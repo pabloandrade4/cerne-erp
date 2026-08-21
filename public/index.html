@@ -1432,7 +1432,7 @@
           + '<div style="margin-top:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; width:100%;">'
             + '<button class="btn-primary" id="mlSyncBtn" type="button" '+(state.syncing?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.syncing?'Sincronizando…':'Sincronizar agora')+'</span></button>'
             + '<button class="btn-secondary" id="mlReconnectBtn" type="button">'+svg('link')+'<span>Reconectar</span></button>'
-            + (state.syncResult ? '<span class="field-hint" style="margin:0;">'+state.syncResult.importados+' de '+state.syncResult.total+' pedido(s) importados/atualizados'+(state.syncResult.erros.length? (', '+state.syncResult.erros.length+' com erro'):'')+'.</span>' : '')
+            + (state.syncResult ? '<span class="field-hint" style="margin:0;">'+state.syncResult.importados+' de '+state.syncResult.total+' pedido(s) dos últimos '+(state.syncResult.periodo?state.syncResult.periodo.dias:30)+' dias importados/atualizados'+(state.syncResult.erros.length? (', '+state.syncResult.erros.length+' com erro'):'')+'.</span>' : '<span class="field-hint" style="margin:0;">A sincronização traz os pedidos dos últimos 30 dias.</span>')
           + '</div>'
         + '</div>';
       } else {
