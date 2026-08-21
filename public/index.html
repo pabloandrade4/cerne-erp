@@ -1058,7 +1058,6 @@
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
-  navigate(location.hash ? location.hash.slice(1) : 'overview');
 
   /* ---------- SIDEBAR COLLAPSE ---------- */
   const sidebar = document.getElementById('sidebar');
@@ -1791,6 +1790,12 @@
 
     window.Custos = { load };
   })();
+
+  // Só navega para a rota inicial depois que TODOS os módulos acima (Empresas,
+  // Marketplaces, Pedidos, Custos) já estão definidos — chamar isso mais cedo
+  // fazia a tela de destino do OAuth do Mercado Livre (#marketplaces?ml=...)
+  // e outras rotas carregarem em branco no primeiro load/refresh.
+  navigate(location.hash ? location.hash.slice(1) : 'overview');
 
 })();
 </script>
