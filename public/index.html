@@ -572,6 +572,71 @@
   .toast.error{ border-color:var(--danger); color:var(--danger); }
   .toast svg{ width:15px; height:15px; flex-shrink:0; }
   @keyframes toastIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+
+  /* ============ INTEGRAÇÕES / PEDIDOS / CUSTOS (Mercado Livre) ============ */
+  .field select{
+    width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:9px;
+    padding:10px 12px; font-size:13.5px; color:var(--text); font-family:inherit; appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2398A0B3' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 10px center; background-size:15px; padding-right:34px;
+  }
+  .field select:focus{ outline:none; border-color:var(--copper); box-shadow:0 0 0 3px var(--copper-soft); }
+  .empresa-picker{ max-width:320px; margin-bottom:16px; }
+  .empresa-picker label{ display:block; font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em; }
+
+  .badge-status.warn{ color:var(--warning); background:var(--warning-soft); }
+  .badge-status.err{ color:var(--danger); background:var(--danger-soft); }
+
+  .conn-card-real{
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:20px 22px; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  }
+  .conn-card-real .cc-left{ display:flex; align-items:flex-start; gap:14px; min-width:0; }
+  .conn-card-real .cc-ic{
+    width:44px; height:44px; border-radius:12px; flex-shrink:0;
+    background:linear-gradient(150deg,var(--copper-soft),var(--copper-wash)); color:var(--copper);
+    display:flex; align-items:center; justify-content:center; border:1px solid var(--border);
+  }
+  .conn-card-real .cc-ic svg{ width:21px; height:21px; }
+  .conn-card-real .cc-nick{ font-family:"Archivo",sans-serif; font-size:15px; font-weight:800; }
+  .conn-card-real .cc-sub{ font-size:12px; color:var(--text-faint); margin-top:2px; }
+  .conn-meta{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-top:16px; width:100%; }
+  .conn-meta-item{ }
+  .conn-meta-item .cm-label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-faint); font-weight:700; margin-bottom:3px; }
+  .conn-meta-item .cm-value{ font-size:13px; font-weight:600; color:var(--text); }
+  .conn-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+
+  .inline-form{ display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin-bottom:16px; }
+  .inline-form .field{ margin-bottom:0; flex:1; min-width:150px; }
+  .inline-form .field.narrow{ max-width:180px; }
+
+  /* ---- Modal de detalhe (mais largo, sem formulário) ---- */
+  .modal-card.wide{ max-width:600px; }
+  .detail-section-title{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-faint); margin:18px 0 8px; }
+  .detail-section-title:first-child{ margin-top:0; }
+  .detail-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; }
+  .detail-grid .dg-item .dg-label{ font-size:11px; color:var(--text-faint); margin-bottom:2px; }
+  .detail-grid .dg-item .dg-value{ font-size:13px; font-weight:600; color:var(--text); }
+  .detail-grid .dg-item .dg-value.muted{ color:var(--text-faint); font-weight:500; font-style:italic; }
+
+  .item-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); font-size:12.5px; }
+  .item-row:last-child{ border-bottom:none; }
+  .item-row .ir-title{ font-weight:600; }
+  .item-row .ir-sku{ color:var(--text-faint); font-size:11px; margin-top:1px; }
+
+  .bd-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; font-size:13px; border-bottom:1px solid var(--border); }
+  .bd-row:last-child{ border-bottom:none; }
+  .bd-row .bd-label{ color:var(--text-muted); }
+  .bd-row .bd-value{ font-family:"IBM Plex Mono",monospace; font-weight:600; color:var(--text); white-space:nowrap; }
+  .bd-row.neg .bd-value{ color:var(--danger); }
+  .bd-row.total{ border-top:2px solid var(--border-strong); border-bottom:none; margin-top:4px; padding-top:12px; }
+  .bd-row.total .bd-label{ font-weight:800; color:var(--text); font-family:"Archivo",sans-serif; }
+  .bd-row.total .bd-value{ font-size:16px; font-weight:800; }
+  .bd-row.total .bd-value.positive{ color:var(--success); }
+  .bd-row.total .bd-value.negative{ color:var(--danger); }
+  .bd-note{ display:flex; align-items:flex-start; gap:8px; background:var(--warning-soft); color:var(--warning); border-radius:10px; padding:10px 12px; font-size:11.5px; font-weight:600; margin-top:10px; }
+  .bd-note svg{ width:14px; height:14px; flex-shrink:0; margin-top:1px; }
+  .bd-side-note{ font-size:11px; color:var(--text-faint); margin-top:8px; }
 </style>
 </head>
 <body>
@@ -722,6 +787,9 @@
     search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5"/>',
     checkCircle:'<circle cx="12" cy="12" r="8.5"/><path d="M8.3 12.3 11 15l4.7-5.6"/>',
     inbox:'<path d="M3.5 12h5l1.6 3h3.8l1.6-3h5"/><path d="M6 5h12l2.5 7v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18v-6Z"/>',
+    refreshCw:'<path d="M4 12a8 8 0 0 1 14-5.3L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-14 5.3L4 16"/><path d="M4 20v-4h4"/>',
+    tag:'<path d="M11 3H4v7l10 10 7-7Z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/>',
+    eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
   };
   function svg(name, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" '+(extra||'')+'>'+(ICON[name]||'')+'</svg>'; }
 
@@ -948,16 +1016,20 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
+    const REAL_MODULES = ['companies','marketplaces','orders','costs'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
-    } else if(id !== 'overview'){
+    } else if(id !== 'overview' && !REAL_MODULES.includes(id)){
       inner += '<button class="primary-btn" disabled>'+svg('plus')+'<span>'+(p.action||'Em breve')+'</span></button>';
     }
     inner += '</div>';
 
     if(id === 'overview'){ inner += overviewHTML(); }
     else if(id === 'companies'){ inner += '<div id="empresasRoot"></div>'; }
+    else if(id === 'marketplaces'){ inner += '<div id="marketplacesRoot"></div>'; }
+    else if(id === 'orders'){ inner += '<div id="pedidosRoot"></div>'; }
+    else if(id === 'costs'){ inner += '<div id="custosRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -965,7 +1037,10 @@
   });
 
   /* ---------- NAVIGATION ---------- */
-  function navigate(id){
+  function navigate(rawId){
+    const parts = String(rawId||'').split('?');
+    let id = parts[0];
+    const queryStr = parts[1] || '';
     if(!PAGES[id]) id = 'overview';
     document.querySelectorAll('.page').forEach(el=> el.classList.toggle('active', el.id === 'page-'+id));
     document.querySelectorAll('.nav-item').forEach(el=> el.classList.toggle('active', el.dataset.page === id));
@@ -976,8 +1051,11 @@
     document.getElementById('sidebar').classList.remove('mobile-open');
     const scrimEl = document.getElementById('mobileScrim');
     if(scrimEl) scrimEl.classList.remove('show');
-    if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
     if(id === 'companies' && window.Empresas) window.Empresas.load();
+    if(id === 'marketplaces' && window.Marketplaces) window.Marketplaces.load(queryStr);
+    if(id === 'orders' && window.Pedidos) window.Pedidos.load();
+    if(id === 'costs' && window.Custos) window.Custos.load();
+    if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
   navigate(location.hash ? location.hash.slice(1) : 'overview');
@@ -1250,6 +1328,468 @@
     document.getElementById('btnNewEmpresa').addEventListener('click', ()=> openModal());
 
     window.Empresas = { load };
+  })();
+
+  /* ================= MARKETPLACES — Mercado Livre (OAuth real) ================= */
+  (function(){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, conta:null, loadingConta:false, syncing:false, configurado:null, syncResult:null };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      const body = await res.json();
+      return (body && body.empresas) || [];
+    }
+    async function apiMl(path, opts){
+      const res = await fetch('/api/integracoes/mercadolivre'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ throw new Error((body && body.error) || 'Falha na requisição.'); }
+      return body;
+    }
+
+    async function loadContaDaEmpresa(){
+      state.loadingConta = true; render();
+      try{
+        const data = await apiMl('?empresaId='+state.empresaId);
+        state.conta = (data.contas && data.contas[0]) || null;
+      }catch(e){ state.conta = null; }
+      state.loadingConta = false; render();
+    }
+
+    async function load(queryStr){
+      if(queryStr){
+        const params = new URLSearchParams(queryStr);
+        if(params.get('ml') === 'success') toast('Mercado Livre conectado com sucesso.');
+        else if(params.get('ml') === 'error') toast(params.get('msg') || 'Não foi possível conectar o Mercado Livre.', 'error');
+      }
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      try{ state.configurado = (await fetch('/api/integracoes/mercadolivre/config-status').then(r=>r.json())).configurado; }
+      catch(e){ state.configurado = null; }
+      if(state.empresaId) await loadContaDaEmpresa(); else render();
+    }
+
+    function statusBadge(status){
+      if(status === 'ativa') return '<span class="badge-status on"><span class="dot"></span>Conectada</span>';
+      if(status === 'erro') return '<span class="badge-status err"><span class="dot"></span>Erro na conexão</span>';
+      return '<span class="badge-status off"><span class="dot"></span>Desconectada</span>';
+    }
+
+    function render(){
+      const root = document.getElementById('marketplacesRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative pelo menos uma empresa em <strong>Cadastros → Empresas</strong> antes de conectar uma conta do Mercado Livre.</p></div>';
+        return;
+      }
+
+      let html = '<div class="empresa-picker"><label>Empresa</label><select id="mlEmpresaSelect">'
+        + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>';
+
+      if(state.configurado === false){
+        html += '<div class="empty-panel" style="margin-bottom:16px;"><div class="empty-icon" style="color:var(--warning); background:var(--warning-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--warning);">Integração ainda não configurada</h2>'
+          + '<p class="lead">O aplicativo do Mercado Livre (Client ID/Secret) ainda não foi configurado neste ambiente.</p></div>';
+      }
+
+      if(state.loadingConta){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando conexão…</span></div></div>';
+      } else if(state.conta){
+        const c = state.conta;
+        html += '<div class="conn-card-real">'
+          + '<div class="cc-left"><div class="cc-ic">'+svg('store')+'</div><div>'
+            + '<div class="cc-nick">'+escapeHtml(c.nickname || ('Usuário '+c.mlUserId))+'</div>'
+            + '<div class="cc-sub">Mercado Livre'+(c.siteId?(' · '+c.siteId):'')+' · ID '+c.mlUserId+'</div>'
+          + '</div></div>'
+          + '<div class="conn-actions">'+statusBadge(c.status)+'</div>'
+          + '<div class="conn-meta">'
+            + '<div class="conn-meta-item"><div class="cm-label">Última sincronização</div><div class="cm-value">'+(fmtDateTime(c.ultimaSincronizacaoEm) || 'Nunca sincronizado')+'</div></div>'
+            + '<div class="conn-meta-item"><div class="cm-label">Token de acesso expira em</div><div class="cm-value">'+(fmtDateTime(c.tokenExpiraEm) || '—')+'</div></div>'
+            + '<div class="conn-meta-item"><div class="cm-label">Conectado em</div><div class="cm-value">'+(fmtDateTime(c.criadoEm) || '—')+'</div></div>'
+          + '</div>'
+          + (c.status==='erro' && c.ultimoErro ? '<div class="bd-note">'+svg('alertCircle')+'<span>'+escapeHtml(c.ultimoErro)+'</span></div>' : '')
+          + '<div style="margin-top:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; width:100%;">'
+            + '<button class="btn-primary" id="mlSyncBtn" type="button" '+(state.syncing?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.syncing?'Sincronizando…':'Sincronizar agora')+'</span></button>'
+            + '<button class="btn-secondary" id="mlReconnectBtn" type="button">'+svg('link')+'<span>Reconectar</span></button>'
+            + (state.syncResult ? '<span class="field-hint" style="margin:0;">'+state.syncResult.importados+' de '+state.syncResult.total+' pedido(s) importados/atualizados'+(state.syncResult.erros.length? (', '+state.syncResult.erros.length+' com erro'):'')+'.</span>' : '')
+          + '</div>'
+        + '</div>';
+      } else {
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma conta conectada</h2>'
+          + '<p class="lead">Conecte a conta do Mercado Livre desta empresa para importar pedidos automaticamente. Você será redirecionado ao Mercado Livre para autorizar o acesso — os tokens ficam criptografados no servidor, nunca no navegador.</p>'
+          + '<button class="primary-btn enabled" id="mlConnectBtn" type="button">'+svg('link')+'<span>Conectar Mercado Livre</span></button></div>';
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('mlEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); state.syncResult = null; loadContaDaEmpresa(); });
+      const connectBtn = document.getElementById('mlConnectBtn');
+      if(connectBtn) connectBtn.addEventListener('click', ()=>{ window.location.href = '/api/integracoes/mercadolivre/conectar?empresaId='+state.empresaId; });
+      const reconnectBtn = document.getElementById('mlReconnectBtn');
+      if(reconnectBtn) reconnectBtn.addEventListener('click', ()=>{ window.location.href = '/api/integracoes/mercadolivre/conectar?empresaId='+state.empresaId; });
+      const syncBtn = document.getElementById('mlSyncBtn');
+      if(syncBtn) syncBtn.addEventListener('click', async ()=>{
+        state.syncing = true; render();
+        try{
+          const result = await apiMl('/'+state.conta.id+'/sincronizar', { method:'POST' });
+          state.syncResult = result;
+          toast(result.importados+' pedido(s) importados/atualizados.');
+          await loadContaDaEmpresa();
+        }catch(err){ toast(err.message, 'error'); }
+        state.syncing = false; render();
+      });
+    }
+
+    window.Marketplaces = { load };
+  })();
+
+  /* ================= PEDIDOS — importados do Mercado Livre ================= */
+  (function(){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, items:[], loading:false, error:null };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return '—'; } }
+    function money(v, moeda){ return v===null||v===undefined ? null : (moeda==='BRL'||!moeda?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function apiPedidos(path){
+      const res = await fetch('/api/pedidos'+path);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Falha na requisição.');
+      return body;
+    }
+    async function apiMlSync(contaId){
+      const res = await fetch('/api/integracoes/mercadolivre/'+contaId+'/sincronizar', { method:'POST' });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Falha ao sincronizar.');
+      return body;
+    }
+    async function apiContaDaEmpresa(empresaId){
+      const res = await fetch('/api/integracoes/mercadolivre?empresaId='+empresaId);
+      const body = await res.json();
+      return (body.contas && body.contas[0]) || null;
+    }
+
+    async function loadPedidos(){
+      state.loading = true; state.error = null; render();
+      try{
+        const data = await apiPedidos('?empresaId='+state.empresaId);
+        state.items = data.pedidos;
+      }catch(err){ state.error = err.message; }
+      state.loading = false; render();
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadPedidos(); else render();
+    }
+
+    function render(){
+      const root = document.getElementById('pedidosRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa, conecte o Mercado Livre em <strong>Marketplaces</strong> e sincronize para ver os pedidos aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedEmpresaSelect">'
+          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>'
+        + '<button class="ghost-btn" id="pedSyncBtn" type="button" style="cursor:pointer; opacity:1;">'+svg('refreshCw')+'<span>Sincronizar</span></button>'
+      + '</div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando pedidos…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+state.error+'</p></div>';
+      } else if(!state.items.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('inbox')+'</div>'
+          + '<h2>Nenhum pedido importado</h2>'
+          + '<p class="lead">Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> e clique em "Sincronizar agora" para importar os pedidos reais.</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Data</th><th>Comprador</th><th>Item(ns)</th><th>Valor</th><th>Frete comprador</th><th>Frete vendedor</th><th>Status</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.items.map(p => '<tr>'
+            + '<td class="tab-nums">'+fmtDateTime(p.dataCriacao)+'</td>'
+            + '<td>'+escapeHtml(p.compradorNickname||'—')+'</td>'
+            + '<td>'+escapeHtml(p.itemResumo||'—')+(p.qtdItens>2?' <span class="field-hint" style="display:inline;">+'+(p.qtdItens-2)+'</span>':'')+'</td>'
+            + '<td class="mono">'+(money(p.valorTotal,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
+            + '<td class="mono">'+(money(p.freteComprador,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
+            + '<td class="mono">'+(money(p.freteVendedor,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
+            + '<td><span class="badge-status '+(p.status==='paid'?'on':'off')+'"><span class="dot"></span>'+escapeHtml(p.status||'—')+'</span></td>'
+            + '<td><div class="row-actions"><button class="row-ic-btn" data-detail="'+p.id+'" title="Ver detalhes" type="button">'+svg('eye')+'</button></div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('pedEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadPedidos(); });
+      const syncBtn = document.getElementById('pedSyncBtn');
+      if(syncBtn) syncBtn.addEventListener('click', async ()=>{
+        syncBtn.disabled = true;
+        try{
+          const conta = await apiContaDaEmpresa(state.empresaId);
+          if(!conta){ toast('Conecte o Mercado Livre desta empresa em Marketplaces primeiro.', 'error'); syncBtn.disabled=false; return; }
+          const result = await apiMlSync(conta.id);
+          toast(result.importados+' pedido(s) importados/atualizados.');
+          await loadPedidos();
+        }catch(err){ toast(err.message, 'error'); }
+        syncBtn.disabled = false;
+      });
+      root.querySelectorAll('[data-detail]').forEach(b=> b.addEventListener('click', ()=> openDetail(b.dataset.detail)));
+    }
+
+    async function openDetail(id){
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card wide"><div class="table-skel"><span class="spin"></span><span>Carregando pedido…</span></div></div></div>';
+      document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='modalOverlay') modalRoot.innerHTML=''; });
+
+      let data;
+      try{ data = await apiPedidos('/'+id); }
+      catch(err){ toast(err.message, 'error'); modalRoot.innerHTML=''; return; }
+
+      const { pedido, itens, resultadoFinanceiro: rf } = data;
+      const moeda = pedido.moeda;
+      const bdLine = (label, valor, negative) => '<div class="bd-row'+(negative?' neg':'')+'">'
+        + '<span class="bd-label">'+label+'</span>'
+        + '<span class="bd-value">'+(valor===null ? '<span style="color:var(--text-faint); font-style:italic; font-family:\'Public Sans\',sans-serif; font-weight:500;">indisponível</span>' : (negative?'− ':'')+money(Math.abs(valor),moeda))+'</span>'
+        + '</div>';
+
+      const tarifasSideNote = rf.tarifasMl.componentes.filter(c=>c.valor!==null)
+        .map(c=> escapeHtml(c.label)+': '+money(c.valor,moeda)).join(' · ');
+
+      const html = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card wide">'
+        + '<div class="modal-head"><div class="modal-title">Pedido #'+pedido.mlOrderId+'</div><button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+        + '<div class="modal-sub">'+fmtDateTime(pedido.dataCriacao)+' · <span class="badge-status '+(pedido.status==='paid'?'on':'off')+'" style="display:inline-flex;"><span class="dot"></span>'+escapeHtml(pedido.status||'—')+'</span></div>'
+
+        + '<div class="detail-section-title">Pedido</div>'
+        + '<div class="detail-grid">'
+          + '<div class="dg-item"><div class="dg-label">Comprador</div><div class="dg-value">'+escapeHtml(pedido.compradorNickname||'—')+'</div></div>'
+          + '<div class="dg-item"><div class="dg-label">ID do pagamento</div><div class="dg-value'+(pedido.mlPaymentId?'':' muted')+'">'+(pedido.mlPaymentId||'indisponível')+'</div></div>'
+          + '<div class="dg-item"><div class="dg-label">ID do envio (shipment)</div><div class="dg-value'+(pedido.mlShippingId?'':' muted')+'">'+(pedido.mlShippingId||'sem envio')+'</div></div>'
+          + '<div class="dg-item"><div class="dg-label">Modalidade de logística</div><div class="dg-value'+(pedido.envioLogisticType?'':' muted')+'">'+(escapeHtml(pedido.envioLogisticType||pedido.envioLogisticMode)||'indisponível')+'</div></div>'
+        + '</div>'
+
+        + '<div class="detail-section-title">Itens</div>'
+        + itens.map(it => '<div class="item-row"><div><div class="ir-title">'+escapeHtml(it.titulo||it.mlItemId||'—')+'</div>'
+            + '<div class="ir-sku">'+(it.sku?('SKU '+escapeHtml(it.sku)):'sem SKU informado')+' · qtd '+it.quantidade+'</div></div>'
+            + '<div class="mono">'+(money(it.valorTotalItem,moeda)||'indisponível')+'</div></div>').join('')
+
+        + '<div class="detail-section-title">Resultado da venda</div>'
+        + bdLine('Valor da venda', rf.valorVenda, false)
+        + bdLine('(−) Comissão/tarifas Mercado Livre', rf.tarifasMl.total, true)
+        + (tarifasSideNote ? '<div class="bd-side-note">'+tarifasSideNote+'</div>' : '')
+        + bdLine('(−) Frete do vendedor', rf.freteVendedor, true)
+        + bdLine('(−) Imposto configurado ('+rf.imposto.aliquota+'%)', rf.imposto.valor, true)
+        + bdLine('(−) Custo do produto', rf.custoProduto, true)
+        + '<div class="bd-row total"><span class="bd-label">= Resultado da venda</span><span class="bd-value '+(rf.resultado===null?'':(rf.resultado>=0?'positive':'negative'))+'">'
+          + (rf.resultado===null ? 'Cálculo incompleto' : money(rf.resultado,moeda)) + '</span></div>'
+        + (rf.pendencias.length ? '<div class="bd-note">'+svg('alertCircle')+'<span>'+rf.pendencias.map(escapeHtml).join('<br>')+'</span></div>' : '')
+
+        + '<div class="detail-section-title">Frete pago pelo comprador (informativo)</div>'
+        + bdLine('Frete comprador (receiver.cost)', rf.freteComprador, false)
+        + '<div class="bd-side-note">Não entra no cálculo do resultado acima — é o valor pago pelo comprador, separado do custo de frete do vendedor.</div>'
+
+        + '</div></div>';
+
+      modalRoot.innerHTML = html;
+      document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='modalOverlay') modalRoot.innerHTML=''; });
+      document.getElementById('modalClose').addEventListener('click', ()=> modalRoot.innerHTML='');
+    }
+
+    window.Pedidos = { load };
+  })();
+
+  /* ================= CUSTOS & MARGEM — custo por SKU + imposto ================= */
+  (function(){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, custos:[], loading:false, aliquota:0, savingAliquota:false };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return '—'; } }
+    function money(v){ return 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function apiJson(path, opts){
+      const res = await fetch(path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+
+    async function loadAll(){
+      state.loading = true; render();
+      try{
+        const [custosData, configData] = await Promise.all([
+          apiJson('/api/custos-produto?empresaId='+state.empresaId),
+          apiJson('/api/config-financeiro/'+state.empresaId),
+        ]);
+        state.custos = custosData.custos;
+        state.aliquota = configData.aliquotaImposto;
+      }catch(e){ toast(e.message, 'error'); }
+      state.loading = false; render();
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadAll(); else render();
+    }
+
+    function render(){
+      const root = document.getElementById('custosRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa para configurar custos de produto e imposto.</p></div>';
+        return;
+      }
+
+      let html = '<div class="empresa-picker"><label>Empresa</label><select id="cstEmpresaSelect">'
+        + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+      + '</select></div>';
+
+      html += '<div class="section-label"><span>Imposto configurado</span></div>'
+        + '<div class="inline-form">'
+          + '<div class="field narrow"><label>Alíquota de imposto (%)</label><input type="text" inputmode="decimal" id="cstAliquota" value="'+(state.loading?'':state.aliquota)+'"></div>'
+          + '<button class="btn-primary" id="cstSaveAliquota" type="button">'+svg('check')+'<span>Salvar</span></button>'
+          + '<div class="field-hint" style="margin:0;">Percentual aplicado sobre o valor da venda. Não vem do Mercado Livre — é uma configuração do ERP.</div>'
+        + '</div>';
+
+      html += '<div class="section-label"><span>Custo de produto por SKU</span></div>'
+        + '<div class="inline-form">'
+          + '<div class="field narrow"><label>SKU</label><input type="text" id="cstSku" placeholder="Ex: CAM-AZ-M"></div>'
+          + '<div class="field narrow"><label>Custo (R$)</label><input type="text" inputmode="decimal" id="cstCusto" placeholder="0,00"></div>'
+          + '<button class="btn-primary" id="cstAddCusto" type="button">'+svg('plus')+'<span>Salvar SKU</span></button>'
+        + '</div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      } else if(!state.custos.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
+          + '<h2>Nenhum custo cadastrado</h2>'
+          + '<p class="lead">Cadastre o custo de cada SKU acima para o ERP calcular o resultado real das vendas.</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>SKU</th><th>Custo</th><th>Atualizado em</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.custos.map(c => '<tr>'
+            + '<td class="mono">'+escapeHtml(c.sku)+'</td>'
+            + '<td class="mono">'+money(c.custo)+'</td>'
+            + '<td class="tab-nums">'+fmtDateTime(c.atualizadoEm)+'</td>'
+            + '<td><div class="row-actions"><button class="row-ic-btn" data-edit-sku="'+escapeHtml(c.sku)+'" data-edit-custo="'+c.custo+'" title="Editar" type="button">'+svg('edit')+'</button></div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('cstEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadAll(); });
+
+      const saveAliquota = document.getElementById('cstSaveAliquota');
+      if(saveAliquota) saveAliquota.addEventListener('click', async ()=>{
+        const val = Number(String(document.getElementById('cstAliquota').value).replace(',','.'));
+        if(!Number.isFinite(val) || val<0 || val>100){ toast('Informe um percentual entre 0 e 100.', 'error'); return; }
+        saveAliquota.disabled = true;
+        try{
+          await apiJson('/api/config-financeiro/'+state.empresaId, { method:'PUT', body: JSON.stringify({ aliquotaImposto: val }) });
+          state.aliquota = val;
+          toast('Alíquota de imposto salva.');
+        }catch(err){ toast(err.message, 'error'); }
+        saveAliquota.disabled = false;
+      });
+
+      const addCusto = document.getElementById('cstAddCusto');
+      if(addCusto) addCusto.addEventListener('click', async ()=>{
+        const sku = document.getElementById('cstSku').value.trim();
+        const custo = Number(String(document.getElementById('cstCusto').value).replace(',','.'));
+        if(!sku){ toast('Informe o SKU.', 'error'); return; }
+        if(!Number.isFinite(custo) || custo<0){ toast('Informe um custo válido.', 'error'); return; }
+        addCusto.disabled = true;
+        try{
+          await apiJson('/api/custos-produto', { method:'POST', body: JSON.stringify({ empresaId: state.empresaId, sku, custo }) });
+          toast('Custo do SKU salvo.');
+          await loadAll();
+        }catch(err){ toast(err.message, 'error'); }
+        addCusto.disabled = false;
+      });
+
+      root.querySelectorAll('[data-edit-sku]').forEach(b=> b.addEventListener('click', ()=>{
+        document.getElementById('cstSku').value = b.dataset.editSku;
+        document.getElementById('cstCusto').value = b.dataset.editCusto;
+        document.getElementById('cstSku').scrollIntoView({behavior:'smooth', block:'center'});
+      }));
+    }
+
+    window.Custos = { load };
   })();
 
 })();

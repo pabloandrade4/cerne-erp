@@ -3,6 +3,9 @@ const path = require('path');
 const express = require('express');
 const migrate = require('./db/migrate');
 const empresasRouter = require('./routes/empresas');
+const integracoesRouter = require('./routes/integracoes');
+const pedidosRouter = require('./routes/pedidos');
+const custosRouter = require('./routes/custos');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,6 +16,9 @@ app.use(express.json());
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 app.use('/api/empresas', empresasRouter);
+app.use('/api/integracoes/mercadolivre', integracoesRouter);
+app.use('/api/pedidos', pedidosRouter);
+app.use('/api', custosRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
