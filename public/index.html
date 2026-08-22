@@ -827,8 +827,10 @@
         bullets:['Dados cadastrais e fiscais por CNPJ','Vínculo de lojas e contas por empresa','Regimes tributários e configurações','Usuários com acesso por empresa'] },
       { id:'marketplaces', title:'Marketplaces', icon:'store', action:'Conectar conta', desc:'Contas do Mercado Livre e lojas da Shopee conectadas ao ERP.',
         bullets:['Múltiplas contas do Mercado Livre','Múltiplas lojas da Shopee','Status de sincronização por conta','Taxas e regras específicas de cada canal'] },
-      { id:'products', title:'Produtos', icon:'box', action:'Novo produto', desc:'Catálogo de produtos, variações e vínculo com os anúncios dos marketplaces.',
+      { id:'products', title:'Produtos', icon:'box', action:'Novo produto', desc:'Cadastro simples de produtos: nome, SKU, custo e status.',
         bullets:['Ficha técnica e custo do produto','Variações e SKUs','Vínculo com anúncios do ML e Shopee','Curva ABC de vendas'] },
+      { id:'anuncios', title:'Anúncios', icon:'tag', action:'Atualizar', desc:'Anúncios reais das contas do Mercado Livre conectadas — título, SKU, loja, preço, estoque, status e tipo.',
+        bullets:['Sincronizado ao vivo com o Mercado Livre','SKU, preço e estoque de cada anúncio','Vínculo com a loja/conta conectada','Edição de preço e estoque (próxima etapa)'] },
       { id:'suppliers', title:'Fornecedores', icon:'truck', action:'Novo fornecedor', desc:'Cadastro de fornecedores, condições comerciais e histórico de compras.',
         bullets:['Dados cadastrais do fornecedor','Condições de pagamento e prazos','Produtos fornecidos','Histórico de compras'] },
     ]},
@@ -987,10 +989,16 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','costs','finance'];
+    const REAL_MODULES = ['companies','marketplaces','orders','costs','finance','products','anuncios','suppliers'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
+    } else if(id === 'products'){
+      inner += '<button class="primary-btn enabled" id="btnNewProduto" type="button">'+svg('plus')+'<span>Novo produto</span></button>';
+    } else if(id === 'suppliers'){
+      inner += '<button class="primary-btn enabled" id="btnNewFornecedor" type="button">'+svg('plus')+'<span>Novo fornecedor</span></button>';
+    } else if(id === 'anuncios'){
+      inner += '<button class="primary-btn enabled" id="btnRefreshAnuncios" type="button">'+svg('refreshCw')+'<span>Atualizar</span></button>';
     } else if(id !== 'overview' && !REAL_MODULES.includes(id)){
       inner += '<button class="primary-btn" disabled>'+svg('plus')+'<span>'+(p.action||'Em breve')+'</span></button>';
     }
@@ -1002,6 +1010,9 @@
     else if(id === 'orders'){ inner += '<div id="pedidosRoot"></div>'; }
     else if(id === 'costs'){ inner += '<div id="custosRoot"></div>'; }
     else if(id === 'finance'){ inner += '<div id="financeRoot"></div>'; }
+    else if(id === 'products'){ inner += '<div id="produtosRoot"></div>'; }
+    else if(id === 'suppliers'){ inner += '<div id="fornecedoresRoot"></div>'; }
+    else if(id === 'anuncios'){ inner += '<div id="anunciosRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1029,6 +1040,9 @@
     if(id === 'orders' && window.Pedidos) window.Pedidos.load();
     if(id === 'costs' && window.Custos) window.Custos.load();
     if(id === 'finance' && window.Financeiro) window.Financeiro.load();
+    if(id === 'products' && window.Produtos) window.Produtos.load();
+    if(id === 'suppliers' && window.Fornecedores) window.Fornecedores.load();
+    if(id === 'anuncios' && window.Anuncios) window.Anuncios.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -2286,10 +2300,582 @@
     window.Custos = { load };
   })();
 
+  /* ================= PRODUTOS — cadastro simples, por empresa =================
+     Nome, SKU, custo e status. Sem kits/composição/estoque automático ainda
+     (não pedido nesta etapa) — catálogo simples e funcional, salvo no banco.
+     É uma tabela separada de "custos_produto" (usada no cálculo de margem
+     das vendas) — ver docs/02-decisoes.md. */
+  (function(){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, items:[], loading:false, error:null, status:'todos', search:'' };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDate(iso){ try{ return new Date(iso).toLocaleDateString('pt-BR'); }catch(e){ return '—'; } }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function api(path, opts){
+      const res = await fetch('/api/produtos'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+
+    async function loadItens(){
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: state.empresaId });
+        if(state.status !== 'todos') params.set('status', state.status);
+        if(state.search.trim()) params.set('search', state.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.items = data.produtos;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar os produtos.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadItens(); else render();
+    }
+
+    function render(){
+      const root = document.getElementById('produtosRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de cadastrar produtos.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="prdEmpresaSelect">'
+          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>'
+        + '<div class="seg" id="prdSeg">'
+          + [['todos','Todos'],['ativos','Ativos'],['inativos','Inativos']].map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="prdSearch" placeholder="Buscar por nome ou SKU" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+      + '</div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando produtos…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="prdRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      } else if(!state.items.length){
+        const filtrado = !!(state.search || state.status!=='todos');
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('box')+'</div>'
+          + '<h2>Nenhum produto encontrado</h2>'
+          + '<p class="lead">'+(filtrado ? 'Nenhum produto corresponde ao filtro atual.' : 'Cadastre o primeiro produto (nome, SKU e custo) para começar o catálogo desta empresa.')+'</p>'
+          + (filtrado ? '' : '<button class="primary-btn enabled" id="prdEmptyNew" type="button">'+svg('plus')+'<span>Cadastrar produto</span></button>')
+        + '</div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto</th><th>SKU</th><th>Custo</th><th>Status</th><th>Cadastrado em</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.items.map(p => '<tr class="'+(p.ativo?'':'inactive')+'">'
+            + '<td>'+escapeHtml(p.nome)+'</td>'
+            + '<td class="mono">'+escapeHtml(p.sku)+'</td>'
+            + '<td class="mono">'+money(p.custo)+'</td>'
+            + '<td>'+(p.ativo ? '<span class="badge-status on"><span class="dot"></span>Ativo</span>' : '<span class="badge-status off"><span class="dot"></span>Inativo</span>')+'</td>'
+            + '<td class="tab-nums">'+fmtDate(p.criadoEm)+'</td>'
+            + '<td><div class="row-actions">'
+              + '<button class="row-ic-btn" data-edit="'+p.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
+              + '<button class="row-ic-btn '+(p.ativo?'danger':'success')+'" data-toggle="'+p.id+'" data-next="'+(!p.ativo)+'" title="'+(p.ativo?'Desativar':'Ativar')+'" type="button">'+svg('power')+'</button>'
+            + '</div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('prdEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadItens(); });
+      const seg = document.getElementById('prdSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadItens(); }));
+      const search = document.getElementById('prdSearch');
+      if(search) search.addEventListener('input', ()=>{
+        state.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadItens, 300);
+      });
+      const retry = document.getElementById('prdRetry');
+      if(retry) retry.addEventListener('click', loadItens);
+      const emptyNew = document.getElementById('prdEmptyNew');
+      if(emptyNew) emptyNew.addEventListener('click', ()=> openModal());
+      root.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=>{
+        const p = state.items.find(x=> String(x.id)===b.dataset.edit);
+        openModal(p);
+      }));
+      root.querySelectorAll('[data-toggle]').forEach(b=> b.addEventListener('click', async ()=>{
+        const id = b.dataset.toggle, next = b.dataset.next === 'true';
+        b.disabled = true;
+        try{
+          await api('/'+id+'/status', { method:'PATCH', body: JSON.stringify({ ativo: next }) });
+          toast(next ? 'Produto ativado.' : 'Produto desativado.');
+          loadItens();
+        }catch(err){ toast(err.message, 'error'); b.disabled = false; }
+      }));
+    }
+
+    function openModal(produto){
+      const isEdit = !!produto;
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar produto':'Novo produto')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+(isEdit?'Atualize os dados do produto.':'Preencha os dados para cadastrar um novo produto no catálogo desta empresa.')+'</div>'
+          + '<form id="prdForm">'
+            + '<div class="field"><label>Nome do produto</label><input type="text" id="fNome" placeholder="Ex: Caixa de papelão 50x24x15" value="'+(isEdit?escapeHtml(produto.nome):'')+'" maxlength="200">'
+              + '<div class="field-error" id="eNome" style="display:none;"></div></div>'
+            + '<div class="field"><label>SKU</label><input type="text" id="fSku" placeholder="Ex: CX-50X24X15" value="'+(isEdit?escapeHtml(produto.sku):'')+'" maxlength="100">'
+              + '<div class="field-error" id="eSku" style="display:none;"></div></div>'
+            + '<div class="field"><label>Custo (R$)</label><input type="text" inputmode="decimal" id="fCusto" placeholder="0,00" value="'+(isEdit?String(produto.custo).replace('.',','):'')+'">'
+              + '<div class="field-error" id="eCusto" style="display:none;"></div></div>'
+            + (isEdit ? '<div class="toggle-row"><div><div class="toggle-row-label">Produto ativo</div><div class="toggle-row-sub">Produtos inativos ficam ocultos nas seleções do sistema.</div></div>'
+              + '<button type="button" class="toggle '+(produto.ativo?'on':'')+'" id="fAtivo" data-on="'+(produto.ativo?'true':'false')+'"></button></div>' : '')
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Cadastrar produto')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+      document.getElementById('fNome').focus();
+
+      const toggleBtn = document.getElementById('fAtivo');
+      if(toggleBtn) toggleBtn.addEventListener('click', ()=>{
+        const on = toggleBtn.dataset.on !== 'true';
+        toggleBtn.dataset.on = String(on);
+        toggleBtn.classList.toggle('on', on);
+      });
+
+      document.getElementById('prdForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eNome','eSku','eCusto'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+        ['fNome','fSku','fCusto'].forEach(id=> document.getElementById(id).classList.remove('invalid'));
+
+        const payload = {
+          empresaId: state.empresaId,
+          nome: document.getElementById('fNome').value,
+          sku: document.getElementById('fSku').value,
+          custo: Number(String(document.getElementById('fCusto').value).replace(',','.')),
+        };
+        if(isEdit && toggleBtn) payload.ativo = toggleBtn.dataset.on === 'true';
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/'+produto.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Produto atualizado.' : 'Produto cadastrado.');
+          loadItens();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            const fieldMap = { nome:'Nome', sku:'Sku', custo:'Custo' };
+            Object.entries(err.errors).forEach(([k,msg])=>{
+              const suf = fieldMap[k]; if(!suf) return;
+              const el=document.getElementById('e'+suf); if(el){ el.textContent=msg; el.style.display='block'; }
+              const input=document.getElementById('f'+suf); if(input) input.classList.add('invalid');
+            });
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    document.getElementById('btnNewProduto').addEventListener('click', ()=> openModal());
+
+    window.Produtos = { load };
+  })();
+
+  /* ================= FORNECEDORES — cadastro por empresa =================
+     Razão social/nome, nome fantasia, CNPJ ou CPF, telefone, e-mail,
+     observação e status. Estrutura pronta para futuramente relacionar
+     fornecedor a produtos e compras — a relação em si ainda não existe. */
+  (function(){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, items:[], loading:false, error:null, status:'todos', search:'' };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDate(iso){ try{ return new Date(iso).toLocaleDateString('pt-BR'); }catch(e){ return '—'; } }
+
+    function maskDocumento(v){
+      const d = v.replace(/\D/g,'').slice(0,14);
+      if(d.length <= 11){
+        let out = d;
+        if(d.length > 9) out = d.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, '$1.$2.$3-$4');
+        else if(d.length > 6) out = d.replace(/(\d{3})(\d{3})(\d{0,3})/, '$1.$2.$3');
+        else if(d.length > 3) out = d.replace(/(\d{3})(\d{0,3})/, '$1.$2');
+        return out;
+      }
+      return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, '$1.$2.$3/$4-$5');
+    }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function api(path, opts){
+      const res = await fetch('/api/fornecedores'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+
+    async function loadItens(){
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: state.empresaId });
+        if(state.status !== 'todos') params.set('status', state.status);
+        if(state.search.trim()) params.set('search', state.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.items = data.fornecedores;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar os fornecedores.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadItens(); else render();
+    }
+
+    function render(){
+      const root = document.getElementById('fornecedoresRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de cadastrar fornecedores.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="forEmpresaSelect">'
+          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>'
+        + '<div class="seg" id="forSeg">'
+          + [['todos','Todos'],['ativos','Ativos'],['inativos','Inativos']].map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="forSearch" placeholder="Buscar por razão social, fantasia ou CNPJ/CPF" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+      + '</div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando fornecedores…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="forRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      } else if(!state.items.length){
+        const filtrado = !!(state.search || state.status!=='todos');
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('truck')+'</div>'
+          + '<h2>Nenhum fornecedor encontrado</h2>'
+          + '<p class="lead">'+(filtrado ? 'Nenhum fornecedor corresponde ao filtro atual.' : 'Cadastre o primeiro fornecedor (razão social e CNPJ/CPF) desta empresa.')+'</p>'
+          + (filtrado ? '' : '<button class="primary-btn enabled" id="forEmptyNew" type="button">'+svg('plus')+'<span>Cadastrar fornecedor</span></button>')
+        + '</div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Fornecedor</th><th>CNPJ/CPF</th><th>Telefone</th><th>E-mail</th><th>Status</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.items.map(f => '<tr class="'+(f.ativo?'':'inactive')+'">'
+            + '<td><div class="company-name">'+escapeHtml(f.razaoSocial)+'</div>'+(f.nomeFantasia?'<div class="company-fantasy">'+escapeHtml(f.nomeFantasia)+'</div>':'')+'</td>'
+            + '<td class="mono">'+escapeHtml(f.documentoFormatado)+'</td>'
+            + '<td class="mono">'+escapeHtml(f.telefone||'—')+'</td>'
+            + '<td class="mono">'+escapeHtml(f.email||'—')+'</td>'
+            + '<td>'+(f.ativo ? '<span class="badge-status on"><span class="dot"></span>Ativo</span>' : '<span class="badge-status off"><span class="dot"></span>Inativo</span>')+'</td>'
+            + '<td><div class="row-actions">'
+              + '<button class="row-ic-btn" data-edit="'+f.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
+              + '<button class="row-ic-btn '+(f.ativo?'danger':'success')+'" data-toggle="'+f.id+'" data-next="'+(!f.ativo)+'" title="'+(f.ativo?'Desativar':'Ativar')+'" type="button">'+svg('power')+'</button>'
+            + '</div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('forEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadItens(); });
+      const seg = document.getElementById('forSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadItens(); }));
+      const search = document.getElementById('forSearch');
+      if(search) search.addEventListener('input', ()=>{
+        state.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadItens, 300);
+      });
+      const retry = document.getElementById('forRetry');
+      if(retry) retry.addEventListener('click', loadItens);
+      const emptyNew = document.getElementById('forEmptyNew');
+      if(emptyNew) emptyNew.addEventListener('click', ()=> openModal());
+      root.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=>{
+        const f = state.items.find(x=> String(x.id)===b.dataset.edit);
+        openModal(f);
+      }));
+      root.querySelectorAll('[data-toggle]').forEach(b=> b.addEventListener('click', async ()=>{
+        const id = b.dataset.toggle, next = b.dataset.next === 'true';
+        b.disabled = true;
+        try{
+          await api('/'+id+'/status', { method:'PATCH', body: JSON.stringify({ ativo: next }) });
+          toast(next ? 'Fornecedor ativado.' : 'Fornecedor desativado.');
+          loadItens();
+        }catch(err){ toast(err.message, 'error'); b.disabled = false; }
+      }));
+    }
+
+    function openModal(fornecedor){
+      const isEdit = !!fornecedor;
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar fornecedor':'Novo fornecedor')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+(isEdit?'Atualize os dados do fornecedor.':'Preencha os dados para cadastrar um novo fornecedor desta empresa.')+'</div>'
+          + '<form id="forForm">'
+            + '<div class="field"><label>Razão social / Nome</label><input type="text" id="fRazao" placeholder="Razão social ou nome completo" value="'+(isEdit?escapeHtml(fornecedor.razaoSocial):'')+'" maxlength="200">'
+              + '<div class="field-error" id="eRazao" style="display:none;"></div></div>'
+            + '<div class="field"><label>Nome fantasia <span class="opt">(opcional)</span></label><input type="text" id="fFantasia" placeholder="Nome usado no dia a dia" value="'+(isEdit?escapeHtml(fornecedor.nomeFantasia||''):'')+'" maxlength="200"></div>'
+            + '<div class="field"><label>CNPJ ou CPF</label><input type="text" inputmode="numeric" id="fDocumento" placeholder="00.000.000/0000-00 ou 000.000.000-00" value="'+(isEdit?maskDocumento(fornecedor.documento):'')+'" maxlength="18">'
+              + '<div class="field-error" id="eDocumento" style="display:none;"></div></div>'
+            + '<div class="field"><label>Telefone <span class="opt">(opcional)</span></label><input type="text" id="fTelefone" placeholder="(00) 00000-0000" value="'+(isEdit?escapeHtml(fornecedor.telefone||''):'')+'" maxlength="20"></div>'
+            + '<div class="field"><label>E-mail <span class="opt">(opcional)</span></label><input type="text" id="fEmail" placeholder="contato@fornecedor.com" value="'+(isEdit?escapeHtml(fornecedor.email||''):'')+'" maxlength="255">'
+              + '<div class="field-error" id="eEmail" style="display:none;"></div></div>'
+            + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" placeholder="Condições, contato, observações gerais" value="'+(isEdit?escapeHtml(fornecedor.observacao||''):'')+'"></div>'
+            + (isEdit ? '<div class="toggle-row"><div><div class="toggle-row-label">Fornecedor ativo</div><div class="toggle-row-sub">Fornecedores inativos ficam ocultos nas seleções do sistema.</div></div>'
+              + '<button type="button" class="toggle '+(fornecedor.ativo?'on':'')+'" id="fAtivo" data-on="'+(fornecedor.ativo?'true':'false')+'"></button></div>' : '')
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Cadastrar fornecedor')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+
+      const docInput = document.getElementById('fDocumento');
+      docInput.addEventListener('input', ()=>{ docInput.value = maskDocumento(docInput.value); });
+      document.getElementById('fRazao').focus();
+
+      const toggleBtn = document.getElementById('fAtivo');
+      if(toggleBtn) toggleBtn.addEventListener('click', ()=>{
+        const on = toggleBtn.dataset.on !== 'true';
+        toggleBtn.dataset.on = String(on);
+        toggleBtn.classList.toggle('on', on);
+      });
+
+      document.getElementById('forForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eRazao','eDocumento','eEmail'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+        ['fRazao','fDocumento','fEmail'].forEach(id=> document.getElementById(id).classList.remove('invalid'));
+
+        const payload = {
+          empresaId: state.empresaId,
+          razaoSocial: document.getElementById('fRazao').value,
+          nomeFantasia: document.getElementById('fFantasia').value,
+          documento: document.getElementById('fDocumento').value,
+          telefone: document.getElementById('fTelefone').value,
+          email: document.getElementById('fEmail').value,
+          observacao: document.getElementById('fObservacao').value,
+        };
+        if(isEdit && toggleBtn) payload.ativo = toggleBtn.dataset.on === 'true';
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/'+fornecedor.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Fornecedor atualizado.' : 'Fornecedor cadastrado.');
+          loadItens();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            const fieldMap = { razaoSocial:'Razao', documento:'Documento', email:'Email' };
+            Object.entries(err.errors).forEach(([k,msg])=>{
+              const suf = fieldMap[k]; if(!suf) return;
+              const el=document.getElementById('e'+suf); if(el){ el.textContent=msg; el.style.display='block'; }
+              const input=document.getElementById('f'+suf); if(input) input.classList.add('invalid');
+            });
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    document.getElementById('btnNewFornecedor').addEventListener('click', ()=> openModal());
+
+    window.Fornecedores = { load };
+  })();
+
+  /* ================= ANÚNCIOS — visualização ao vivo (Mercado Livre) =================
+     Mostra os anúncios reais das contas do Mercado Livre conectadas: ID,
+     título, SKU, loja, preço, estoque disponível, status e tipo. Nada é
+     inventado — se a conta não estiver conectada, ou a API do Mercado Livre
+     falhar, a tela mostra exatamente isso (nunca uma lista vazia sem
+     explicação, nunca um anúncio fictício). Edição de preço/estoque não faz
+     parte desta etapa (pedido explícito do usuário). */
+  (function(){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, loading:false, data:null, error:null };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function apiAnuncios(empresaId){
+      const res = await fetch('/api/anuncios?empresaId='+empresaId);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os anúncios.');
+      return body;
+    }
+
+    async function loadAnuncios(){
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiAnuncios(state.empresaId); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadAnuncios(); else render();
+    }
+
+    function statusBadge(status){
+      if(status === 'active') return '<span class="badge-status on"><span class="dot"></span>Ativo</span>';
+      if(status === 'paused') return '<span class="badge-status warn"><span class="dot"></span>Pausado</span>';
+      if(status === 'closed') return '<span class="badge-status off"><span class="dot"></span>Encerrado</span>';
+      return status ? ('<span class="badge-status off"><span class="dot"></span>'+escapeHtml(status)+'</span>') : '—';
+    }
+
+    function tipoAnuncioLabel(tipo){
+      const map = { gold_special:'Clássico', gold_pro:'Premium', free:'Grátis' };
+      if(!tipo) return '—';
+      return map[tipo] || tipo;
+    }
+
+    function render(){
+      const root = document.getElementById('anunciosRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa, e conecte o Mercado Livre em <strong>Marketplaces</strong>, para ver os anúncios aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="empresa-picker"><label>Empresa</label><select id="adsEmpresaSelect">'
+        + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+      + '</select></div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Buscando anúncios no Mercado Livre…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data && state.data.pendente){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--warning); background:var(--warning-soft);">'+svg('clock')+'</div>'
+          + '<h2>Sincronização pendente</h2>'
+          + '<p class="lead">'+escapeHtml(state.data.mensagem||'Ainda não é possível mostrar os anúncios desta empresa.')+'</p></div>';
+      } else if(state.data && !state.data.itens.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
+          + '<h2>Nenhum anúncio encontrado</h2>'
+          + '<p class="lead">A conta '+escapeHtml((state.data.conta&&state.data.conta.nickname)||'')+' não tem nenhum anúncio publicado no Mercado Livre no momento.</p></div>';
+      } else if(state.data){
+        const itens = state.data.itens;
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>ID</th><th>Título</th><th>SKU</th><th>Loja</th><th>Preço</th><th>Estoque</th><th>Status</th><th>Tipo</th>'
+          + '</tr></thead><tbody>'
+          + itens.map(a => '<tr>'
+            + '<td class="mono">'+escapeHtml(a.id)+'</td>'
+            + '<td>'+escapeHtml(a.titulo||'—')+'</td>'
+            + '<td class="mono">'+escapeHtml(a.sku||'—')+'</td>'
+            + '<td>'+escapeHtml(a.loja||'—')+'</td>'
+            + '<td class="mono">'+money(a.preco)+'</td>'
+            + '<td class="tab-nums">'+(a.estoqueDisponivel===null||a.estoqueDisponivel===undefined?'—':a.estoqueDisponivel)+'</td>'
+            + '<td>'+statusBadge(a.status)+'</td>'
+            + '<td>'+escapeHtml(tipoAnuncioLabel(a.tipoAnuncio))+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>'
+          + (state.data.total > itens.length ? '<div class="field-hint" style="margin-top:10px;">Mostrando '+itens.length+' de '+state.data.total+' anúncio(s) — carregar mais ainda não foi implementado nesta etapa.</div>' : '');
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('adsEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadAnuncios(); });
+    }
+
+    document.getElementById('btnRefreshAnuncios').addEventListener('click', ()=>{ if(state.empresaId) loadAnuncios(); });
+
+    window.Anuncios = { load };
+  })();
+
   // Só navega para a rota inicial depois que TODOS os módulos acima (Empresas,
-  // Marketplaces, Pedidos, Custos) já estão definidos — chamar isso mais cedo
-  // fazia a tela de destino do OAuth do Mercado Livre (#marketplaces?ml=...)
-  // e outras rotas carregarem em branco no primeiro load/refresh.
+  // Marketplaces, Pedidos, Custos, Produtos, Fornecedores, Anúncios) já estão
+  // definidos — chamar isso mais cedo fazia a tela de destino do OAuth do
+  // Mercado Livre (#marketplaces?ml=...) e outras rotas carregarem em branco
+  // no primeiro load/refresh.
   navigate(location.hash ? location.hash.slice(1) : 'overview');
 
 })();

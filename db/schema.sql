@@ -138,3 +138,50 @@ CREATE TABLE IF NOT EXISTS config_financeiro (
   aliquota_imposto  NUMERIC(5,2) NOT NULL DEFAULT 0,  -- percentual, ex: 6.00 = 6%
   atualizado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ============================================================
+-- Etapa: Produtos, Anúncios (visualização) e Fornecedores
+-- ============================================================
+
+-- Cadastro simples de produtos, por empresa. Ainda sem kits, composição nem
+-- controle de estoque automático (não pedido nesta etapa) — catálogo
+-- deliberadamente simples: nome, SKU, custo e status. Fica SEPARADA de
+-- "custos_produto" (usada no cálculo de margem das vendas do Mercado Livre)
+-- de propósito, para não alterar essa fonte de cálculo já em uso nesta
+-- etapa — ver docs/02-decisoes.md sobre essa decisão e o que falta pra
+-- unificar as duas no futuro.
+CREATE TABLE IF NOT EXISTS produtos (
+  id             SERIAL PRIMARY KEY,
+  empresa_id     INTEGER NOT NULL REFERENCES empresas(id),
+  nome           VARCHAR(200) NOT NULL,
+  sku            VARCHAR(100) NOT NULL,
+  custo          NUMERIC(12,2) NOT NULL,
+  ativo          BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, sku)
+);
+
+-- Cadastro de fornecedores, por empresa. "documento" guarda CNPJ (14
+-- dígitos) ou CPF (11 dígitos), validado conforme o tamanho. Estrutura já
+-- preparada (empresa_id) para futuramente relacionar fornecedor a produtos
+-- e a compras — essa relação em si ainda não existe (não pedida nesta etapa).
+CREATE TABLE IF NOT EXISTS fornecedores (
+  id              SERIAL PRIMARY KEY,
+  empresa_id      INTEGER NOT NULL REFERENCES empresas(id),
+  razao_social    VARCHAR(200) NOT NULL,
+  nome_fantasia   VARCHAR(200),
+  documento       VARCHAR(14) NOT NULL,   -- somente dígitos: CNPJ (14) ou CPF (11)
+  telefone        VARCHAR(20),
+  email           VARCHAR(255),
+  observacao      TEXT,
+  ativo           BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, documento)
+);
+
+-- Anúncios (itens/listagens) do Mercado Livre NÃO têm tabela própria: a tela
+-- Anúncios busca ao vivo na API do Mercado Livre a cada carregamento (ver
+-- server/lib/mlAnuncios.js) — nada é persistido aqui nesta etapa, por
+-- decisão consciente (ver docs/02-decisoes.md).

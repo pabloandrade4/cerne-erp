@@ -7,6 +7,9 @@ const integracoesRouter = require('./routes/integracoes');
 const pedidosRouter = require('./routes/pedidos');
 const custosRouter = require('./routes/custos');
 const relatoriosRouter = require('./routes/relatorios');
+const produtosRouter = require('./routes/produtos');
+const fornecedoresRouter = require('./routes/fornecedores');
+const anunciosRouter = require('./routes/anuncios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,6 +24,9 @@ app.use('/api/integracoes/mercadolivre', integracoesRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api', custosRouter);
 app.use('/api/relatorios', relatoriosRouter);
+app.use('/api/produtos', produtosRouter);
+app.use('/api/fornecedores', fornecedoresRouter);
+app.use('/api/anuncios', anunciosRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
