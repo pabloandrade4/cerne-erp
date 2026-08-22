@@ -17,18 +17,22 @@ desenvolvimento, para não serem esquecidas.
   normalmente, empacota um `.zip` só com o que mudou, e o usuário sobrescreve
   os arquivos no GitHub manualmente (Add file → Upload files) e comita.
 
-## Sincronização do Mercado Livre pode ficar lenta com muitos pedidos
-- Testado com a conta real "PFEMBALAGEMS": sincronizar ~193 pedidos dos
-  últimos 30 dias levou vários minutos. A sincronização processa um pedido
-  por vez (sequencial), com até 3 chamadas à API do Mercado Livre por
-  pedido — sob volume alto, parece esbarrar em rate-limiting real da API do
-  Mercado Livre, deixando o processo bem mais lento (não trava mais
-  indefinidamente, pois foi adicionado um timeout de 20s por chamada, mas
-  ainda pode demorar bastante para terminar).
-- Não foi otimizado agora (ex: processar pedidos em paralelo com limite de
-  concorrência, ou pausar/repetir com backoff quando a API sinalizar limite
-  de uso) porque estava fora do escopo dos 3 passos pedidos nesta etapa.
-  Ver `06-proximos-passos.md`.
+## Sincronização do Mercado Livre demora com muitos pedidos (não é erro, é lentidão esperada)
+- Testado com a conta real "PFEMBALAGEMS": a primeira sincronização trouxe
+  **2.370 pedidos reais dos últimos 30 dias** (confirmado: 2370 de 2370
+  importados/atualizados, 0 erros) — levou cerca de 14 minutos, do clique
+  em "Sincronizar agora" até aparecer "Última sincronização" preenchida.
+  Terminou certa e completa, só demorou.
+- A sincronização processa um pedido por vez (sequencial), com até 3
+  chamadas à API do Mercado Livre por pedido — para uma conta com muitos
+  pedidos, isso soma bastante tempo. O botão fica em "Sincronizando..." o
+  tempo todo, sem indicar progresso (quantos já foram, quantos faltam).
+- Não foi otimizado agora (ex: processar em paralelo com limite de
+  concorrência, mostrar progresso em tempo real, rodar em background) porque
+  estava fora do escopo dos 3 passos pedidos nesta etapa. Ver
+  `06-proximos-passos.md`. Foi adicionado um timeout de 20s por chamada à
+  API (ver `02-decisoes.md`) para garantir que, mesmo numa chamada lenta,
+  o processo nunca trave para sempre.
 
 ## `mcp__Render__query_render_postgres` não funciona
 - A ferramenta de consulta direta ao Postgres do Render (via MCP) retorna

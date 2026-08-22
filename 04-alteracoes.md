@@ -15,9 +15,11 @@ Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
   resultado da venda (valor - tarifas - frete do vendedor - imposto - custo
   do produto) calculado só quando todas as partes existem — senão mostra o
   que está pendente, nunca um número inventado.
-- **Testado com a conta real "PFEMBALAGEMS":** conectada, sincronizada
-  (193 pedidos reais importados), pedido de exemplo conferido em detalhe
-  (ver relatório enviado ao usuário no chat, com o exemplo completo).
+- **Testado com a conta real "PFEMBALAGEMS":** conectada e sincronizada com
+  sucesso — **2.370 pedidos reais** dos últimos 30 dias importados/
+  atualizados, 0 erros (sincronização concluída em ~14 min). Pedido de
+  exemplo conferido em detalhe (ver relatório enviado ao usuário no chat,
+  com o exemplo completo).
 - Durante o teste real, foram corrigidos 2 problemas encontrados: (1) as
   telas de Marketplaces/Pedidos/Custos carregavam em branco no primeiro
   load (ordem de inicialização do `index.html`); (2) a sincronização podia
