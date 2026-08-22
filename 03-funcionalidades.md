@@ -3,6 +3,54 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
+## Produtos (cadastro simples)
+- **Status:** concluído localmente (aguardando deploy + teste ao vivo em
+  produção — ver `06-proximos-passos.md`).
+- **O que é:** cadastro de produtos por empresa — nome, SKU, custo e
+  status. Permite cadastrar, listar (com busca por nome/SKU e filtro
+  ativos/inativos/todos), editar e ativar/desativar. Ainda sem kits,
+  composição nem controle de estoque automático (não pedido nesta etapa).
+  Tabela separada da já existente `custos_produto` (usada no cálculo de
+  margem) — ver `02-decisoes.md` para o porquê.
+- **Onde está:** `server/routes/produtos.js` (API),
+  `server/public/index.html` (tela — módulo `window.Produtos`).
+- **O que falta:** unificar (ou não) com o custo já usado no cálculo de
+  margem das vendas; kits/composição; vínculo com estoque; exclusão
+  definitiva.
+
+## Anúncios (visualização ao vivo do Mercado Livre)
+- **Status:** concluído localmente (aguardando deploy + teste ao vivo em
+  produção — ver `06-proximos-passos.md`).
+- **O que é:** mostra os anúncios reais das contas do Mercado Livre
+  conectadas — ID, título, SKU, loja, preço, estoque disponível, status e
+  tipo do anúncio — buscados ao vivo na API a cada carregamento da tela
+  (nada fica salvo no banco nesta etapa). Se a empresa não tiver conta
+  conectada, a conexão estiver com erro, ou a API falhar, a tela mostra que
+  a sincronização está pendente (nunca um anúncio fictício). Edição de
+  preço/estoque ainda não faz parte desta etapa.
+- **Onde está:** `server/lib/mlAnuncios.js` (busca dos anúncios na API),
+  `server/routes/anuncios.js` (API), `server/public/index.html` (tela —
+  módulo `window.Anuncios`, item de menu "Anúncios", ao lado de Produtos).
+- **O que falta:** editar preço e estoque pelo Mercado Livre; paginação
+  além da primeira página (hoje mostra até 100 anúncios com o total real
+  informado); Shopee.
+
+## Fornecedores (cadastro)
+- **Status:** concluído localmente (aguardando deploy + teste ao vivo em
+  produção — ver `06-proximos-passos.md`).
+- **O que é:** cadastro de fornecedores por empresa — razão social/nome,
+  nome fantasia, CNPJ ou CPF (validado conforme o tamanho), telefone,
+  e-mail, observação e status. Permite cadastrar, listar (com busca e
+  filtro ativos/inativos/todos), editar e ativar/desativar. Estrutura já
+  preparada para relacionar fornecedor a produtos e compras no futuro
+  (relação em si ainda não existe).
+- **Onde está:** `server/routes/fornecedores.js` (API), `server/lib/cpf.js`
+  (validação de CPF, novo — CNPJ reaproveita `server/lib/cnpj.js` já
+  existente), `server/public/index.html` (tela — módulo
+  `window.Fornecedores`).
+- **O que falta:** vínculo de fato com produtos e com o módulo de Compras;
+  exclusão definitiva.
+
 ## Integração real com Mercado Livre (conexão, pedidos, custo/imposto)
 - **Status:** concluído (os 3 passos pedidos: conectar conta, importar
   pedidos completos, custo por SKU + imposto configurável).

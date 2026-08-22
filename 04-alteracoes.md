@@ -2,6 +2,46 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-22 (7) — Ativação de Produtos, Anúncios e Fornecedores
+- Pedido pelo usuário: ativar 3 áreas novas, mantendo o design atual e sem
+  mexer em nenhuma outra área — Produtos, Anúncios (nova) e Fornecedores.
+- **Produtos:** cadastro simples e funcional, salvo no banco — nome, SKU,
+  custo, status. Cadastrar, listar, editar, pesquisar (nome/SKU) e
+  ativar/desativar. Ainda sem kits, composição ou estoque automático (não
+  pedido). Tabela nova (`produtos`), separada da já existente
+  `custos_produto` usada no cálculo de margem — ver `02-decisoes.md`.
+- **Anúncios (aba nova, ao lado de Produtos no menu):** mostra os anúncios
+  reais das contas do Mercado Livre conectadas — ID, título, SKU, loja,
+  preço, estoque disponível, status e tipo — buscados ao vivo na API a
+  cada carregamento da tela (nenhum anúncio é salvo no banco nesta etapa,
+  nem inventado). Se a empresa não tiver conta conectada, a conexão
+  estiver com erro, ou a API falhar, a tela avisa que a sincronização está
+  pendente. Ainda não edita preço nem estoque pelo Mercado Livre (só
+  visualização, como pedido).
+- **Fornecedores:** cadastro por empresa — razão social/nome, nome
+  fantasia, CNPJ ou CPF (validação nova de CPF, mesma lógica que já existia
+  para CNPJ), telefone, e-mail, observação e status. Cadastrar, listar,
+  editar, pesquisar e ativar/desativar. Estrutura pronta para relacionar a
+  produtos e compras futuramente (relação em si ainda não existe).
+- **Testado localmente:** `node --check` em todos os arquivos de backend
+  novos/alterados e no bloco de script do front-end; schema aplicado no
+  Postgres local confirmando criação das 2 tabelas novas (`produtos`,
+  `fornecedores`) sem alterar nenhuma tabela existente; CRUD completo de
+  Produtos e Fornecedores testado via `psql` com as mesmas queries das
+  rotas (criar, listar, buscar por nome/SKU/CNPJ/CPF, filtrar por status,
+  editar, ativar/desativar, e a rejeição de SKU/documento duplicado por
+  empresa); validação de CPF testada com números válidos e inválidos
+  conhecidos; extração de SKU de anúncio testada nos 5 cenários possíveis
+  (atributo do anúncio, campo legado, sem SKU, variações com SKU igual,
+  variações com SKU diferente — neste último caso mostra "—", nunca chuta);
+  máscara de CNPJ/CPF do formulário de Fornecedores testada digitando os
+  dois formatos progressivamente. **Ainda não foi possível testar a
+  chamada real à API de anúncios do Mercado Livre nem rodar o servidor
+  completo neste ambiente** (sem acesso a pacotes npm aqui) — depende do
+  teste ao vivo em produção depois do deploy.
+- Nenhuma outra área foi alterada (Empresas, Marketplaces, Custos, Pedidos,
+  Visão Geral e Financeiro continuam exatamente como estavam).
+
 ## 2026-08-22 (6) — Correções: filtro único da Visão Geral, tabela de Pedidos mais estreita, fuso horário do período
 - Pedido pelo usuário: corrigir 3 problemas específicos nas telas já
   ativadas na etapa anterior, sem mudar o design geral nem criar

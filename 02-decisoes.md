@@ -3,6 +3,77 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-22 (10) — Ativação de Produtos, Anúncios e Fornecedores
+- Pedido do usuário: ativar 3 áreas novas do ERP — Produtos (cadastro
+  simples), Anúncios (visualização real do Mercado Livre) e Fornecedores
+  (cadastro) — mantendo o design atual e sem mexer em nenhuma outra área.
+- **Produtos é uma tabela nova e separada de `custos_produto`.** A tabela
+  `custos_produto` já existia e é usada, hoje, pelo cálculo de margem de
+  Custos/Pedidos/Visão Geral/Financeiro — mexer nela contaria como alterar
+  "outras áreas", proibido nesta etapa. Como o pedido também foi
+  explicitamente por um "cadastro de produtos simples", sem kits/composição/
+  estoque ainda, a decisão foi criar `produtos` como catálogo independente
+  (nome, SKU, custo, status), sem nenhum vínculo com o cálculo de margem por
+  enquanto. **Trade-off consciente:** custo por SKU passa a existir em dois
+  lugares (Produtos e Custos) sem sincronia entre eles — registrado como
+  pendência em `05-problemas-conhecidos.md` e `06-proximos-passos.md`, para
+  o usuário decidir quando/como unificar (ex: Produtos passar a ser a fonte
+  única de custo, ou as duas telas serem uma só).
+- **Anúncios não tem tabela no banco — busca ao vivo na API do Mercado
+  Livre a cada carregamento da tela.** Alternativa considerada: importar e
+  guardar os anúncios como é feito com os pedidos (`ml_pedidos`). Decisão:
+  não criar uma sincronização nova nesta etapa, porque (1) o pedido foi
+  explicitamente "primeiro quero visualizar corretamente os anúncios" (sem
+  editar preço/estoque ainda), (2) evita duplicar mais uma vez o problema já
+  registrado de sincronização lenta com contas de muitos itens (ver
+  `05-problemas-conhecidos.md`, período 7/30 dias), e (3) mantém o escopo no
+  tamanho pedido. Usa os endpoints `/users/{id}/items/search` (lista de IDs,
+  paginado) e `/items?ids=...` (detalhe de até 20 itens por chamada) — ambos
+  documentados oficialmente pelo Mercado Livre. Nova lib
+  `server/lib/mlAnuncios.js`, reaproveitando `getContaComTokenValido` de
+  `mlSync.js` (mesmo padrão de renovação automática de token) e `apiGet` de
+  `mercadolivre.js` — nenhuma lógica de token/renovação foi duplicada.
+- **SKU do anúncio nem sempre vem num campo único e óbvio da API do Mercado
+  Livre** — pode estar no atributo `SELLER_SKU` do anúncio, no campo legado
+  `seller_custom_field`, ou só dentro de cada variação. Regra adotada: usar
+  o SKU do anúncio se existir; senão, o campo legado; senão, o SKU da(s)
+  variação(ões) **só se todas tiverem o mesmo SKU** — se houver mais de um
+  SKU diferente entre variações, o campo fica "—" (nunca escolhe um SKU "no
+  chute" entre vários possíveis).
+- **Primeira página de anúncios limitada a 50–100 itens por carregamento**
+  (parâmetro `limit`, máx. 100), com o total real informado pela API
+  mostrado na tela ("mostrando X de Y"). "Carregar mais"/paginação completa
+  não foi implementado nesta etapa — decisão de manter o escopo no tamanho
+  pedido ("primeiro quero visualizar corretamente"); fica registrado em
+  `06-proximos-passos.md` para quando o usuário quiser ver mais que a
+  primeira página.
+- **Validação de CPF nova** (`server/lib/cpf.js`), no mesmo padrão já usado
+  para CNPJ (`server/lib/cnpj.js`, não alterado) — Fornecedores aceita
+  CNPJ (14 dígitos) ou CPF (11 dígitos) no mesmo campo, detectando qual
+  validar pelo tamanho do número.
+- **Posição no menu:** "Anúncios" foi adicionado ao grupo "Cadastros", logo
+  depois de "Produtos" (antes de "Fornecedores") — pedido explícito do
+  usuário foi a aba ficar "próxima de Produtos". Fornecedores e Produtos já
+  existiam como itens do menu (desativados, com placeholder "Em
+  desenvolvimento") — só precisaram ser ativados com tela real, sem mexer
+  na posição deles no menu.
+- **Testado localmente** (sem poder rodar o servidor Express+pg neste
+  ambiente — ver `05-problemas-conhecidos.md`): `node --check` em todos os
+  arquivos de backend novos/alterados e no bloco de script do front-end;
+  schema aplicado no Postgres local (`cerne_dev`) confirmando criação das
+  tabelas novas sem afetar as existentes; CRUD completo de Produtos e
+  Fornecedores testado direto via `psql` com as mesmas queries das rotas
+  (criar, listar, buscar, editar, ativar/desativar, e a violação de
+  unicidade de SKU/documento por empresa); validação de CPF testada com
+  números conhecidos válidos/inválidos; extração de SKU do anúncio testada
+  com os 5 cenários possíveis (atributo, campo legado, sem SKU, variações
+  com SKU igual, variações com SKU diferente); máscara de CNPJ/CPF do
+  formulário testada com digitação progressiva de ambos os formatos. Não
+  foi possível testar a chamada real à API de itens do Mercado Livre nem
+  rodar o servidor Express completo neste ambiente — isso depende do teste
+  ao vivo em produção depois do deploy (ver `04-alteracoes.md` e
+  `06-proximos-passos.md`).
+
 ## 2026-08-22 (9) — 3 correções: filtro único da Visão Geral, tabela de Pedidos mais estreita, fuso horário do período
 - Pedido do usuário: corrigir 3 problemas específicos, sem mudar o design
   geral e sem criar funcionalidade nova — (1) Visão Geral tinha dois

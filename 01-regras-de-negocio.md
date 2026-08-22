@@ -132,7 +132,47 @@ _(sem regras registradas ainda)_
   pra esta listagem operacional. Ver "Outras regras gerais", abaixo.
 
 ## Produtos
-_(sem regras registradas ainda)_
+- Cadastro simples, por empresa: **nome, SKU, custo e status**
+  (ativo/inativo). É possível cadastrar, listar, editar, pesquisar (por nome
+  ou SKU) e ativar/desativar um produto.
+- **SKU é único por empresa** (a mesma empresa não pode ter dois produtos
+  com o mesmo SKU) — mas o mesmo SKU pode existir em empresas diferentes.
+- **Ainda não existem regras de kits, composição (produto feito de outros
+  produtos) nem controle de estoque automático** — pedido explícito do
+  usuário para esta etapa ser só um cadastro simples e funcional. Isso pode
+  vir depois, quando for pedido.
+- **Esta tabela (`produtos`) é separada da tabela de custo por SKU que já
+  existia (`custos_produto`, usada em Custos/Pedidos/Visão Geral/Financeiro
+  para calcular a margem das vendas do Mercado Livre).** As duas hoje não
+  têm nenhum vínculo entre si — cadastrar um produto aqui não atualiza (nem
+  é atualizado por) o custo usado no cálculo de margem, e vice-versa. Ver
+  `02-decisoes.md` para o porquê dessa separação nesta etapa, e
+  `06-proximos-passos.md` para a decisão pendente sobre unificar as duas no
+  futuro.
+- Por enquanto **não existe exclusão definitiva** de produto — só
+  ativar/desativar (mesma regra de Empresas).
+
+## Anúncios
+- Mostra os **anúncios reais das contas do Mercado Livre conectadas** — não
+  existe (e não pode existir) anúncio cadastrado manualmente ou fictício
+  nesta tela.
+- Campos mostrados por anúncio: **ID do anúncio, título, SKU, loja
+  (conta/nickname do Mercado Livre), preço, estoque disponível, status e
+  tipo do anúncio**.
+- **Busca ao vivo, direto na API do Mercado Livre, a cada vez que a tela é
+  aberta ou atualizada** — nenhum anúncio fica salvo no banco de dados
+  nesta etapa (diferente de Pedidos, que são importados e guardados). Ver
+  `02-decisoes.md`.
+- Se a empresa não tiver nenhuma conta do Mercado Livre conectada, ou a
+  conexão estiver com erro, ou a API do Mercado Livre falhar ao responder,
+  a tela **mostra claramente que a sincronização está pendente** (com o
+  motivo) — nunca inventa ou mantém na tela um anúncio de exemplo.
+- Se o Mercado Livre não retornar o SKU de um anúncio (ou o anúncio tiver
+  variações com SKUs diferentes, sem um único SKU "principal"), o campo
+  aparece como "—" nessa linha — nunca um SKU adivinhado.
+- **Nesta etapa não é possível editar preço nem estoque pelo Mercado
+  Livre** — pedido explícito do usuário para primeiro visualizar
+  corretamente os anúncios, antes de qualquer edição.
 
 ## Estoque
 _(sem regras registradas ainda)_
@@ -144,7 +184,22 @@ _(sem regras registradas ainda)_
 _(sem regras registradas ainda)_
 
 ## Fornecedores
-_(sem regras registradas ainda)_
+- Cadastro por empresa: **razão social/nome, nome fantasia (opcional),
+  CNPJ ou CPF, telefone (opcional), e-mail (opcional), observação
+  (opcional) e status** (ativo/inativo). É possível cadastrar, listar,
+  editar, pesquisar (por razão social, fantasia ou CNPJ/CPF) e
+  ativar/desativar um fornecedor.
+- **Aceita CNPJ (pessoa jurídica) ou CPF (pessoa física)** no mesmo campo —
+  o sistema identifica pelo tamanho do número (14 dígitos = CNPJ, 11 =
+  CPF) e valida os dígitos verificadores de cada um.
+- **Documento (CNPJ/CPF) é único por empresa** — a mesma empresa não pode
+  cadastrar o mesmo fornecedor duas vezes.
+- **Estrutura já preparada para relacionar fornecedor a produtos e a
+  compras no futuro** (cada fornecedor já pertence a uma empresa) — essa
+  relação em si (quais produtos cada fornecedor fornece, pedidos de compra)
+  ainda não existe, não foi pedida nesta etapa.
+- Por enquanto **não existe exclusão definitiva** de fornecedor — só
+  ativar/desativar (mesma regra de Empresas e Produtos).
 
 ## Financeiro
 - **Primeira versão, focada só nas vendas do Mercado Livre já sincronizadas**

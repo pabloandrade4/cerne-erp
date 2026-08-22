@@ -3,6 +3,44 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Custo por SKU existe em dois lugares (Produtos e Custos), sem sincronia entre eles
+- Ao ativar a tela **Produtos** (nome, SKU, custo, status), foi criada uma
+  tabela nova (`produtos`) — de propósito, **separada** da tabela
+  `custos_produto` já existente e usada no cálculo de margem das vendas do
+  Mercado Livre (telas Custos, Pedidos, Visão Geral e Financeiro). Ver o
+  porquê dessa separação em `02-decisoes.md`.
+- Na prática, hoje: cadastrar/editar o custo de um SKU em **Produtos** não
+  atualiza o custo usado no cálculo de margem em **Custos** (e vice-versa)
+  — são dois cadastros independentes, mesmo que guardem informação
+  parecida (custo por SKU).
+- **Precisa de uma decisão do usuário** sobre unificar as duas no futuro
+  (ex: Produtos passar a ser a fonte única de custo usada no cálculo de
+  margem, substituindo `custos_produto`) — não foi feito agora porque
+  fugiria do escopo desta etapa ("não altere outras áreas") e do pedido
+  explícito de um cadastro de Produtos simples primeiro. Ver
+  `06-proximos-passos.md`.
+
+## Anúncios: sem tabela própria, primeira página limitada, SKU pode não vir da API
+- A tela **Anúncios** busca os dados ao vivo na API do Mercado Livre a
+  cada carregamento — não existe tabela no banco guardando anúncios (ver
+  `02-decisoes.md`). Isso significa que, se a API do Mercado Livre estiver
+  lenta ou instável no momento, a tela demora ou mostra erro — não há uma
+  cópia local para cair como reforço (diferente de Pedidos, que ficam
+  salvos depois de importados).
+- **Só a primeira página é mostrada** (até 100 anúncios), com o total real
+  informado pela API na tela. Contas com mais de 100 anúncios veem só uma
+  parte, com aviso de quantos existem no total — "carregar mais"/paginação
+  completa não foi implementado nesta etapa (ver `02-decisoes.md`).
+- O **SKU de um anúncio pode aparecer como "—"** quando o Mercado Livre não
+  retorna esse dado num campo único (ex: anúncio com variações que têm
+  SKUs diferentes entre si) — o sistema nunca escolhe um SKU "no chute"
+  nesses casos.
+- **Ainda não foi possível testar a busca real de anúncios na API do
+  Mercado Livre** neste ambiente (sem conseguir rodar o servidor Express
+  completo aqui — ver "Este ambiente de desenvolvimento não consegue
+  instalar pacotes npm", abaixo) — depende do teste ao vivo em produção
+  depois do deploy.
+
 ## Período "7 dias"/"30 dias" fica muito lento com muitos pedidos (Visão Geral, Pedidos, Financeiro)
 - Descoberto testando ao vivo em produção (conta real "pf embalegens",
   22/08/2026) depois da correção do filtro de período: **"Hoje" (7
