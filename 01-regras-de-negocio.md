@@ -70,6 +70,23 @@ junto da nova).
 ## Shopee
 _(sem regras registradas ainda)_
 
+## Visão Geral
+- A tela usa dados reais dos pedidos do Mercado Livre já sincronizados —
+  nada de indicador decorativo/estático. Mostra, para a empresa e o
+  **período selecionado**: faturamento, quantidade de pedidos, margem de
+  contribuição (R$ e %) quando já houver dados suficientes, taxas/
+  comissões, frete do vendedor, imposto e custo dos produtos — e um
+  gráfico de Faturamento x Margem de contribuição por dia.
+- **Filtro de período de verdade** (não decorativo): Hoje, Últimos 7 dias,
+  Últimos 30 dias ou Este mês. "Hoje" e "Este mês" usam o fuso de Brasília
+  (UTC-3 fixo); "7/30 dias" são uma janela corrida a partir de agora.
+- Se não houver nenhum pedido no período, os indicadores mostram "Sem
+  dados". Se houver pedido mas faltar alguma informação (ex: custo de SKU
+  não cadastrado em algum pedido), mostra "Pendente" — nunca um número
+  calculado com uma parte inventada.
+- Ver a regra de **pedidos cancelados** em "Outras regras gerais", abaixo —
+  vale igualmente aqui.
+
 ## Pedidos
 - Pedidos do sistema hoje vêm só do Mercado Livre (Shopee ainda não existe).
   Cada pedido importado guarda: ID do pedido, data, status, comprador, cada
@@ -78,13 +95,21 @@ _(sem regras registradas ainda)_
   comprador e do vendedor separados, e o tipo de logística.
 - Ver a regra completa de "nunca inventar valor" e separação de frete em
   **Mercado Livre**, acima — vale igualmente para os pedidos importados.
-- A lista de pedidos (tela Pedidos) mostra, por pedido: valor da venda,
-  frete do vendedor, frete do comprador, **custo do produto** (soma do
-  custo cadastrado de cada SKU do pedido), **imposto** (calculado com a
-  alíquota configurada) e **margem líquida** (resultado da venda — ver
-  fórmula em **Custos**, abaixo). Se qualquer parte estiver faltando, a
-  coluna mostra "pendente" em vez de um número — nunca um valor
-  parcial/estimado.
+- A lista de pedidos (tela Pedidos) é filtrada pelo mesmo seletor de
+  período da Visão Geral/Financeiro, e mostra por pedido: data, número do
+  pedido, loja (conta do Mercado Livre), produto, SKU, quantidade, valor
+  da venda, taxas/comissões, frete do vendedor, imposto, **custo do
+  produto** (soma do custo cadastrado de cada SKU do pedido), **margem de
+  contribuição** (R$ e %) — ver fórmula em **Custos**, abaixo — logística e
+  status. Se qualquer parte estiver faltando, a coluna mostra "pendente"
+  em vez de um número — nunca um valor parcial/estimado.
+- Clicando no pedido abre o detalhe completo, mostrando exatamente como o
+  resultado daquela venda foi calculado (cada parte subtraída, uma por
+  uma, até a margem de contribuição final).
+- Pedidos cancelados aparecem normalmente na lista (linha esmaecida, para
+  diferenciar visualmente) — a regra de não entrarem no resultado
+  financeiro vale só pros números agregados de Visão Geral/Financeiro, não
+  pra esta listagem operacional. Ver "Outras regras gerais", abaixo.
 
 ## Produtos
 _(sem regras registradas ainda)_
@@ -102,7 +127,16 @@ _(sem regras registradas ainda)_
 _(sem regras registradas ainda)_
 
 ## Financeiro
-_(sem regras registradas ainda)_
+- **Primeira versão, focada só nas vendas do Mercado Livre já sincronizadas**
+  — não é a DRE completa. Mostra, para a empresa e o período selecionado:
+  faturamento bruto, taxas e comissões, frete pago pelo vendedor, impostos,
+  custo dos produtos, margem de contribuição em R$ e em %.
+- Usa o mesmo seletor de período (Hoje / 7 dias / 30 dias / Este mês) e a
+  mesma regra de cálculo da Visão Geral e dos Pedidos — nunca um valor
+  diferente pro mesmo período em telas diferentes.
+- **Por pedido do usuário, NÃO fazem parte desta etapa:** contas a pagar,
+  contas a receber, fluxo de caixa, DRE completa, banco, fornecedores,
+  Shopee. Isso vem depois, quando for pedido.
 
 ## Contas a pagar
 _(sem regras registradas ainda)_
@@ -152,4 +186,19 @@ _(sem regras registradas ainda)_
 _(sem regras registradas ainda)_
 
 ## Outras regras gerais
-_(sem regras registradas ainda)_
+- **Pedido cancelado no Mercado Livre não é venda de verdade.** Ele não
+  entra no faturamento, taxas, frete, imposto, custo nem margem de
+  contribuição mostrados em Visão Geral e Financeiro. Ele tem **um lugar
+  só** pra aparecer nesses números agregados: o card/linha "Pedidos
+  cancelados" (quantidade e valor, só informativo). Na listagem de
+  Pedidos ele continua aparecendo normalmente junto dos outros (linha
+  esmaecida), porque ali é a lista operacional de tudo que veio do
+  Mercado Livre — a regra de ficar de fora vale só pros totais.
+- **Fonte única de cálculo (regra central, pedida pelo usuário):** o
+  cálculo de resultado de uma venda — venda **(-)** taxas/comissões
+  **(-)** frete do vendedor **(-)** imposto **(-)** custo do produto **=**
+  margem de contribuição — existe em um único lugar no backend
+  (`lib/resultadoVenda.js` + `lib/relatorioVendas.js`) e é reaproveitado
+  por Visão Geral, Pedidos e Financeiro. Nenhuma dessas três telas tem sua
+  própria conta paralela — se a regra mudar, muda nos três lugares de uma
+  vez só. Ver `02-decisoes.md`.

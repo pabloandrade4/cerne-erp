@@ -3,6 +3,85 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-22 (8) — Ativação de Visão Geral, Pedidos e Financeiro com dados reais
+- Pedido do usuário: ativar de verdade 3 telas (Visão Geral, Pedidos,
+  Financeiro) com dados reais do Mercado Livre já sincronizado, com filtro
+  de período funcionando, sem inventar valor, e — regra explícita — **as
+  três usando a mesma fonte de cálculo no backend**, nunca cada uma
+  calculando do seu jeito.
+- **Arquitetura escolhida:** dois módulos novos no backend, sem nenhum dos
+  três acessarem o banco "cru" por conta própria:
+  - `lib/periodo.js` — define os 4 períodos (Hoje, 7 dias, 30 dias, Este
+    mês) e calcula os limites de data. "Hoje" e "Este mês" usam o fuso de
+    Brasília (UTC-3 fixo — o Brasil não tem mais horário de verão desde
+    2019); "7/30 dias" são janela corrida.
+  - `lib/relatorioVendas.js` — busca os pedidos do período de uma empresa
+    (uma query só, com o mesmo formato de subquery de custo por SKU que já
+    existia), calcula o resultado de cada um usando
+    `lib/resultadoVenda.js` (o mesmo arquivo já usado desde a etapa
+    anterior) e expõe duas funções de agregação: `resumirPeriodo` (totais)
+    e `serieDiaria` (pro gráfico).
+  - `routes/relatorios.js` — só um endpoint,
+    `GET /api/relatorios/resumo-vendas`, consumido tanto por Visão Geral
+    quanto por Financeiro.
+  - `routes/pedidos.js` (`GET /`) foi reescrito pra usar
+    `lib/relatorioVendas.js` também, no lugar da query que tinha antes —
+    ou seja, a listagem de Pedidos e o resumo de Visão Geral/Financeiro
+    literalmente compartilham a mesma função de busca+cálculo, não só a
+    mesma fórmula.
+- **Regra de pedido cancelado, definida com o usuário nesta etapa:** pedido
+  cancelado no Mercado Livre não conta como venda — fica de fora de todos
+  os valores agregados (faturamento, taxas, frete, imposto, custo, margem)
+  em Visão Geral e Financeiro. Ele aparece **num lugar só**: um card
+  "Pedidos cancelados" (quantidade + valor, informativo) em Visão Geral,
+  com uma nota equivalente no Financeiro. Na listagem de Pedidos ele
+  continua aparecendo normalmente (linha esmaecida), já que ali é a lista
+  operacional de tudo que veio do Mercado Livre.
+- **Decisão sobre valores parciais/pendentes nos totais agregados:** se
+  ALGUNS pedidos do período têm custo de SKU pendente mas outros não, o
+  total de "custo do produto" e a "margem de contribuição" somam só os
+  pedidos com informação completa — nunca zero fingindo que o pedido
+  pendente não existe, nem uma estimativa. Junto do número aparece quantos
+  pedidos ficaram de fora ("N pedido(s) sem essa informação"). Se **nenhum**
+  pedido do período tem a informação, aparece "Pendente"; se não há pedido
+  nenhum no período, aparece "Sem dados" — as duas palavras exatas pedidas
+  pelo usuário, usadas em lugares diferentes de propósito.
+- **Gráfico "Faturamento x Margem de contribuição" por dia:** implementado
+  como SVG simples embutido no próprio `index.html` (sem biblioteca externa
+  de gráfico) — barras de faturamento (cobre) + linha de margem de
+  contribuição (azul-petróleo), mesmo eixo (mesma unidade, R$, sem eixo
+  duplo). Dias com pedido cancelado não entram na soma do dia; dias com
+  pedido de custo pendente somam só a margem já conhecida daquele dia (com
+  aviso abaixo do gráfico).
+- **Renomeação de "margem líquida"/"lucro real" para "margem de
+  contribuição"** em toda a interface (Pedidos, Visão Geral, Financeiro).
+  "Lucro real"/"margem líquida" prometiam um resultado depois de TODAS as
+  despesas (aluguel, salário, etc.), que o sistema não calcula — o termo
+  certo pro que a fórmula realmente calcula (venda − taxas − frete − imposto
+  − custo do produto) é margem de contribuição, termo que o próprio
+  usuário usou ao pedir a funcionalidade.
+- **Limite de linhas na listagem de Pedidos:** até 500 pedidos por período
+  (antes era sempre os 200 mais recentes, fixo). Se o período tiver mais
+  que isso (ex: 30 dias com milhares de pedidos), aparece um aviso dizendo
+  quantos estão sendo mostrados de quantos existem no total — nunca um
+  corte silencioso.
+- **Removidos os cards "A receber"/"A pagar"** que existiam (vazios, só
+  "—") na Visão Geral antiga. Como contas a pagar/receber não fazem parte
+  desta etapa (nem foram pedidas), deixá-los ali para sempre mostrando "—"
+  parecia prometer algo que ainda não existe. Eles voltam quando esses
+  módulos forem implementados de verdade.
+- **Testado localmente antes de publicar** (Postgres local, mesmo
+  procedimento já usado no projeto): a query SQL de `relatorioVendas.js`
+  foi validada direto via `psql`, e a lógica pura de agregação
+  (`resumirPeriodo`, `serieDiaria`, `calcularPeriodo`) foi validada com
+  dados de teste cobrindo pedido completo, pedido com custo pendente,
+  pedido cancelado e os 4 períodos — todos bateram com o esperado (contas
+  refeitas à mão). Não foi possível instalar o driver `pg` neste ambiente
+  (bloqueio de rede já documentado em `05-problemas-conhecidos.md`), então
+  a query e a lógica pura foram validadas separadamente (uma via `psql`
+  direto, a outra reproduzindo as mesmas funções fora do módulo que
+  depende do `pg`) — mesmo resultado, mas registrando a limitação.
+
 ## 2026-08-22 (7) — Pedido cai sozinho no sistema (webhook do ML) + custo/imposto/margem na lista de Pedidos
 - Usuário pediu duas coisas: (1) pedido entrar no sistema sozinho, sem
   depender do botão "Sincronizar"; (2) a lista de Pedidos mostrar também

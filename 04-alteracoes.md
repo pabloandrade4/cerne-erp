@@ -2,6 +2,58 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-22 (5) — Visão Geral, Pedidos e Financeiro com dados reais (fonte única de cálculo)
+- Pedido pelo usuário: ativar de verdade as telas Visão Geral, Pedidos e
+  Financeiro com os dados já sincronizados do Mercado Livre, com filtro de
+  período funcionando, sem inventar valor nenhum, e as três telas usando a
+  mesma regra de cálculo no backend (nunca uma conta paralela em cada
+  tela).
+- **Visão Geral:** deixou de ser um layout estático. Agora mostra
+  faturamento, quantidade de pedidos, margem de contribuição (R$ e %),
+  taxas/comissões, frete do vendedor, imposto, custo dos produtos e
+  pedidos cancelados — tudo pro período selecionado (Hoje / 7 dias / 30
+  dias / Este mês) — e um gráfico novo, Faturamento x Margem de
+  contribuição por dia.
+- **Pedidos:** ganhou filtro de período (a listagem toda, não só as mais
+  recentes) e a tabela agora tem: data, número do pedido, loja, produto,
+  SKU, quantidade, valor da venda, taxas/comissões, frete do vendedor,
+  imposto, custo do produto, margem de contribuição (R$ e %), logística e
+  status. O detalhe do pedido (ao clicar) agora também mostra a loja e o
+  percentual de margem.
+- **Financeiro:** telas novas, primeira versão — faturamento bruto, taxas e
+  comissões, frete do vendedor, impostos, custo dos produtos, margem de
+  contribuição em R$ e %, e pedidos cancelados à parte. Só Mercado Livre
+  por enquanto; contas a pagar/receber, fluxo de caixa, DRE completa,
+  banco, fornecedores e Shopee ficam para depois (não fazem parte desta
+  etapa).
+- **Regra de pedido cancelado:** definida com o usuário nesta etapa —
+  pedido cancelado no Mercado Livre não conta em nenhum valor financeiro
+  agregado (faturamento, taxas, frete, imposto, custo, margem); ele
+  aparece só num lugar, um card "Pedidos cancelados" (quantidade e valor),
+  pra não ficar escondido nem misturado com o resultado real. Na listagem
+  de Pedidos ele continua aparecendo normalmente (linha esmaecida).
+- **"Margem líquida"/"lucro real" renomeados para "margem de
+  contribuição"** em toda a interface — nome mais correto pro que a
+  fórmula (venda − taxas − frete do vendedor − imposto − custo do produto)
+  realmente calcula, e o termo que o próprio usuário usou ao pedir.
+- **Backend reorganizado pra ter uma fonte única de verdade:** dois
+  arquivos novos, `lib/periodo.js` (cálculo dos 4 períodos, com "Hoje"/
+  "Este mês" no fuso de Brasília) e `lib/relatorioVendas.js` (busca +
+  cálculo + agregação dos pedidos de um período, reaproveitando
+  `lib/resultadoVenda.js` já existente). A listagem de Pedidos
+  (`routes/pedidos.js`) e o novo endpoint de relatórios
+  (`routes/relatorios.js`, usado por Visão Geral e Financeiro) chamam
+  exatamente as mesmas funções — não existe cálculo duplicado.
+- Removidos da Visão Geral os cards "A receber"/"A pagar" que só
+  mostravam "—" (contas a pagar/receber não fazem parte desta etapa);
+  eles voltam quando esses módulos forem implementados de verdade.
+- **Testado localmente antes de publicar** (Postgres local): a query SQL
+  de `relatorioVendas.js` validada via `psql`, e a lógica de agregação
+  (totais, série diária, os 4 períodos) validada com dados de teste
+  cobrindo pedido completo, pedido com custo pendente e pedido cancelado —
+  todos bateram com o cálculo esperado (contas refeitas à mão). Detalhes
+  em `02-decisoes.md` (8).
+
 ## 2026-08-22 (4) — Pedido cai sozinho no sistema (webhook do Mercado Livre) + custo/imposto/margem na lista de Pedidos
 - Pedido pelo usuário: (1) o pedido entrar sozinho no sistema, sem depender
   do botão "Sincronizar"; (2) a lista de Pedidos mostrar também custo do

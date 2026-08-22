@@ -1,10 +1,16 @@
 # Próximos Passos
 
 - Sistema já está no ar (https://cerne-erp.onrender.com), com banco Postgres
-  real, **Empresas** funcionando de ponta a ponta, e a **integração real com
+  real, **Empresas** funcionando de ponta a ponta, a **integração real com
   o Mercado Livre** (conectar conta, importar pedidos dos últimos 30 dias,
   custo por SKU + imposto configurável) testada com a conta real
-  "PFEMBALAGEMS".
+  "PFEMBALAGEMS", e agora **Visão Geral, Pedidos e Financeiro** com dados
+  reais e filtro de período (ver `03-funcionalidades.md` e `04-alteracoes.md`).
+- Por instrução explícita do usuário, esta etapa terminou depois do teste
+  nas três telas — aguardando o usuário pedir o próximo módulo antes de
+  avançar (não avançar sozinho pra Estoque, Full, Compras, Produtos,
+  Fornecedores, contas a pagar/receber, DRE completa, Ads, notas fiscais,
+  Shopee, IA, etc.).
 - **Pendente do usuário:** configurar no painel de desenvolvedor do
   Mercado Livre a notificação do tópico `orders_v2` apontando para
   `https://cerne-erp.onrender.com/api/integracoes/mercadolivre/webhook`,
@@ -20,7 +26,3 @@
 - Verificar, com o usuário, se surgiu alguma forma de habilitar `git push`
   direto nesta sessão do Cowork (ver `05-problemas-conhecidos.md`); enquanto
   isso, seguir com o fluxo de zip manual.
-- Aguardando o usuário pedir o próximo módulo/etapa — por instrução
-  explícita, nada além do que já foi pedido deve avançar sozinho (lojas,
-  usuários avançados, permissões, Shopee, pedidos além do que já existe,
-  produtos, estoque, financeiro completo, Full, IA, notas fiscais).

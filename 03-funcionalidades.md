@@ -43,17 +43,59 @@ cada uma e o status (em desenvolvimento / concluída).
   desenvolvedor do Mercado Livre (ver `02-decisoes.md` (7) para a URL
   exata) e confirmar, com um pedido real, que ele aparece sozinho no ERP.
 
-## Custo, imposto e margem líquida na lista de Pedidos
+## Pedidos — listagem completa com filtro de período
 - **Status:** concluído.
-- **O que é:** a tela de Pedidos passou a mostrar, direto na lista (sem
-  precisar abrir o detalhe de cada pedido), o custo do produto, o imposto
-  e a margem líquida de cada pedido — além do valor da venda e dos dois
-  fretes que já apareciam. Quando falta alguma informação (custo de SKU
-  não cadastrado, tarifa que o Mercado Livre não retornou), a coluna
-  mostra "pendente" em vez de um número.
-- **Onde está:** `server/lib/resultadoVenda.js` (cálculo compartilhado com
-  o detalhe do pedido), `server/routes/pedidos.js` (`GET /`),
+- **O que é:** a tela de Pedidos usa as vendas reais sincronizadas do
+  Mercado Livre, filtradas pelo período selecionado (Hoje / 7 dias / 30
+  dias / Este mês), numa tabela com: data, número do pedido, loja,
+  produto, SKU, quantidade, valor da venda, taxas/comissões, frete do
+  vendedor, imposto, custo do produto, margem de contribuição (R$ e %),
+  logística e status. Clicar num pedido abre o detalhe completo, com cada
+  parte do cálculo (venda − taxas − frete − imposto − custo = margem de
+  contribuição) explicada linha a linha. Quando falta alguma informação
+  (custo de SKU não cadastrado, tarifa que o Mercado Livre não retornou),
+  a coluna mostra "pendente" em vez de um número. Se o período tiver mais
+  de 500 pedidos, mostra os 500 mais recentes com um aviso de quantos
+  existem no total.
+- **Onde está:** `server/lib/resultadoVenda.js` (fórmula),
+  `server/lib/relatorioVendas.js` (busca + agregação, compartilhado com
+  Visão Geral e Financeiro), `server/lib/periodo.js` (cálculo dos
+  períodos), `server/routes/pedidos.js` (`GET /` e `GET /:id`),
   `server/public/index.html` (módulo `window.Pedidos`).
+
+## Visão Geral com dados reais
+- **Status:** concluído.
+- **O que é:** a tela deixou de ser só visual — mostra, pra empresa e
+  período selecionados (mesmo seletor de período de Pedidos/Financeiro):
+  faturamento, quantidade de pedidos, margem de contribuição (R$ e %),
+  taxas/comissões, frete do vendedor, imposto, custo dos produtos e
+  pedidos cancelados (quantidade/valor, informativo — não entram nos
+  valores acima). Tem também o gráfico "Faturamento x Margem de
+  contribuição" por dia, um SVG simples sem biblioteca externa. Indicador
+  sem nenhum pedido no período mostra "Sem dados"; indicador com pedido
+  mas informação faltando mostra "Pendente".
+- **Onde está:** `server/routes/relatorios.js`
+  (`GET /api/relatorios/resumo-vendas`), `server/lib/relatorioVendas.js`,
+  `server/public/index.html` (módulo `window.Overview`).
+- **O que falta:** os outros 3 gráficos da tela (Evolução diária, Por
+  marketplace, Fluxo de caixa) continuam como empty-state — não foram
+  pedidos nesta etapa. Comparativo com o período anterior (Δ) também não
+  foi implementado agora.
+
+## Financeiro (primeira versão — só Mercado Livre)
+- **Status:** concluído.
+- **O que é:** primeira versão do Financeiro, mostrando pro período
+  selecionado: faturamento bruto, taxas e comissões, frete pago pelo
+  vendedor, impostos, custo dos produtos, margem de contribuição em R$ e
+  em %, e pedidos cancelados no período (fora do resultado). Usa a mesma
+  fonte de dados de Visão Geral e Pedidos — nunca mostra um número
+  diferente pro mesmo período.
+- **Onde está:** `server/routes/relatorios.js` (mesmo endpoint da Visão
+  Geral), `server/public/index.html` (módulo `window.Financeiro`, item de
+  menu "Financeiro").
+- **O que falta (por pedido explícito do usuário, para depois):** contas a
+  pagar, contas a receber, fluxo de caixa, DRE completa, banco,
+  fornecedores, Shopee.
 
 ## Sistema publicado online, com banco de dados real
 - **Status:** concluído.
