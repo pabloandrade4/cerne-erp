@@ -34,6 +34,27 @@ desenvolvimento, para não serem esquecidas.
   API (ver `02-decisoes.md`) para garantir que, mesmo numa chamada lenta,
   o processo nunca trave para sempre.
 
+## Webhook do Mercado Livre ainda não foi testado com uma notificação real
+- O webhook (`POST /api/integracoes/mercadolivre/webhook`) foi testado de
+  duas formas neste ambiente: a lógica de validação (tópico `orders_v2`,
+  conferência do `application_id`, extração do ID do pedido, payload
+  malformado) isoladamente, e a query SQL/cálculo que agora aparece na
+  lista de Pedidos, com dados de teste no Postgres local. **Não foi
+  possível** disparar uma notificação real do Mercado Livre e confirmar o
+  pedido aparecendo sozinho no ERP, porque isso depende de duas coisas que
+  só o usuário pode fazer: configurar a URL do webhook no painel de
+  desenvolvedor do Mercado Livre, e existir um pedido real acontecendo
+  depois disso.
+- **Ação necessária do usuário:** no painel de desenvolvedor do app do
+  Mercado Livre, em Notificações, configurar o tópico `orders_v2` com a
+  URL `https://cerne-erp.onrender.com/api/integracoes/mercadolivre/webhook`.
+  Depois disso, o ideal é confirmar com o próximo pedido real (ou um pedido
+  de teste, se o Mercado Livre permitir) que ele aparece no ERP sem
+  precisar clicar em "Sincronizar".
+- Enquanto o webhook não estiver configurado (ou se alguma notificação
+  falhar por qualquer motivo), o botão "Sincronizar agora" continua
+  funcionando normalmente como reforço/backup.
+
 ## `mcp__Render__query_render_postgres` não funciona
 - A ferramenta de consulta direta ao Postgres do Render (via MCP) retorna
   erro de SSL (`FATAL: SSL/TLS required`) mesmo em consultas simples de

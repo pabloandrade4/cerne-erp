@@ -3,6 +3,54 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-22 (7) — Pedido cai sozinho no sistema (webhook do ML) + custo/imposto/margem na lista de Pedidos
+- Usuário pediu duas coisas: (1) pedido entrar no sistema sozinho, sem
+  depender do botão "Sincronizar"; (2) a lista de Pedidos mostrar também
+  custo do produto, imposto e margem líquida (só aparecia valor da venda e
+  os dois fretes).
+- **Pra (1), foram apresentadas duas opções ao usuário** (sincronização
+  periódica automática vs. webhook do Mercado Livre em tempo real) —
+  **escolhido: webhook (tempo real)**.
+- **Webhook implementado seguindo a documentação oficial do Mercado
+  Livre:** tópico `orders_v2` (o recomendado atualmente; o tópico legado
+  `orders` não é usado), recebido em
+  `POST /api/integracoes/mercadolivre/webhook`. Seguindo a própria
+  orientação do Mercado Livre, o ERP responde `200` imediatamente ao
+  receber a notificação (antes de processar), e só depois busca o pedido
+  completo na API — se der erro nesse processamento, ele só é registrado em
+  log (a resposta 200 já foi enviada, então a próxima sincronização cobre
+  o que passar batido).
+- **Validação de segurança:** a notificação só é processada se o
+  `application_id` dela bater com o `ML_CLIENT_ID` configurado no Render —
+  evita processar notificação de outro aplicativo/conta por engano.
+- **Trava por pedido:** como agora existem dois caminhos que podem tentar
+  importar o mesmo pedido ao mesmo tempo (webhook em tempo real +
+  sincronização manual/periódica), foi adicionada uma fila interna por
+  pedido (`conta + ID do pedido`) pra garantir que dois processos nunca
+  gravem o mesmo pedido ao mesmo tempo e corrompam os itens gravados.
+- **Pra (2),** a fórmula de "resultado da venda" (que já existia no
+  detalhe do pedido) foi extraída pra um arquivo só
+  (`lib/resultadoVenda.js`), usado tanto pelo detalhe quanto pela nova
+  listagem — garante que a lista e o detalhe nunca mostrem números
+  diferentes pro mesmo pedido. Custo do produto na listagem é somado por
+  SQL (soma o custo × quantidade de cada item do pedido); se **qualquer**
+  item do pedido não tiver custo de SKU cadastrado, o total fica
+  "pendente" (nunca uma soma parcial fingindo ser o total).
+- **Testado localmente antes de publicar** (Postgres local, mesmo
+  procedimento já usado no projeto): 3 cenários — pedido com todos os itens
+  com custo cadastrado (resultado calculado certo), pedido com um SKU sem
+  custo cadastrado (fica "pendente"), e pedido com item sem SKU nenhum
+  (também fica "pendente", nunca ignorado como se custasse zero). Os três
+  bateram com o esperado. A lógica de validação da notificação (tópico,
+  `application_id`, extração do ID do pedido, payload malformado) também
+  foi testada isoladamente. Não foi possível testar o webhook de ponta a
+  ponta com uma notificação real do Mercado Livre neste ambiente (só depois
+  que o usuário configurar a URL no painel do Mercado Livre e um pedido
+  real acontecer) — ver `05-problemas-conhecidos.md`.
+- **Configuração necessária no painel de desenvolvedor do Mercado
+  Livre** (feita pelo usuário, fora do ERP): notificar sobre o tópico
+  `orders_v2` na URL `https://cerne-erp.onrender.com/api/integracoes/mercadolivre/webhook`.
+
 ## 2026-08-21/22 (6) — Processo de entrega: como as alterações chegam ao GitHub
 - O usuário pediu que o Claude trabalhasse **diretamente no repositório Git**
   (editar → testar → commit → `git push`), sem precisar baixar/subir zip

@@ -27,6 +27,34 @@ cada uma e o status (em desenvolvimento / concluída).
   nada disso foi pedido ainda. Também falta otimizar a sincronização para
   contas com muitos pedidos (ver `05-problemas-conhecidos.md`).
 
+## Pedido cai sozinho no sistema (importação automática por webhook)
+- **Status:** concluído (código testado localmente; teste de ponta a ponta
+  com notificação real do Mercado Livre depende do usuário configurar a
+  URL no painel do Mercado Livre — ver `02-decisoes.md` (7) e
+  `05-problemas-conhecidos.md`).
+- **O que é:** o Mercado Livre agora avisa o ERP em tempo real assim que um
+  pedido é criado/atualizado (webhook), e o pedido é importado
+  automaticamente — sem precisar clicar em "Sincronizar agora". O botão
+  continua existindo como reforço manual.
+- **Onde está:** `server/routes/integracoes.js` (rota
+  `POST /mercadolivre/webhook`), `server/lib/mlSync.js`
+  (`importarPedidoPorNotificacao`, trava por pedido).
+- **O que falta:** o usuário configurar a notificação no painel de
+  desenvolvedor do Mercado Livre (ver `02-decisoes.md` (7) para a URL
+  exata) e confirmar, com um pedido real, que ele aparece sozinho no ERP.
+
+## Custo, imposto e margem líquida na lista de Pedidos
+- **Status:** concluído.
+- **O que é:** a tela de Pedidos passou a mostrar, direto na lista (sem
+  precisar abrir o detalhe de cada pedido), o custo do produto, o imposto
+  e a margem líquida de cada pedido — além do valor da venda e dos dois
+  fretes que já apareciam. Quando falta alguma informação (custo de SKU
+  não cadastrado, tarifa que o Mercado Livre não retornou), a coluna
+  mostra "pendente" em vez de um número.
+- **Onde está:** `server/lib/resultadoVenda.js` (cálculo compartilhado com
+  o detalhe do pedido), `server/routes/pedidos.js` (`GET /`),
+  `server/public/index.html` (módulo `window.Pedidos`).
+
 ## Sistema publicado online, com banco de dados real
 - **Status:** concluído.
 - **O que é:** o ERP deixou de ser só um layout estático — agora roda como um

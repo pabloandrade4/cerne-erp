@@ -5,6 +5,12 @@
   o Mercado Livre** (conectar conta, importar pedidos dos últimos 30 dias,
   custo por SKU + imposto configurável) testada com a conta real
   "PFEMBALAGEMS".
+- **Pendente do usuário:** configurar no painel de desenvolvedor do
+  Mercado Livre a notificação do tópico `orders_v2` apontando para
+  `https://cerne-erp.onrender.com/api/integracoes/mercadolivre/webhook`,
+  pra ativar o pedido caindo sozinho no sistema. Depois de configurado,
+  confirmar com um pedido real que ele aparece sem precisar clicar em
+  "Sincronizar" (ver `05-problemas-conhecidos.md`).
 - Antes de 20/09/2026: decidir com o usuário sobre migrar o Postgres do
   Render do plano gratuito para um plano pago (ver
   `05-problemas-conhecidos.md`).

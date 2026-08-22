@@ -48,6 +48,24 @@ junto da nova).
   exatamente como a API do Mercado Livre retorna — nunca deduzida/adivinhada.
 - O payload bruto (resposta original da API) de cada pedido, envio e custo de
   envio é guardado separado dos campos já organizados, para auditoria futura.
+- **Pedido novo entra no sistema sozinho, sem precisar clicar em
+  "Sincronizar".** O Mercado Livre avisa o ERP em tempo real (webhook,
+  tópico `orders_v2`) assim que um pedido é criado/atualizado, e o ERP já
+  importa esse pedido automaticamente na hora — mesma lógica/regras de
+  sempre (nunca inventar valor, nunca duplicar pedido). O botão
+  "Sincronizar agora" continua existindo, como reforço manual/para trazer
+  pedidos de antes de a conta ter sido conectada — ele não é mais o único
+  jeito de um pedido aparecer no sistema.
+
+## Notificações do Mercado Livre (webhook)
+- O ERP recebe as notificações do Mercado Livre (evento de pedido novo/
+  atualizado) numa URL própria e as usa só para saber "tem pedido pra
+  buscar" — os dados do pedido em si sempre vêm de buscar de novo na API do
+  Mercado Livre (a notificação não traz o pedido completo).
+- Notificação de uma conta que não está conectada neste ERP é ignorada.
+- Regra combinada com o usuário: se a notificação chegar mas a importação
+  falhar por algum motivo, o pedido não fica perdido — a próxima
+  sincronização (manual ou periódica) cobre esse pedido normalmente.
 
 ## Shopee
 _(sem regras registradas ainda)_
@@ -60,6 +78,13 @@ _(sem regras registradas ainda)_
   comprador e do vendedor separados, e o tipo de logística.
 - Ver a regra completa de "nunca inventar valor" e separação de frete em
   **Mercado Livre**, acima — vale igualmente para os pedidos importados.
+- A lista de pedidos (tela Pedidos) mostra, por pedido: valor da venda,
+  frete do vendedor, frete do comprador, **custo do produto** (soma do
+  custo cadastrado de cada SKU do pedido), **imposto** (calculado com a
+  alíquota configurada) e **margem líquida** (resultado da venda — ver
+  fórmula em **Custos**, abaixo). Se qualquer parte estiver faltando, a
+  coluna mostra "pendente" em vez de um número — nunca um valor
+  parcial/estimado.
 
 ## Produtos
 _(sem regras registradas ainda)_
