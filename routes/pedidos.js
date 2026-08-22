@@ -1,9 +1,15 @@
 // Pedidos importados do Mercado Livre: listagem e detalhe (com o cálculo
 // financeiro preparado no Passo 3 — comissão real da API, frete do vendedor
 // real da API, imposto configurado pelo ERP e custo do produto cadastrado).
+//
+// A listagem usa lib/relatorioVendas.js — a MESMA função usada por Visão
+// Geral e Financeiro (routes/relatorios.js) — pra nunca mostrar um número
+// diferente do que essas duas telas mostram pro mesmo período.
 const express = require('express');
 const pool = require('../db/pool');
-const { calcularResultadoVenda } = require('../lib/resultadoVenda');
+const { calcularResultadoVenda, round2 } = require('../lib/resultadoVenda');
+const { calcularPeriodo } = require('../lib/periodo');
+const { buscarPedidosDoPeriodo } = require('../lib/relatorioVendas');
 
 const router = express.Router();
 
@@ -11,76 +17,27 @@ function toNum(v) {
   return v === null || v === undefined ? null : Number(v);
 }
 
-// Empacota o resultado financeiro de uma linha da listagem (já traz
-// custo_produto_total pronto da query — ver GET /). Mesma fórmula usada no
-// detalhe (lib/resultadoVenda.js), só a origem dos dados muda.
-function serializeResumo(row, aliquotaImposto) {
-  const valorVenda = toNum(row.valor_total);
-  const custoProduto = toNum(row.custo_produto_total);
-  const calc = calcularResultadoVenda({
-    valorVenda,
-    taxaVenda: toNum(row.taxa_venda_total),
-    pagamentoTaxas: toNum(row.pagamento_taxas),
-    pagamentoTaxaMarketplace: toNum(row.pagamento_taxa_marketplace),
-    freteVendedor: toNum(row.frete_vendedor),
-    custoProduto,
-    aliquotaImposto,
-  });
+const LIMITE_LISTAGEM = 500;
 
-  return {
-    id: row.id,
-    empresaId: row.empresa_id,
-    contaMlId: row.conta_ml_id,
-    mlOrderId: String(row.ml_order_id),
-    dataCriacao: row.data_criacao,
-    status: row.status,
-    compradorNickname: row.comprador_nickname,
-    valorTotal: valorVenda,
-    moeda: row.moeda,
-    itemResumo: row.item_resumo,
-    qtdItens: Number(row.qtd_itens) || 0,
-    freteComprador: toNum(row.frete_comprador),
-    freteVendedor: toNum(row.frete_vendedor),
-    envioLogisticType: row.envio_logistic_type,
-    tarifasMl: calc.tarifasTotal,
-    imposto: calc.imposto,
-    custoProduto,
-    margemLiquida: calc.resultado,
-    calculoCompleto: calc.calculoCompleto,
-  };
-}
-
-// GET /api/pedidos?empresaId=ID — lista pedidos de uma empresa (via conta ML dela)
+// GET /api/pedidos?empresaId=ID&periodo=30d — lista pedidos de uma empresa no período
 router.get('/', async (req, res, next) => {
   try {
-    const { empresaId } = req.query;
+    const { empresaId, periodo } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
-    const { rows: configRows } = await pool.query(
-      'SELECT aliquota_imposto FROM config_financeiro WHERE empresa_id = $1',
-      [empresaId]
-    );
-    const aliquotaImposto = configRows.length ? Number(configRows[0].aliquota_imposto) : 0;
+    const periodoCalc = calcularPeriodo(periodo);
+    const { pedidos, totalNoPeriodo } = await buscarPedidosDoPeriodo({
+      empresaId,
+      desde: periodoCalc.desde,
+      ate: periodoCalc.ate,
+      limit: LIMITE_LISTAGEM,
+    });
 
-    const { rows } = await pool.query(
-      `SELECT p.*,
-              (SELECT string_agg(titulo, ' + ' ORDER BY id) FROM (
-                 SELECT titulo, id FROM ml_pedido_itens WHERE pedido_id = p.id ORDER BY id LIMIT 2
-               ) t) AS item_resumo,
-              (SELECT count(*) FROM ml_pedido_itens WHERE pedido_id = p.id) AS qtd_itens,
-              (SELECT CASE WHEN bool_and(cp.custo IS NOT NULL) THEN SUM(cp.custo * pi.quantidade) ELSE NULL END
-                 FROM ml_pedido_itens pi
-                 LEFT JOIN custos_produto cp ON cp.empresa_id = $1 AND cp.sku = pi.sku
-                 WHERE pi.pedido_id = p.id
-              ) AS custo_produto_total
-       FROM ml_pedidos p
-       JOIN ml_contas c ON c.id = p.conta_ml_id
-       WHERE c.empresa_id = $1
-       ORDER BY p.data_criacao DESC NULLS LAST
-       LIMIT 200`,
-      [empresaId]
-    );
-    res.json({ pedidos: rows.map((r) => serializeResumo(r, aliquotaImposto)) });
+    res.json({
+      pedidos,
+      totalNoPeriodo,
+      periodo: { chave: periodoCalc.chave, label: periodoCalc.label, desde: periodoCalc.desde, ate: periodoCalc.ate },
+    });
   } catch (err) { next(err); }
 });
 
@@ -88,7 +45,7 @@ router.get('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT p.*, e.id AS empresa_id_real
+      `SELECT p.*, e.id AS empresa_id_real, c.nickname AS conta_nickname
        FROM ml_pedidos p
        JOIN ml_contas c ON c.id = p.conta_ml_id
        JOIN empresas e ON e.id = c.empresa_id
@@ -172,11 +129,13 @@ router.get('/:id', async (req, res, next) => {
       custoProduto: custoProdutoFinal,
       aliquotaImposto,
     });
+    const margemPercentual = resultado !== null && valorVenda ? round2((resultado / valorVenda) * 100) : null;
 
     res.json({
       pedido: {
         id: pedido.id,
         empresaId,
+        loja: pedido.conta_nickname,
         mlOrderId: String(pedido.ml_order_id),
         packId: pedido.pack_id ? String(pedido.pack_id) : null,
         dataCriacao: pedido.data_criacao,
@@ -201,6 +160,7 @@ router.get('/:id', async (req, res, next) => {
         imposto: { aliquota: aliquotaImposto, valor: imposto },
         custoProduto: custoProdutoFinal,
         resultado,
+        margemPercentual,
         calculoCompleto,
         pendencias,
       },

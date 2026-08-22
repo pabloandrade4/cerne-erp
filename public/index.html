@@ -361,6 +361,14 @@
   .kpi-sec-label{ font-size:11px; color:var(--text-faint); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .kpi-sec-value{ font-family:"Archivo",sans-serif; font-size:17px; font-weight:800; letter-spacing:-.2px; color:var(--text); margin-top:1px; }
   .kpi-sec-value .dash{ color:var(--text-faint); }
+  .kpi-sec-note{ font-size:10px; color:var(--text-faint); margin-top:2px; }
+  .kpi-hero-value .neg{ color:var(--danger); }
+  .kpi-hero-value .pos{ color:var(--success); }
+
+  /* ---- Gráfico simples (SVG, sem lib externa) ---- */
+  .simple-chart-svg{ width:100%; display:block; overflow:visible; }
+  .simple-chart-xlabels{ display:grid; margin-top:6px; }
+  .simple-chart-xlabels span{ font-size:10px; color:var(--text-faint); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   /* ---- Panels & grids ---- */
   .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
@@ -880,38 +888,6 @@
 
   function sectionLabel(text){ return '<div class="section-label"><span>'+text+'</span></div>'; }
 
-  function heroKpiHTML(){
-    const heroes = [
-      {label:'Faturamento', icon:'barChart', tint:'copper', note:'Bruto no período'},
-      {label:'Lucro real', icon:'wallet', tint:'success', note:'Após custos, taxas e Ads'},
-      {label:'Margem líquida', icon:'percent', tint:'teal', note:'Sobre o faturamento'},
-    ];
-    return '<div class="kpi-hero-grid">' + heroes.map(k=>{
-      return '<div class="kpi-hero" style="--tint:var(--'+k.tint+');--tint-soft:var(--'+k.tint+'-soft);--tint-wash:var(--'+k.tint+'-wash,var(--'+k.tint+'-soft));">'
-        + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div>'
-        + '<div class="kpi-hero-delta-slot">Δ vs. período anterior</div></div>'
-        + '<div class="kpi-hero-label">'+k.label+'</div>'
-        + '<div class="kpi-hero-value"><span class="dash">—</span></div>'
-        + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+k.note+'</span>'
-        + '<svg class="kpi-spark" viewBox="0 0 64 22" fill="none"><line x1="1" y1="15" x2="63" y2="15" stroke="currentColor" stroke-width="1.6" stroke-dasharray="1.5 4" stroke-linecap="round"/></svg>'
-        + '</div></div>';
-    }).join('') + '</div>';
-  }
-
-  function secKpiHTML(){
-    const secs = [
-      {label:'Pedidos no período', icon:'bag', tint:'teal'},
-      {label:'A receber', icon:'arrowDownCircle', tint:'success'},
-      {label:'A pagar', icon:'arrowUpCircle', tint:'warning'},
-    ];
-    return '<div class="kpi-sec-grid">' + secs.map(k=>{
-      return '<div class="kpi-sec" style="--tint:var(--'+k.tint+');--tint-soft:var(--'+k.tint+'-soft);">'
-        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
-        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value"><span class="dash">—</span></div></div>'
-        + '</div>';
-    }).join('') + '</div>';
-  }
-
   function chartGridLines(n){
     n = n || 3;
     let out = '<div class="chart-grid-lines">';
@@ -928,21 +904,12 @@
       + '</div>';
   }
 
-  function chartsHTML(){
-    return '<div class="chart-card" style="margin-bottom:14px;">'
-      + '<div class="chart-card-head">'
-        + '<div class="panel-title"><span class="panel-title-ic">'+svg('lineChart')+'</span>Faturamento x Lucro</div>'
-        + '<div class="chart-legend">'
-          + '<span class="legend-item"><span class="legend-dot" style="background:var(--copper)"></span>Faturamento</span>'
-          + '<span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>Lucro real</span>'
-          + '<span class="panel-note">últimos 30 dias</span>'
-        + '</div>'
-      + '</div>'
-      + '<div class="chart-canvas h-lg">' + chartGridLines(4)
-        + chartEmptyState('lineChart','Os dados de faturamento e lucro aparecerão aqui após as primeiras vendas serem sincronizadas.')
-      + '</div>'
-    + '</div>'
-    + '<div class="grid-3" style="margin-bottom:14px;">'
+  // As 3 mini-telas de gráfico que ainda não foram pedidas nesta etapa
+  // (Shopee/canal, fluxo de caixa) continuam como empty-state — só o
+  // gráfico principal (Faturamento x Margem de contribuição) virou real,
+  // dentro do módulo window.Overview mais abaixo.
+  function secondaryChartsHTML(){
+    return '<div class="grid-3" style="margin-bottom:14px;">'
       + '<div class="chart-card">'
         + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Evolução diária</div></div>'
         + '<div class="chart-canvas h-sm">' + chartGridLines(3)
@@ -990,16 +957,6 @@
       + '</div>';
   }
 
-  function overviewHTML(){
-    return sectionLabel('Indicadores principais')
-      + heroKpiHTML()
-      + '<div style="margin-top:10px;">' + secKpiHTML() + '</div>'
-      + sectionLabel('Desempenho')
-      + chartsHTML()
-      + sectionLabel('Status da operação')
-      + '<div class="grid-2">' + connectionsPanelHTML() + alertsPanelHTML() + '</div>';
-  }
-
   function moduleEmptyHTML(p){
     return '<div class="empty-panel">'
       + '<div class="empty-icon">'+svg(p.icon)+'</div>'
@@ -1016,7 +973,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','costs'];
+    const REAL_MODULES = ['companies','marketplaces','orders','costs','finance'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1025,11 +982,12 @@
     }
     inner += '</div>';
 
-    if(id === 'overview'){ inner += overviewHTML(); }
+    if(id === 'overview'){ inner += '<div id="overviewRoot"></div>'; }
     else if(id === 'companies'){ inner += '<div id="empresasRoot"></div>'; }
     else if(id === 'marketplaces'){ inner += '<div id="marketplacesRoot"></div>'; }
     else if(id === 'orders'){ inner += '<div id="pedidosRoot"></div>'; }
     else if(id === 'costs'){ inner += '<div id="custosRoot"></div>'; }
+    else if(id === 'finance'){ inner += '<div id="financeRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1051,10 +1009,12 @@
     document.getElementById('sidebar').classList.remove('mobile-open');
     const scrimEl = document.getElementById('mobileScrim');
     if(scrimEl) scrimEl.classList.remove('show');
+    if(id === 'overview' && window.Overview) window.Overview.load();
     if(id === 'companies' && window.Empresas) window.Empresas.load();
     if(id === 'marketplaces' && window.Marketplaces) window.Marketplaces.load(queryStr);
     if(id === 'orders' && window.Pedidos) window.Pedidos.load();
     if(id === 'costs' && window.Custos) window.Custos.load();
+    if(id === 'finance' && window.Financeiro) window.Financeiro.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -1465,9 +1425,251 @@
     window.Marketplaces = { load };
   })();
 
-  /* ================= PEDIDOS — importados do Mercado Livre ================= */
+  /* ================= VISÃO GERAL — indicadores reais (Mercado Livre) =================
+     Usa /api/relatorios/resumo-vendas, a MESMA fonte que Financeiro consulta e que a
+     listagem de Pedidos usa por trás (lib/relatorioVendas.js no backend) — os três
+     nunca calculam o resultado de um jeito diferente pro mesmo período. */
   (function(){
-    const state = { empresas:[], empresaId:null, loadingEmpresas:false, items:[], loading:false, error:null };
+    const PERIODOS = [
+      { chave:'hoje', label:'Hoje' },
+      { chave:'7d', label:'Últimos 7 dias' },
+      { chave:'30d', label:'Últimos 30 dias' },
+      { chave:'mes', label:'Este mês' },
+    ];
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, periodo:'30d', loading:false, error:null, data:null };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v, moeda){ return v===null||v===undefined ? null : (moeda==='BRL'||!moeda?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function moneySigned(v, moeda){ if(v===null||v===undefined) return null; const abs = money(Math.abs(v), moeda); return v<0 ? '− '+abs : abs; }
+    function pctFmt(v){ return v===null||v===undefined ? null : (v<0?'− ':'')+Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function apiResumo(empresaId, periodo){
+      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os indicadores.');
+      return body;
+    }
+
+    async function loadResumo(){
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiResumo(state.empresaId, state.periodo); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadResumo(); else render();
+    }
+
+    // ---- KPI cards ----
+    function tintVars(tint){
+      return tint === 'muted'
+        ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);'
+        : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);';
+    }
+
+    function heroCardHTML(k){
+      return '<div class="kpi-hero" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
+        + '<div class="kpi-hero-label">'+k.label+'</div>'
+        + '<div class="kpi-hero-value">'+k.valueHtml+'</div>'
+        + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+k.note+'</span></div>'
+        + '</div>';
+    }
+    function secCardHTML(k){
+      return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
+        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div>'
+        + (k.subNote ? '<div class="kpi-sec-note">'+k.subNote+'</div>' : '')
+        + '</div></div>';
+    }
+
+    // valorObj = { valor, pendentes } vindo de resumo-vendas. hasOrders = há pedido
+    // (não cancelado) no período — decide entre "Sem dados" (nada no período) e
+    // "Pendente" (tem pedido, mas falta essa informação em algum deles).
+    function statusText(hasOrders, pendentes){
+      if(hasOrders && pendentes>0) return pendentes===1 ? 'Pendente — 1 pedido sem essa informação' : 'Pendente — '+pendentes+' pedidos sem essa informação';
+      return 'Sem dados';
+    }
+
+    function kpisHTML(resumo, moeda, hasOrders){
+      const heroes = [
+        { label:'Faturamento', icon:'barChart', tint:'copper', note:'Bruto no período (vendas não canceladas)',
+          valueHtml: resumo.faturamento.valor!==null ? escapeHtml(money(resumo.faturamento.valor, moeda)) : '<span class="dash">'+statusText(hasOrders,resumo.faturamento.pendentes)+'</span>' },
+        { label:'Margem de contribuição (R$)', icon:'wallet', tint: resumo.margemContribuicao.valor===null ? 'muted' : (resumo.margemContribuicao.valor>=0?'success':'danger'),
+          note:'Venda − taxas − frete vendedor − imposto − custo produto',
+          valueHtml: resumo.margemContribuicao.valor!==null
+            ? '<span class="'+(resumo.margemContribuicao.valor>=0?'pos':'neg')+'">'+escapeHtml(moneySigned(resumo.margemContribuicao.valor, moeda))+'</span>'
+            : '<span class="dash">'+statusText(hasOrders,resumo.margemContribuicao.pendentes)+'</span>' },
+        { label:'Margem de contribuição (%)', icon:'percent', tint: resumo.margemPercentual===null ? 'muted' : (resumo.margemPercentual>=0?'success':'danger'),
+          note:'Margem de contribuição sobre o faturamento',
+          valueHtml: resumo.margemPercentual!==null
+            ? '<span class="'+(resumo.margemPercentual>=0?'pos':'neg')+'">'+escapeHtml(pctFmt(resumo.margemPercentual))+'</span>'
+            : '<span class="dash">'+statusText(hasOrders,resumo.margemContribuicao.pendentes)+'</span>' },
+      ];
+
+      function secMoneyCard(label, icon, obj){
+        return { label, icon, tint:'muted',
+          valueHtml: obj.valor!==null ? escapeHtml(money(obj.valor, moeda)) : '<span class="dash">'+statusText(hasOrders,obj.pendentes)+'</span>',
+          subNote: obj.valor!==null && obj.pendentes>0 ? (obj.pendentes===1?'1 pedido pendente':obj.pendentes+' pedidos pendentes') : null };
+      }
+      const secs = [
+        { label:'Pedidos no período', icon:'bag', tint:'teal', valueHtml: String(resumo.qtdPedidos) },
+        { label:'Pedidos cancelados', icon:'x', tint: resumo.cancelados.quantidade>0 ? 'warning' : 'muted',
+          valueHtml: String(resumo.cancelados.quantidade),
+          subNote: resumo.cancelados.quantidade>0 ? ('não entram nos valores acima'+(resumo.cancelados.valor!==null?(' · '+money(resumo.cancelados.valor,moeda)):'')) : null },
+        secMoneyCard('Taxas/comissões', 'receipt', resumo.tarifas),
+        secMoneyCard('Frete do vendedor', 'truck', resumo.freteVendedor),
+        secMoneyCard('Imposto', 'fileText', resumo.imposto),
+        secMoneyCard('Custo dos produtos', 'box', resumo.custoProduto),
+      ];
+
+      return '<div class="kpi-hero-grid">' + heroes.map(heroCardHTML).join('') + '</div>'
+        + '<div class="kpi-sec-grid" style="margin-top:10px;">' + secs.map(secCardHTML).join('') + '</div>';
+    }
+
+    // ---- Gráfico: Faturamento x Margem de contribuição por dia (SVG simples) ----
+    function chartHTML(serie, moeda){
+      if(!serie.length){
+        return '<div class="chart-canvas h-lg">' + chartGridLines(4)
+          + chartEmptyState('lineChart','Sem dados no período selecionado. O gráfico aparece assim que houver pedidos não cancelados sincronizados.')
+        + '</div>';
+      }
+      const n = serie.length;
+      const W = Math.max(n*10, 10), H = 100, topPad = 8, botPad = 10;
+      const usable = H - topPad - botPad;
+      const vals = serie.flatMap(d => [d.faturamento, d.margemContribuicao]);
+      const maxV = Math.max(0, ...vals);
+      const minV = Math.min(0, ...vals);
+      const range = (maxV - minV) || 1;
+      const yFor = v => topPad + usable * (1 - (v - minV) / range);
+      const baseY = yFor(0);
+
+      const barW = 6;
+      let bars = '';
+      let points = [];
+      serie.forEach((d, i) => {
+        const cx = i*10 + 5;
+        const y1 = yFor(d.faturamento);
+        const barY = Math.min(y1, baseY), barH = Math.max(Math.abs(y1-baseY), 0.6);
+        const dataLabel = fmtDiaCurto(d.dia)+' — Faturamento: '+money(d.faturamento,moeda)+' · Margem de contribuição: '+money(d.margemContribuicao,moeda);
+        bars += '<rect x="'+(cx-barW/2)+'" y="'+barY+'" width="'+barW+'" height="'+barH+'" rx="1" fill="var(--copper)" fill-opacity="0.85"><title>'+escapeHtml(dataLabel)+'</title></rect>';
+        points.push(cx+','+yFor(d.margemContribuicao));
+      });
+      const line = '<polyline points="'+points.join(' ')+'" fill="none" stroke="var(--teal)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>';
+      const dots = serie.map((d,i) => {
+        const cx = i*10+5, cy = yFor(d.margemContribuicao);
+        const dataLabel = fmtDiaCurto(d.dia)+' — Margem de contribuição: '+money(d.margemContribuicao,moeda);
+        return '<circle cx="'+cx+'" cy="'+cy+'" r="1.6" fill="var(--teal)" vector-effect="non-scaling-stroke"><title>'+escapeHtml(dataLabel)+'</title></circle>';
+      }).join('');
+      const baseline = '<line x1="0" y1="'+baseY+'" x2="'+W+'" y2="'+baseY+'" stroke="var(--border-strong)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+
+      const labelStep = Math.max(1, Math.ceil(n/9));
+      const labels = serie.map((d,i) => '<span>'+((i%labelStep===0 || i===n-1) ? escapeHtml(fmtDiaCurto(d.dia)) : '')+'</span>').join('');
+
+      return '<div class="chart-canvas" style="position:relative;height:200px;padding:0;">'
+        + '<svg class="simple-chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:100%;">'
+          + baseline + bars + line + dots
+        + '</svg>'
+      + '</div>'
+      + '<div class="simple-chart-xlabels" style="grid-template-columns:repeat('+n+',1fr);">' + labels + '</div>';
+    }
+
+    function fmtDiaCurto(diaISO){
+      const [, m, d] = diaISO.split('-');
+      return d+'/'+m;
+    }
+
+    function chartCardHTML(data){
+      const serie = data ? data.serieDiaria : [];
+      return '<div class="chart-card" style="margin-bottom:14px;">'
+        + '<div class="chart-card-head">'
+          + '<div class="panel-title"><span class="panel-title-ic">'+svg('lineChart')+'</span>Faturamento x Margem de contribuição</div>'
+          + '<div class="chart-legend">'
+            + '<span class="legend-item"><span class="legend-dot" style="background:var(--copper)"></span>Faturamento</span>'
+            + '<span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>Margem de contribuição</span>'
+            + '<span class="panel-note">'+(data?escapeHtml(data.periodo.label):'')+'</span>'
+          + '</div>'
+        + '</div>'
+        + chartHTML(serie, 'BRL')
+        + (serie.length ? '<div class="field-hint" style="margin-top:8px;">Dias com pedido sem custo de SKU cadastrado somam só a margem já conhecida daquele dia — nunca um valor estimado.</div>' : '')
+      + '</div>'
+      + secondaryChartsHTML();
+    }
+
+    function render(){
+      const root = document.getElementById('overviewRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa, conecte o Mercado Livre em <strong>Marketplaces</strong> e sincronize para ver os indicadores aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="ovEmpresaSelect">'
+            + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+          + '</select></div>'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="ovPeriodoSelect">'
+            + PERIODOS.map(p=>'<option value="'+p.chave+'" '+(p.chave===state.periodo?'selected':'')+'>'+p.label+'</option>').join('')
+          + '</select></div>'
+        + '</div>'
+      + '</div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando indicadores…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data){
+        const resumo = state.data.resumo;
+        const hasOrders = resumo.qtdPedidos > 0;
+        html += sectionLabel('Indicadores principais — '+state.data.periodo.label)
+          + kpisHTML(resumo, 'BRL', hasOrders)
+          + sectionLabel('Desempenho')
+          + chartCardHTML(state.data)
+          + sectionLabel('Status da operação')
+          + '<div class="grid-2">' + connectionsPanelHTML() + alertsPanelHTML() + '</div>';
+      }
+
+      root.innerHTML = html;
+
+      const selEmp = document.getElementById('ovEmpresaSelect');
+      if(selEmp) selEmp.addEventListener('change', ()=>{ state.empresaId = Number(selEmp.value); loadResumo(); });
+      const selPer = document.getElementById('ovPeriodoSelect');
+      if(selPer) selPer.addEventListener('change', ()=>{ state.periodo = selPer.value; loadResumo(); });
+    }
+
+    window.Overview = { load };
+  })();
+
+  /* ================= PEDIDOS — importados do Mercado Livre =================
+     A listagem vem de /api/pedidos, que por trás usa lib/relatorioVendas.js —
+     a MESMA fonte que Visão Geral e Financeiro consultam (routes/relatorios.js)
+     pro mesmo período nunca aparecer com números diferentes em telas diferentes. */
+  (function(){
+    const PERIODOS = [
+      { chave:'hoje', label:'Hoje' },
+      { chave:'7d', label:'Últimos 7 dias' },
+      { chave:'30d', label:'Últimos 30 dias' },
+      { chave:'mes', label:'Este mês' },
+    ];
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, periodo:'30d', items:[], totalNoPeriodo:0, periodoLabel:'', loading:false, error:null };
 
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
@@ -1506,8 +1708,10 @@
     async function loadPedidos(){
       state.loading = true; state.error = null; render();
       try{
-        const data = await apiPedidos('?empresaId='+state.empresaId);
+        const data = await apiPedidos('?empresaId='+state.empresaId+'&periodo='+state.periodo);
         state.items = data.pedidos;
+        state.totalNoPeriodo = data.totalNoPeriodo;
+        state.periodoLabel = data.periodo ? data.periodo.label : '';
       }catch(err){ state.error = err.message; }
       state.loading = false; render();
     }
@@ -1536,9 +1740,14 @@
       }
 
       let html = '<div class="toolbar">'
-        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedEmpresaSelect">'
-          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
-        + '</select></div>'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedEmpresaSelect">'
+            + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+          + '</select></div>'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedPeriodoSelect">'
+            + PERIODOS.map(pr=>'<option value="'+pr.chave+'" '+(pr.chave===state.periodo?'selected':'')+'>'+pr.label+'</option>').join('')
+          + '</select></div>'
+        + '</div>'
         + '<button class="ghost-btn" id="pedSyncBtn" type="button" style="cursor:pointer; opacity:1;">'+svg('refreshCw')+'<span>Sincronizar</span></button>'
       + '</div>';
 
@@ -1549,38 +1758,52 @@
           + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+state.error+'</p></div>';
       } else if(!state.items.length){
         html += '<div class="empty-panel"><div class="empty-icon">'+svg('inbox')+'</div>'
-          + '<h2>Nenhum pedido importado</h2>'
-          + '<p class="lead">Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> e clique em "Sincronizar agora" para importar os pedidos reais.</p></div>';
+          + '<h2>Nenhum pedido no período</h2>'
+          + '<p class="lead">Não há pedidos sincronizados em "'+escapeHtml(state.periodoLabel||'')+'". Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> e clique em "Sincronizar agora", ou escolha outro período.</p></div>';
       } else {
         const cellMoney = (v, moeda, negative) => v===null
           ? '<span style="color:var(--text-faint);font-style:italic;">pendente</span>'
           : (negative && v!==0 ? '− ' : '') + money(Math.abs(v), moeda);
+        const pctCell = (v) => v===null
+          ? '<span style="color:var(--text-faint);font-style:italic;">pendente</span>'
+          : '<span style="'+(v>=0?'color:var(--success);':'color:var(--danger);')+'">'+(v<0?'− ':'')+Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%</span>';
 
         html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Data</th><th>Comprador</th><th>Item(ns)</th><th>Valor</th><th>Frete comprador</th><th>Frete vendedor</th>'
-          + '<th>Custo produto</th><th>Imposto</th><th>Margem líquida</th><th>Status</th><th></th>'
+          + '<th>Data</th><th>Nº do pedido</th><th>Loja</th><th>Produto</th><th>SKU</th><th>Qtd.</th><th>Valor da venda</th>'
+          + '<th>Taxas/comissões</th><th>Frete vendedor</th><th>Imposto</th><th>Custo produto</th>'
+          + '<th>Margem de contribuição</th><th>% margem</th><th>Logística</th><th>Status</th><th></th>'
           + '</tr></thead><tbody>'
-          + state.items.map(p => '<tr>'
+          + state.items.map(p => '<tr'+(p.cancelado?' style="opacity:.6;"':'')+'>'
             + '<td class="tab-nums">'+fmtDateTime(p.dataCriacao)+'</td>'
-            + '<td>'+escapeHtml(p.compradorNickname||'—')+'</td>'
-            + '<td>'+escapeHtml(p.itemResumo||'—')+(p.qtdItens>2?' <span class="field-hint" style="display:inline;">+'+(p.qtdItens-2)+'</span>':'')+'</td>'
+            + '<td class="mono">'+escapeHtml(p.mlOrderId)+'</td>'
+            + '<td>'+escapeHtml(p.loja||'—')+'</td>'
+            + '<td>'+escapeHtml(p.produtoResumo||'—')+(p.qtdItens>3?' <span class="field-hint" style="display:inline;">+'+(p.qtdItens-3)+'</span>':'')+'</td>'
+            + '<td class="mono">'+escapeHtml(p.skuResumo||'sem SKU')+'</td>'
+            + '<td class="tab-nums">'+p.qtdUnidades+'</td>'
             + '<td class="mono">'+(money(p.valorTotal,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
-            + '<td class="mono">'+(money(p.freteComprador,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
+            + '<td class="mono">'+cellMoney(p.tarifasMl,p.moeda,true)+'</td>'
             + '<td class="mono">'+(money(p.freteVendedor,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
-            + '<td class="mono">'+cellMoney(p.custoProduto,p.moeda,true)+'</td>'
             + '<td class="mono">'+cellMoney(p.imposto,p.moeda,true)+'</td>'
-            + '<td class="mono" style="'+(p.margemLiquida!==null?(p.margemLiquida>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(p.calculoCompleto ? money(p.margemLiquida,p.moeda) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
-            + '<td><span class="badge-status '+(p.status==='paid'?'on':'off')+'"><span class="dot"></span>'+escapeHtml(p.status||'—')+'</span></td>'
+            + '<td class="mono">'+cellMoney(p.custoProduto,p.moeda,true)+'</td>'
+            + '<td class="mono" style="'+(p.margemContribuicao!==null?(p.margemContribuicao>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(p.calculoCompleto ? money(p.margemContribuicao,p.moeda) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
+            + '<td class="mono">'+(p.calculoCompleto ? pctCell(p.margemPercentual) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
+            + '<td>'+escapeHtml(p.envioLogisticType||'—')+'</td>'
+            + '<td><span class="badge-status '+(p.status==='paid'?'on':(p.cancelado?'err':'off'))+'"><span class="dot"></span>'+escapeHtml(p.status||'—')+'</span></td>'
             + '<td><div class="row-actions"><button class="row-ic-btn" data-detail="'+p.id+'" title="Ver detalhes" type="button">'+svg('eye')+'</button></div></td>'
           + '</tr>').join('')
           + '</tbody></table></div></div>'
-          + '<div class="field-hint" style="margin-top:10px;">"Pendente" = falta cadastrar o custo do SKU em <strong>Custos</strong> e/ou o Mercado Livre não retornou alguma tarifa desse pedido ainda — nunca um valor estimado.</div>';
+          + (state.totalNoPeriodo > state.items.length
+              ? '<div class="field-hint" style="margin-top:10px;">Mostrando os '+state.items.length+' pedidos mais recentes de '+state.totalNoPeriodo+' no período selecionado.</div>'
+              : '')
+          + '<div class="field-hint" style="margin-top:6px;">"Pendente" = falta cadastrar o custo do SKU em <strong>Custos</strong> e/ou o Mercado Livre não retornou alguma tarifa desse pedido ainda — nunca um valor estimado. Pedidos cancelados (linha esmaecida) não entram nos totais de Visão Geral e Financeiro.</div>';
       }
 
       root.innerHTML = html;
 
       const sel = document.getElementById('pedEmpresaSelect');
       if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadPedidos(); });
+      const selPer = document.getElementById('pedPeriodoSelect');
+      if(selPer) selPer.addEventListener('change', ()=>{ state.periodo = selPer.value; loadPedidos(); });
       const syncBtn = document.getElementById('pedSyncBtn');
       if(syncBtn) syncBtn.addEventListener('click', async ()=>{
         syncBtn.disabled = true;
@@ -1621,6 +1844,7 @@
 
         + '<div class="detail-section-title">Pedido</div>'
         + '<div class="detail-grid">'
+          + '<div class="dg-item"><div class="dg-label">Loja</div><div class="dg-value'+(pedido.loja?'':' muted')+'">'+(escapeHtml(pedido.loja)||'—')+'</div></div>'
           + '<div class="dg-item"><div class="dg-label">Comprador</div><div class="dg-value">'+escapeHtml(pedido.compradorNickname||'—')+'</div></div>'
           + '<div class="dg-item"><div class="dg-label">ID do pagamento</div><div class="dg-value'+(pedido.mlPaymentId?'':' muted')+'">'+(pedido.mlPaymentId||'indisponível')+'</div></div>'
           + '<div class="dg-item"><div class="dg-label">ID do envio (shipment)</div><div class="dg-value'+(pedido.mlShippingId?'':' muted')+'">'+(pedido.mlShippingId||'sem envio')+'</div></div>'
@@ -1632,15 +1856,16 @@
             + '<div class="ir-sku">'+(it.sku?('SKU '+escapeHtml(it.sku)):'sem SKU informado')+' · qtd '+it.quantidade+'</div></div>'
             + '<div class="mono">'+(money(it.valorTotalItem,moeda)||'indisponível')+'</div></div>').join('')
 
-        + '<div class="detail-section-title">Resultado da venda</div>'
+        + '<div class="detail-section-title">Margem de contribuição desta venda</div>'
         + bdLine('Valor da venda', rf.valorVenda, false)
-        + bdLine('(−) Comissão/tarifas Mercado Livre', rf.tarifasMl.total, true)
+        + bdLine('(−) Taxas/comissões Mercado Livre', rf.tarifasMl.total, true)
         + (tarifasSideNote ? '<div class="bd-side-note">'+tarifasSideNote+'</div>' : '')
         + bdLine('(−) Frete do vendedor', rf.freteVendedor, true)
         + bdLine('(−) Imposto configurado ('+rf.imposto.aliquota+'%)', rf.imposto.valor, true)
         + bdLine('(−) Custo do produto', rf.custoProduto, true)
-        + '<div class="bd-row total"><span class="bd-label">= Resultado da venda</span><span class="bd-value '+(rf.resultado===null?'':(rf.resultado>=0?'positive':'negative'))+'">'
+        + '<div class="bd-row total"><span class="bd-label">= Margem de contribuição</span><span class="bd-value '+(rf.resultado===null?'':(rf.resultado>=0?'positive':'negative'))+'">'
           + (rf.resultado===null ? 'Cálculo incompleto' : money(rf.resultado,moeda)) + '</span></div>'
+        + (rf.margemPercentual!==null ? '<div class="bd-row"><span class="bd-label">% sobre o valor da venda</span><span class="bd-value '+(rf.margemPercentual>=0?'positive':'negative')+'">'+(rf.margemPercentual<0?'− ':'')+Math.abs(rf.margemPercentual).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%</span></div>' : '')
         + (rf.pendencias.length ? '<div class="bd-note">'+svg('alertCircle')+'<span>'+rf.pendencias.map(escapeHtml).join('<br>')+'</span></div>' : '')
 
         + '<div class="detail-section-title">Frete pago pelo comprador (informativo)</div>'
@@ -1655,6 +1880,134 @@
     }
 
     window.Pedidos = { load };
+  })();
+
+  /* ================= FINANCEIRO — primeira versão (só vendas do Mercado Livre) =================
+     Usa /api/relatorios/resumo-vendas — a MESMA fonte que Visão Geral usa e que a
+     listagem de Pedidos usa por trás — pro mesmo período nunca aparecer com um
+     valor diferente aqui e nas outras duas telas.
+     Nesta etapa: só o resultado das vendas do Mercado Livre. Contas a pagar, contas
+     a receber, fluxo de caixa, DRE completa, banco, fornecedores e Shopee ficam
+     para depois (não fazem parte desta versão). */
+  (function(){
+    const PERIODOS = [
+      { chave:'hoje', label:'Hoje' },
+      { chave:'7d', label:'Últimos 7 dias' },
+      { chave:'30d', label:'Últimos 30 dias' },
+      { chave:'mes', label:'Este mês' },
+    ];
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, periodo:'30d', loading:false, error:null, data:null };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v, moeda){ return v===null||v===undefined ? null : (moeda==='BRL'||!moeda?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function apiResumo(empresaId, periodo){
+      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o financeiro.');
+      return body;
+    }
+
+    async function loadResumo(){
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiResumo(state.empresaId, state.periodo); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadResumo(); else render();
+    }
+
+    function linha(label, obj, moeda, hasOrders, negativo){
+      const pendenteTxt = hasOrders ? 'Pendente' : 'Sem dados';
+      const valorHtml = obj.valor!==null
+        ? (negativo && obj.valor!==0 ? '− ' : '') + money(Math.abs(obj.valor), moeda)
+        : '<span style="color:var(--text-faint); font-style:italic; font-family:\'Public Sans\',sans-serif; font-weight:500;">'+pendenteTxt+'</span>';
+      const pendNote = obj.valor!==null && obj.pendentes>0
+        ? ' <span style="font-size:10.5px; color:var(--text-faint); font-weight:500;">('+obj.pendentes+' pedido(s) sem essa informação)</span>' : '';
+      return '<div class="bd-row'+(negativo?' neg':'')+'"><span class="bd-label">'+label+pendNote+'</span><span class="bd-value">'+valorHtml+'</span></div>';
+    }
+
+    function render(){
+      const root = document.getElementById('financeRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa, conecte o Mercado Livre em <strong>Marketplaces</strong> e sincronize para ver o financeiro aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="finEmpresaSelect">'
+            + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+          + '</select></div>'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="finPeriodoSelect">'
+            + PERIODOS.map(p=>'<option value="'+p.chave+'" '+(p.chave===state.periodo?'selected':'')+'>'+p.label+'</option>').join('')
+          + '</select></div>'
+        + '</div>'
+      + '</div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando financeiro…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data){
+        const r = state.data.resumo;
+        const moeda = 'BRL';
+        const hasOrders = r.qtdPedidos > 0;
+        const margemPositiva = r.margemContribuicao.valor!==null && r.margemContribuicao.valor>=0;
+
+        html += '<div class="panel" style="max-width:560px;">'
+          + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('wallet')+'</span>Resultado das vendas do Mercado Livre</div><span class="panel-note">'+escapeHtml(state.data.periodo.label)+'</span></div>'
+          + '<p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">'+r.qtdPedidos+' pedido(s) considerados neste resultado (pedidos cancelados ficam de fora — ver abaixo).</p>'
+
+          + '<div class="detail-section-title" style="margin-top:4px;">Resultado</div>'
+          + linha('Faturamento bruto', r.faturamento, moeda, hasOrders, false)
+          + linha('(−) Taxas e comissões', r.tarifas, moeda, hasOrders, true)
+          + linha('(−) Frete pago pelo vendedor', r.freteVendedor, moeda, hasOrders, true)
+          + linha('(−) Impostos', r.imposto, moeda, hasOrders, true)
+          + linha('(−) Custo dos produtos', r.custoProduto, moeda, hasOrders, true)
+          + '<div class="bd-row total"><span class="bd-label">= Margem de contribuição (R$)</span><span class="bd-value '+(r.margemContribuicao.valor===null?'':(margemPositiva?'positive':'negative'))+'">'
+            + (r.margemContribuicao.valor===null ? (hasOrders?'Pendente':'Sem dados') : money(r.margemContribuicao.valor, moeda)) + '</span></div>'
+          + '<div class="bd-row"><span class="bd-label">Margem de contribuição (%)</span><span class="bd-value '+(r.margemPercentual===null?'':(r.margemPercentual>=0?'positive':'negative'))+'">'
+            + (r.margemPercentual===null ? (hasOrders?'Pendente':'Sem dados') : (r.margemPercentual<0?'− ':'')+Math.abs(r.margemPercentual).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%') + '</span></div>'
+
+          + (r.margemContribuicao.pendentes>0 ? '<div class="bd-note">'+svg('alertCircle')+'<span>'+r.margemContribuicao.pendentes+' pedido(s) do período ainda não entram nessa margem — falta cadastrar o custo do SKU em Custos e/ou o Mercado Livre não retornou alguma tarifa. Veja quais em Pedidos.</span></div>' : '')
+
+          + '<div class="detail-section-title">Pedidos cancelados</div>'
+          + '<div class="bd-row"><span class="bd-label">Quantidade no período</span><span class="bd-value">'+r.cancelados.quantidade+'</span></div>'
+          + (r.cancelados.quantidade>0 ? '<div class="bd-row"><span class="bd-label">Valor (informativo — fora do resultado acima)</span><span class="bd-value">'+(r.cancelados.valor!==null?money(r.cancelados.valor,moeda):'indisponível')+'</span></div>' : '')
+          + '<div class="bd-side-note">Pedido cancelado no Mercado Livre não é venda de verdade — não entra em nenhum valor acima.</div>'
+        + '</div>'
+        + '<div class="field-hint" style="margin-top:10px;max-width:560px;">Esta é a primeira versão do Financeiro, só com as vendas do Mercado Livre. Contas a pagar, contas a receber, fluxo de caixa, DRE completa, banco, fornecedores e Shopee ainda não foram implementados.</div>';
+      }
+
+      root.innerHTML = html;
+
+      const selEmp = document.getElementById('finEmpresaSelect');
+      if(selEmp) selEmp.addEventListener('change', ()=>{ state.empresaId = Number(selEmp.value); loadResumo(); });
+      const selPer = document.getElementById('finPeriodoSelect');
+      if(selPer) selPer.addEventListener('change', ()=>{ state.periodo = selPer.value; loadResumo(); });
+    }
+
+    window.Financeiro = { load };
   })();
 
   /* ================= CUSTOS & MARGEM — custo por SKU + imposto ================= */
