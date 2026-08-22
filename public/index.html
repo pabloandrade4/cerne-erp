@@ -520,6 +520,26 @@
   .badge-status.off{ color:var(--text-faint); background:var(--surface-2); border:1px solid var(--border); }
   .badge-status .dot{ width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0; }
 
+  /* Célula com duas linhas (valor principal + linha secundária menor/muted) —
+     usado pra caber mais informação em menos largura sem esconder nada. */
+  .cell-stack{ display:flex; flex-direction:column; gap:1px; line-height:1.35; }
+  .cell-stack-sub{ font-size:10.5px; color:var(--text-faint); }
+
+  /* Tabela de Pedidos: colunas mais estreitas e fonte um pouco menor pra caber
+     na largura normal da tela desktop sem precisar rolar pro lado — só essa
+     tabela, o resto do sistema (Empresas, Marketplaces, Custos) continua com
+     o .data-table padrão. */
+  .compact-orders{ min-width:0; font-size:11.5px; }
+  .compact-orders thead th{ padding:10px 6px; font-size:9px; letter-spacing:0; }
+  .compact-orders tbody td{ padding:8px 6px; }
+  .compact-orders td.produto-cell{ max-width:140px; }
+  .compact-orders td.produto-cell .prod-title{
+    display:block; max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .compact-orders td.produto-cell .cell-stack-sub{ max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .compact-orders .badge-status{ font-size:10px; padding:3px 7px; }
+  .compact-orders .row-ic-btn{ width:26px; height:26px; }
+
   .empty-panel .primary-btn.enabled,
   .page-head .primary-btn.enabled{ opacity:1; cursor:pointer; }
   .empty-panel .primary-btn.enabled:hover,
@@ -697,14 +717,11 @@
         <div style="position:relative;">
           <button class="pill-btn" id="companyBtn" type="button">
             <span class="pill-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 8h1M14 8h1M9 12h1M14 12h1M9 16h1M14 16h1"/></svg></span>
-            <span class="pill-label">2 empresas</span>
+            <span class="pill-label" id="companyLabel">Carregando…</span>
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <div class="dropdown" id="companyDropdown">
             <div class="dropdown-title">Empresas ativas</div>
-            <div class="dropdown-item"><div><div class="di-name">Todas as empresas</div><div class="di-sub">Visão consolidada</div></div><span class="dot"></span></div>
-            <div class="dropdown-item"><div><div class="di-name">Empresa A Comércio Ltda</div><div class="di-sub mono">00.000.000/0001-00</div></div><span class="dot"></span></div>
-            <div class="dropdown-item"><div><div class="di-name">Empresa B Comércio Ltda</div><div class="di-sub mono">00.000.000/0001-91</div></div><span class="dot"></span></div>
           </div>
         </div>
 
@@ -715,10 +732,7 @@
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <div class="dropdown" id="periodDropdown">
-            <div class="dropdown-item" data-period="Hoje"><div class="di-name">Hoje</div></div>
-            <div class="dropdown-item" data-period="Últimos 7 dias"><div class="di-name">Últimos 7 dias</div></div>
-            <div class="dropdown-item" data-period="Últimos 30 dias"><div class="di-name">Últimos 30 dias</div></div>
-            <div class="dropdown-item" data-period="Este mês"><div class="di-name">Este mês</div></div>
+            <div class="dropdown-title">Período (Visão Geral)</div>
           </div>
         </div>
 
@@ -1009,7 +1023,7 @@
     document.getElementById('sidebar').classList.remove('mobile-open');
     const scrimEl = document.getElementById('mobileScrim');
     if(scrimEl) scrimEl.classList.remove('show');
-    if(id === 'overview' && window.Overview) window.Overview.load();
+    if(id === 'overview' && window.Overview){ if(window.CerneFiltro) window.CerneFiltro.refreshEmpresas(); window.Overview.load(); }
     if(id === 'companies' && window.Empresas) window.Empresas.load();
     if(id === 'marketplaces' && window.Marketplaces) window.Marketplaces.load(queryStr);
     if(id === 'orders' && window.Pedidos) window.Pedidos.load();
@@ -1051,9 +1065,127 @@
   wireDropdown('periodBtn','periodDropdown');
   wireDropdown('userBtn','userDropdown');
   document.addEventListener('click', ()=> document.querySelectorAll('.dropdown.open').forEach(d=>d.classList.remove('open')));
-  document.getElementById('periodDropdown').querySelectorAll('[data-period]').forEach(item=>{
-    item.addEventListener('click', ()=>{ document.getElementById('periodLabel').textContent = item.dataset.period; });
-  });
+
+  /* ---------- FILTRO DO HEADER (empresa + período) — fonte única da Visão Geral ----------
+     Único lugar que guarda "empresa selecionada" e "período selecionado" pra Visão
+     Geral: os dois seletores que ficavam dentro da própria página foram removidos
+     (eram um segundo estado, duplicado, e nunca em sincronia com o header). Pedidos
+     e Financeiro continuam com o seletor próprio dentro da tela — não fazem parte
+     desta correção. */
+  const HEADER_PERIODOS = [
+    { chave:'hoje', label:'Hoje' },
+    { chave:'ontem', label:'Ontem' },
+    { chave:'7d', label:'Últimos 7 dias' },
+    { chave:'30d', label:'Últimos 30 dias' },
+    { chave:'mes', label:'Este mês' },
+  ];
+  window.CerneFiltro = (function(){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:true, periodo:'30d' };
+    const listeners = [];
+    function onChange(fn){ listeners.push(fn); }
+    function notify(){ listeners.forEach(fn=>{ try{ fn(state); }catch(e){} }); }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    function renderCompanyDropdown(){
+      const dd = document.getElementById('companyDropdown');
+      if(!dd) return;
+      let html = '<div class="dropdown-title">Empresas ativas</div>';
+      if(state.loadingEmpresas){
+        html += '<div class="dropdown-item"><div><div class="di-name">Carregando…</div></div></div>';
+      } else if(!state.empresas.length){
+        html += '<div class="dropdown-item"><div><div class="di-name">Nenhuma empresa ativa</div></div></div>';
+      } else {
+        html += state.empresas.map(e =>
+          '<div class="dropdown-item" data-empresa-id="'+e.id+'">'
+            + '<div><div class="di-name">'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</div>'
+            + (e.cnpj ? '<div class="di-sub mono">'+escapeHtml(e.cnpj)+'</div>' : '')+'</div>'
+            + '<span class="dot'+(e.id===state.empresaId?'':' muted')+'"></span>'
+          + '</div>'
+        ).join('');
+      }
+      dd.innerHTML = html;
+      dd.querySelectorAll('[data-empresa-id]').forEach(item=>{
+        item.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const id = Number(item.dataset.empresaId);
+          dd.classList.remove('open');
+          if(id === state.empresaId) return;
+          state.empresaId = id;
+          renderCompanyDropdown();
+          updateCompanyLabel();
+          notify();
+        });
+      });
+    }
+
+    function updateCompanyLabel(){
+      const lbl = document.getElementById('companyLabel');
+      if(!lbl) return;
+      if(state.loadingEmpresas){ lbl.textContent = 'Carregando…'; return; }
+      const emp = state.empresas.find(e=>e.id===state.empresaId);
+      lbl.textContent = emp ? (emp.nomeFantasia||emp.razaoSocial) : 'Nenhuma empresa ativa';
+    }
+
+    function renderPeriodDropdown(){
+      const dd = document.getElementById('periodDropdown');
+      if(!dd) return;
+      dd.innerHTML = '<div class="dropdown-title">Período (Visão Geral)</div>' + HEADER_PERIODOS.map(p =>
+        '<div class="dropdown-item" data-periodo="'+p.chave+'">'
+          + '<div class="di-name">'+p.label+'</div>'
+          + '<span class="dot'+(p.chave===state.periodo?'':' muted')+'"></span>'
+        + '</div>'
+      ).join('');
+      dd.querySelectorAll('[data-periodo]').forEach(item=>{
+        item.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const chave = item.dataset.periodo;
+          dd.classList.remove('open');
+          if(chave === state.periodo) return;
+          state.periodo = chave;
+          renderPeriodDropdown();
+          updatePeriodLabel();
+          notify();
+        });
+      });
+    }
+
+    function updatePeriodLabel(){
+      const lbl = document.getElementById('periodLabel');
+      if(!lbl) return;
+      const p = HEADER_PERIODOS.find(p => p.chave === state.periodo);
+      lbl.textContent = p ? p.label : '';
+    }
+
+    let empresasFetchEmAndamento = null;
+    function carregarEmpresas(){
+      // Evita duas buscas concorrentes de empresa (ex.: bootstrap inicial +
+      // navegação pra Visão Geral acontecendo quase ao mesmo tempo).
+      if(empresasFetchEmAndamento) return empresasFetchEmAndamento;
+      state.loadingEmpresas = true; renderCompanyDropdown(); updateCompanyLabel();
+      empresasFetchEmAndamento = (async ()=>{
+        try{
+          const res = await fetch('/api/empresas?status=ativas');
+          const body = await res.json();
+          state.empresas = (body && body.empresas) || [];
+        }catch(e){ state.empresas = []; }
+        if(!state.empresaId || !state.empresas.find(emp=>emp.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+        state.loadingEmpresas = false;
+        renderCompanyDropdown();
+        updateCompanyLabel();
+        notify();
+        empresasFetchEmAndamento = null;
+      })();
+      return empresasFetchEmAndamento;
+    }
+
+    renderPeriodDropdown();
+    updatePeriodLabel();
+    carregarEmpresas();
+
+    return { state, onChange, refreshEmpresas: carregarEmpresas };
+  })();
 
   /* ---------- THEME TOGGLE ---------- */
   const root = document.documentElement;
@@ -1428,25 +1560,20 @@
   /* ================= VISÃO GERAL — indicadores reais (Mercado Livre) =================
      Usa /api/relatorios/resumo-vendas, a MESMA fonte que Financeiro consulta e que a
      listagem de Pedidos usa por trás (lib/relatorioVendas.js no backend) — os três
-     nunca calculam o resultado de um jeito diferente pro mesmo período. */
+     nunca calculam o resultado de um jeito diferente pro mesmo período.
+
+     Empresa e período NÃO são estado próprio desta tela — vêm só do filtro do
+     header (window.CerneFiltro), pra existir uma única fonte de verdade (era
+     duplicado antes: um seletor aqui dentro e outro no header, cada um com seu
+     próprio estado). */
   (function(){
-    const PERIODOS = [
-      { chave:'hoje', label:'Hoje' },
-      { chave:'7d', label:'Últimos 7 dias' },
-      { chave:'30d', label:'Últimos 30 dias' },
-      { chave:'mes', label:'Este mês' },
-    ];
-    const state = { empresas:[], empresaId:null, loadingEmpresas:false, periodo:'30d', loading:false, error:null, data:null };
+    const state = { loading:false, error:null, data:null };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v, moeda){ return v===null||v===undefined ? null : (moeda==='BRL'||!moeda?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function moneySigned(v, moeda){ if(v===null||v===undefined) return null; const abs = money(Math.abs(v), moeda); return v<0 ? '− '+abs : abs; }
     function pctFmt(v){ return v===null||v===undefined ? null : (v<0?'− ':'')+Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
 
-    async function apiEmpresasAtivas(){
-      const res = await fetch('/api/empresas?status=ativas');
-      return ((await res.json()).empresas) || [];
-    }
     async function apiResumo(empresaId, periodo){
       const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo);
       let body = null; try{ body = await res.json(); }catch(e){}
@@ -1455,23 +1582,23 @@
     }
 
     async function loadResumo(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data = null; state.error = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; render();
-      try{ state.data = await apiResumo(state.empresaId, state.periodo); }
+      try{ state.data = await apiResumo(filtro.empresaId, filtro.periodo); }
       catch(err){ state.error = err.message; state.data = null; }
       state.loading = false; render();
     }
 
-    async function load(){
-      state.loadingEmpresas = true; render();
-      try{
-        state.empresas = await apiEmpresasAtivas();
-        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
-          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
-        }
-      }catch(e){ state.empresas = []; }
-      state.loadingEmpresas = false;
-      if(state.empresaId) await loadResumo(); else render();
-    }
+    function load(){ loadResumo(); }
+
+    // Reage a troca de empresa/período no header — só recarrega se a Visão
+    // Geral for a página ativa no momento (evita chamada à toa em outra tela).
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-overview');
+      if(page && page.classList.contains('active')) loadResumo();
+      else render();
+    });
 
     // ---- KPI cards ----
     function tintVars(tint){
@@ -1612,26 +1739,18 @@
     function render(){
       const root = document.getElementById('overviewRoot');
       if(!root) return;
+      const filtro = window.CerneFiltro.state;
 
-      if(!state.loadingEmpresas && !state.empresas.length){
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
         root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
           + '<h2>Nenhuma empresa ativa</h2>'
           + '<p class="lead">Cadastre e ative uma empresa, conecte o Mercado Livre em <strong>Marketplaces</strong> e sincronize para ver os indicadores aqui.</p></div>';
         return;
       }
 
-      let html = '<div class="toolbar">'
-        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
-          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="ovEmpresaSelect">'
-            + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
-          + '</select></div>'
-          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="ovPeriodoSelect">'
-            + PERIODOS.map(p=>'<option value="'+p.chave+'" '+(p.chave===state.periodo?'selected':'')+'>'+p.label+'</option>').join('')
-          + '</select></div>'
-        + '</div>'
-      + '</div>';
+      let html = '';
 
-      if(state.loading){
+      if(filtro.loadingEmpresas || state.loading){
         html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando indicadores…</span></div></div>';
       } else if(state.error){
         html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
@@ -1648,11 +1767,6 @@
       }
 
       root.innerHTML = html;
-
-      const selEmp = document.getElementById('ovEmpresaSelect');
-      if(selEmp) selEmp.addEventListener('change', ()=>{ state.empresaId = Number(selEmp.value); loadResumo(); });
-      const selPer = document.getElementById('ovPeriodoSelect');
-      if(selPer) selPer.addEventListener('change', ()=>{ state.periodo = selPer.value; loadResumo(); });
     }
 
     window.Overview = { load };
@@ -1665,6 +1779,7 @@
   (function(){
     const PERIODOS = [
       { chave:'hoje', label:'Hoje' },
+      { chave:'ontem', label:'Ontem' },
       { chave:'7d', label:'Últimos 7 dias' },
       { chave:'30d', label:'Últimos 30 dias' },
       { chave:'mes', label:'Este mês' },
@@ -1681,6 +1796,19 @@
     }
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return '—'; } }
+    // Data + hora em duas linhas (mais estreito que a data/hora por extenso) —
+    // usado só na coluna "Data" da tabela, que precisa caber na largura normal
+    // da tela sem precisar rolar pro lado. O detalhe do pedido continua usando
+    // fmtDateTime (por extenso).
+    function fmtDataCell(iso){
+      if(!iso) return '—';
+      try{
+        const d = new Date(iso);
+        const data = d.toLocaleDateString('pt-BR');
+        const hora = d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+        return '<div class="cell-stack"><span>'+data+'</span><span class="cell-stack-sub">'+hora+'</span></div>';
+      }catch(e){ return '—'; }
+    }
     function money(v, moeda){ return v===null||v===undefined ? null : (moeda==='BRL'||!moeda?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
 
     async function apiEmpresasAtivas(){
@@ -1768,34 +1896,38 @@
           ? '<span style="color:var(--text-faint);font-style:italic;">pendente</span>'
           : '<span style="'+(v>=0?'color:var(--success);':'color:var(--danger);')+'">'+(v<0?'− ':'')+Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%</span>';
 
-        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Data</th><th>Nº do pedido</th><th>Loja</th><th>Produto</th><th>SKU</th><th>Qtd.</th><th>Valor da venda</th>'
-          + '<th>Taxas/comissões</th><th>Frete vendedor</th><th>Imposto</th><th>Custo produto</th>'
-          + '<th>Margem de contribuição</th><th>% margem</th><th>Logística</th><th>Status</th><th></th>'
+        // Colunas priorizadas pra tabela caber na largura normal da tela
+        // desktop sem precisar rolar pro lado (pedido do usuário). Loja e
+        // Imposto continuam disponíveis — só que dentro do detalhe do pedido
+        // (clique no ícone de olho), não mais como coluna aqui.
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table compact-orders"><thead><tr>'
+          + '<th>Data</th><th>Pedido</th><th>Produto / SKU</th><th>Qtd.</th><th>Venda</th>'
+          + '<th>Taxas</th><th>Frete vend.</th><th>Custo</th>'
+          + '<th>Margem R$</th><th>Margem %</th><th>Logística</th><th>Status</th><th></th>'
           + '</tr></thead><tbody>'
           + state.items.map(p => '<tr'+(p.cancelado?' style="opacity:.6;"':'')+'>'
-            + '<td class="tab-nums">'+fmtDateTime(p.dataCriacao)+'</td>'
+            + '<td class="tab-nums">'+fmtDataCell(p.dataCriacao)+'</td>'
             + '<td class="mono">'+escapeHtml(p.mlOrderId)+'</td>'
-            + '<td>'+escapeHtml(p.loja||'—')+'</td>'
-            + '<td>'+escapeHtml(p.produtoResumo||'—')+(p.qtdItens>3?' <span class="field-hint" style="display:inline;">+'+(p.qtdItens-3)+'</span>':'')+'</td>'
-            + '<td class="mono">'+escapeHtml(p.skuResumo||'sem SKU')+'</td>'
+            + '<td class="produto-cell">'
+              + '<div class="cell-stack"><span class="prod-title" title="'+escapeHtml(p.produtoResumo||'—')+'">'+escapeHtml(p.produtoResumo||'—')+(p.qtdItens>3?' +'+(p.qtdItens-3):'')+'</span>'
+              + '<span class="cell-stack-sub mono" title="'+escapeHtml(p.skuResumo||'')+'">'+escapeHtml(p.skuResumo||'sem SKU')+'</span></div>'
+            + '</td>'
             + '<td class="tab-nums">'+p.qtdUnidades+'</td>'
-            + '<td class="mono">'+(money(p.valorTotal,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
+            + '<td class="mono">'+(money(p.valorTotal,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisp.</span>')+'</td>'
             + '<td class="mono">'+cellMoney(p.tarifasMl,p.moeda,true)+'</td>'
-            + '<td class="mono">'+(money(p.freteVendedor,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
-            + '<td class="mono">'+cellMoney(p.imposto,p.moeda,true)+'</td>'
+            + '<td class="mono">'+(money(p.freteVendedor,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisp.</span>')+'</td>'
             + '<td class="mono">'+cellMoney(p.custoProduto,p.moeda,true)+'</td>'
             + '<td class="mono" style="'+(p.margemContribuicao!==null?(p.margemContribuicao>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(p.calculoCompleto ? money(p.margemContribuicao,p.moeda) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
             + '<td class="mono">'+(p.calculoCompleto ? pctCell(p.margemPercentual) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
-            + '<td>'+escapeHtml(p.envioLogisticType||'—')+'</td>'
+            + '<td class="cell-stack-sub" style="white-space:normal;">'+escapeHtml(p.envioLogisticType||'—')+'</td>'
             + '<td><span class="badge-status '+(p.status==='paid'?'on':(p.cancelado?'err':'off'))+'"><span class="dot"></span>'+escapeHtml(p.status||'—')+'</span></td>'
-            + '<td><div class="row-actions"><button class="row-ic-btn" data-detail="'+p.id+'" title="Ver detalhes" type="button">'+svg('eye')+'</button></div></td>'
+            + '<td><div class="row-actions"><button class="row-ic-btn" data-detail="'+p.id+'" title="Ver detalhes (loja, imposto e mais)" type="button">'+svg('eye')+'</button></div></td>'
           + '</tr>').join('')
           + '</tbody></table></div></div>'
           + (state.totalNoPeriodo > state.items.length
               ? '<div class="field-hint" style="margin-top:10px;">Mostrando os '+state.items.length+' pedidos mais recentes de '+state.totalNoPeriodo+' no período selecionado.</div>'
               : '')
-          + '<div class="field-hint" style="margin-top:6px;">"Pendente" = falta cadastrar o custo do SKU em <strong>Custos</strong> e/ou o Mercado Livre não retornou alguma tarifa desse pedido ainda — nunca um valor estimado. Pedidos cancelados (linha esmaecida) não entram nos totais de Visão Geral e Financeiro.</div>';
+          + '<div class="field-hint" style="margin-top:6px;">"Pendente" = falta cadastrar o custo do SKU em <strong>Custos</strong> e/ou o Mercado Livre não retornou alguma tarifa desse pedido ainda — nunca um valor estimado. Pedidos cancelados (linha esmaecida) não entram nos totais de Visão Geral e Financeiro. Loja e imposto do pedido estão no detalhe (ícone de olho).</div>';
       }
 
       root.innerHTML = html;
@@ -1892,6 +2024,7 @@
   (function(){
     const PERIODOS = [
       { chave:'hoje', label:'Hoje' },
+      { chave:'ontem', label:'Ontem' },
       { chave:'7d', label:'Últimos 7 dias' },
       { chave:'30d', label:'Últimos 30 dias' },
       { chave:'mes', label:'Este mês' },

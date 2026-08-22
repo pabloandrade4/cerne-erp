@@ -20,6 +20,7 @@ function toNum(v) {
 const LIMITE_LISTAGEM = 500;
 
 // GET /api/pedidos?empresaId=ID&periodo=30d — lista pedidos de uma empresa no período
+// periodo: hoje | ontem | 7d | 30d (padrão) | mes
 router.get('/', async (req, res, next) => {
   try {
     const { empresaId, periodo } = req.query;

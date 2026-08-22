@@ -9,7 +9,7 @@ const { buscarPedidosDoPeriodo, resumirPeriodo, serieDiaria } = require('../lib/
 const router = express.Router();
 
 // GET /api/relatorios/resumo-vendas?empresaId=ID&periodo=30d
-// periodo: hoje | 7d | 30d (padrão) | mes
+// periodo: hoje | ontem | 7d | 30d (padrão) | mes
 router.get('/resumo-vendas', async (req, res, next) => {
   try {
     const { empresaId, periodo } = req.query;
