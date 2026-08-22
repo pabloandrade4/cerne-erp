@@ -69,6 +69,19 @@ em que foram tomadas (mais recente no topo).
   seletor duplicado, que trocar empresa/período no header realmente muda o
   dado carregado, que "Ontem" aparece nos três seletores, e que a tabela de
   Pedidos não tem mais rolagem horizontal com a Margem R$/% sempre visível.
+- **Testado ao vivo em produção, depois do deploy** (conta real "pf
+  embalegens"), com o Chrome automatizado: "Hoje" e "Ontem" bateram exato
+  com o esperado (mesmos números em Visão Geral, Pedidos e Financeiro pro
+  mesmo período — confirmando a fonte única de cálculo), o header mostrou
+  empresa/período reais, sem seletor duplicado na Visão Geral, e a tabela
+  de Pedidos renderizou sem rolagem horizontal (`scrollWidth === clientWidth`
+  confirmado via JS), com Loja e Imposto corretos no detalhe do pedido.
+  **Troca de empresa não pôde ser testada com dado real** — a conta só tem
+  uma empresa ativa hoje; o mecanismo em si já foi validado com dados
+  simulados de 2 empresas antes do deploy. **Achado durante esse teste ao
+  vivo (não fazia parte das 3 correções pedidas):** "7 dias" e "30 dias"
+  ficam muito lentos com o volume real de pedidos da conta — detalhes em
+  `05-problemas-conhecidos.md`.
 
 ## 2026-08-22 (8) — Ativação de Visão Geral, Pedidos e Financeiro com dados reais
 - Pedido do usuário: ativar de verdade 3 telas (Visão Geral, Pedidos,

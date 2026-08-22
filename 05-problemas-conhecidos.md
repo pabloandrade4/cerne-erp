@@ -3,6 +3,32 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Período "7 dias"/"30 dias" fica muito lento com muitos pedidos (Visão Geral, Pedidos, Financeiro)
+- Descoberto testando ao vivo em produção (conta real "pf embalegens",
+  22/08/2026) depois da correção do filtro de período: **"Hoje" (7
+  pedidos) respondeu em ~6s e "Ontem" (91 pedidos) em ~41s** — mas
+  **"Últimos 7 dias" não terminou nem depois de 160 segundos esperando**
+  (nesse ponto o teste foi interrompido; "Últimos 30 dias" na tela de
+  Pedidos eventualmente terminou de carregar, mas levou dezenas de
+  segundos e a aba do navegador ficou sem responder enquanto isso).
+- **Causa provável:** a query de `lib/relatorioVendas.js`
+  (`buscarPedidosDoPeriodo`) roda, pra cada pedido do período, várias
+  subqueries correlacionadas (itens, SKUs, quantidade, custo do produto) —
+  isso escala mal conforme o número de pedidos cresce. Como Visão Geral,
+  Pedidos e Financeiro compartilham essa mesma função (de propósito, pra
+  nunca calcular diferente em cada tela — ver `01-regras-de-negocio.md`),
+  o problema aparece nas três, sempre que o período tem muitos pedidos.
+- **Isso já existia antes desta etapa** (a query em si não foi alterada
+  nesta correção — só o cálculo de início/fim do período em
+  `lib/periodo.js`) — não é um problema causado pelas 3 correções pedidas
+  agora, mas só apareceu claramente ao testar com "Ontem"/"7 dias"/"30
+  dias" numa conta com volume real de pedidos.
+- **Não foi corrigido agora** — está fora do escopo das 3 correções
+  pedidas nesta etapa ("não faça nenhuma outra alteração"). Precisa de uma
+  decisão do usuário sobre quando resolver (ex: reescrever a query pra
+  buscar itens/custos numa consulta só em vez de subquery por pedido, ou
+  paginar/adiar o cálculo pesado). Ver `06-proximos-passos.md`.
+
 ## `git push` direto não funciona nesta sessão do Cowork
 - O usuário pediu para o Claude trabalhar direto no repositório Git
   (editar → testar → commit → push). `git clone` funciona (leitura
