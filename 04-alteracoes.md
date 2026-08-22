@@ -2,6 +2,41 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-22 (6) — Correções: filtro único da Visão Geral, tabela de Pedidos mais estreita, fuso horário do período
+- Pedido pelo usuário: corrigir 3 problemas específicos nas telas já
+  ativadas na etapa anterior, sem mudar o design geral nem criar
+  funcionalidade nova.
+- **Visão Geral tinha filtro duplicado:** existia um seletor de
+  empresa/período dentro da própria página E outro (decorativo, sem
+  função) no header. Removido o seletor de dentro da página — agora o
+  header é a única fonte de verdade da empresa e do período da Visão
+  Geral, e os dois dropdowns do header passaram a funcionar de verdade
+  (empresas reais buscadas da API, e trocar a seleção atualiza os dados na
+  hora).
+- **Tabela de Pedidos larga demais:** reorganizada pra caber na largura
+  normal de uma tela desktop sem precisar rolar pro lado. Ficaram: Data,
+  Pedido, Produto/SKU (uma coluna, em duas linhas), Qtd., Venda, Taxas,
+  Frete vendedor, Custo, Margem R$, Margem %, Logística e Status — nessa
+  ordem de prioridade. Loja e Imposto saíram da tabela (continuam no
+  detalhe do pedido). Margem R$ e Margem % continuam sempre visíveis, sem
+  precisar rolar.
+- **Filtro de "Hoje"/"Ontem" agora usa início e fim exatos do dia, em
+  `America/Sao_Paulo`:** antes, "Hoje" ia de 00:00 (Brasília) até o
+  instante da consulta — na prática não deixava pedido de outro dia
+  entrar, mas não era literalmente "00:00:00 até 23:59:59" como pedido, e
+  não existia jeito de isolar só "ontem". Agora existe o período **"Ontem"**
+  (novo) e tanto "Hoje" quanto "Ontem" usam o dia inteiro, início e fim
+  explícitos — validado com pedido de teste no último segundo de ontem e
+  no primeiro segundo de hoje, sem nenhum vazando pro período errado.
+  Como a correção foi em `lib/periodo.js` (regra central), vale ao mesmo
+  tempo para Visão Geral, Pedidos e Financeiro.
+- **Testado:** `node --check` em todos os arquivos de backend alterados;
+  limites de cada período validados com script Node isolado e com queries
+  reais no Postgres local (`psql`); front-end (header da Visão Geral e
+  tabela de Pedidos) testado com Playwright/Chromium local em 1440px e
+  1280px de largura — sem seletor duplicado, sem rolagem horizontal na
+  tabela, com "Ontem" disponível nos três seletores de período.
+
 ## 2026-08-22 (5) — Visão Geral, Pedidos e Financeiro com dados reais (fonte única de cálculo)
 - Pedido pelo usuário: ativar de verdade as telas Visão Geral, Pedidos e
   Financeiro com os dados já sincronizados do Mercado Livre, com filtro de

@@ -3,6 +3,73 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-22 (9) — 3 correções: filtro único da Visão Geral, tabela de Pedidos mais estreita, fuso horário do período
+- Pedido do usuário: corrigir 3 problemas específicos, sem mudar o design
+  geral e sem criar funcionalidade nova — (1) Visão Geral tinha dois
+  conjuntos de filtro (header + seletor dentro da página) em vez de um só;
+  (2) a tabela de Pedidos era larga demais, precisava rolar pro lado pra ver
+  a margem; (3) o filtro de período podia deixar pedido de outro dia entrar
+  no resultado de "Hoje"/"Ontem".
+- **(1) Filtro único da Visão Geral:** os dois seletores (empresa/período)
+  que ficavam dentro da página `Visão Geral` foram removidos. O header
+  (`#companyBtn`/`#periodBtn`, que antes eram só visuais — clicar não
+  mudava nenhum dado) virou a única fonte de verdade: um módulo novo,
+  `window.CerneFiltro`, busca as empresas ativas de verdade
+  (`/api/empresas?status=ativas`), preenche os dois dropdowns do header com
+  dado real, e notifica quem estiver "ouvindo" (`onChange`) quando a
+  empresa ou o período mudam. A `Visão Geral` agora só lê
+  `window.CerneFiltro.state` — não tem mais `empresaId`/`periodo` próprio.
+  **Pedidos e Financeiro não entraram nessa troca** (fora do pedido desta
+  etapa) — continuam com o seletor de empresa/período de dentro da própria
+  página, do jeito que já funcionava.
+- **(2) Tabela de Pedidos mais estreita:** revisadas as colunas mostradas —
+  ficaram Data, Pedido, Produto/SKU (uma coluna só, em duas linhas), Qtd.,
+  Venda, Taxas, Frete vendedor, Custo, Margem R$, Margem %, Logística e
+  Status, na ordem de prioridade que o usuário pediu. **Loja** e **Imposto**
+  saíram da tabela — continuam disponíveis no detalhe do pedido (clique no
+  ícone de olho), que já mostrava os dois. Foi reduzido o espaçamento e a
+  fonte só dessa tabela (classe `.compact-orders`, não mexe nas outras
+  tabelas do sistema — Empresas, Marketplaces, Custos continuam do jeito
+  que estavam) e a coluna Produto/SKU trunca com reticências (com o texto
+  completo disponível ao passar o mouse) em vez de empurrar a tabela pra
+  largura maior. Testado numa tela de 1280px de largura (notebook comum)
+  sem precisar rolar a tabela pro lado, com Margem R$ e Margem % sempre
+  visíveis.
+- **(3) Fuso horário do período — bug real corrigido:** `lib/periodo.js`
+  calculava "Hoje" como `[00:00 de hoje em Brasília, agora]` — o limite de
+  cima era o instante da consulta, não o fim do dia. Na prática isso não
+  deixava pedido "vazar" pra dentro de "Hoje" (não existe pedido no
+  futuro), mas não era exatamente o que foi pedido (00:00:00 até 23:59:59)
+  e não tinha jeito de isolar só "ontem". Agora "Hoje" e "Ontem" usam
+  início E fim explícitos do dia inteiro em `America/Sao_Paulo`
+  (`[00:00:00 do dia, 00:00:00 do dia seguinte)`), e foi adicionado o
+  período **"Ontem"** (não existia antes). Validado com queries reais no
+  Postgres local, inserindo pedido de teste no último segundo de ontem
+  (23:59:55 BRT) e no primeiro segundo de hoje (00:00:05 BRT): o de ontem
+  só apareceu em "Ontem", o de hoje só em "Hoje" — sem sobreposição, sem
+  vazamento de um dia pro outro. Como a coluna `data_criacao` já é
+  `TIMESTAMPTZ` (guarda o instante certo, não depende do fuso do servidor),
+  não havia bug de UTC na gravação — o ajuste foi só no cálculo do
+  intervalo de consulta.
+- Como Visão Geral, Pedidos e Financeiro continuam todos chamando
+  `calcularPeriodo()` de `lib/periodo.js` (regra central, sem duplicação —
+  ver `01-regras-de-negocio.md`), a correção do fuso horário e o novo
+  período "Ontem" valem para as três telas ao mesmo tempo, sem precisar
+  mexer em cada uma separadamente. Só foi necessário acrescentar "Ontem" na
+  lista de opções mostradas em cada seletor (header da Visão Geral, e os
+  seletores próprios de Pedidos e Financeiro).
+- **Testado localmente antes de publicar:** `node --check` em todos os
+  arquivos de backend alterados; a lógica de `calcularPeriodo()` validada
+  com script Node isolado (limites exatos de cada período); as consultas
+  reais no Postgres local (`psql`) confirmando os limites de "Hoje"/"Ontem"
+  com pedidos de teste nos segundos-limite (23:59:55 de ontem e 00:00:05 de
+  hoje, em BRT); e o front-end (header + tabela de Pedidos) testado com
+  Playwright/Chromium local (dados mockados, sem depender do Postgres) em
+  telas de 1440px e 1280px — confirmando que a Visão Geral não tem mais
+  seletor duplicado, que trocar empresa/período no header realmente muda o
+  dado carregado, que "Ontem" aparece nos três seletores, e que a tabela de
+  Pedidos não tem mais rolagem horizontal com a Margem R$/% sempre visível.
+
 ## 2026-08-22 (8) — Ativação de Visão Geral, Pedidos e Financeiro com dados reais
 - Pedido do usuário: ativar de verdade 3 telas (Visão Geral, Pedidos,
   Financeiro) com dados reais do Mercado Livre já sincronizado, com filtro

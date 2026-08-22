@@ -77,9 +77,19 @@ _(sem regras registradas ainda)_
   contribuição (R$ e %) quando já houver dados suficientes, taxas/
   comissões, frete do vendedor, imposto e custo dos produtos — e um
   gráfico de Faturamento x Margem de contribuição por dia.
-- **Filtro de período de verdade** (não decorativo): Hoje, Últimos 7 dias,
-  Últimos 30 dias ou Este mês. "Hoje" e "Este mês" usam o fuso de Brasília
-  (UTC-3 fixo); "7/30 dias" são uma janela corrida a partir de agora.
+- **Empresa e período são escolhidos só no HEADER** (topo da tela, os dois
+  botões ao lado do sino de notificações) — é a **única fonte de verdade**
+  dessas duas escolhas para a Visão Geral. Não existe mais um segundo
+  seletor dentro da própria página (existia antes; foi removido por ser
+  duplicado e nunca ficar em sincronia com o header). Trocar empresa ou
+  período no header atualiza a Visão Geral na hora.
+- **Filtro de período de verdade** (não decorativo, e não só visual — a
+  consulta ao banco também respeita): Hoje, Ontem, Últimos 7 dias, Últimos
+  30 dias ou Este mês. Tudo no fuso `America/Sao_Paulo` (BRT, UTC-3 fixo —
+  o Brasil não usa mais horário de verão desde 2019). "Hoje" e "Ontem" são
+  o dia inteiro, início e fim exatos (00:00:00 até 23:59:59 daquele dia em
+  BRT) — nunca deixam pedido de um dia vazar pro resultado do outro.
+  "7/30 dias" são uma janela corrida a partir de agora.
 - Se não houver nenhum pedido no período, os indicadores mostram "Sem
   dados". Se houver pedido mas faltar alguma informação (ex: custo de SKU
   não cadastrado em algum pedido), mostra "Pendente" — nunca um número
@@ -95,17 +105,27 @@ _(sem regras registradas ainda)_
   comprador e do vendedor separados, e o tipo de logística.
 - Ver a regra completa de "nunca inventar valor" e separação de frete em
   **Mercado Livre**, acima — vale igualmente para os pedidos importados.
-- A lista de pedidos (tela Pedidos) é filtrada pelo mesmo seletor de
-  período da Visão Geral/Financeiro, e mostra por pedido: data, número do
-  pedido, loja (conta do Mercado Livre), produto, SKU, quantidade, valor
-  da venda, taxas/comissões, frete do vendedor, imposto, **custo do
-  produto** (soma do custo cadastrado de cada SKU do pedido), **margem de
-  contribuição** (R$ e %) — ver fórmula em **Custos**, abaixo — logística e
-  status. Se qualquer parte estiver faltando, a coluna mostra "pendente"
-  em vez de um número — nunca um valor parcial/estimado.
-- Clicando no pedido abre o detalhe completo, mostrando exatamente como o
-  resultado daquela venda foi calculado (cada parte subtraída, uma por
-  uma, até a margem de contribuição final).
+- A lista de pedidos (tela Pedidos) usa o mesmo cálculo de período de
+  Visão Geral/Financeiro (período escolhido no seletor da própria tela —
+  ver nota abaixo), e mostra por pedido, priorizando a informação que cabe
+  na largura normal da tela desktop sem precisar rolar pro lado: data,
+  número do pedido, produto/SKU (numa coluna só), quantidade, valor da
+  venda, taxas/comissões, frete do vendedor, **custo do produto** (soma do
+  custo cadastrado de cada SKU do pedido), **margem de contribuição** (R$ e
+  %) — ver fórmula em **Custos**, abaixo — logística e status. Se qualquer
+  parte estiver faltando, a coluna mostra "pendente" em vez de um número —
+  nunca um valor parcial/estimado. **Loja** e **imposto** do pedido não
+  ficam mais como coluna própria — continuam disponíveis no detalhe do
+  pedido (mesma informação, só que dentro do clique, pra tabela caber sem
+  rolagem horizontal).
+- Clicando no pedido abre o detalhe completo, mostrando a loja, o imposto e
+  exatamente como o resultado daquela venda foi calculado (cada parte
+  subtraída, uma por uma, até a margem de contribuição final).
+- **Nota:** o seletor de empresa/período da tela Pedidos é próprio dessa
+  tela (não é o mesmo do header, que hoje só controla a Visão Geral — ver
+  seção "Visão Geral", acima) — mas usa a mesma regra de cálculo de período
+  (`lib/periodo.js`) das outras duas telas, então o mesmo período nunca
+  significa datas diferentes dependendo de onde foi escolhido.
 - Pedidos cancelados aparecem normalmente na lista (linha esmaecida, para
   diferenciar visualmente) — a regra de não entrarem no resultado
   financeiro vale só pros números agregados de Visão Geral/Financeiro, não
@@ -131,9 +151,9 @@ _(sem regras registradas ainda)_
   — não é a DRE completa. Mostra, para a empresa e o período selecionado:
   faturamento bruto, taxas e comissões, frete pago pelo vendedor, impostos,
   custo dos produtos, margem de contribuição em R$ e em %.
-- Usa o mesmo seletor de período (Hoje / 7 dias / 30 dias / Este mês) e a
-  mesma regra de cálculo da Visão Geral e dos Pedidos — nunca um valor
-  diferente pro mesmo período em telas diferentes.
+- Usa o mesmo seletor de período (Hoje / Ontem / 7 dias / 30 dias / Este
+  mês) e a mesma regra de cálculo da Visão Geral e dos Pedidos — nunca um
+  valor diferente pro mesmo período em telas diferentes.
 - **Por pedido do usuário, NÃO fazem parte desta etapa:** contas a pagar,
   contas a receber, fluxo de caixa, DRE completa, banco, fornecedores,
   Shopee. Isso vem depois, quando for pedido.
