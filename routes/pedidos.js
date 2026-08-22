@@ -3,6 +3,7 @@
 // real da API, imposto configurado pelo ERP e custo do produto cadastrado).
 const express = require('express');
 const pool = require('../db/pool');
+const { calcularResultadoVenda } = require('../lib/resultadoVenda');
 
 const router = express.Router();
 
@@ -10,7 +11,22 @@ function toNum(v) {
   return v === null || v === undefined ? null : Number(v);
 }
 
-function serializeResumo(row) {
+// Empacota o resultado financeiro de uma linha da listagem (já traz
+// custo_produto_total pronto da query — ver GET /). Mesma fórmula usada no
+// detalhe (lib/resultadoVenda.js), só a origem dos dados muda.
+function serializeResumo(row, aliquotaImposto) {
+  const valorVenda = toNum(row.valor_total);
+  const custoProduto = toNum(row.custo_produto_total);
+  const calc = calcularResultadoVenda({
+    valorVenda,
+    taxaVenda: toNum(row.taxa_venda_total),
+    pagamentoTaxas: toNum(row.pagamento_taxas),
+    pagamentoTaxaMarketplace: toNum(row.pagamento_taxa_marketplace),
+    freteVendedor: toNum(row.frete_vendedor),
+    custoProduto,
+    aliquotaImposto,
+  });
+
   return {
     id: row.id,
     empresaId: row.empresa_id,
@@ -19,13 +35,18 @@ function serializeResumo(row) {
     dataCriacao: row.data_criacao,
     status: row.status,
     compradorNickname: row.comprador_nickname,
-    valorTotal: toNum(row.valor_total),
+    valorTotal: valorVenda,
     moeda: row.moeda,
     itemResumo: row.item_resumo,
     qtdItens: Number(row.qtd_itens) || 0,
     freteComprador: toNum(row.frete_comprador),
     freteVendedor: toNum(row.frete_vendedor),
     envioLogisticType: row.envio_logistic_type,
+    tarifasMl: calc.tarifasTotal,
+    imposto: calc.imposto,
+    custoProduto,
+    margemLiquida: calc.resultado,
+    calculoCompleto: calc.calculoCompleto,
   };
 }
 
@@ -35,12 +56,23 @@ router.get('/', async (req, res, next) => {
     const { empresaId } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
+    const { rows: configRows } = await pool.query(
+      'SELECT aliquota_imposto FROM config_financeiro WHERE empresa_id = $1',
+      [empresaId]
+    );
+    const aliquotaImposto = configRows.length ? Number(configRows[0].aliquota_imposto) : 0;
+
     const { rows } = await pool.query(
       `SELECT p.*,
               (SELECT string_agg(titulo, ' + ' ORDER BY id) FROM (
                  SELECT titulo, id FROM ml_pedido_itens WHERE pedido_id = p.id ORDER BY id LIMIT 2
                ) t) AS item_resumo,
-              (SELECT count(*) FROM ml_pedido_itens WHERE pedido_id = p.id) AS qtd_itens
+              (SELECT count(*) FROM ml_pedido_itens WHERE pedido_id = p.id) AS qtd_itens,
+              (SELECT CASE WHEN bool_and(cp.custo IS NOT NULL) THEN SUM(cp.custo * pi.quantidade) ELSE NULL END
+                 FROM ml_pedido_itens pi
+                 LEFT JOIN custos_produto cp ON cp.empresa_id = $1 AND cp.sku = pi.sku
+                 WHERE pi.pedido_id = p.id
+              ) AS custo_produto_total
        FROM ml_pedidos p
        JOIN ml_contas c ON c.id = p.conta_ml_id
        WHERE c.empresa_id = $1
@@ -48,7 +80,7 @@ router.get('/', async (req, res, next) => {
        LIMIT 200`,
       [empresaId]
     );
-    res.json({ pedidos: rows.map(serializeResumo) });
+    res.json({ pedidos: rows.map((r) => serializeResumo(r, aliquotaImposto)) });
   } catch (err) { next(err); }
 });
 
@@ -129,26 +161,17 @@ router.get('/:id', async (req, res, next) => {
     if (taxaVenda === null) pendencias.push('O Mercado Livre não retornou a comissão (sale_fee) deste pedido.');
     if (freteVendedor === null) pendencias.push('O Mercado Livre não retornou o custo de frete do vendedor deste pedido.');
 
-    const tarifasComponentes = [
-      { label: 'Comissão da venda (sale_fee)', valor: taxaVenda },
-      { label: 'Taxas do pagamento', valor: pagamentoTaxas },
-      { label: 'Tarifa de marketplace do pagamento', valor: pagamentoTaxaMarketplace },
-    ];
-    const tarifasDisponiveis = tarifasComponentes.filter((c) => c.valor !== null);
-    const tarifasTotal = tarifasDisponiveis.length
-      ? Math.round(tarifasDisponiveis.reduce((s, c) => s + c.valor, 0) * 100) / 100
-      : null;
-
-    const imposto = valorVenda !== null ? Math.round(valorVenda * (aliquotaImposto / 100) * 100) / 100 : null;
-
     const custoProdutoFinal = itens.length && custoCompleto ? Math.round(custoProdutoTotal * 100) / 100 : null;
 
-    const calculoCompleto =
-      valorVenda !== null && tarifasTotal !== null && freteVendedor !== null && imposto !== null && custoProdutoFinal !== null;
-
-    const resultado = calculoCompleto
-      ? Math.round((valorVenda - tarifasTotal - freteVendedor - imposto - custoProdutoFinal) * 100) / 100
-      : null;
+    const { tarifasComponentes, tarifasTotal, imposto, resultado, calculoCompleto } = calcularResultadoVenda({
+      valorVenda,
+      taxaVenda,
+      pagamentoTaxas,
+      pagamentoTaxaMarketplace,
+      freteVendedor,
+      custoProduto: custoProdutoFinal,
+      aliquotaImposto,
+    });
 
     res.json({
       pedido: {

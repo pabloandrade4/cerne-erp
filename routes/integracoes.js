@@ -6,7 +6,7 @@ const pool = require('../db/pool');
 const { encrypt } = require('../lib/crypto');
 const { generateState, generatePkce } = require('../lib/pkce');
 const ml = require('../lib/mercadolivre');
-const { sincronizarConta } = require('../lib/mlSync');
+const { sincronizarConta, importarPedidoPorNotificacao } = require('../lib/mlSync');
 
 const router = express.Router();
 
@@ -148,6 +148,39 @@ router.get('/callback', async (req, res) => {
   } catch (err) {
     console.error('[integracoes/mercadolivre/callback]', err);
     redirectComErro('Não foi possível concluir a conexão com o Mercado Livre.');
+  }
+});
+
+// POST /api/integracoes/mercadolivre/webhook — notificação em tempo real do
+// Mercado Livre (tópico orders_v2, configurado no painel do app do ML).
+// A própria documentação do Mercado Livre pede pra confirmar o recebimento
+// com HTTP 200 o mais rápido possível, e só DEPOIS buscar o pedido completo
+// na API — por isso a resposta é enviada antes de qualquer processamento.
+router.post('/webhook', async (req, res) => {
+  res.sendStatus(200);
+
+  try {
+    const body = req.body || {};
+    const { resource, topic, user_id: mlUserId, application_id: applicationId } = body;
+
+    if (topic !== 'orders_v2' || !resource || !mlUserId) return; // só processamos notificação de pedido
+
+    if (process.env.ML_CLIENT_ID && String(applicationId) !== String(process.env.ML_CLIENT_ID)) {
+      console.warn('[ml webhook] application_id da notificação não confere com ML_CLIENT_ID — ignorada.');
+      return;
+    }
+
+    const match = /\/orders\/(\d+)/.exec(resource);
+    if (!match) return;
+    const orderId = match[1];
+
+    await importarPedidoPorNotificacao(mlUserId, orderId);
+  } catch (err) {
+    // Nunca propaga erro pro Mercado Livre (a resposta 200 já foi enviada) —
+    // só registra, pra não perder o rastro se um pedido falhar ao importar
+    // por notificação. A próxima sincronização manual/periódica cobre o que
+    // passar batido aqui.
+    console.error('[ml webhook] falha ao processar notificação:', err.message);
   }
 });
 

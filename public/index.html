@@ -1552,8 +1552,13 @@
           + '<h2>Nenhum pedido importado</h2>'
           + '<p class="lead">Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> e clique em "Sincronizar agora" para importar os pedidos reais.</p></div>';
       } else {
+        const cellMoney = (v, moeda, negative) => v===null
+          ? '<span style="color:var(--text-faint);font-style:italic;">pendente</span>'
+          : (negative && v!==0 ? '− ' : '') + money(Math.abs(v), moeda);
+
         html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Data</th><th>Comprador</th><th>Item(ns)</th><th>Valor</th><th>Frete comprador</th><th>Frete vendedor</th><th>Status</th><th></th>'
+          + '<th>Data</th><th>Comprador</th><th>Item(ns)</th><th>Valor</th><th>Frete comprador</th><th>Frete vendedor</th>'
+          + '<th>Custo produto</th><th>Imposto</th><th>Margem líquida</th><th>Status</th><th></th>'
           + '</tr></thead><tbody>'
           + state.items.map(p => '<tr>'
             + '<td class="tab-nums">'+fmtDateTime(p.dataCriacao)+'</td>'
@@ -1562,10 +1567,14 @@
             + '<td class="mono">'+(money(p.valorTotal,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
             + '<td class="mono">'+(money(p.freteComprador,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
             + '<td class="mono">'+(money(p.freteVendedor,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisponível</span>')+'</td>'
+            + '<td class="mono">'+cellMoney(p.custoProduto,p.moeda,true)+'</td>'
+            + '<td class="mono">'+cellMoney(p.imposto,p.moeda,true)+'</td>'
+            + '<td class="mono" style="'+(p.margemLiquida!==null?(p.margemLiquida>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(p.calculoCompleto ? money(p.margemLiquida,p.moeda) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
             + '<td><span class="badge-status '+(p.status==='paid'?'on':'off')+'"><span class="dot"></span>'+escapeHtml(p.status||'—')+'</span></td>'
             + '<td><div class="row-actions"><button class="row-ic-btn" data-detail="'+p.id+'" title="Ver detalhes" type="button">'+svg('eye')+'</button></div></td>'
           + '</tr>').join('')
-          + '</tbody></table></div></div>';
+          + '</tbody></table></div></div>'
+          + '<div class="field-hint" style="margin-top:10px;">"Pendente" = falta cadastrar o custo do SKU em <strong>Custos</strong> e/ou o Mercado Livre não retornou alguma tarifa desse pedido ainda — nunca um valor estimado.</div>';
       }
 
       root.innerHTML = html;
