@@ -41,23 +41,41 @@ const TABELAS = [
 // ml_oauth_states (transitório, uso único no fluxo OAuth) e ml_sync_historicos
 // (tabela nova, sem dado antigo pra trazer) não entram na migração de propósito.
 
+// Linhas por lote de INSERT — copiar linha por linha (1 round-trip de rede
+// por linha) ficou lento demais indo até o Supabase (banco de origem e
+// destino em provedores/regiões diferentes): uma conta com ~2.370 pedidos já
+// passa de 8 mil linhas somando pedidos+itens+pagamentos. Em lotes de 300
+// linhas por INSERT, o mesmo total vira só algumas dezenas de round-trips.
+const TAMANHO_LOTE = 300;
+
+function normalizarValor(v) {
+  if (v !== null && typeof v === 'object' && !(v instanceof Date)) return JSON.stringify(v);
+  return v;
+}
+
 async function copiarTabela(source, target, tabela, colunas) {
   const ordenarPor = colunas.includes('id') ? 'id' : colunas[0];
   const { rows } = await source.query(`SELECT ${colunas.join(',')} FROM ${tabela} ORDER BY ${ordenarPor}`);
   let copiadas = 0;
-  for (const row of rows) {
-    const values = colunas.map((c) => {
-      const v = row[c];
-      if (v !== null && typeof v === 'object' && !(v instanceof Date)) return JSON.stringify(v);
-      return v;
+
+  for (let inicio = 0; inicio < rows.length; inicio += TAMANHO_LOTE) {
+    const lote = rows.slice(inicio, inicio + TAMANHO_LOTE);
+    const values = [];
+    const gruposDePlaceholder = lote.map((row, i) => {
+      const placeholders = colunas.map((_, j) => {
+        values.push(normalizarValor(row[colunas[j]]));
+        return `$${i * colunas.length + j + 1}`;
+      });
+      return `(${placeholders.join(',')})`;
     });
-    const placeholders = colunas.map((_, i) => `$${i + 1}`).join(',');
+
     const r = await target.query(
-      `INSERT INTO ${tabela} (${colunas.join(',')}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
+      `INSERT INTO ${tabela} (${colunas.join(',')}) VALUES ${gruposDePlaceholder.join(',')} ON CONFLICT DO NOTHING`,
       values
     );
     copiadas += r.rowCount;
   }
+
   if (colunas.includes('id')) {
     await target.query(
       `SELECT setval(pg_get_serial_sequence('${tabela}','id'), GREATEST(COALESCE((SELECT MAX(id) FROM ${tabela}), 1), 1), true)`
