@@ -3,6 +3,39 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Estoque Full: dados do endpoint de estoque nunca testados com uma conta real
+- A tela **Estoque Full** identifica anúncios Full pelo campo
+  `shipping.logistic_type === 'fulfillment'` (documentado pelo Mercado
+  Livre) e busca a quantidade pelo endpoint `GET /inventories/
+  {inventory_id}/stock/fulfillment`, usando o `inventory_id` que a própria
+  API do item retorna. **Nada disso pôde ser testado com uma chamada real**
+  neste ambiente de desenvolvimento (sem servidor rodando, sem conta real
+  acessível) — só a lógica de identificação de Full, extração de SKU e
+  montagem das chamadas foi revisada e testada isoladamente.
+- Se, ao testar ao vivo, o formato da resposta desse endpoint for diferente
+  do esperado (ex: o campo de quantidade tiver outro nome), a tela vai
+  mostrar "Pendente" para a quantidade em vez de dar erro — o que é seguro
+  (não inventa número), mas pode esconder um ajuste de código necessário.
+  **Precisa ser conferido no teste ao vivo em produção.**
+- Buscar a quantidade Full é **uma chamada de API por anúncio Full
+  encontrado** (o Mercado Livre não documenta um jeito de buscar várias de
+  uma vez) — para uma conta com muitos anúncios Full, isso pode ficar
+  lento, parecido com o problema já conhecido de sincronização de pedidos.
+  Não foi otimizado agora (ex: cache, busca em background) porque fugiria
+  do escopo desta etapa.
+
+## Compras e Estoque não têm nenhuma automação entre si ainda
+- Marcar uma compra como "Recebido" **não altera o Estoque** — foi uma
+  decisão explícita do usuário para esta etapa ("não automatize ainda
+  entrada de estoque ao receber a compra"). Enquanto isso não existir, dar
+  entrada no estoque depois de receber uma compra precisa ser feito à mão,
+  na tela Estoque (ajuste manual).
+- Quando essa automação for pedida, existem decisões de negócio a
+  combinar com o usuário antes de implementar: o que fazer se a
+  quantidade recebida for diferente da pedida (soma o que veio, ou exige
+  bater com o pedido?), o que fazer se a compra for editada depois de já
+  ter dado entrada, etc.
+
 ## Custo por SKU existe em dois lugares (Produtos e Custos), sem sincronia entre eles
 - Ao ativar a tela **Produtos** (nome, SKU, custo, status), foi criada uma
   tabela nova (`produtos`) — de propósito, **separada** da tabela

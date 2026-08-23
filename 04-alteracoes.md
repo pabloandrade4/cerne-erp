@@ -2,6 +2,46 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-23 (8) — Ativação de Estoque, Estoque Full e Compras
+- Pedido pelo usuário: ativar 3 áreas novas, mantendo o design atual e sem
+  mexer em nenhuma outra área — Estoque, Estoque Full (renomeado de
+  "Full") e Compras.
+- **Estoque:** tela que lista os produtos cadastrados (Produtos) com
+  estoque atual, custo unitário, valor total em estoque e status. Ajuste
+  manual de quantidade, com observação opcional. Cada ajuste grava
+  quantidade anterior, nova, diferença e observação numa tabela de
+  movimentação nova (`estoque_movimentos`), preparando o histórico mesmo
+  sem uma tela própria pra vê-lo ainda. Nunca misturado com o Estoque Full.
+- **Estoque Full (menu renomeado de "Full" para "Estoque Full"):** mostra
+  os anúncios com logística Full das contas do Mercado Livre conectadas —
+  produto, SKU, ID do anúncio, loja, quantidade no Full e status —
+  buscados ao vivo a cada carregamento, sem tabela no banco. Quando a
+  quantidade de um anúncio específico não está disponível na API, a linha
+  mostra "Pendente" — nunca um número inventado.
+- **Compras:** primeira versão simples de pedido de compra — criar,
+  listar, editar, pesquisar por fornecedor e mudar status (Em aberto,
+  Pedido realizado, Recebido, Cancelado). Cada compra tem um ou mais itens
+  (produto, quantidade, custo unitário); valor de cada item e valor total
+  da compra sempre calculados pelo servidor, nunca aceitos prontos do
+  front-end. Marcar como "Recebido" não mexe no Estoque ainda (não
+  automatizado, por pedido explícito do usuário). Sem IA de compras.
+- **Testado localmente:** `node --check` em todos os arquivos de backend
+  novos/alterados e no bloco de script do front-end; schema aplicado no
+  Postgres local confirmando criação das 4 tabelas novas (`estoque`,
+  `estoque_movimentos`, `compras`, `compra_itens`) sem alterar nenhuma
+  tabela existente; ajuste de estoque testado via `psql` dentro de uma
+  transação, nos dois casos (produto sem estoque ainda, e produto com
+  ajuste anterior), confirmando quantidade, movimentação gravada e valor
+  total em estoque corretos; Compras testado via `psql` (criar com itens e
+  valor total calculado certo, editar substituindo itens, mudar status,
+  filtrar por status, buscar por fornecedor). **Ainda não foi possível
+  testar a chamada real ao endpoint de estoque Full do Mercado Livre**
+  neste ambiente — depende do teste ao vivo em produção, junto com o teste
+  (ainda pendente da etapa anterior) de Anúncios.
+- Nenhuma outra área foi alterada (Empresas, Marketplaces, Custos,
+  Pedidos, Visão Geral, Financeiro, Produtos, Anúncios e Fornecedores
+  continuam exatamente como estavam).
+
 ## 2026-08-22 (7) — Ativação de Produtos, Anúncios e Fornecedores
 - Pedido pelo usuário: ativar 3 áreas novas, mantendo o design atual e sem
   mexer em nenhuma outra área — Produtos, Anúncios (nova) e Fornecedores.

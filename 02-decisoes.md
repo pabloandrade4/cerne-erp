@@ -3,6 +3,97 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-23 (11) — Ativação de Estoque, Estoque Full e Compras
+- Pedido do usuário: ativar 3 áreas novas — Estoque (próprio), Estoque Full
+  (renomeado de "Full", visualização real do Mercado Livre) e Compras —
+  mantendo o design atual e sem mexer em nenhuma outra área.
+- **Estoque é modelado em cima de Produtos, não de `custos_produto`.** Uma
+  linha por produto na tabela nova `estoque` (produto_id único, quantidade)
+  — um produto sem nenhum ajuste ainda simplesmente não tem linha lá, e a
+  tela trata isso como quantidade 0. Fica consistente com a decisão já
+  tomada em Produtos (ver (10), abaixo) de não tocar em `custos_produto`
+  nesta etapa.
+- **Histórico de movimentação preparado desde já, mesmo sem tela própria
+  para vê-lo.** Tabela nova `estoque_movimentos`: toda vez que o endpoint
+  de ajuste (`PUT /api/estoque/:produtoId`) roda, ele grava a quantidade
+  anterior, a nova, a diferença e uma observação opcional, dentro da MESMA
+  transação que atualiza `estoque` (usando `pool.connect()` + `BEGIN`/
+  `COMMIT`/`ROLLBACK` — primeira vez que este projeto usa uma transação
+  explícita, necessária aqui porque são duas tabelas que precisam mudar
+  juntas ou nenhuma mudar). Isso atende ao pedido literal do usuário
+  ("toda alteração de quantidade deve ficar preparada para possuir
+  histórico de movimentação") sem construir uma tela de histórico que não
+  foi pedida ainda.
+- **Estoque Full não tem tabela — busca ao vivo, mesmo padrão de Anúncios**
+  ((10), abaixo), por uma razão adicional aqui: a API do Mercado Livre para
+  saber a quantidade de um item Full (`GET /inventories/{inventory_id}/
+  stock/fulfillment`) não tem um "multiget" documentado — é uma chamada por
+  anúncio. Persistir isso exigiria uma sincronização própria (fila,
+  agendamento, etc.) fora do escopo pedido ("Se algum dado ainda não
+  estiver disponível, mostre claramente como pendente" já assume que isso
+  pode não estar completo). Nova lib `server/lib/mlFull.js`, deliberadamente
+  **separada** de `server/lib/mlAnuncios.js` (mesmo com alguma duplicação
+  de código) para não arriscar alterar a lógica de Anúncios, que ainda
+  segue pendente de teste ao vivo em produção.
+- **Identificar um anúncio como "Full" usa `shipping.logistic_type ===
+  'fulfillment'`** no retorno de `/items?ids=...` — campo documentado pela
+  API do Mercado Livre. A quantidade em si depende de mais um campo,
+  `inventory_id`, que só existe quando o Mercado Livre já processou aquele
+  anúncio como Full — quando ausente, ou quando a chamada ao endpoint de
+  estoque falha, o item entra na lista com `pendenteQuantidade: true` e a
+  tela mostra "Pendente" na coluna, nunca um número.
+- **Só a primeira "janela" de anúncios da conta é verificada** (até 100 por
+  carregamento, mesmo limite de Anúncios) — a tela avisa quantos anúncios
+  foram verificados de quantos existem no total, e quantos desses são Full,
+  pra nunca dar a entender que a lista é completa quando não é. Mesma
+  lógica de não över-construir uma paginação completa que não foi pedida
+  ainda.
+- **Compras: `valor_total` da compra e de cada item são sempre calculados
+  no servidor** (quantidade × custo unitário, por item; soma dos itens,
+  pro total) — nunca aceitos prontos do que o front-end mandar, mesmo
+  princípio de "nunca inventar/confiar em número de fora" já usado pra
+  dados do Mercado Livre, agora aplicado a dado digitado pelo usuário
+  (evita o total ficar errado por um bug ou manipulação no front-end).
+- **Editar uma compra substitui todos os itens** (apaga os itens antigos e
+  grava os novos, dentro de uma transação) — mesmo padrão já usado em
+  `ml_pedido_itens` ao ressincronizar um pedido do Mercado Livre. Mais
+  simples que tentar calcular um diff item a item, e suficiente pro
+  "primeiro quero apenas o módulo de compras funcionando corretamente"
+  pedido pelo usuário.
+- **"Recebido" não mexe em estoque, de propósito** (pedido explícito do
+  usuário: "também não automatize ainda entrada de estoque ao receber a
+  compra") — o PATCH de status só troca o campo `status`. Ligar Compras
+  "Recebido" → Estoque é uma decisão de negócio (o que fazer se a
+  quantidade recebida for diferente da pedida? soma ou substitui?) que
+  precisa ser conversada com o usuário antes de automatizar — fica
+  registrada como pendência em `06-proximos-passos.md`.
+- **Sem `CHECK` de banco para o status da compra** (`em_aberto` /
+  `pedido_realizado` / `recebido` / `cancelado`) — validado só na rota
+  (`STATUS_VALIDOS`), mesmo padrão já usado pros outros campos "tipo enum"
+  do projeto (ex: `ml_contas.status`). Consistente, mas significa que só a
+  aplicação garante os valores válidos, não o banco.
+- **Editar uma compra que referencia um produto já desativado**: o
+  formulário mantém esse produto selecionável (com um aviso "— inativo"),
+  em vez de fazer a seleção sumir silenciosamente — pra nunca perder, sem
+  querer, qual produto era aquele item ao reabrir uma compra antiga depois
+  de desativar o produto em Produtos.
+- **Testado localmente** (sem poder rodar o servidor Express+pg neste
+  ambiente — ver `05-problemas-conhecidos.md`): `node --check` em todos os
+  arquivos de backend novos/alterados e no bloco de script do front-end;
+  schema aplicado no Postgres local confirmando criação das 4 tabelas
+  novas (`estoque`, `estoque_movimentos`, `compras`, `compra_itens`) sem
+  afetar nenhuma tabela existente; fluxo completo de ajuste de estoque
+  testado via `psql` dentro de uma transação (produto sem linha ainda →
+  cria; produto com linha → atualiza; grava a movimentação; confere o
+  valor total em estoque) para os dois casos (criar e atualizar); fluxo
+  completo de Compras testado via `psql` (criar com 2 itens e valor total
+  calculado, editar substituindo os itens, mudar status, filtrar por
+  status, buscar por fornecedor). **Não foi possível testar a chamada real
+  ao endpoint de estoque Full do Mercado Livre** neste ambiente (sem
+  servidor rodando, sem conta real acessível) — depende do teste ao vivo
+  em produção depois do deploy, junto com o teste (ainda pendente) de
+  Anúncios.
+
 ## 2026-08-22 (10) — Ativação de Produtos, Anúncios e Fornecedores
 - Pedido do usuário: ativar 3 áreas novas do ERP — Produtos (cadastro
   simples), Anúncios (visualização real do Mercado Livre) e Fornecedores

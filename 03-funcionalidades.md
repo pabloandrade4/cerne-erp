@@ -3,6 +3,56 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
+## Estoque (próprio, ajuste manual)
+- **Status:** concluído localmente (aguardando deploy + teste ao vivo em
+  produção — ver `06-proximos-passos.md`).
+- **O que é:** lista todos os produtos cadastrados (tela Produtos) com
+  estoque atual, custo unitário, valor total em estoque e status. Permite
+  ajuste manual da quantidade, com observação opcional — cada ajuste grava
+  uma movimentação (quantidade anterior/nova/diferença), preparando o
+  histórico de movimentação mesmo sem ainda existir uma tela própria pra
+  vê-lo. Nunca misturado com o Estoque Full do Mercado Livre.
+- **Onde está:** `server/routes/estoque.js` (API, com transação para
+  ajuste + movimentação), `server/public/index.html` (tela — módulo
+  `window.Estoque`).
+- **O que falta:** entrada automática por compra recebida; reserva por
+  pedido de venda; tela de histórico de movimentação (a tabela já existe,
+  só falta a tela); alertas de estoque mínimo.
+
+## Estoque Full (visualização ao vivo do Mercado Livre)
+- **Status:** concluído localmente (aguardando deploy + teste ao vivo em
+  produção — ver `06-proximos-passos.md`).
+- **O que é:** mostra os anúncios com logística Full das contas do Mercado
+  Livre conectadas — produto (título), SKU, ID do anúncio, loja, quantidade
+  no Full e status — buscados ao vivo a cada carregamento (nada persistido
+  nesta etapa). Quando a API não disponibiliza a quantidade de um anúncio
+  específico, a linha mostra "Pendente". Menu renomeado de "Full" para
+  "Estoque Full". Nunca misturado com o Estoque próprio.
+- **Onde está:** `server/lib/mlFull.js` (busca dos anúncios Full + estoque
+  na API), `server/routes/estoqueFull.js` (API), `server/public/index.html`
+  (tela — módulo `window.EstoqueFull`).
+- **O que falta:** confirmar ao vivo, com uma conta real, se o Mercado
+  Livre está de fato retornando `inventory_id`/quantidade Full como
+  esperado (não pôde ser testado neste ambiente); paginação além da
+  primeira janela verificada.
+
+## Compras (primeira versão simples)
+- **Status:** concluído localmente (aguardando deploy + teste ao vivo em
+  produção — ver `06-proximos-passos.md`).
+- **O que é:** pedido de compra a um fornecedor — criar, listar, editar,
+  pesquisar (por fornecedor) e mudar status (Em aberto, Pedido realizado,
+  Recebido, Cancelado). Cada compra tem um ou mais itens (produto,
+  quantidade, custo unitário); o valor de cada item e o valor total da
+  compra são sempre calculados pelo servidor. Marcar como "Recebido" não
+  mexe no Estoque (não automatizado nesta etapa, por pedido do usuário).
+  Sem IA de compras.
+- **Onde está:** `server/routes/compras.js` (API, com transação para
+  criar/editar compra + itens), `server/public/index.html` (tela — módulo
+  `window.Compras`).
+- **O que falta:** automatizar entrada de estoque ao marcar "Recebido"
+  (decisão pendente do usuário sobre como); sugestão de reposição/IA de
+  compras; anexar nota fiscal/boleto; aprovação de compra.
+
 ## Produtos (cadastro simples)
 - **Status:** concluído localmente (aguardando deploy + teste ao vivo em
   produção — ver `06-proximos-passos.md`).

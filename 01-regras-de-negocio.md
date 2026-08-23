@@ -175,13 +175,62 @@ _(sem regras registradas ainda)_
   corretamente os anúncios, antes de qualquer edição.
 
 ## Estoque
-_(sem regras registradas ainda)_
+- Mostra **todos os produtos cadastrados** (tela Produtos) da empresa
+  selecionada, com: produto, SKU, estoque atual, custo unitário (o mesmo
+  custo cadastrado em Produtos), valor total em estoque (estoque atual ×
+  custo unitário) e status (ativo/inativo do produto). Produto sem nenhum
+  ajuste ainda aparece com estoque atual **0** — nunca "sem dado".
+- **Ajuste manual por enquanto** — pedido explícito do usuário. Não existe
+  ainda entrada automática por compra recebida, nem reserva automática de
+  estoque por pedido de venda.
+- **Toda alteração de quantidade grava uma movimentação** (quantidade
+  anterior, quantidade nova, diferença, observação opcional, data/hora) —
+  preparado para existir um histórico de movimentação, mesmo sem ainda
+  existir uma tela própria para consultá-lo.
+- **Nunca é misturado com o Estoque Full** do Mercado Livre — são dois
+  números diferentes, guardados e mostrados separadamente (ver "Estoque
+  Full", abaixo).
 
-## Full
-_(sem regras registradas ainda)_
+## Estoque Full
+- Mostra os **anúncios reais com logística Full** (armazenados nos centros
+  de distribuição do Mercado Livre) das contas conectadas — nunca um
+  anúncio ou quantidade inventados.
+- Campos mostrados: **produto (título do anúncio), SKU, anúncio (ID),
+  loja (conta/nickname do Mercado Livre), quantidade no Full e status**.
+- **Busca ao vivo, direto na API do Mercado Livre**, a cada vez que a tela
+  é aberta ou atualizada — assim como Anúncios, nenhum dado fica salvo no
+  banco nesta etapa.
+- **Se a API do Mercado Livre ainda não disponibilizar a quantidade de um
+  anúncio Full específico** (ex: falta o identificador interno do estoque
+  daquele anúncio, ou a chamada falha), a linha mostra **"Pendente"** no
+  lugar da quantidade — nunca um número calculado ou zero fingindo ser
+  real.
+- Se a empresa não tiver conta do Mercado Livre conectada, ou a conexão
+  estiver com erro, a tela mostra que a sincronização está pendente (mesmo
+  padrão de Anúncios).
+- **Nunca é misturado com o Estoque próprio** (tela separada, "Estoque",
+  acima) — um produto pode ter uma quantidade em cada um, sem relação
+  automática entre os dois números.
 
 ## Compras
-_(sem regras registradas ainda)_
+- Primeira versão simples de pedido de compra a um fornecedor: **criar,
+  listar, editar, pesquisar (por fornecedor) e mudar status**.
+- Campos de uma compra: **fornecedor, um ou mais itens (produto,
+  quantidade, custo unitário — o valor do item é quantidade × custo
+  unitário), valor total (soma dos itens), data da compra, previsão de
+  chegada (opcional) e status**.
+- **Valor total é sempre calculado pelo sistema**, a partir dos itens —
+  nunca aceito pronto de fora, pra nunca ficar dessincronizado da soma
+  real.
+- **Status possíveis: Em aberto, Pedido realizado, Recebido, Cancelado.**
+  A compra começa como "Em aberto" e o status pode ser trocado livremente
+  entre os quatro a qualquer momento nesta etapa.
+- **Marcar uma compra como "Recebido" não faz nada além de mudar o
+  status** — pedido explícito do usuário para NÃO automatizar ainda a
+  entrada desses itens no Estoque. Essa automação fica para uma etapa
+  futura, quando for pedida.
+- **Não existe IA de compras** (sugestão de reposição, previsão de
+  demanda, etc.) nesta etapa — pedido explícito do usuário.
 
 ## Fornecedores
 - Cadastro por empresa: **razão social/nome, nome fantasia (opcional),
