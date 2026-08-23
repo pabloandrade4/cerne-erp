@@ -10,6 +10,9 @@ const relatoriosRouter = require('./routes/relatorios');
 const produtosRouter = require('./routes/produtos');
 const fornecedoresRouter = require('./routes/fornecedores');
 const anunciosRouter = require('./routes/anuncios');
+const estoqueRouter = require('./routes/estoque');
+const estoqueFullRouter = require('./routes/estoqueFull');
+const comprasRouter = require('./routes/compras');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,6 +30,9 @@ app.use('/api/relatorios', relatoriosRouter);
 app.use('/api/produtos', produtosRouter);
 app.use('/api/fornecedores', fornecedoresRouter);
 app.use('/api/anuncios', anunciosRouter);
+app.use('/api/estoque', estoqueRouter);
+app.use('/api/estoque-full', estoqueFullRouter);
+app.use('/api/compras', comprasRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));

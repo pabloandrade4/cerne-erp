@@ -185,3 +185,72 @@ CREATE TABLE IF NOT EXISTS fornecedores (
 -- Anúncios busca ao vivo na API do Mercado Livre a cada carregamento (ver
 -- server/lib/mlAnuncios.js) — nada é persistido aqui nesta etapa, por
 -- decisão consciente (ver docs/02-decisoes.md).
+
+-- ============================================================
+-- Etapa: Estoque, Estoque Full (visualização) e Compras
+-- ============================================================
+
+-- Estoque PRÓPRIO (nunca misturado com o Estoque Full do Mercado Livre, que
+-- não tem tabela — ver mais abaixo). Uma linha por produto — se o produto
+-- ainda não teve nenhum ajuste, ele simplesmente não tem linha aqui ainda
+-- (a tela trata como quantidade 0). Ajuste manual por enquanto (não pedido:
+-- entrada automática por compra recebida, reserva por pedido).
+CREATE TABLE IF NOT EXISTS estoque (
+  id             SERIAL PRIMARY KEY,
+  produto_id     INTEGER NOT NULL UNIQUE REFERENCES produtos(id),
+  quantidade     INTEGER NOT NULL DEFAULT 0,
+  atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Histórico de movimentação do estoque próprio: toda alteração de
+-- quantidade (por enquanto, só ajuste manual) grava uma linha aqui, mesmo
+-- sem ainda existir uma tela própria de "ver histórico" — a tabela já fica
+-- pronta pra isso (pedido explícito do usuário: "toda alteração de
+-- quantidade deve ficar preparada para possuir histórico de movimentação").
+CREATE TABLE IF NOT EXISTS estoque_movimentos (
+  id                    SERIAL PRIMARY KEY,
+  estoque_id            INTEGER NOT NULL REFERENCES estoque(id) ON DELETE CASCADE,
+  tipo                  VARCHAR(20) NOT NULL DEFAULT 'ajuste_manual',
+  quantidade_anterior   INTEGER NOT NULL,
+  quantidade_nova       INTEGER NOT NULL,
+  diferenca             INTEGER NOT NULL,
+  observacao            TEXT,
+  criado_em             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Estoque FULL (Mercado Livre) NÃO tem tabela própria, pela mesma razão de
+-- Anúncios: a tela busca ao vivo na API a cada carregamento (ver
+-- server/lib/mlFull.js) — nunca fica salvo/misturado com o estoque próprio
+-- acima. Se a API não trouxer a quantidade de algum anúncio Full, a tela
+-- mostra "pendente" — nunca um número inventado (ver docs/02-decisoes.md).
+
+-- Pedido de compra a um fornecedor. "valor_total" é sempre recalculado no
+-- servidor a partir dos itens (nunca aceito direto do que o front-end
+-- mandar), pra nunca ficar dessincronizado da soma real dos itens.
+CREATE TABLE IF NOT EXISTS compras (
+  id                 SERIAL PRIMARY KEY,
+  empresa_id         INTEGER NOT NULL REFERENCES empresas(id),
+  fornecedor_id      INTEGER NOT NULL REFERENCES fornecedores(id),
+  data_compra        DATE NOT NULL DEFAULT CURRENT_DATE,
+  previsao_chegada   DATE,
+  status             VARCHAR(20) NOT NULL DEFAULT 'em_aberto', -- em_aberto | pedido_realizado | recebido | cancelado
+  valor_total        NUMERIC(12,2) NOT NULL DEFAULT 0,
+  observacao         TEXT,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Itens de um pedido de compra. Ao editar uma compra, os itens são
+-- substituídos pelos itens atuais enviados (mesmo padrão já usado em
+-- ml_pedido_itens ao ressincronizar um pedido do Mercado Livre).
+CREATE TABLE IF NOT EXISTS compra_itens (
+  id                 SERIAL PRIMARY KEY,
+  compra_id          INTEGER NOT NULL REFERENCES compras(id) ON DELETE CASCADE,
+  produto_id         INTEGER NOT NULL REFERENCES produtos(id),
+  quantidade         INTEGER NOT NULL,
+  custo_unitario     NUMERIC(12,2) NOT NULL,
+  valor_total_item   NUMERIC(12,2) NOT NULL
+);
+-- Nesta etapa, receber uma compra (status "recebido") NÃO entra
+-- automaticamente no estoque — pedido explícito do usuário para não
+-- automatizar isso ainda. Ver docs/01-regras-de-negocio.md.

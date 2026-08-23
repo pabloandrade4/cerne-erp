@@ -837,9 +837,9 @@
     { id:'operacao', label:'Operação', open:true, items:[
       { id:'orders', title:'Pedidos', icon:'bag', action:'Sincronizar', desc:'Pedidos recebidos em todos os canais e empresas, centralizados em um só lugar.',
         bullets:['Pedidos do Mercado Livre e Shopee','Status de separação, envio e entrega','Custo e lucro real por pedido','Devoluções e cancelamentos'] },
-      { id:'stock', title:'Estoque', icon:'layers', action:'Ajuste de estoque', desc:'Estoque próprio por empresa e depósito.',
+      { id:'stock', title:'Estoque', icon:'layers', action:'Ajuste de estoque', desc:'Produtos cadastrados e suas quantidades em estoque próprio, com ajuste manual.',
         bullets:['Saldo por empresa e depósito','Movimentações de entrada e saída','Reserva de estoque por pedido','Alertas de estoque mínimo'] },
-      { id:'full', title:'Full', icon:'warehouse', action:'Novo envio', desc:'Estoque enviado aos centros de distribuição dos marketplaces (Full/FBA-like).',
+      { id:'full', title:'Estoque Full', icon:'warehouse', action:'Atualizar', desc:'Anúncios com logística Full e a quantidade real nos centros de distribuição do Mercado Livre, quando a API disponibilizar.',
         bullets:['Saldo em cada centro de distribuição','Envios e recebimentos de Full','Cobertura de estoque por SKU','Custo de armazenagem'] },
       { id:'purchases', title:'Compras', icon:'cart', action:'Novo pedido de compra', desc:'Pedidos de compra e reposição junto a fornecedores.',
         bullets:['Sugestão de reposição por cobertura','Pedidos de compra e aprovação','Recebimento e conferência','Histórico de preços por fornecedor'] },
@@ -989,7 +989,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','costs','finance','products','anuncios','suppliers'];
+    const REAL_MODULES = ['companies','marketplaces','orders','costs','finance','products','anuncios','suppliers','stock','full','purchases'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -999,6 +999,10 @@
       inner += '<button class="primary-btn enabled" id="btnNewFornecedor" type="button">'+svg('plus')+'<span>Novo fornecedor</span></button>';
     } else if(id === 'anuncios'){
       inner += '<button class="primary-btn enabled" id="btnRefreshAnuncios" type="button">'+svg('refreshCw')+'<span>Atualizar</span></button>';
+    } else if(id === 'full'){
+      inner += '<button class="primary-btn enabled" id="btnRefreshEstoqueFull" type="button">'+svg('refreshCw')+'<span>Atualizar</span></button>';
+    } else if(id === 'purchases'){
+      inner += '<button class="primary-btn enabled" id="btnNewCompra" type="button">'+svg('plus')+'<span>Nova compra</span></button>';
     } else if(id !== 'overview' && !REAL_MODULES.includes(id)){
       inner += '<button class="primary-btn" disabled>'+svg('plus')+'<span>'+(p.action||'Em breve')+'</span></button>';
     }
@@ -1013,6 +1017,9 @@
     else if(id === 'products'){ inner += '<div id="produtosRoot"></div>'; }
     else if(id === 'suppliers'){ inner += '<div id="fornecedoresRoot"></div>'; }
     else if(id === 'anuncios'){ inner += '<div id="anunciosRoot"></div>'; }
+    else if(id === 'stock'){ inner += '<div id="estoqueRoot"></div>'; }
+    else if(id === 'full'){ inner += '<div id="estoqueFullRoot"></div>'; }
+    else if(id === 'purchases'){ inner += '<div id="comprasRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1043,6 +1050,9 @@
     if(id === 'products' && window.Produtos) window.Produtos.load();
     if(id === 'suppliers' && window.Fornecedores) window.Fornecedores.load();
     if(id === 'anuncios' && window.Anuncios) window.Anuncios.load();
+    if(id === 'stock' && window.Estoque) window.Estoque.load();
+    if(id === 'full' && window.EstoqueFull) window.EstoqueFull.load();
+    if(id === 'purchases' && window.Compras) window.Compras.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -2871,11 +2881,642 @@
     window.Anuncios = { load };
   })();
 
+  /* ================= ESTOQUE (próprio) — produtos cadastrados + quantidade =================
+     Nunca misturado com o Estoque Full do Mercado Livre (tela separada,
+     window.EstoqueFull, sem tabela no banco). Ajuste manual por enquanto —
+     cada ajuste grava uma movimentação (estoque_movimentos), preparando o
+     histórico mesmo sem ainda existir uma tela própria pra vê-lo. */
+  (function(){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, items:[], loading:false, error:null, status:'todos', search:'' };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function api(path, opts){
+      const res = await fetch('/api/estoque'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+
+    async function loadItens(){
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: state.empresaId });
+        if(state.status !== 'todos') params.set('status', state.status);
+        if(state.search.trim()) params.set('search', state.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.items = data.itens;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar o estoque.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadItens(); else render();
+    }
+
+    function render(){
+      const root = document.getElementById('estoqueRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de ver o estoque.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="stkEmpresaSelect">'
+          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>'
+        + '<div class="seg" id="stkSeg">'
+          + [['todos','Todos'],['ativos','Ativos'],['inativos','Inativos']].map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="stkSearch" placeholder="Buscar por nome ou SKU" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+      + '</div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando estoque…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="stkRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      } else if(!state.items.length){
+        const filtrado = !!(state.search || state.status!=='todos');
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('layers')+'</div>'
+          + '<h2>Nenhum produto encontrado</h2>'
+          + '<p class="lead">'+(filtrado ? 'Nenhum produto corresponde ao filtro atual.' : 'Cadastre produtos em Cadastros → Produtos para ver o estoque aqui.')+'</p>'
+        + '</div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto</th><th>SKU</th><th>Estoque atual</th><th>Custo unitário</th><th>Valor total em estoque</th><th>Status</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.items.map(it => '<tr class="'+(it.ativo?'':'inactive')+'">'
+            + '<td>'+escapeHtml(it.nome)+'</td>'
+            + '<td class="mono">'+escapeHtml(it.sku)+'</td>'
+            + '<td class="tab-nums">'+it.quantidade+'</td>'
+            + '<td class="mono">'+money(it.custoUnitario)+'</td>'
+            + '<td class="mono">'+money(it.valorTotal)+'</td>'
+            + '<td>'+(it.ativo ? '<span class="badge-status on"><span class="dot"></span>Ativo</span>' : '<span class="badge-status off"><span class="dot"></span>Inativo</span>')+'</td>'
+            + '<td><div class="row-actions">'
+              + '<button class="row-ic-btn" data-adjust="'+it.produtoId+'" title="Ajustar estoque" type="button">'+svg('edit')+'</button>'
+            + '</div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('stkEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadItens(); });
+      const seg = document.getElementById('stkSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadItens(); }));
+      const search = document.getElementById('stkSearch');
+      if(search) search.addEventListener('input', ()=>{
+        state.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadItens, 300);
+      });
+      const retry = document.getElementById('stkRetry');
+      if(retry) retry.addEventListener('click', loadItens);
+      root.querySelectorAll('[data-adjust]').forEach(b=> b.addEventListener('click', ()=>{
+        const it = state.items.find(x=> String(x.produtoId)===b.dataset.adjust);
+        openModal(it);
+      }));
+    }
+
+    function openModal(item){
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card">'
+          + '<div class="modal-head"><div class="modal-title">Ajustar estoque</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+escapeHtml(item.nome)+' <span class="mono" style="color:var(--text-faint);">('+escapeHtml(item.sku)+')</span></div>'
+          + '<form id="stkForm">'
+            + '<div class="field-hint" style="margin:0 0 12px;">Quantidade atual: <strong>'+item.quantidade+'</strong></div>'
+            + '<div class="field"><label>Nova quantidade</label><input type="text" inputmode="numeric" id="fQuantidade" placeholder="0" value="'+item.quantidade+'">'
+              + '<div class="field-error" id="eQuantidade" style="display:none;"></div></div>'
+            + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" placeholder="Motivo do ajuste, ex: contagem física, perda, etc." maxlength="500"></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Salvar ajuste</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+      const qtyInput = document.getElementById('fQuantidade');
+      qtyInput.focus();
+      qtyInput.select();
+
+      document.getElementById('stkForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const eQtd = document.getElementById('eQuantidade');
+        eQtd.style.display = 'none'; eQtd.textContent = '';
+        qtyInput.classList.remove('invalid');
+
+        const novaQuantidade = Number(qtyInput.value);
+        if(!Number.isInteger(novaQuantidade) || novaQuantidade < 0){
+          eQtd.textContent = 'Informe uma quantidade inteira, maior ou igual a zero.';
+          eQtd.style.display = 'block';
+          qtyInput.classList.add('invalid');
+          return;
+        }
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          await api('/'+item.produtoId, { method:'PUT', body: JSON.stringify({ quantidade: novaQuantidade, observacao: document.getElementById('fObservacao').value }) });
+          close();
+          toast('Estoque ajustado.');
+          loadItens();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors && err.errors.quantidade){
+            eQtd.textContent = err.errors.quantidade; eQtd.style.display = 'block'; qtyInput.classList.add('invalid');
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    window.Estoque = { load };
+  })();
+
+  /* ================= ESTOQUE FULL — visualização ao vivo (Mercado Livre) =================
+     Anúncios com logística Full e a quantidade real no centro de
+     distribuição do Mercado Livre, buscados ao vivo — nunca misturado com
+     o Estoque próprio (tela separada, window.Estoque). Se a API não
+     trouxer a quantidade de algum anúncio, a linha mostra "pendente" —
+     nunca um número inventado. */
+  (function(){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, loading:false, data:null, error:null };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function apiEstoqueFull(empresaId){
+      const res = await fetch('/api/estoque-full?empresaId='+empresaId);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o estoque Full.');
+      return body;
+    }
+
+    async function loadEstoque(){
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiEstoqueFull(state.empresaId); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadEstoque(); else render();
+    }
+
+    function statusBadge(status){
+      if(status === 'active') return '<span class="badge-status on"><span class="dot"></span>Ativo</span>';
+      if(status === 'paused') return '<span class="badge-status warn"><span class="dot"></span>Pausado</span>';
+      if(status === 'closed') return '<span class="badge-status off"><span class="dot"></span>Encerrado</span>';
+      return status ? ('<span class="badge-status off"><span class="dot"></span>'+escapeHtml(status)+'</span>') : '—';
+    }
+
+    function render(){
+      const root = document.getElementById('estoqueFullRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa, e conecte o Mercado Livre em <strong>Marketplaces</strong>, para ver o estoque Full aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="empresa-picker"><label>Empresa</label><select id="fullEmpresaSelect">'
+        + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+      + '</select></div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Buscando estoque Full no Mercado Livre…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data && state.data.pendente){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--warning); background:var(--warning-soft);">'+svg('clock')+'</div>'
+          + '<h2>Sincronização pendente</h2>'
+          + '<p class="lead">'+escapeHtml(state.data.mensagem||'Ainda não é possível mostrar o estoque Full desta empresa.')+'</p></div>';
+      } else if(state.data && !state.data.itens.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('warehouse')+'</div>'
+          + '<h2>Nenhum anúncio Full encontrado</h2>'
+          + '<p class="lead">Foram verificados '+state.data.verificados+' de '+state.data.totalContaGeral+' anúncio(s) da conta '+escapeHtml((state.data.conta&&state.data.conta.nickname)||'')+', e nenhum tem logística Full.</p></div>';
+      } else if(state.data){
+        const itens = state.data.itens;
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto</th><th>SKU</th><th>Anúncio</th><th>Loja</th><th>Quantidade no Full</th><th>Status</th>'
+          + '</tr></thead><tbody>'
+          + itens.map(a => '<tr>'
+            + '<td>'+escapeHtml(a.titulo||'—')+'</td>'
+            + '<td class="mono">'+escapeHtml(a.sku||'—')+'</td>'
+            + '<td class="mono">'+escapeHtml(a.id)+'</td>'
+            + '<td>'+escapeHtml(a.loja||'—')+'</td>'
+            + '<td class="tab-nums">'+(a.pendenteQuantidade ? '<span style="color:var(--text-faint); font-style:italic; font-family:\'Public Sans\',sans-serif; font-weight:500;">Pendente</span>' : a.quantidadeFull)+'</td>'
+            + '<td>'+statusBadge(a.status)+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>'
+          + (state.data.totalContaGeral > state.data.verificados ? '<div class="field-hint" style="margin-top:10px;">Verificados os primeiros '+state.data.verificados+' anúncios desta conta (de '+state.data.totalContaGeral+' no total) — '+itens.length+' com logística Full nesse grupo. Buscar mais anúncios ainda não foi implementado nesta etapa.</div>' : '');
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('fullEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadEstoque(); });
+    }
+
+    document.getElementById('btnRefreshEstoqueFull').addEventListener('click', ()=>{ if(state.empresaId) loadEstoque(); });
+
+    window.EstoqueFull = { load };
+  })();
+
+  /* ================= COMPRAS — primeira versão simples =================
+     Criar, listar, editar, pesquisar e mudar status de pedidos de compra a
+     um fornecedor. Sem IA de compras e sem automatizar entrada de estoque
+     ao marcar "Recebido" nesta etapa (pedido explícito do usuário). */
+  (function(){
+    const STATUS_OPCOES = [
+      ['em_aberto','Em aberto'],
+      ['pedido_realizado','Pedido realizado'],
+      ['recebido','Recebido'],
+      ['cancelado','Cancelado'],
+    ];
+    const STATUS_LABEL = Object.fromEntries(STATUS_OPCOES);
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, items:[], loading:false, error:null, status:'todos', search:'' };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function api(path, opts){
+      const res = await fetch('/api/compras'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+    async function apiFornecedoresAtivos(empresaId){
+      const res = await fetch('/api/fornecedores?empresaId='+empresaId+'&status=ativos');
+      return ((await res.json()).fornecedores) || [];
+    }
+    async function apiProdutosAtivos(empresaId){
+      const res = await fetch('/api/produtos?empresaId='+empresaId+'&status=ativos');
+      return ((await res.json()).produtos) || [];
+    }
+
+    async function loadItens(){
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: state.empresaId });
+        if(state.status !== 'todos') params.set('status', state.status);
+        if(state.search.trim()) params.set('search', state.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.items = data.compras;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar as compras.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadItens(); else render();
+    }
+
+    function render(){
+      const root = document.getElementById('comprasRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de registrar compras.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="cmpEmpresaSelect">'
+          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>'
+        + '<div class="seg" id="cmpSeg">'
+          + [['todos','Todos']].concat(STATUS_OPCOES).map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="cmpSearch" placeholder="Buscar por fornecedor" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+      + '</div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando compras…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="cmpRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      } else if(!state.items.length){
+        const filtrado = !!(state.search || state.status!=='todos');
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('cart')+'</div>'
+          + '<h2>Nenhuma compra encontrada</h2>'
+          + '<p class="lead">'+(filtrado ? 'Nenhuma compra corresponde ao filtro atual.' : 'Crie o primeiro pedido de compra desta empresa.')+'</p>'
+          + (filtrado ? '' : '<button class="primary-btn enabled" id="cmpEmptyNew" type="button">'+svg('plus')+'<span>Nova compra</span></button>')
+        + '</div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Data</th><th>Fornecedor</th><th>Itens</th><th>Valor total</th><th>Previsão de chegada</th><th>Status</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.items.map(c => '<tr>'
+            + '<td class="tab-nums">'+fmtDate(c.dataCompra)+'</td>'
+            + '<td>'+escapeHtml(c.fornecedorNome||'—')+'</td>'
+            + '<td class="tab-nums">'+(c.qtdItens!==undefined?c.qtdItens:'—')+'</td>'
+            + '<td class="mono">'+money(c.valorTotal)+'</td>'
+            + '<td class="tab-nums">'+fmtDate(c.previsaoChegada)+'</td>'
+            + '<td><select class="mono" data-status-select="'+c.id+'" style="font-size:11.5px; padding:4px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">'
+              + STATUS_OPCOES.map(function(par){ return '<option value="'+par[0]+'" '+(c.status===par[0]?'selected':'')+'>'+par[1]+'</option>'; }).join('')
+            + '</select></td>'
+            + '<td><div class="row-actions">'
+              + '<button class="row-ic-btn" data-edit="'+c.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
+            + '</div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('cmpEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadItens(); });
+      const seg = document.getElementById('cmpSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadItens(); }));
+      const search = document.getElementById('cmpSearch');
+      if(search) search.addEventListener('input', ()=>{
+        state.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadItens, 300);
+      });
+      const retry = document.getElementById('cmpRetry');
+      if(retry) retry.addEventListener('click', loadItens);
+      const emptyNew = document.getElementById('cmpEmptyNew');
+      if(emptyNew) emptyNew.addEventListener('click', ()=> openModal());
+      root.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', async ()=>{
+        try{
+          const data = await api('/'+b.dataset.edit, { method:'GET' });
+          openModal(data.compra);
+        }catch(err){ toast(err.message, 'error'); }
+      }));
+      root.querySelectorAll('[data-status-select]').forEach(sel=> sel.addEventListener('change', async ()=>{
+        const id = sel.dataset.statusSelect;
+        sel.disabled = true;
+        try{
+          await api('/'+id+'/status', { method:'PATCH', body: JSON.stringify({ status: sel.value }) });
+          toast('Status da compra atualizado.');
+          loadItens();
+        }catch(err){ toast(err.message, 'error'); sel.disabled = false; }
+      }));
+    }
+
+    function openModal(compra){
+      const isEdit = !!compra;
+      let itens = isEdit && compra.itens && compra.itens.length
+        ? compra.itens.map(function(it){ return { produtoId:it.produtoId, quantidade:it.quantidade, custoUnitario:it.custoUnitario, nome:it.produtoNome, sku:it.produtoSku }; })
+        : [{ produtoId:null, quantidade:1, custoUnitario:0 }];
+      let rowSeq = 0;
+      itens.forEach(function(it){ it._rowId = 'r'+(rowSeq++); });
+
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card" style="max-width:640px;">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar compra':'Nova compra')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+(isEdit?'Atualize os dados do pedido de compra.':'Preencha os dados para registrar um novo pedido de compra.')+'</div>'
+          + '<form id="cmpForm">'
+            + '<div class="field"><label>Fornecedor</label><select id="fFornecedor"><option value="">Carregando…</option></select>'
+              + '<div class="field-error" id="eFornecedor" style="display:none;"></div></div>'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Data da compra</label><input type="date" id="fData" value="'+(isEdit&&compra.dataCompra?String(compra.dataCompra).slice(0,10):new Date().toISOString().slice(0,10))+'"></div>'
+              + '<div class="field narrow"><label>Previsão de chegada <span class="opt">(opcional)</span></label><input type="date" id="fPrevisao" value="'+(isEdit&&compra.previsaoChegada?String(compra.previsaoChegada).slice(0,10):'')+'"></div>'
+            + '</div>'
+            + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" placeholder="Observações gerais da compra" value="'+(isEdit?escapeHtml(compra.observacao||''):'')+'"></div>'
+            + '<div class="section-label"><span>Itens da compra</span></div>'
+            + '<div id="cmpItensList"></div>'
+            + '<div class="field-error" id="eItens" style="display:none; margin-bottom:10px;"></div>'
+            + '<button type="button" class="ghost-btn" id="cmpAddItem" style="cursor:pointer; opacity:1; margin-bottom:14px;">'+svg('plus')+'<span>Adicionar item</span></button>'
+            + '<div class="bd-row total" style="margin-bottom:14px;"><span class="bd-label">Valor total da compra</span><span class="bd-value" id="cmpTotalGeral">R$ 0,00</span></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Criar compra')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+
+      let produtosAtivos = [];
+
+      function calcularTotal(){
+        return itens.reduce(function(acc, it){ return acc + (Number(it.quantidade)||0) * (Number(it.custoUnitario)||0); }, 0);
+      }
+
+      function renderItens(){
+        const list = document.getElementById('cmpItensList');
+        if(!list) return;
+        list.innerHTML = itens.map(function(it, idx){
+          const totalItem = (Number(it.quantidade)||0) * (Number(it.custoUnitario)||0);
+          const produtoAindaAtivo = it.produtoId && produtosAtivos.some(function(p){ return p.id === Number(it.produtoId); });
+          const opcaoInativa = (it.produtoId && !produtoAindaAtivo)
+            ? '<option value="'+it.produtoId+'" selected>'+escapeHtml(it.nome||('Produto #'+it.produtoId))+(it.sku?' ('+escapeHtml(it.sku)+')':'')+' — inativo</option>'
+            : '';
+          const opcoesProduto = '<option value="">Selecione…</option>' + opcaoInativa + produtosAtivos.map(function(p){
+            return '<option value="'+p.id+'" '+(Number(it.produtoId)===p.id?'selected':'')+'>'+escapeHtml(p.nome)+' ('+escapeHtml(p.sku)+')</option>';
+          }).join('');
+          return '<div class="inline-form" data-item-row="'+it._rowId+'" style="align-items:flex-end; margin-bottom:8px;">'
+            + '<div class="field" style="min-width:200px; margin-bottom:0;"><label>Produto</label><select data-item-produto="'+it._rowId+'">'+opcoesProduto+'</select></div>'
+            + '<div class="field narrow" style="margin-bottom:0;"><label>Quantidade</label><input type="text" inputmode="numeric" data-item-qtd="'+it._rowId+'" value="'+it.quantidade+'"></div>'
+            + '<div class="field narrow" style="margin-bottom:0;"><label>Custo unitário</label><input type="text" inputmode="decimal" data-item-custo="'+it._rowId+'" value="'+String(it.custoUnitario).replace('.',',')+'"></div>'
+            + '<div class="field narrow" style="margin-bottom:0;"><label>Total do item</label><input type="text" value="'+money(totalItem)+'" disabled></div>'
+            + (itens.length > 1 ? '<button type="button" class="row-ic-btn danger" data-item-remove="'+it._rowId+'" title="Remover item" style="margin-bottom:2px;">'+svg('x')+'</button>' : '<span style="width:36px;"></span>')
+          + '</div>';
+        }).join('');
+
+        list.querySelectorAll('[data-item-produto]').forEach(function(sel){
+          sel.addEventListener('change', function(){
+            const row = itens.find(function(it){ return it._rowId === sel.dataset.itemProduto; });
+            if(row) row.produtoId = sel.value ? Number(sel.value) : null;
+          });
+        });
+        list.querySelectorAll('[data-item-qtd]').forEach(function(input){
+          input.addEventListener('input', function(){
+            const row = itens.find(function(it){ return it._rowId === input.dataset.itemQtd; });
+            if(row){ row.quantidade = input.value; renderItens(); atualizarTotalGeral(); posicionarFoco(input.dataset.itemQtd,'qtd'); }
+          });
+        });
+        list.querySelectorAll('[data-item-custo]').forEach(function(input){
+          input.addEventListener('input', function(){
+            const row = itens.find(function(it){ return it._rowId === input.dataset.itemCusto; });
+            if(row){ row.custoUnitario = input.value.replace(',','.'); renderItens(); atualizarTotalGeral(); posicionarFoco(input.dataset.itemCusto,'custo'); }
+          });
+        });
+        list.querySelectorAll('[data-item-remove]').forEach(function(btn){
+          btn.addEventListener('click', function(){
+            itens = itens.filter(function(it){ return it._rowId !== btn.dataset.itemRemove; });
+            renderItens();
+            atualizarTotalGeral();
+          });
+        });
+      }
+
+      // Reposiciona o cursor no campo que estava sendo editado depois de um
+      // re-render (evita perder o foco a cada tecla digitada).
+      let focoPendente = null;
+      function posicionarFoco(rowId, campo){
+        focoPendente = { rowId, campo };
+        requestAnimationFrame(function(){
+          if(!focoPendente) return;
+          const seletor = focoPendente.campo === 'qtd' ? '[data-item-qtd="'+focoPendente.rowId+'"]' : '[data-item-custo="'+focoPendente.rowId+'"]';
+          const el = document.querySelector(seletor);
+          if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+          focoPendente = null;
+        });
+      }
+
+      function atualizarTotalGeral(){
+        const el = document.getElementById('cmpTotalGeral');
+        if(el) el.textContent = money(calcularTotal());
+      }
+
+      document.getElementById('cmpAddItem').addEventListener('click', function(){
+        itens.push({ produtoId:null, quantidade:1, custoUnitario:0, _rowId:'r'+(rowSeq++) });
+        renderItens();
+        atualizarTotalGeral();
+      });
+
+      (async function carregarPickers(){
+        try{
+          const [fornecedores, produtos] = await Promise.all([
+            apiFornecedoresAtivos(state.empresaId),
+            apiProdutosAtivos(state.empresaId),
+          ]);
+          produtosAtivos = produtos;
+          const fSel = document.getElementById('fFornecedor');
+          if(fSel){
+            fSel.innerHTML = fornecedores.length
+              ? fornecedores.map(function(f){ return '<option value="'+f.id+'" '+(isEdit&&compra.fornecedorId===f.id?'selected':'')+'>'+escapeHtml(f.razaoSocial)+'</option>'; }).join('')
+              : '<option value="">Nenhum fornecedor ativo cadastrado</option>';
+          }
+          renderItens();
+          atualizarTotalGeral();
+        }catch(e){
+          toast('Não foi possível carregar fornecedores/produtos.', 'error');
+        }
+      })();
+
+      document.getElementById('cmpForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eFornecedor','eItens'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+
+        const payload = {
+          empresaId: state.empresaId,
+          fornecedorId: Number(document.getElementById('fFornecedor').value),
+          dataCompra: document.getElementById('fData').value,
+          previsaoChegada: document.getElementById('fPrevisao').value,
+          observacao: document.getElementById('fObservacao').value,
+          itens: itens.map(function(it){ return { produtoId: it.produtoId, quantidade: Number(it.quantidade), custoUnitario: Number(it.custoUnitario) }; }),
+        };
+
+        if(!payload.fornecedorId){
+          const el = document.getElementById('eFornecedor'); el.textContent = 'Selecione o fornecedor.'; el.style.display = 'block';
+          return;
+        }
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/'+compra.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Compra atualizada.' : 'Compra criada.');
+          loadItens();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            if(err.errors.fornecedorId){ const el=document.getElementById('eFornecedor'); el.textContent=err.errors.fornecedorId; el.style.display='block'; }
+            if(err.errors.itens){ const el=document.getElementById('eItens'); el.textContent=err.errors.itens; el.style.display='block'; }
+            if(!err.errors.fornecedorId && !err.errors.itens) toast(err.message, 'error');
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    window.Compras = { load };
+  })();
+
   // Só navega para a rota inicial depois que TODOS os módulos acima (Empresas,
-  // Marketplaces, Pedidos, Custos, Produtos, Fornecedores, Anúncios) já estão
-  // definidos — chamar isso mais cedo fazia a tela de destino do OAuth do
-  // Mercado Livre (#marketplaces?ml=...) e outras rotas carregarem em branco
-  // no primeiro load/refresh.
+  // Marketplaces, Pedidos, Custos, Produtos, Fornecedores, Anúncios, Estoque,
+  // Estoque Full, Compras) já estão definidos — chamar isso mais cedo fazia
+  // a tela de destino do OAuth do Mercado Livre (#marketplaces?ml=...) e
+  // outras rotas carregarem em branco no primeiro load/refresh.
   navigate(location.hash ? location.hash.slice(1) : 'overview');
 
 })();
