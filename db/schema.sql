@@ -254,3 +254,60 @@ CREATE TABLE IF NOT EXISTS compra_itens (
 -- Nesta etapa, receber uma compra (status "recebido") NÃO entra
 -- automaticamente no estoque — pedido explícito do usuário para não
 -- automatizar isso ainda. Ver docs/01-regras-de-negocio.md.
+
+-- ============================================================
+-- Etapa: Supabase como banco principal + sincronização histórica
+-- ============================================================
+
+-- Detalhe completo de cada pagamento de um pedido (order.payments[] —
+-- um pedido pode ter mais de um pagamento). ml_pedidos.pagamento_* continua
+-- guardando só um RESUMO do primeiro pagamento (payments[0]), que é o que
+-- lib/resultadoVenda.js usa no cálculo de margem (fonte única de cálculo,
+-- não alterada nesta etapa) — esta tabela é o detalhe completo de todos os
+-- pagamentos, para auditoria/consulta, sem duplicar nem mudar essa fonte.
+-- Ao ressincronizar um pedido, os pagamentos são substituídos pelos atuais
+-- da API (mesmo padrão já usado em ml_pedido_itens).
+CREATE TABLE IF NOT EXISTS ml_pedido_pagamentos (
+  id                  SERIAL PRIMARY KEY,
+  pedido_id           INTEGER NOT NULL REFERENCES ml_pedidos(id) ON DELETE CASCADE,
+  ml_payment_id       BIGINT,
+  status              VARCHAR(30),
+  status_detail       VARCHAR(100),
+  payment_type        VARCHAR(50),
+  payment_method_id   VARCHAR(50),
+  transaction_amount  NUMERIC(12,2),
+  taxes_amount        NUMERIC(12,2),
+  shipping_cost       NUMERIC(12,2),
+  marketplace_fee     NUMERIC(12,2),
+  installments        INTEGER,
+  date_approved       TIMESTAMPTZ,
+  date_created        TIMESTAMPTZ,
+  raw_pagamento       JSONB,
+  UNIQUE (pedido_id, ml_payment_id)
+);
+
+-- Acompanhamento da sincronização HISTÓRICA (importa todos os pedidos desde
+-- uma data específica, ex: 01/07/2026 — diferente da sincronização normal,
+-- que só traz os últimos 30 dias). Processada dia a dia, em fuso
+-- America/Sao_Paulo, em segundo plano (pode levar bastante tempo numa conta
+-- com muitos pedidos). O progresso é salvo a cada dia concluído
+-- (janela_concluida_ate) — se for interrompida por qualquer motivo, a
+-- próxima chamada retoma do dia seguinte ao último concluído, em vez de
+-- reprocessar tudo de novo. Mesmo sem isso, nenhum pedido duplicaria (o
+-- UPSERT de ml_pedidos por conta_ml_id+ml_order_id já garante isso) — o
+-- bookmark existe só para não desperdiçar chamadas à API refazendo dias
+-- já importados.
+CREATE TABLE IF NOT EXISTS ml_sync_historicos (
+  id                     SERIAL PRIMARY KEY,
+  conta_ml_id            INTEGER NOT NULL REFERENCES ml_contas(id),
+  desde                  DATE NOT NULL,
+  ate_alvo               DATE NOT NULL,
+  status                 VARCHAR(20) NOT NULL DEFAULT 'em_andamento', -- em_andamento | concluido | erro
+  janela_concluida_ate   DATE,
+  total_encontrados      INTEGER NOT NULL DEFAULT 0,
+  total_importados       INTEGER NOT NULL DEFAULT 0,
+  erros                  JSONB NOT NULL DEFAULT '[]',
+  iniciado_em            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finalizado_em          TIMESTAMPTZ
+);

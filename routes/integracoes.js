@@ -6,7 +6,13 @@ const pool = require('../db/pool');
 const { encrypt } = require('../lib/crypto');
 const { generateState, generatePkce } = require('../lib/pkce');
 const ml = require('../lib/mercadolivre');
-const { sincronizarConta, importarPedidoPorNotificacao } = require('../lib/mlSync');
+const {
+  sincronizarConta,
+  importarPedidoPorNotificacao,
+  iniciarOuRetomarSyncHistorico,
+  buscarUltimoSyncHistorico,
+  processarSyncHistorico,
+} = require('../lib/mlSync');
 
 const router = express.Router();
 
@@ -193,6 +199,74 @@ router.post('/:id/sincronizar', async (req, res, next) => {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
+});
+
+const DATA_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+// Colunas DATE voltam do driver como objeto Date — normaliza pra
+// 'YYYY-MM-DD' na resposta da API (mais simples de ler do que um
+// timestamp ISO completo pra um campo que é só data).
+function paraDataStr(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string') return v.slice(0, 10);
+  return new Date(v).toISOString().slice(0, 10);
+}
+
+function serializeSyncHistorico(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    contaMlId: row.conta_ml_id,
+    desde: paraDataStr(row.desde),
+    ateAlvo: paraDataStr(row.ate_alvo),
+    status: row.status,
+    janelaConcluidaAte: paraDataStr(row.janela_concluida_ate),
+    totalEncontrados: row.total_encontrados,
+    totalImportados: row.total_importados,
+    erros: row.erros || [],
+    iniciadoEm: row.iniciado_em,
+    atualizadoEm: row.atualizado_em,
+    finalizadoEm: row.finalizado_em,
+  };
+}
+
+// POST /api/integracoes/mercadolivre/:id/sincronizar-historico — importa TODOS
+// os pedidos desde uma data (body: { desde: 'YYYY-MM-DD' }, padrão 2026-07-01).
+// Diferente de /sincronizar (só últimos 30 dias). Responde logo com o status
+// inicial e continua em segundo plano (pode levar bastante tempo) — consultar
+// o progresso em GET .../sincronizar-historico/status.
+router.post('/:id/sincronizar-historico', async (req, res, next) => {
+  try {
+    const desde = (req.body && req.body.desde) || '2026-07-01';
+    if (!DATA_ISO_REGEX.test(desde)) {
+      return res.status(400).json({ error: 'Parâmetro "desde" precisa estar no formato YYYY-MM-DD.' });
+    }
+
+    const execucaoInicial = await iniciarOuRetomarSyncHistorico(req.params.id, desde);
+    res.json({
+      execucao: serializeSyncHistorico(execucaoInicial),
+      aviso: 'Sincronização histórica iniciada em segundo plano — pode levar bastante tempo. Consulte o progresso em GET /api/integracoes/mercadolivre/:id/sincronizar-historico/status?desde=' + desde,
+    });
+
+    processarSyncHistorico(req.params.id, desde).catch((err) => {
+      console.error('[sincronizar-historico] falhou:', err.message);
+    });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// GET /api/integracoes/mercadolivre/:id/sincronizar-historico/status?desde=YYYY-MM-DD
+router.get('/:id/sincronizar-historico/status', async (req, res, next) => {
+  try {
+    const desde = req.query.desde || '2026-07-01';
+    if (!DATA_ISO_REGEX.test(desde)) {
+      return res.status(400).json({ error: 'Parâmetro "desde" precisa estar no formato YYYY-MM-DD.' });
+    }
+    const execucao = await buscarUltimoSyncHistorico(req.params.id, desde);
+    res.json({ execucao: serializeSyncHistorico(execucao) });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

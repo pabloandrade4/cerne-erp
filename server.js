@@ -13,6 +13,7 @@ const anunciosRouter = require('./routes/anuncios');
 const estoqueRouter = require('./routes/estoque');
 const estoqueFullRouter = require('./routes/estoqueFull');
 const comprasRouter = require('./routes/compras');
+const adminMigracaoRouter = require('./routes/adminMigracao'); // temporária — ver comentário no arquivo
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +34,7 @@ app.use('/api/anuncios', anunciosRouter);
 app.use('/api/estoque', estoqueRouter);
 app.use('/api/estoque-full', estoqueFullRouter);
 app.use('/api/compras', comprasRouter);
+app.use('/api/admin', adminMigracaoRouter); // temporária — ver comentário no arquivo
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
