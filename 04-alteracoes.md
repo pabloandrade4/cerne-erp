@@ -2,6 +2,27 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-23 (9) — Teste ao vivo em produção de Estoque, Estoque Full e Compras + correção
+- Depois do usuário subir o zip anterior pro GitHub e o Render fazer o
+  deploy automático, testei as 3 telas novas direto em produção
+  (https://cerne-erp.onrender.com), pela empresa real "pf embalegens".
+- **Estoque:** carregou normalmente (estado vazio correto, já que a
+  empresa ainda não tem produtos cadastrados em Produtos). Sem erros no
+  console.
+- **Estoque Full:** funcionou com dados reais da API do Mercado Livre —
+  20 anúncios Full carregados com quantidade real, nenhum caiu em
+  "Pendente". Ver `05-problemas-conhecidos.md` para o detalhe.
+- **Compras:** encontrado um bug real — o botão "Nova compra" do topo da
+  tela não abria o formulário (faltava o `addEventListener` de clique,
+  presente em todos os outros botões equivalentes). **Corrigido** no
+  próprio código (`server/public/index.html`) e reconferido com
+  `node --check`. Como a correção veio depois do primeiro upload, precisa
+  de um novo upload do zip de código + novo deploy para valer em produção,
+  e uma nova conferência ao vivo do botão depois disso. Ver
+  `05-problemas-conhecidos.md`.
+- Nenhuma outra área foi tocada nesta rodada — só a correção pontual do
+  botão de Compras.
+
 ## 2026-08-23 (8) — Ativação de Estoque, Estoque Full e Compras
 - Pedido pelo usuário: ativar 3 áreas novas, mantendo o design atual e sem
   mexer em nenhuma outra área — Estoque, Estoque Full (renomeado de

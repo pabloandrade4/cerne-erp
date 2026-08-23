@@ -15,19 +15,24 @@
   depois que o usuário subir o novo zip pro GitHub e o deploy automático do
   Render terminar — em especial a busca real de anúncios na API do Mercado
   Livre, que não pôde ser testada neste ambiente de desenvolvimento.
-- **Estoque, Estoque Full e Compras foram implementados e testados
-  localmente** (schema, transações e queries — ver `04-alteracoes.md` (8) e
-  `02-decisoes.md` (11)). **Ainda precisam do teste ao vivo em produção**
-  depois que o usuário subir o novo zip pro GitHub:
-  - **Estoque Full em especial** — a busca da quantidade real no Full do
-    Mercado Livre (`inventory_id` + endpoint de estoque) nunca foi
-    exercitada contra a API real. Se o formato vier diferente do esperado,
-    a tela mostra "Pendente" (comportamento seguro), mas pode precisar de
-    ajuste de código — ver `05-problemas-conhecidos.md`.
-  - Estoque (ajuste manual) e Compras (criar/editar/mudar status) só foram
-    testados via SQL direto e `node --check`, sem o servidor Express
-    rodando de ponta a ponta — o teste ao vivo em produção é o primeiro
-    teste real do fluxo completo (API + tela).
+- **Estoque, Estoque Full e Compras foram testados ao vivo em produção em
+  23/08/2026** (ver `04-alteracoes.md` (9) e `05-problemas-conhecidos.md`):
+  - **Estoque** — carregou normalmente (empresa "pf embalegens" ainda sem
+    produtos cadastrados, então mostrou o estado vazio correto). O fluxo
+    de ajuste de quantidade por linha (que abre um formulário) ainda
+    precisa ser conferido ao vivo com um produto real cadastrado — ainda
+    não dá pra testar porque a empresa não tem nenhum produto em Produtos.
+  - **Estoque Full** — funcionou com dados reais da API do Mercado Livre,
+    sem nenhum item em "Pendente". Considerar validado.
+  - **Compras** — encontrado e corrigido um bug: o botão "Nova compra" do
+    topo não abria o formulário (faltava o evento de clique). **Precisa de
+    um novo upload do zip de código pro GitHub e um novo deploy** para a
+    correção valer em produção, e depois disso reconferir o botão ao vivo.
+- **Pendência aberta, sem prazo:** cadastrar o primeiro produto em
+  Produtos (empresa "pf embalegens") para poder testar de ponta a ponta,
+  com dado real, o ajuste manual de estoque e a montagem de uma compra
+  (seleção de produto no formulário) — hoje as duas telas só têm o estado
+  vazio confirmado ao vivo.
 - **Pendência aberta, sem prazo:** decidir com o usuário se e quando
   automatizar a entrada de estoque ao marcar uma compra como "Recebido"
   (hoje é 100% manual, por instrução explícita) — inclui decisões de

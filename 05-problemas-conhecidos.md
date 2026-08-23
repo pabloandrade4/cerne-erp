@@ -3,26 +3,44 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
-## Estoque Full: dados do endpoint de estoque nunca testados com uma conta real
+## Estoque Full: testado ao vivo em produção com sucesso (23/08/2026)
 - A tela **Estoque Full** identifica anúncios Full pelo campo
-  `shipping.logistic_type === 'fulfillment'` (documentado pelo Mercado
-  Livre) e busca a quantidade pelo endpoint `GET /inventories/
-  {inventory_id}/stock/fulfillment`, usando o `inventory_id` que a própria
-  API do item retorna. **Nada disso pôde ser testado com uma chamada real**
-  neste ambiente de desenvolvimento (sem servidor rodando, sem conta real
-  acessível) — só a lógica de identificação de Full, extração de SKU e
-  montagem das chamadas foi revisada e testada isoladamente.
-- Se, ao testar ao vivo, o formato da resposta desse endpoint for diferente
-  do esperado (ex: o campo de quantidade tiver outro nome), a tela vai
-  mostrar "Pendente" para a quantidade em vez de dar erro — o que é seguro
-  (não inventa número), mas pode esconder um ajuste de código necessário.
-  **Precisa ser conferido no teste ao vivo em produção.**
+  `shipping.logistic_type === 'fulfillment'` e busca a quantidade pelo
+  endpoint `GET /inventories/{inventory_id}/stock/fulfillment`, usando o
+  `inventory_id` que a própria API do item retorna. **Testado ao vivo em
+  produção com a conta real "PFEMBALAGEMS"**: a tela carregou 20 anúncios
+  Full (dos 52 anúncios totais verificados nos primeiros 50) com
+  quantidades reais retornadas pela API, **nenhum caiu em "Pendente"** —
+  ou seja, o formato assumido para `inventory_id` e para o endpoint de
+  estoque bateu com a API real.
 - Buscar a quantidade Full é **uma chamada de API por anúncio Full
   encontrado** (o Mercado Livre não documenta um jeito de buscar várias de
   uma vez) — para uma conta com muitos anúncios Full, isso pode ficar
   lento, parecido com o problema já conhecido de sincronização de pedidos.
   Não foi otimizado agora (ex: cache, busca em background) porque fugiria
   do escopo desta etapa.
+- A tela só verifica os **primeiros 50 anúncios da conta por página** (sem
+  buscar páginas seguintes automaticamente) — no teste ao vivo, a conta
+  tinha 52 anúncios no total, então os últimos 2 não foram verificados
+  nessa carga. Buscar mais páginas ainda não foi implementado nesta etapa
+  (a tela avisa isso no rodapé da tabela, com o total verificado vs. total
+  da conta).
+
+## Compras: botão "Nova compra" do topo não abria o modal (bug encontrado e corrigido em 23/08/2026)
+- No teste ao vivo em produção, o botão **"Nova compra"** no topo da tela
+  (fora do estado vazio) não tinha nenhum evento de clique associado —
+  clicar nele não fazia nada. Faltou a linha de wiring
+  `document.getElementById('btnNewCompra').addEventListener(...)` que
+  todos os outros botões equivalentes têm (Nova empresa, Novo produto,
+  Novo fornecedor, Atualizar do Estoque Full). O botão "Nova compra" que
+  aparece dentro do estado vazio (quando não há nenhuma compra cadastrada)
+  funcionava normalmente, por isso o bug só foi percebido testando o botão
+  do topo especificamente.
+- **Corrigido** nesta mesma etapa, antes da entrega final — mas como a
+  correção foi feita depois do primeiro upload pro GitHub, **precisa de um
+  novo upload do zip de código e um novo deploy** para valer em produção.
+  Depois desse novo deploy, o botão do topo precisa ser reconferido ao
+  vivo (clicar e confirmar que o formulário de nova compra abre).
 
 ## Compras e Estoque não têm nenhuma automação entre si ainda
 - Marcar uma compra como "Recebido" **não altera o Estoque** — foi uma
