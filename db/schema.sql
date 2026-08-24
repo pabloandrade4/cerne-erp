@@ -359,3 +359,43 @@ CREATE TABLE IF NOT EXISTS produto_base_skus (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (empresa_id, sku)
 );
+
+-- ============================================================
+-- Etapa: tela Estoque (Galpão + Full, agrupado por produto base)
+-- ============================================================
+--
+-- Custo unitário do produto base — usado só pelo valor financeiro do
+-- estoque nesta etapa (Galpão/Full). Fica em `produtos_base` (e não numa
+-- tabela separada, ao contrário de `custos_produto`) porque aqui já existe
+-- uma linha por produto base — não há o problema de multiplicidade que
+-- motivou a tabela separada para o custo por SKU. NULL = custo ainda não
+-- cadastrado (tela mostra "pendente", nunca zero fingindo ser um custo real).
+ALTER TABLE produtos_base ADD COLUMN IF NOT EXISTS custo NUMERIC(12,2);
+
+-- Estoque físico no Galpão, por produto base (ajuste manual, mesmo padrão
+-- já usado em `estoque`/`estoque_movimentos` para a tela antiga de
+-- Produtos — só que agora por produto base, não por produto/SKU de venda).
+-- Deliberadamente uma tabela NOVA e separada de `estoque` (que continua
+-- existindo, ligada a `produtos`, sem nenhuma mudança) — nenhum dado real
+-- existia lá (nenhum produto cadastrado ainda), então não há nada para
+-- migrar, e as duas telas antigas (Produtos/Estoque) continuam intactas.
+CREATE TABLE IF NOT EXISTS estoque_produto_base (
+  id               SERIAL PRIMARY KEY,
+  produto_base_id  INTEGER NOT NULL UNIQUE REFERENCES produtos_base(id),
+  quantidade       INTEGER NOT NULL DEFAULT 0,
+  atualizado_em    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Histórico de movimentação do estoque de Galpão por produto base — mesmo
+-- padrão de `estoque_movimentos` (quantidade anterior/nova/diferença,
+-- observação opcional), preparado desde já mesmo sem tela própria pra
+-- consultar o histórico ainda.
+CREATE TABLE IF NOT EXISTS estoque_produto_base_movimentos (
+  id                        SERIAL PRIMARY KEY,
+  estoque_produto_base_id   INTEGER NOT NULL REFERENCES estoque_produto_base(id) ON DELETE CASCADE,
+  quantidade_anterior       INTEGER NOT NULL,
+  quantidade_nova           INTEGER NOT NULL,
+  diferenca                 INTEGER NOT NULL,
+  observacao                TEXT,
+  criado_em                 TIMESTAMPTZ NOT NULL DEFAULT now()
+);

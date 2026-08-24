@@ -9,6 +9,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { interpretarSku } = require('../lib/skuProdutoBase');
+const { converterItens, SELECT_VINCULO } = require('../lib/produtoBaseConversao');
 
 const router = express.Router();
 
@@ -18,6 +19,7 @@ function serializeProdutoBase(row) {
     empresaId: row.empresa_id,
     codigo: row.codigo,
     nome: row.nome,
+    custo: row.custo === null || row.custo === undefined ? null : Number(row.custo),
     ativo: row.ativo,
     criadoEm: row.created_at,
     atualizadoEm: row.updated_at,
@@ -38,12 +40,6 @@ function serializeVinculo(row) {
     atualizadoEm: row.updated_at,
   };
 }
-
-const SELECT_VINCULO = `
-  SELECT v.*, pb.codigo AS produto_base_codigo, pb.nome AS produto_base_nome
-  FROM produto_base_skus v
-  JOIN produtos_base pb ON pb.id = v.produto_base_id
-`;
 
 // Busca o produto base pelo código (por empresa); cria se ainda não existir.
 async function obterOuCriarProdutoBase(empresaId, codigo, nome) {
@@ -97,16 +93,19 @@ router.post('/', async (req, res, next) => {
     const empresaId = Number(req.body.empresaId);
     const codigo = String(req.body.codigo || '').trim();
     const nome = req.body.nome ? String(req.body.nome).trim() : null;
+    const custo = req.body.custo !== undefined && req.body.custo !== null && req.body.custo !== ''
+      ? Number(req.body.custo) : null;
 
     const errors = {};
     if (!empresaId) errors.empresaId = 'Selecione a empresa.';
     if (!codigo) errors.codigo = 'Informe o código do produto base.';
     else if (codigo.length > 100) errors.codigo = 'Código muito longo (máx. 100 caracteres).';
+    if (custo !== null && (!Number.isFinite(custo) || custo < 0)) errors.custo = 'Informe um custo válido (maior ou igual a zero).';
     if (Object.keys(errors).length) return res.status(400).json({ errors });
 
     const { rows } = await pool.query(
-      `INSERT INTO produtos_base (empresa_id, codigo, nome) VALUES ($1,$2,$3) RETURNING *`,
-      [empresaId, codigo, nome]
+      `INSERT INTO produtos_base (empresa_id, codigo, nome, custo) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [empresaId, codigo, nome, custo]
     );
     res.status(201).json({ produtoBase: serializeProdutoBase(rows[0]) });
   } catch (err) {
@@ -115,7 +114,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// PUT /api/produtos-base/:id — edita código/nome
+// PUT /api/produtos-base/:id — edita código/nome/custo
 router.put('/:id', async (req, res, next) => {
   try {
     const fields = [];
@@ -129,6 +128,13 @@ router.put('/:id', async (req, res, next) => {
     }
     if (req.body.nome !== undefined) {
       fields.push(`nome = $${i++}`); values.push(req.body.nome ? String(req.body.nome).trim() : null);
+    }
+    if (req.body.custo !== undefined) {
+      const custo = req.body.custo === null || req.body.custo === '' ? null : Number(req.body.custo);
+      if (custo !== null && (!Number.isFinite(custo) || custo < 0)) {
+        return res.status(400).json({ errors: { custo: 'Informe um custo válido (maior ou igual a zero).' } });
+      }
+      fields.push(`custo = $${i++}`); values.push(custo);
     }
     if (!fields.length) return res.status(400).json({ error: 'Nada para atualizar.' });
 
@@ -322,62 +328,6 @@ router.delete('/vinculos/:id', async (req, res, next) => {
 // ============================================================
 // Conversão: venda (SKU + quantidade) -> quantidade física do produto base
 // ============================================================
-
-// Aplica os vínculos já salvos sobre uma lista de itens {sku, quantidade}.
-// Nunca adivinha: SKU sem vínculo salvo vai para `pendentes`, nunca soma
-// um valor estimado no total físico.
-async function converterItens(empresaId, itens) {
-  const skus = [...new Set(itens.map((it) => it.sku).filter(Boolean))];
-  let vinculosPorSku = {};
-  if (skus.length) {
-    const { rows } = await pool.query(
-      `${SELECT_VINCULO} WHERE v.empresa_id = $1 AND v.sku = ANY($2::text[])`,
-      [empresaId, skus]
-    );
-    vinculosPorSku = Object.fromEntries(rows.map((r) => [r.sku, r]));
-  }
-
-  const porProdutoBase = {};
-  const pendentes = [];
-  const detalhes = [];
-
-  for (const item of itens) {
-    const quantidade = Number(item.quantidade) || 0;
-    const vinculo = item.sku ? vinculosPorSku[item.sku] : null;
-
-    if (!vinculo) {
-      pendentes.push({ sku: item.sku || null, quantidade });
-      detalhes.push({ sku: item.sku || null, quantidade, vinculado: false });
-      continue;
-    }
-
-    const quantidadeFisica = quantidade * vinculo.multiplicador;
-    const chave = vinculo.produto_base_id;
-    if (!porProdutoBase[chave]) {
-      porProdutoBase[chave] = {
-        produtoBaseId: vinculo.produto_base_id,
-        codigo: vinculo.produto_base_codigo,
-        nome: vinculo.produto_base_nome,
-        quantidadeFisica: 0,
-      };
-    }
-    porProdutoBase[chave].quantidadeFisica += quantidadeFisica;
-    detalhes.push({
-      sku: item.sku,
-      quantidade,
-      vinculado: true,
-      produtoBaseCodigo: vinculo.produto_base_codigo,
-      multiplicador: vinculo.multiplicador,
-      quantidadeFisica,
-    });
-  }
-
-  return {
-    porProdutoBase: Object.values(porProdutoBase),
-    pendentes,
-    detalhes,
-  };
-}
 
 // POST /api/produtos-base/conversao — calculadora genérica
 // body: { empresaId, itens: [{ sku, quantidade }, ...] }
