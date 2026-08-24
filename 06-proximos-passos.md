@@ -1,5 +1,35 @@
 # Próximos Passos
 
+- **Concluído em 24/08/2026, testado ao vivo em produção:** conceito de
+  **produto base + SKU de venda + multiplicador** (deploy `ml15`) — ver
+  `04-alteracoes.md` (11) e `03-funcionalidades.md`. Só depois disso, a
+  nova tela **Estoque** (Galpão + Full, agrupada por produto base, com
+  filtro Todos/Galpão/Full) foi construída reaproveitando essa estrutura —
+  ver `04-alteracoes.md` (12). **A tela Estoque nova ainda só foi testada
+  localmente** (Postgres local + dados sintéticos batendo o exemplo do
+  pedido do usuário) — falta:
+  - o usuário subir o próximo zip de código (`ml16`) pro GitHub;
+  - depois do deploy, testar os três filtros ao vivo com dados reais da
+    empresa (idealmente já com algum produto base cadastrado e com custo,
+    e com a conta do Mercado Livre da empresa ativa, pra também confirmar
+    o Full ao vivo — hoje a conta de teste local está marcada como
+    "erro", então o caminho de Full com sucesso só foi validado com dados
+    simulados, não contra a API real);
+  - confirmar que produtos base sem nenhum SKU do Mercado Livre vinculado
+    ainda aparecem certinho com Full = 0 (não pendente), e que SKUs do
+    Full sem vínculo aparecem na lista de pendências da tela, não somados
+    a nenhum produto.
+  - as antigas telas "Estoque" e "Estoque Full" (com ajuste por produto
+    cadastrado em Produtos / visualização separada por anúncio) **foram
+    substituídas** por essa tela única — os itens de pendência abaixo
+    datados de 23/08/2026 que mencionam essas duas telas antigas ficam
+    como histórico, não como trabalho ainda por fazer nelas.
+- **Pendência aberta, sem prazo:** não existe ainda uma tela para cadastrar
+  produtos base e corrigir manualmente o vínculo SKU → produto base →
+  multiplicador — hoje isso só é possível direto pela API
+  (`server/routes/produtosBase.js`). A tela Estoque já mostra o produto
+  base e o custo, mas cadastrar um produto base novo ou corrigir um
+  vínculo errado ainda depende de uma chamada de API manual.
 - **Concluído em 24/08/2026:** Supabase como banco principal, migração dos
   dados existentes, sincronização histórica desde 01/07/2026 (3.604
   pedidos, 0 erros) e confirmação de que Visão Geral lê só do banco — ver

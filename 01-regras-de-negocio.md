@@ -215,43 +215,60 @@ _(sem regras registradas ainda)_
   Livre** — pedido explícito do usuário para primeiro visualizar
   corretamente os anúncios, antes de qualquer edição.
 
-## Estoque
-- Mostra **todos os produtos cadastrados** (tela Produtos) da empresa
-  selecionada, com: produto, SKU, estoque atual, custo unitário (o mesmo
-  custo cadastrado em Produtos), valor total em estoque (estoque atual ×
-  custo unitário) e status (ativo/inativo do produto). Produto sem nenhum
-  ajuste ainda aparece com estoque atual **0** — nunca "sem dado".
-- **Ajuste manual por enquanto** — pedido explícito do usuário. Não existe
-  ainda entrada automática por compra recebida, nem reserva automática de
-  estoque por pedido de venda.
-- **Toda alteração de quantidade grava uma movimentação** (quantidade
-  anterior, quantidade nova, diferença, observação opcional, data/hora) —
-  preparado para existir um histórico de movimentação, mesmo sem ainda
-  existir uma tela própria para consultá-lo.
-- **Nunca é misturado com o Estoque Full** do Mercado Livre — são dois
-  números diferentes, guardados e mostrados separadamente (ver "Estoque
-  Full", abaixo).
+## Produto base / SKU de venda / Multiplicador
+- **Produto base** é o produto físico real, controlado no Galpão —
+  independente de quantos SKUs diferentes o Mercado Livre usa pra vender
+  esse mesmo produto em kits de tamanhos diferentes (ex.: `25CX-19X12X12`,
+  `50CX-19X12X12`, `75CX-19X12X12` e `100CX-19X12X12` são quatro SKUs
+  vendidos, mas **um só** produto base: `CX-19X12X12`). **O estoque físico
+  nunca é controlado pelo SKU do kit vendido**, sempre pelo produto base.
+- O vínculo entre um SKU e um produto base carrega um **multiplicador**
+  (quantas unidades físicas aquele SKU representa) e uma **origem**
+  (`manual` ou `automatico`). Existe uma interpretação automática do
+  padrão "dígitos no início do SKU" pra **sugerir** esse vínculo, mas ela
+  nunca decide sozinha — **o vínculo que vale é sempre o que está salvo no
+  banco**, e pode ser corrigido manualmente a qualquer momento, sem
+  depender de o SKU seguir algum padrão.
+- **O SKU original recebido do Mercado Livre nunca é alterado** — nem no
+  pedido, nem em lugar nenhum. A conversão pra quantidade física acontece
+  só na hora de somar/mostrar estoque ou vendas, nunca sobrescrevendo o
+  dado original.
+- Conversão de venda (ou de estoque Full, que também é vendido em kits)
+  para quantidade física: `quantidade física = quantidade vendida ×
+  multiplicador`, somada por produto base. **Um SKU sem vínculo salvo
+  nunca é somado como zero** — fica separado como pendência, pra nunca
+  esconder um produto que ainda não foi mapeado.
 
-## Estoque Full
-- Mostra os **anúncios reais com logística Full** (armazenados nos centros
-  de distribuição do Mercado Livre) das contas conectadas — nunca um
-  anúncio ou quantidade inventados.
-- Campos mostrados: **produto (título do anúncio), SKU, anúncio (ID),
-  loja (conta/nickname do Mercado Livre), quantidade no Full e status**.
-- **Busca ao vivo, direto na API do Mercado Livre**, a cada vez que a tela
-  é aberta ou atualizada — assim como Anúncios, nenhum dado fica salvo no
-  banco nesta etapa.
-- **Se a API do Mercado Livre ainda não disponibilizar a quantidade de um
-  anúncio Full específico** (ex: falta o identificador interno do estoque
-  daquele anúncio, ou a chamada falha), a linha mostra **"Pendente"** no
-  lugar da quantidade — nunca um número calculado ou zero fingindo ser
-  real.
-- Se a empresa não tiver conta do Mercado Livre conectada, ou a conexão
-  estiver com erro, a tela mostra que a sincronização está pendente (mesmo
-  padrão de Anúncios).
-- **Nunca é misturado com o Estoque próprio** (tela separada, "Estoque",
-  acima) — um produto pode ter uma quantidade em cada um, sem relação
-  automática entre os dois números.
+## Estoque (Galpão + Full, por produto base)
+- Tela única de estoque físico, sempre agrupada por **produto base** — uma
+  linha por produto físico (nunca uma linha por SKU de kit vendido).
+- **Filtro Todos / Galpão / Full:** "Galpão" mostra só o estoque físico do
+  nosso galpão; "Full" mostra só o estoque armazenado no Full do Mercado
+  Livre (convertido de "kits no Full" pra unidades físicas, com o mesmo
+  multiplicador da venda); "Todos" soma os dois. **Galpão e Full continuam
+  guardados e calculados separadamente por baixo** — o filtro só muda o
+  que a tela mostra e o que os cards somam, nunca mistura os números
+  guardados.
+- **Valor financeiro do estoque** = quantidade física × custo do produto
+  base (não existe mais custo por SKU de kit pra fins de estoque — o custo
+  é sempre do produto físico). Produto base sem custo cadastrado aparece
+  como **"Pendente"** no valor — nunca soma como zero.
+- **Cards no topo** (quantidade total de caixas, valor total em estoque)
+  mudam conforme o filtro selecionado.
+- **Galpão:** número sempre real e conhecido (controlado só por nós) —
+  produto base sem nenhum ajuste ainda aparece com **0**, nunca "sem
+  dado". Ajuste manual por enquanto (sem entrada automática por compra
+  recebida nem reserva automática por pedido de venda) — toda alteração
+  grava uma movimentação (quantidade anterior, nova, diferença, observação
+  opcional, data/hora).
+- **Full:** busca ao vivo na API do Mercado Livre a cada carregamento
+  (nada persistido) — nunca editável nesta tela. Se a empresa não tiver
+  conta conectada, a conexão estiver com erro, ou a API falhar, os cards
+  que dependem do Full mostram **"Pendente"** (com o motivo) em vez de um
+  total que ignoraria o Full em silêncio. Um SKU do Full sem vínculo de
+  produto base, um anúncio sem SKU, ou um anúncio sem quantidade
+  disponível na API aparecem numa lista de pendências — nunca somados a
+  nenhum produto.
 
 ## Compras
 - Primeira versão simples de pedido de compra a um fornecedor: **criar,

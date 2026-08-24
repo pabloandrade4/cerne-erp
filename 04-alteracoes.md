@@ -2,6 +2,85 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-24 (12) — Tela Estoque: Galpão + Full juntos, agrupados por produto base
+- Reescrita a tela Estoque, que passa a ser a única tela de estoque físico
+  do ERP (a antiga "Estoque Full" separada foi retirada do menu e o
+  módulo de frontend `window.EstoqueFull` foi removido — o backend
+  `server/routes/estoqueFull.js`/`server/lib/mlFull.js` continua existindo
+  e agora é reaproveitado pela nova tela, não descartado).
+- **Filtro Todos / Galpão / Full**, **uma linha por produto base** (nunca
+  mais por SKU de kit) e **valor financeiro** (quantidade física × custo
+  do produto base), exatamente como pedido — ver exemplo testado abaixo.
+- Nova tabela `estoque_produto_base` (+ `estoque_produto_base_movimentos`
+  para o histórico do ajuste manual) para o estoque físico do Galpão, e
+  nova coluna `produtos_base.custo`. Estoque do Full continua sendo uma
+  busca ao vivo na API do Mercado Livre (nada persistido), agora
+  percorrendo **todas as páginas** da conta (`buscarEstoqueFullCompletoDaConta`
+  em `server/lib/mlFull.js`, com um teto defensivo de 200 páginas) e
+  convertida para quantidade física com a mesma lógica de
+  `produto_base_skus`/multiplicador usada na conversão de vendas (função
+  `converterItens`, extraída para `server/lib/produtoBaseConversao.js` e
+  compartilhada entre as duas).
+- Nova API `server/routes/estoqueProdutoBase.js`: `GET
+  /api/estoque-produto-base?empresaId=&filtro=todos|galpao|full` (Galpão
+  sempre um número real; Full com `pendente`/`motivo`/`mensagem` quando não
+  há conta conectada, a conta está com erro, ou a API falha — os cards do
+  topo ficam "Pendente" nesse caso, nunca somam um total que ignoraria o
+  Full em silêncio) e `PUT /api/estoque-produto-base/:produtoBaseId`
+  (ajuste manual do Galpão, mesmo padrão transacional — `BEGIN` + `SELECT
+  ... FOR UPDATE` + upsert + histórico + `COMMIT` — da tela antiga).
+- **Testado localmente** (Postgres local, com dados sintéticos batendo o
+  exemplo do pedido do usuário: produto base `CX-19X12X12`, custo R$ 0,50,
+  Galpão 5.000 → depois ajustado para 5.200 via `PUT` e confirmado de volta
+  pelo `GET`; Full simulado com dois SKUs vinculados — `50CX-19X12X12`
+  quantidade 40 e `25CX-19X12X12` quantidade 8 — convertendo para 2.200
+  unidades físicas de Full, um SKU sem vínculo (`VARAL-DESCONHECIDO`, 10
+  kits) e dois anúncios pendentes (um sem SKU, um com erro de API na
+  quantidade) corretamente separados em `pendentes`, nunca somados):
+  - Filtro Galpão: 5.200 caixas, R$ 2.600,00.
+  - Filtro Full: 2.200 caixas, R$ 1.100,00.
+  - Filtro Todos: 7.400 caixas, R$ 3.700,00 (= 5.200 + 2.200).
+  - Sem conta do Mercado Livre conectada (ou conta com erro): filtro Full/
+    Todos mostra "Pendente" nos cards, com a mensagem explicando o motivo —
+    confirmado com a conta de teste local marcada como `erro`.
+  - `node --check` em todos os arquivos alterados; teste rodado direto
+    contra os handlers das rotas (sem o driver `pg`, que continua não
+    instalável neste ambiente — ver `05-problemas-conhecidos.md`), usando
+    o mesmo Postgres local via `psql` das etapas anteriores.
+  - **Ainda não testado contra produção** — depende do usuário subir o
+    próximo pacote de código (ver `06-proximos-passos.md`).
+- Por instrução explícita do usuário, não foi mexido em relatórios,
+  compras ou IA nesta etapa.
+
+## 2026-08-24 (11) — Produto base + SKU de venda + Multiplicador
+- Criado o conceito de **produto base**, separando o produto físico
+  guardado no Galpão do SKU do "kit" vendido no Mercado Livre. Três peças
+  novas no banco: `produtos_base` (o produto físico), `produto_base_skus`
+  (vínculo SKU → produto base, com um `multiplicador` e uma `origem`
+  `manual`/`automatico`) — ver detalhes em `03-funcionalidades.md`.
+- Interpretação automática do padrão "dígitos no início do SKU"
+  (`server/lib/skuProdutoBase.js`) só **sugere** um vínculo — nunca decide
+  sozinha. O vínculo que vale é sempre o salvo no banco, corrigível
+  manualmente a qualquer momento pela API (`PUT
+  /api/produtos-base/vinculos/:id`), e o SKU original recebido do Mercado
+  Livre nunca é alterado no pedido.
+- Conversão de venda para quantidade física (`POST
+  /api/produtos-base/conversao` e `GET
+  /api/produtos-base/conversao/pedido/:pedidoId`): soma `quantidade vendida
+  × multiplicador` por produto base; SKU sem vínculo salvo nunca é somado
+  como zero — fica separado em `pendentes`.
+- **Testado com SKUs reais da conta "PFEMBALAGEMS"** (20 de 21 SKUs
+  interpretados corretamente pelo padrão automático, 1 corretamente
+  rejeitado por não seguir o padrão) e com o exemplo exato do pedido do
+  usuário (10 kits de 25 + 5 kits de 50 + 3 kits de 100 + 1 vínculo
+  manual = 804 unidades físicas, batendo a conta esperada). Um pedido real
+  (#20909) convertido corretamente de ponta a ponta.
+- **Testado e confirmado ao vivo em produção** (deploy `ml15`, serviço
+  `cerne-erp` no Render) — API testada direto na URL pública com dados
+  reais depois do usuário subir o pacote de código.
+- Por instrução explícita do usuário, não foi mexido em estoque, Full,
+  compras, relatórios, margem ou financeiro nesta etapa.
+
 ## 2026-08-24 (10) — Supabase como banco principal + sincronização histórica desde 01/07/2026
 - Criado projeto no Supabase (com ajuda do usuário: reset de senha do
   banco até conseguir uma connection string do **Session pooler**

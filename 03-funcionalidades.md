@@ -3,38 +3,84 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
-## Estoque (próprio, ajuste manual)
-- **Status:** concluído localmente (aguardando deploy + teste ao vivo em
-  produção — ver `06-proximos-passos.md`).
-- **O que é:** lista todos os produtos cadastrados (tela Produtos) com
-  estoque atual, custo unitário, valor total em estoque e status. Permite
-  ajuste manual da quantidade, com observação opcional — cada ajuste grava
-  uma movimentação (quantidade anterior/nova/diferença), preparando o
-  histórico de movimentação mesmo sem ainda existir uma tela própria pra
-  vê-lo. Nunca misturado com o Estoque Full do Mercado Livre.
-- **Onde está:** `server/routes/estoque.js` (API, com transação para
-  ajuste + movimentação), `server/public/index.html` (tela — módulo
-  `window.Estoque`).
-- **O que falta:** entrada automática por compra recebida; reserva por
-  pedido de venda; tela de histórico de movimentação (a tabela já existe,
-  só falta a tela); alertas de estoque mínimo.
+## Produto base + SKU de venda + Multiplicador
+- **Status:** concluído e **testado em produção** (deploy `ml15`, com dados
+  reais da conta "PFEMBALAGEMS").
+- **O que é:** resolve o problema de um mesmo produto físico ser vendido em
+  vários "kits" diferentes no Mercado Livre (ex.: `25CX-19X12X12`,
+  `50CX-19X12X12`, `75CX-19X12X12`, `100CX-19X12X12` são todos o mesmo
+  produto físico `CX-19X12X12`, em quantidades diferentes por kit). Três
+  peças novas no banco:
+  - `produtos_base` — o produto físico real (o que fica no Galpão).
+  - `produto_base_skus` — o vínculo entre um SKU vendido/armazenado e um
+    produto base, com um `multiplicador` (quantas unidades físicas aquele
+    SKU representa) e uma `origem` (`manual` ou `automatico`).
+  - Interpretação automática (`server/lib/skuProdutoBase.js`) sugere
+    produto base + multiplicador a partir do padrão "dígitos no início do
+    SKU" (`100CX-19X12X12` → multiplicador 100, código `CX-19X12X12`) —
+    **só uma sugestão**, nunca a fonte de verdade. O vínculo que vale é
+    sempre o salvo em `produto_base_skus`, e pode ser corrigido
+    manualmente a qualquer momento (o SKU original do Mercado Livre nunca
+    é alterado no pedido).
+  - Conversão de venda para quantidade física (`server/lib/produtoBaseConversao.js`,
+    compartilhada com a tela Estoque): `quantidade física = quantidade
+    vendida × multiplicador`, somada por produto base. SKU sem vínculo
+    salvo nunca é somado como se fosse zero ou inventado — fica separado
+    em `pendentes`.
+- **Onde está:** `server/db/schema.sql` (tabelas), `server/lib/skuProdutoBase.js`
+  (sugestão automática), `server/lib/produtoBaseConversao.js` (conversão
+  compartilhada), `server/routes/produtosBase.js` (API: CRUD de produto
+  base, CRUD de vínculos, sugestões de vínculo a partir dos pedidos reais,
+  conversão de uma venda ou de um pedido específico para quantidade
+  física).
+- **O que falta:** tela própria de cadastro/vínculo (hoje só existe a API —
+  usada pela tela Estoque para mostrar produto base e pela sugestão de
+  vínculos; cadastrar/corrigir um vínculo manualmente hoje precisa ser
+  feito direto pela API).
 
-## Estoque Full (visualização ao vivo do Mercado Livre)
+## Estoque (Galpão + Full, por produto base)
 - **Status:** concluído localmente (aguardando deploy + teste ao vivo em
   produção — ver `06-proximos-passos.md`).
-- **O que é:** mostra os anúncios com logística Full das contas do Mercado
-  Livre conectadas — produto (título), SKU, ID do anúncio, loja, quantidade
-  no Full e status — buscados ao vivo a cada carregamento (nada persistido
-  nesta etapa). Quando a API não disponibiliza a quantidade de um anúncio
-  específico, a linha mostra "Pendente". Menu renomeado de "Full" para
-  "Estoque Full". Nunca misturado com o Estoque próprio.
-- **Onde está:** `server/lib/mlFull.js` (busca dos anúncios Full + estoque
-  na API), `server/routes/estoqueFull.js` (API), `server/public/index.html`
-  (tela — módulo `window.EstoqueFull`).
-- **O que falta:** confirmar ao vivo, com uma conta real, se o Mercado
-  Livre está de fato retornando `inventory_id`/quantidade Full como
-  esperado (não pôde ser testado neste ambiente); paginação além da
-  primeira janela verificada.
+- **O que é:** tela única de estoque físico (substitui as antigas telas
+  separadas "Estoque" e "Estoque Full"), sempre agrupada por **produto
+  base** — nunca por SKU de kit (não existe mais uma linha para
+  `25CX-19X12X12` e outra para `50CX-19X12X12`; existe uma linha para
+  `CX-19X12X12`, com a soma física dos dois).
+  - **Filtro Todos / Galpão / Full** no topo: "Galpão" mostra só o estoque
+    físico do nosso galpão (tabela própria `estoque_produto_base`, ajuste
+    manual); "Full" mostra só o estoque armazenado no Full do Mercado
+    Livre (buscado ao vivo na API, convertido de "kits no Full" para
+    "unidades físicas" com o mesmo multiplicador salvo); "Todos" soma os
+    dois. Galpão e Full continuam guardados/calculados separadamente por
+    baixo — o filtro só muda o que aparece.
+  - **Cards no topo:** quantidade total de caixas e valor total em
+    estoque (quantidade física × custo do produto base), mudando conforme
+    o filtro selecionado.
+  - **Nunca inventa:** produto base sem custo cadastrado aparece como
+    "Pendente" no valor (não soma como zero); se o Full não puder ser
+    consultado agora (sem conta conectada, conta com erro, ou falha da
+    API do Mercado Livre), os cards mostram "Pendente" em vez de um total
+    que ignoraria o Full silenciosamente; SKU do Full sem vínculo de
+    produto base, anúncio sem SKU, ou anúncio sem quantidade disponível na
+    API aparecem numa lista de pendências, nunca somados a nenhum produto.
+  - **Ajuste manual** só existe para o Galpão (mesmo padrão transacional
+    da tela antiga: grava a movimentação com quantidade anterior/nova/
+    diferença). O Full nunca é editável aqui — é sempre um espelho ao vivo
+    da API do Mercado Livre.
+- **Onde está:** `server/lib/mlFull.js` (busca de todas as páginas de
+  anúncios Full de uma conta), `server/lib/produtoBaseConversao.js`
+  (conversão de SKU do Full para quantidade física, reaproveitada da
+  conversão de vendas), `server/routes/estoqueProdutoBase.js` (API:
+  agregação Galpão+Full por produto base com os três filtros, ajuste
+  manual do Galpão), `server/public/index.html` (tela — módulo
+  `window.Estoque`, único; `window.EstoqueFull` foi removido).
+- **O que falta:** entrada automática por compra recebida; reserva por
+  pedido de venda; tela de histórico de movimentação do Galpão (a tabela
+  já existe, só falta a tela); alertas de estoque mínimo; cadastro/edição
+  de vínculo SKU → produto base direto da tela (hoje só pela API); página
+  além da primeira janela de anúncios do Full continua limitada por um
+  teto defensivo de páginas (`maxPaginas`, ver `05-problemas-conhecidos.md`
+  se o catálogo Full for muito grande).
 
 ## Compras (primeira versão simples)
 - **Status:** concluído localmente (aguardando deploy + teste ao vivo em

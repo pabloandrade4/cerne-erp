@@ -4,27 +4,33 @@ Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
 ## Estoque Full: testado ao vivo em produção com sucesso (23/08/2026)
-- A tela **Estoque Full** identifica anúncios Full pelo campo
-  `shipping.logistic_type === 'fulfillment'` e busca a quantidade pelo
-  endpoint `GET /inventories/{inventory_id}/stock/fulfillment`, usando o
-  `inventory_id` que a própria API do item retorna. **Testado ao vivo em
-  produção com a conta real "PFEMBALAGEMS"**: a tela carregou 20 anúncios
-  Full (dos 52 anúncios totais verificados nos primeiros 50) com
-  quantidades reais retornadas pela API, **nenhum caiu em "Pendente"** —
-  ou seja, o formato assumido para `inventory_id` e para o endpoint de
-  estoque bateu com a API real.
+- O Full identifica anúncios pelo campo `shipping.logistic_type ===
+  'fulfillment'` e busca a quantidade pelo endpoint `GET
+  /inventories/{inventory_id}/stock/fulfillment`, usando o `inventory_id`
+  que a própria API do item retorna. **Testado ao vivo em produção com a
+  conta real "PFEMBALAGEMS"**: carregou 20 anúncios Full (dos 52 anúncios
+  totais verificados nos primeiros 50) com quantidades reais retornadas
+  pela API, **nenhum caiu em "Pendente"** — ou seja, o formato assumido
+  para `inventory_id` e para o endpoint de estoque bateu com a API real.
 - Buscar a quantidade Full é **uma chamada de API por anúncio Full
   encontrado** (o Mercado Livre não documenta um jeito de buscar várias de
   uma vez) — para uma conta com muitos anúncios Full, isso pode ficar
   lento, parecido com o problema já conhecido de sincronização de pedidos.
-  Não foi otimizado agora (ex: cache, busca em background) porque fugiria
-  do escopo desta etapa.
-- A tela só verifica os **primeiros 50 anúncios da conta por página** (sem
-  buscar páginas seguintes automaticamente) — no teste ao vivo, a conta
-  tinha 52 anúncios no total, então os últimos 2 não foram verificados
-  nessa carga. Buscar mais páginas ainda não foi implementado nesta etapa
-  (a tela avisa isso no rodapé da tabela, com o total verificado vs. total
-  da conta).
+  Não foi otimizado (ex: cache, busca em background) porque fugiria do
+  escopo das etapas até aqui.
+- **RESOLVIDO em 24/08/2026:** a limitação de só verificar os primeiros 50
+  anúncios da conta por carregamento foi corrigida —
+  `buscarEstoqueFullCompletoDaConta` (`server/lib/mlFull.js`) agora
+  percorre todas as páginas da conta sozinha, usada pela nova tela
+  Estoque. Continua existindo um teto defensivo de 200 páginas (~10.000
+  anúncios verificados) para nunca entrar num loop sem fim se a API
+  devolver um total inconsistente — se esse teto for atingido antes de
+  terminar, a resposta da API vem com `truncado: true` (ainda não exibido
+  na tela; ver `06-proximos-passos.md` se isso um dia for relevante para
+  uma conta muito grande). Não pôde ser testado contra a API real neste
+  ambiente (sem acesso à internet/token válido aqui) — só com dados
+  simulados; **precisa de confirmação ao vivo em produção** com uma conta
+  com mais de 50 anúncios Full.
 
 ## Compras: botão "Nova compra" do topo não abria o modal (bug encontrado e corrigido em 23/08/2026)
 - No teste ao vivo em produção, o botão **"Nova compra"** no topo da tela
@@ -54,22 +60,28 @@ desenvolvimento, para não serem esquecidas.
   bater com o pedido?), o que fazer se a compra for editada depois de já
   ter dado entrada, etc.
 
-## Custo por SKU existe em dois lugares (Produtos e Custos), sem sincronia entre eles
+## Custo por SKU/produto existe em três lugares, sem sincronia entre eles
 - Ao ativar a tela **Produtos** (nome, SKU, custo, status), foi criada uma
   tabela nova (`produtos`) — de propósito, **separada** da tabela
   `custos_produto` já existente e usada no cálculo de margem das vendas do
   Mercado Livre (telas Custos, Pedidos, Visão Geral e Financeiro). Ver o
   porquê dessa separação em `02-decisoes.md`.
-- Na prática, hoje: cadastrar/editar o custo de um SKU em **Produtos** não
-  atualiza o custo usado no cálculo de margem em **Custos** (e vice-versa)
-  — são dois cadastros independentes, mesmo que guardem informação
-  parecida (custo por SKU).
-- **Precisa de uma decisão do usuário** sobre unificar as duas no futuro
-  (ex: Produtos passar a ser a fonte única de custo usada no cálculo de
-  margem, substituindo `custos_produto`) — não foi feito agora porque
-  fugiria do escopo desta etapa ("não altere outras áreas") e do pedido
-  explícito de um cadastro de Produtos simples primeiro. Ver
-  `06-proximos-passos.md`.
+- Em 24/08/2026, ao criar o **produto base** para a tela Estoque, entrou um
+  **terceiro** lugar com custo: `produtos_base.custo` — o custo do produto
+  físico, usado só pro valor financeiro do estoque (Galpão + Full). Foi
+  deliberadamente mantido separado de `produtos.custo` e de
+  `custos_produto` (o pedido do usuário foi mexer só na estrutura de
+  produto base e SKU nesta etapa) — mas agora existem três cadastros de
+  custo que não conversam entre si: `produtos.custo` (tela Produtos, sem
+  uso ainda), `custos_produto` (cálculo de margem das vendas) e
+  `produtos_base.custo` (valor do estoque).
+- Na prática, hoje: cadastrar/editar o custo em qualquer uma das três telas
+  não atualiza as outras duas.
+- **Precisa de uma decisão do usuário** sobre unificar essas três fontes de
+  custo no futuro (ex: produto base virar a fonte única de custo físico,
+  usada tanto pro estoque quanto pra margem) — não foi feito agora porque
+  fugiria do escopo explícito de cada uma dessas etapas ("não altere outras
+  áreas"). Ver `06-proximos-passos.md`.
 
 ## Anúncios: sem tabela própria, primeira página limitada, SKU pode não vir da API
 - A tela **Anúncios** busca os dados ao vivo na API do Mercado Livre a
