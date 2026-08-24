@@ -1802,7 +1802,8 @@
       { chave:'30d', label:'Últimos 30 dias' },
       { chave:'mes', label:'Este mês' },
     ];
-    const state = { empresas:[], empresaId:null, loadingEmpresas:false, periodo:'30d', items:[], totalNoPeriodo:0, periodoLabel:'', loading:false, error:null };
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, periodo:'30d', contaId:'', status:'', busca:'',
+      items:[], totalNoPeriodo:0, totalFiltrado:0, periodoLabel:'', filtrosDisponiveis:{lojas:[],status:[]}, loading:false, error:null, gerandoRelatorio:false };
 
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
@@ -1851,13 +1852,23 @@
       return (body.contas && body.contas[0]) || null;
     }
 
+    function queryFiltrosAtuais(){
+      const params = new URLSearchParams({ empresaId: state.empresaId, periodo: state.periodo });
+      if(state.contaId) params.set('contaId', state.contaId);
+      if(state.status) params.set('status', state.status);
+      if(state.busca.trim()) params.set('busca', state.busca.trim());
+      return params;
+    }
+
     async function loadPedidos(){
       state.loading = true; state.error = null; render();
       try{
-        const data = await apiPedidos('?empresaId='+state.empresaId+'&periodo='+state.periodo);
+        const data = await apiPedidos('?'+queryFiltrosAtuais().toString());
         state.items = data.pedidos;
         state.totalNoPeriodo = data.totalNoPeriodo;
+        state.totalFiltrado = data.totalFiltrado;
         state.periodoLabel = data.periodo ? data.periodo.label : '';
+        state.filtrosDisponiveis = data.filtrosDisponiveis || { lojas:[], status:[] };
       }catch(err){ state.error = err.message; }
       state.loading = false; render();
     }
@@ -1893,8 +1904,21 @@
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedPeriodoSelect">'
             + PERIODOS.map(pr=>'<option value="'+pr.chave+'" '+(pr.chave===state.periodo?'selected':'')+'>'+pr.label+'</option>').join('')
           + '</select></div>'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedLojaSelect">'
+            + '<option value="">Todas as lojas</option>'
+            + state.filtrosDisponiveis.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+          + '</select></div>'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedStatusSelect">'
+            + '<option value="">Todos os status</option>'
+            + state.filtrosDisponiveis.status.map(s=>'<option value="'+escapeHtml(s)+'" '+(s===state.status?'selected':'')+'>'+escapeHtml(s)+'</option>').join('')
+          + '</select></div>'
+          + '<div class="search-box" style="margin-bottom:0;">'+svg('search')+'<input type="text" id="pedBuscaInput" placeholder="Produto ou SKU" value="'+escapeHtml(state.busca)+'"></div>'
         + '</div>'
-        + '<button class="ghost-btn" id="pedSyncBtn" type="button" style="cursor:pointer; opacity:1;">'+svg('refreshCw')+'<span>Sincronizar</span></button>'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          + '<button class="ghost-btn" id="pedSyncBtn" type="button" style="cursor:pointer; opacity:1;">'+svg('refreshCw')+'<span>Sincronizar</span></button>'
+          + '<button class="ghost-btn" id="pedRelatorioXlsxBtn" type="button" style="cursor:pointer; opacity:1;" title="Gerar relatório em Excel com os filtros atuais">'+svg('fileText')+'<span>Gerar relatório (Excel)</span></button>'
+          + '<button class="ghost-btn" id="pedRelatorioCsvBtn" type="button" style="cursor:pointer; opacity:1;" title="Gerar relatório em CSV com os filtros atuais">'+svg('fileText')+'<span>CSV</span></button>'
+        + '</div>'
       + '</div>';
 
       if(state.loading){
@@ -1942,8 +1966,8 @@
             + '<td><div class="row-actions"><button class="row-ic-btn" data-detail="'+p.id+'" title="Ver detalhes (loja, imposto e mais)" type="button">'+svg('eye')+'</button></div></td>'
           + '</tr>').join('')
           + '</tbody></table></div></div>'
-          + (state.totalNoPeriodo > state.items.length
-              ? '<div class="field-hint" style="margin-top:10px;">Mostrando os '+state.items.length+' pedidos mais recentes de '+state.totalNoPeriodo+' no período selecionado.</div>'
+          + (state.totalFiltrado > state.items.length
+              ? '<div class="field-hint" style="margin-top:10px;">Mostrando os '+state.items.length+' pedidos mais recentes de '+state.totalFiltrado+' que batem o filtro atual'+(state.totalFiltrado!==state.totalNoPeriodo?' (de '+state.totalNoPeriodo+' no período, antes do filtro de loja/status/produto)':'')+'. O botão "Gerar relatório" exporta todos, não só os mostrados aqui.</div>'
               : '')
           + '<div class="field-hint" style="margin-top:6px;">"Pendente" = falta cadastrar o custo do SKU em <strong>Custos</strong> e/ou o Mercado Livre não retornou alguma tarifa desse pedido ainda — nunca um valor estimado. Pedidos cancelados (linha esmaecida) não entram nos totais de Visão Geral e Financeiro. Loja e imposto do pedido estão no detalhe (ícone de olho).</div>';
       }
@@ -1966,6 +1990,25 @@
         }catch(err){ toast(err.message, 'error'); }
         syncBtn.disabled = false;
       });
+      const selLoja = document.getElementById('pedLojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadPedidos(); });
+      const selStatus = document.getElementById('pedStatusSelect');
+      if(selStatus) selStatus.addEventListener('change', ()=>{ state.status = selStatus.value; loadPedidos(); });
+      const busca = document.getElementById('pedBuscaInput');
+      if(busca) busca.addEventListener('input', ()=>{
+        state.busca = busca.value;
+        clearTimeout(busca._t);
+        busca._t = setTimeout(loadPedidos, 300);
+      });
+      function baixarRelatorio(formato){
+        const params = queryFiltrosAtuais();
+        params.set('formato', formato);
+        window.location.href = '/api/pedidos/relatorio?'+params.toString();
+      }
+      const relXlsxBtn = document.getElementById('pedRelatorioXlsxBtn');
+      if(relXlsxBtn) relXlsxBtn.addEventListener('click', ()=> baixarRelatorio('xlsx'));
+      const relCsvBtn = document.getElementById('pedRelatorioCsvBtn');
+      if(relCsvBtn) relCsvBtn.addEventListener('click', ()=> baixarRelatorio('csv'));
       root.querySelectorAll('[data-detail]').forEach(b=> b.addEventListener('click', ()=> openDetail(b.dataset.detail)));
     }
 
