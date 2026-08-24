@@ -932,58 +932,10 @@
       + '</div>';
   }
 
-  // As 3 mini-telas de gráfico que ainda não foram pedidas nesta etapa
-  // (Shopee/canal, fluxo de caixa) continuam como empty-state — só o
-  // gráfico principal (Faturamento x Margem de contribuição) virou real,
-  // dentro do módulo window.Overview mais abaixo.
-  function secondaryChartsHTML(){
-    return '<div class="grid-3" style="margin-bottom:14px;">'
-      + '<div class="chart-card">'
-        + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Evolução diária</div></div>'
-        + '<div class="chart-canvas h-sm">' + chartGridLines(3)
-          + chartEmptyState('activity','A evolução diária de vendas será exibida aqui assim que os primeiros pedidos forem sincronizados.')
-        + '</div>'
-      + '</div>'
-      + '<div class="chart-card">'
-        + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('donut')+'</span>Por marketplace</div></div>'
-        + '<div class="chart-canvas h-sm">'
-          + chartEmptyState('donut','Conecte sua primeira conta do Mercado Livre ou loja da Shopee para ver a distribuição de vendas por canal.','Conectar marketplace')
-        + '</div>'
-      + '</div>'
-      + '<div class="chart-card">'
-        + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('swap')+'</span>Fluxo de caixa</div></div>'
-        + '<div class="chart-canvas h-sm">' + chartGridLines(3)
-          + chartEmptyState('swap','O fluxo de caixa aparecerá aqui após a integração das contas financeiras da empresa.')
-        + '</div>'
-      + '</div>'
-    + '</div>';
-  }
-
-  function connectionsPanelHTML(){
-    return '<div class="panel">'
-      + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('link')+'</span>Conexões & empresas</div><span class="panel-note">0 de 3 conectadas</span></div>'
-      + '<div class="progress-track"><div class="progress-fill" style="width:0%"></div></div>'
-      + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('building')+'</span><div><div class="conn-name">Empresas cadastradas</div><div class="conn-sub">Nenhuma empresa cadastrada ainda</div></div></div>'
-        + '<span class="conn-status"><span class="dot"></span>0 empresas</span></div>'
-      + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div><div class="conn-name">Mercado Livre</div><div class="conn-sub">Conecte para sincronizar pedidos</div></div></div>'
-        + '<span class="conn-status"><span class="dot"></span>0 contas</span></div>'
-      + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div><div class="conn-name">Shopee</div><div class="conn-sub">Conecte para sincronizar pedidos</div></div></div>'
-        + '<span class="conn-status"><span class="dot"></span>0 lojas</span></div>'
-      + '</div>';
-  }
-
-  function alertsPanelHTML(){
-    const cats = [
-      {icon:'box', label:'Risco de ruptura de estoque'},
-      {icon:'percent', label:'Queda de margem em anúncios'},
-      {icon:'wallet', label:'Projeção de caixa negativa'},
-    ];
-    return '<div class="panel">'
-      + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Alertas & IA</div><span class="status-chip">'+svg('clock')+'Em breve</span></div>'
-      + '<p style="font-size:12.5px;color:var(--text-muted);margin:0 0 12px;">Os alertas inteligentes aparecerão aqui conforme a operação for sendo sincronizada. Categorias já preparadas:</p>'
-      + '<div>' + cats.map(c=>'<div class="cat-row"><span class="cat-ic">'+svg(c.icon)+'</span><span class="cat-name">'+c.label+'</span></div>').join('') + '</div>'
-      + '</div>';
-  }
+  // secondaryChartsHTML/connectionsPanelHTML/alertsPanelHTML (Evolução
+  // diária + Por marketplace, Fluxo de Caixa + Conexões & Empresas, Alertas
+  // & IA) viraram reais em 26/08/2026 — implementadas dentro do módulo
+  // window.Overview mais abaixo (precisam do estado/formatação de lá).
 
   function moduleEmptyHTML(p){
     return '<div class="empty-panel">'
@@ -1694,12 +1646,13 @@
      duplicado antes: um seletor aqui dentro e outro no header, cada um com seu
      próprio estado). */
   (function(){
-    const state = { loading:false, error:null, data:null };
+    const state = { loading:false, error:null, data:null, painel:null, painelError:null };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v, moeda){ return v===null||v===undefined ? null : (moeda==='BRL'||!moeda?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function moneySigned(v, moeda){ if(v===null||v===undefined) return null; const abs = money(Math.abs(v), moeda); return v<0 ? '− '+abs : abs; }
     function pctFmt(v){ return v===null||v===undefined ? null : (v<0?'− ':'')+Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
 
     async function apiResumo(empresaId, periodo){
       const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo);
@@ -1708,12 +1661,30 @@
       return body;
     }
 
+    // Evolução diária já vem de apiResumo (campo serieDiaria) — este
+    // segundo endpoint cobre só Por marketplace, Fluxo de Caixa, Conexões &
+    // Empresas e Alertas & IA (lib/visaoGeralPainel.js). Buscado em
+    // paralelo e com erro isolado: se este falhar, os indicadores/gráfico
+    // principal (que não dependem dele) continuam aparecendo normalmente.
+    async function apiPainel(empresaId, periodo){
+      const res = await fetch('/api/visao-geral/painel?empresaId='+empresaId+'&periodo='+periodo);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os indicadores adicionais.');
+      return body;
+    }
+
     async function loadResumo(){
       const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ state.data = null; state.error = null; state.loading = false; render(); return; }
-      state.loading = true; state.error = null; render();
-      try{ state.data = await apiResumo(filtro.empresaId, filtro.periodo); }
-      catch(err){ state.error = err.message; state.data = null; }
+      if(!filtro.empresaId){ state.data = null; state.error = null; state.painel = null; state.painelError = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; state.painelError = null; render();
+      const [resumoResult, painelResult] = await Promise.allSettled([
+        apiResumo(filtro.empresaId, filtro.periodo),
+        apiPainel(filtro.empresaId, filtro.periodo),
+      ]);
+      if(resumoResult.status==='fulfilled'){ state.data = resumoResult.value; state.error = null; }
+      else { state.data = null; state.error = resumoResult.reason.message; }
+      if(painelResult.status==='fulfilled'){ state.painel = painelResult.value; state.painelError = null; }
+      else { state.painel = null; state.painelError = painelResult.reason.message; }
       state.loading = false; render();
     }
 
@@ -1796,10 +1767,16 @@
     }
 
     // ---- Gráfico: Faturamento x Margem de contribuição por dia (SVG simples) ----
-    function chartHTML(serie, moeda){
+    // opts.heightPx/opts.emptyClass/opts.emptyMsg permitem uma versão compacta
+    // (mini card "Evolução diária" da grade de 3, dentro de secondaryChartsHTML)
+    // reaproveitando exatamente o mesmo desenho/dado do gráfico principal —
+    // nunca um segundo cálculo, só um tamanho menor.
+    function chartHTML(serie, moeda, opts){
+      opts = opts || {};
+      const heightPx = opts.heightPx || 200;
       if(!serie.length){
-        return '<div class="chart-canvas h-lg">' + chartGridLines(4)
-          + chartEmptyState('lineChart','Sem dados no período selecionado. O gráfico aparece assim que houver pedidos não cancelados sincronizados.')
+        return '<div class="chart-canvas '+(opts.emptyClass||'h-lg')+'">' + chartGridLines(4)
+          + chartEmptyState('lineChart', opts.emptyMsg || 'Sem dados no período selecionado. O gráfico aparece assim que houver pedidos não cancelados sincronizados.')
         + '</div>';
       }
       const n = serie.length;
@@ -1834,7 +1811,7 @@
       const labelStep = Math.max(1, Math.ceil(n/9));
       const labels = serie.map((d,i) => '<span>'+((i%labelStep===0 || i===n-1) ? escapeHtml(fmtDiaCurto(d.dia)) : '')+'</span>').join('');
 
-      return '<div class="chart-canvas" style="position:relative;height:200px;padding:0;">'
+      return '<div class="chart-canvas" style="position:relative;height:'+heightPx+'px;padding:0;">'
         + '<svg class="simple-chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:100%;">'
           + baseline + bars + line + dots
         + '</svg>'
@@ -1860,8 +1837,143 @@
         + '</div>'
         + chartHTML(serie, 'BRL')
         + (serie.length ? '<div class="field-hint" style="margin-top:8px;">Dias com pedido sem custo de SKU cadastrado somam só a margem já conhecida daquele dia — nunca um valor estimado.</div>' : '')
-      + '</div>'
-      + secondaryChartsHTML();
+      + '</div>';
+    }
+
+    // ---- Evolução diária (mini) + Por marketplace + Fluxo de caixa ----
+    // Ativados em 26/08/2026 (Passo 1 e Passo 2 do pedido do usuário).
+    // Evolução diária reaproveita a MESMA série (serieDiaria) do gráfico
+    // principal acima — nunca um segundo cálculo, só um recorte compacto.
+    // Por marketplace e Fluxo de caixa vêm de /api/visao-geral/painel (ver
+    // lib/visaoGeralPainel.js) — carregado em paralelo, com erro isolado do
+    // resto da tela.
+    function painelCardShell(icon, titulo, bodyHtml){
+      return '<div class="chart-card">'
+        + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg(icon)+'</span>'+titulo+'</div></div>'
+        + bodyHtml
+      + '</div>';
+    }
+
+    function painelCarregandoHTML(){ return '<div class="chart-canvas h-sm"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>'; }
+    function painelErroHTML(){ return '<div class="chart-canvas h-sm">'+chartEmptyState('alertCircle','Não foi possível carregar.')+'</div>'; }
+
+    function evolucaoDiariaMiniHTML(data){
+      const serie = data ? data.serieDiaria : [];
+      return painelCardShell('activity', 'Evolução diária', chartHTML(serie, 'BRL', {
+        heightPx: 150, emptyClass: 'h-sm',
+        emptyMsg: 'Sem dados no período selecionado.',
+      }));
+    }
+
+    function porMarketplaceHTML(painel, painelError){
+      let body;
+      if(painelError) body = painelErroHTML();
+      else if(!painel) body = painelCarregandoHTML();
+      else {
+        const linhas = painel.porCanal.linhas;
+        body = !linhas.length
+          ? '<div class="chart-canvas h-sm">'+chartEmptyState('donut','Sem vendas no período selecionado.')+'</div>'
+          : '<div>' + linhas.map(l => (
+              '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div>'
+                + '<div class="conn-name">'+escapeHtml(l.canal)+'</div>'
+                + '<div class="conn-sub">'+l.qtdPedidos+' pedido'+(l.qtdPedidos===1?'':'s')+(l.participacaoPercentual!==null?(' · '+pctFmt(l.participacaoPercentual)+' do faturamento'):'')+'</div>'
+              + '</div></div>'
+              + '<span class="conn-status">'+(l.faturamento.valor!==null ? escapeHtml(money(l.faturamento.valor,'BRL')) : '<span class="dash">Pendente</span>')+'</span></div>'
+            )).join('') + '</div>';
+      }
+      return painelCardShell('donut', 'Por marketplace', body);
+    }
+
+    function fluxoDeCaixaHTML(painel, painelError){
+      let body;
+      if(painelError) body = painelErroHTML();
+      else if(!painel) body = painelCarregandoHTML();
+      else {
+        const fc = painel.fluxoCaixa;
+        function linha(label, valor, hint){
+          return '<div class="bd-row"><span class="bd-label">'+label+(hint?(' <span style="font-size:10px;color:var(--text-faint);">('+hint+')</span>'):'')+'</span>'
+            + '<span class="bd-value">'+(valor!==null?escapeHtml(money(valor,'BRL')):'<span class="dash">Sem dados</span>')+'</span></div>';
+        }
+        body = linha('Contas a receber (em aberto)', fc.contasAReceber.totalAReceber)
+          + linha('Contas a pagar (em aberto)', fc.contasAPagar.totalAPagar)
+          + linha('Recebimentos do Mercado Livre (líquido esperado)', fc.recebimentosMl.valorLiquidoEsperado, fc.recebimentosMl.pendentes>0 ? (fc.recebimentosMl.pendentes+' pendente(s)') : null)
+          + '<div class="bd-row"><span class="bd-label">Saldo projetado</span><span class="bd-value"><span class="dash">Indisponível — sem saldo bancário cadastrado</span></span></div>';
+      }
+      return painelCardShell('swap', 'Fluxo de caixa', body);
+    }
+
+    function secondaryChartsHTML(data, painel, painelError){
+      return '<div class="grid-3" style="margin-bottom:14px;">'
+        + evolucaoDiariaMiniHTML(data)
+        + porMarketplaceHTML(painel, painelError)
+        + fluxoDeCaixaHTML(painel, painelError)
+      + '</div>';
+    }
+
+    // ---- Conexões & Empresas (real, 26/08/2026 — Passo 2) ----
+    function connectionsPanelHTML(painel, painelError){
+      if(painelError){
+        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('link')+'</span>Conexões & empresas</div></div>'
+          + '<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar.</p></div>';
+      }
+      if(!painel){
+        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('link')+'</span>Conexões & empresas</div></div>'
+          + '<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      const c = painel.conexoes;
+      const ml = c.mercadoLivre;
+      const mlStatusLabel = ml.contasConectadas===0 ? 'Nenhuma conta conectada'
+        : ml.status==='ativa' ? 'Conectada'
+        : ml.status==='erro' ? 'Erro na conexão'
+        : 'Desconectada';
+      const mlDotStyle = ml.status==='ativa' ? ' style="background:var(--success)"' : ml.status==='erro' ? ' style="background:var(--danger)"' : '';
+      const ultimaSinc = fmtDateTime(ml.ultimaSincronizacao);
+      const conectados = (c.empresas.total>0?1:0) + (ml.contasConectadas>0?1:0) + (c.shopee.contasConectadas>0?1:0);
+      const pct = Math.round((conectados/3)*100);
+
+      return '<div class="panel">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('link')+'</span>Conexões & empresas</div><span class="panel-note">'+conectados+' de 3 conectadas</span></div>'
+        + '<div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div>'
+        + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('building')+'</span><div><div class="conn-name">Empresas cadastradas</div><div class="conn-sub">'+(c.empresas.total>0?'Cadastro ativo no ERP':'Nenhuma empresa cadastrada ainda')+'</div></div></div>'
+          + '<span class="conn-status"><span class="dot"'+(c.empresas.total>0?' style="background:var(--success)"':'')+'></span>'+c.empresas.total+' empresa'+(c.empresas.total===1?'':'s')+'</span></div>'
+        + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div><div class="conn-name">Mercado Livre</div><div class="conn-sub">'+(ml.contasConectadas>0 ? (mlStatusLabel+(ultimaSinc?(' · última sinc. '+ultimaSinc):'')) : 'Conecte para sincronizar pedidos')+'</div></div></div>'
+          + '<span class="conn-status"><span class="dot"'+mlDotStyle+'></span>'+ml.contasConectadas+' conta'+(ml.contasConectadas===1?'':'s')+'</span></div>'
+        + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div><div class="conn-name">Shopee</div><div class="conn-sub">Nenhuma conta conectada</div></div></div>'
+          + '<span class="conn-status"><span class="dot"></span>0 lojas</span></div>'
+      + '</div>';
+    }
+
+    // ---- Alertas & IA (regras simples sobre dado real, 26/08/2026 — Passo 3) ----
+    const ALERTA_SEVERIDADE_COR = { danger:'danger', warning:'warning', info:'teal' };
+
+    function alertsPanelHTML(painel, painelError){
+      if(painelError){
+        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Alertas & IA</div></div>'
+          + '<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar os alertas.</p></div>';
+      }
+      if(!painel){
+        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Alertas & IA</div></div>'
+          + '<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      const alertas = painel.alertas;
+      const body = alertas.length
+        ? alertas.map(a => {
+            const cor = ALERTA_SEVERIDADE_COR[a.severidade] || 'teal';
+            return '<div class="conn-row alert-row" data-page="'+escapeHtml(a.pagina)+'" style="cursor:pointer;">'
+              + '<div class="conn-row-left"><span class="conn-ic" style="color:var(--'+cor+');">'+svg('alertCircle')+'</span><div>'
+                + '<div class="conn-name">'+escapeHtml(a.titulo)+'</div><div class="conn-sub">'+escapeHtml(a.descricao)+'</div>'
+              + '</div></div>'
+              + '<span class="conn-status">'+svg('link')+'</span>'
+            + '</div>';
+          }).join('')
+        : '<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('checkCircle')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">Nenhum alerta no momento — tudo certo com os dados sincronizados.</p></div>';
+
+      return '<div class="panel">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Alertas & IA</div>'
+          + (alertas.length ? '<span class="panel-note">'+alertas.length+' alerta'+(alertas.length===1?'':'s')+'</span>' : '<span class="status-chip" style="color:var(--success);background:var(--success-soft);">'+svg('checkCircle')+'Tudo certo</span>')
+        + '</div>'
+        + '<div>' + body + '</div>'
+      + '</div>';
     }
 
     function render(){
@@ -1890,11 +2002,16 @@
           + kpisHTML(resumo, 'BRL', hasOrders)
           + sectionLabel('Desempenho')
           + chartCardHTML(state.data)
+          + secondaryChartsHTML(state.data, state.painel, state.painelError)
           + sectionLabel('Status da operação')
-          + '<div class="grid-2">' + connectionsPanelHTML() + alertsPanelHTML() + '</div>';
+          + '<div class="grid-2">' + connectionsPanelHTML(state.painel, state.painelError) + alertsPanelHTML(state.painel, state.painelError) + '</div>';
       }
 
       root.innerHTML = html;
+
+      root.querySelectorAll('.alert-row').forEach(el => {
+        el.addEventListener('click', () => { const page = el.dataset.page; if(page) navigate(page); });
+      });
     }
 
     window.Overview = { load };
