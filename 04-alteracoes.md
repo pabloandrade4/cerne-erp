@@ -2,6 +2,127 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-24 (15) — Correção da margem: 4 bugs achados na reconciliação PF ERP x Mercado Turbo
+- **Pedido do usuário:** o usuário conferiu, pedido a pedido, os 73 pedidos
+  pagos em comum entre o ERP e uma ferramenta de referência externa
+  ("Mercado Turbo") em 23/08/2026, e achou o ERP superestimando a margem em
+  R$2,74 no total (R$624,92 no ERP vs R$622,18 no Mercado Turbo — com erros
+  positivos e negativos se compensando, e um 74º pedido faltando
+  inteiramente). Pediu correção na causa raiz (nunca só na tela), dados
+  reais da API pra decidir cada bug (nunca escolher um campo só pelo nome),
+  testes automatizados com os pedidos reais, e um relatório final
+  pedido-a-pedido — não só os totais.
+- **Diagnóstico (Etapa 1) feito por leitura de código**, formando hipóteses
+  pra cada bug; **investigação (Etapa 2)** confirmou todas com dados reais
+  do banco de produção (Supabase, MCP conectado pelo usuário durante a
+  sessão) pros 11 pedidos que o usuário apontou como exemplo — `raw_pedido`,
+  `raw_envio`, `raw_custos_envio` e `raw_pagamento` (sempre guardados
+  íntegros desde o início da integração) foram a fonte, nunca suposição.
+- **Bug 1 — frete duplicado em pedidos do mesmo carrinho.** Quando o
+  comprador fecha, no mesmo checkout, mais de um pedido do mesmo vendedor
+  (mesmo `pack_id`), o Mercado Livre gera um envio ÚNICO pros dois — mas
+  `/shipments/{id}/costs` devolve o custo do ENVIO inteiro, não do pedido.
+  A sincronização gravava esse valor cheio em CADA pedido, duplicando o
+  frete somado. Confirmado com os pedidos reais 2000018075073530 e
+  2000018075078724: mesmo `ml_shipping_id`, mesmíssimo `raw_custos_envio`
+  (`senders[0].cost = 15.90`). **Regra anterior:** cada pedido gravava o
+  `senders[].cost` inteiro. **Regra nova:** depois de gravar um pedido com
+  `ml_shipping_id`, o frete (comprador e vendedor) é rateado IGUALMENTE
+  entre todos os pedidos da conta que compartilham esse mesmo
+  `ml_shipping_id` — sempre recalculado a partir do valor BRUTO da API
+  (nunca a partir de um valor já rateado), e reaplicado a TODOS os pedidos
+  do envio toda vez que um novo pedido daquele mesmo envio é sincronizado
+  (se resolve sozinho quando o segundo pedido do carrinho chega antes ou
+  depois do primeiro). Os dois pedidos reais acima: R$15,90 → R$7,95 cada,
+  batendo exatamente o valor que o usuário esperava.
+- **Bug 2 — comissão (sale_fee) não multiplicada pela quantidade.**
+  `order_items[].sale_fee` vem da API POR UNIDADE, não pela linha inteira —
+  a sincronização gravava o valor cru, subestimando a comissão (e
+  superestimando a margem) em pedidos com quantidade > 1, na mesma
+  proporção da quantidade. Confirmado com 4 pedidos reais (incluindo um
+  CANCELADO, prova de que não é ligado ao status): 2000018078185798
+  (qtd 2, sale_fee 5.66 → comissão real 11.32), 2000018081695020 (qtd 2,
+  2.36 → 4.72), 2000018082412310 (qtd 2, 3.45 → 6.90), 2000018086572830
+  (cancelado, qtd 2, 2.12 → 4.24). **Regra anterior:** `taxa_venda` /
+  `taxa_venda_total` = soma direta de `sale_fee`. **Regra nova:** cada
+  linha usa `sale_fee × quantity`; o total do pedido soma essas linhas.
+- **Bug 3 — desconto de cupom do pagamento não capturado em lugar
+  nenhum.** O único mecanismo de desconto que já existia (preço "de"
+  `full_unit_price` vs preço pago `unit_price`, no relatório de Pedidos)
+  vinha sempre NULL nos 4 pedidos reais da investigação — o desconto de
+  verdade estava em `payments[].coupon_amount` (cupom Mercado
+  Livre/PIX), nunca gravado nem usado no cálculo. Confirmado nos 4 pedidos
+  reais: 2000018077005362 (R$1,77), 2000018078186456 (R$1,67),
+  2000018082460366 (R$1,77), 2000018086627042 (2 pagamentos, R$0,86 +
+  R$1,81 = R$2,67) — batendo exatamente as diferenças que o usuário
+  reportou. **Regra anterior:** nenhum desconto de cupom entrava no
+  cálculo — a receita da venda usada era sempre o valor bruto do pedido.
+  **Regra nova:** soma-se `coupon_amount` dos pagamentos APROVADOS do
+  pedido (nova coluna `ml_pedido_pagamentos.coupon_amount`, com fallback
+  pro `raw_pagamento` já existente pros pagamentos sincronizados antes
+  dessa coluna existir — nenhum pedido antigo fica com o cálculo errado); a
+  receita líquida (valor da venda − desconto) passa a ser a base tanto da
+  margem quanto do imposto.
+- **Bug 4 — pedido pago não aparecia no dia certo.** Todo filtro de
+  período (Visão Geral, Pedidos, Financeiro, Relatório) usava só
+  `data_criacao` (`order.date_created` — quando o pedido foi criado),
+  nunca quando foi realmente fechado/pago. O pedido real 2000018066590190
+  foi criado em 22/08 (2 tentativas de pagamento recusadas), mas só foi
+  aprovado e fechado em 23/08 — ficava sempre no período de 22/08, sumindo
+  da reconciliação de 23/08 que o usuário fez. **Regra anterior:** filtro
+  de período comparava só `data_criacao`. **Regra nova:** usa
+  `COALESCE(data_fechamento, data_criacao)` — `data_fechamento`
+  (`order.date_closed`) já era salva pela sincronização, só não era usada
+  em filtro nenhum; pedido ainda não fechado (em aberto) continua usando
+  `data_criacao`, sem regressão. Vale pros 3 lugares que filtravam por
+  período (`lib/relatorioVendas.js`, e o filtro de Status disponível em
+  `routes/pedidos.js`) e pro agrupamento por dia do gráfico de Visão Geral.
+- **Arquivos e funções alterados** (raiz do cálculo, não a tela):
+  `lib/mlSync.js` (`importarPedidoInterno` — extraídas em funções puras
+  testáveis: `extrairFreteDoCustosEnvio`, `ratearValor`,
+  `calcularTaxaVendaItem`, `calcularTaxaVendaTotal`; novo bloco de rateio
+  de frete depois do UPSERT do pedido; `coupon_amount` gravado em
+  `ml_pedido_pagamentos`); `lib/resultadoVenda.js` (`calcularResultadoVenda`
+  ganhou o parâmetro `desconto`, nunca bloqueia `calculoCompleto` — ausência
+  de cupom é 0 de verdade, não "pendente" — e passou a basear o imposto na
+  receita líquida); `lib/relatorioVendas.js` (`SQL_DATA_EFETIVA` e
+  `SQL_DESCONTO_CUPOM`, reaproveitados também em `routes/pedidos.js` pro
+  filtro de Status e pro detalhe do pedido); `db/schema.sql` (coluna nova
+  `ml_pedido_pagamentos.coupon_amount`, sem migração de dados retroativa —
+  desnecessária, o `raw_pagamento` já tinha o valor completo desde sempre).
+  `routes/pedidos.js` perdeu o cálculo de desconto próprio do relatório
+  Excel/CSV (`buscarDescontosPorPedido`, baseado só no preço "de" que
+  vinha sempre NULL) — agora usa o mesmo `desconto` da fonte única.
+  Frontend (`public/index.html`): linha "Desconto (cupom)" nova no detalhe
+  do pedido, no card de Visão Geral e no resumo de Financeiro.
+- **Testes automatizados** em `server/test/` (`node --test`), usando os 11
+  pedidos reais buscados no Supabase de produção durante a investigação
+  (`server/test/fixtures/real-orders.json`, nunca hardcoded na lógica de
+  cálculo — só como dado de teste): `mlSync.test.js` (Bugs 1 e 2, funções
+  puras, sem banco), `resultadoVenda.test.js` (Bug 3, fórmula pura),
+  `relatorioVendas.integration.test.js` (Bugs 3 e 4 e o Teste 6 de
+  idempotência — pedido pra rodar contra um Postgres local, ver
+  instruções no topo do arquivo). Rodados manualmente nesta sessão contra
+  um Postgres local seedado com os 11 pedidos reais (mesma lógica de
+  produção, via `server/test/fixtures/gerar-seed-sql.js`): todos os
+  valores batem exatamente com os esperados (R$7,95/R$7,95 de frete,
+  comissões corretas, R$1,77/R$1,67/R$1,77/R$2,67 de desconto, pedido
+  faltante aparecendo no dia certo); resincronizar duas vezes não duplicou
+  nem mudou nenhum total (idempotência confirmada). A suíte formal rodou
+  completa via `node --test` (21 testes, 5 suítes, 0 falhas) contra o
+  Postgres local seedado com os 11 pedidos reais — confirmação final
+  registrada em 24/08/2026.
+- **Não corrigido nesta etapa (fora do escopo dos 4 bugs reportados):**
+  reconciliação completa dos 73/74 pedidos do dia 23/08 contra o Mercado
+  Turbo (só os 11 pedidos-exemplo foram testados, os outros ~62 pedidos
+  pagos em comum não foram conferidos pedido a pedido); nenhuma mudança em
+  Ads, nem em custo de produto/estoque.
+- **Aviso de segurança encontrado, não corrigido:** o Supabase reportou
+  Row Level Security desligada em todas as 21 tabelas do banco de produção
+  (qualquer um com a chave `anon` consegue ler/editar tudo) — informado ao
+  usuário no chat, SQL de correção não aplicado automaticamente (decisão
+  do usuário, ver `05-problemas-conhecidos.md`).
+
 ## 2026-08-24 (14) — Unificação Produtos + Custo & Margem (aba Custo & Margem removida)
 - **Aba "Custo & Margem" removida do menu.** Cadastro de custo por SKU e a
   alíquota de imposto da empresa agora ficam só na tela **Produtos**, que

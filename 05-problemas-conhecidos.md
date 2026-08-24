@@ -3,6 +3,44 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Correção de margem (24/08/2026): premissa não confirmada com o usuário sobre quem paga o cupom (Bug 3)
+- O Bug 3 (ver `04-alteracoes.md` (15)) trata `payments[].coupon_amount`
+  como um desconto que reduz a receita real do vendedor — decisão baseada
+  em evidência forte (o valor bate exatamente, centavo a centavo, com a
+  diferença de margem que o usuário mediu contra o Mercado Turbo em 4
+  pedidos reais diferentes, incluindo um caso com 2 pagamentos somados).
+  Mas a API do Mercado Livre não deixa 100% claro, só com os campos
+  disponíveis em `order.payments[]`, se ESSE cupom específico é sempre
+  pago pelo vendedor ou às vezes é um cupom promocional custeado pelo
+  próprio Mercado Livre/Mercado Pago (comum em campanhas de desconto no
+  Pix) — nesse segundo caso, o vendedor recebe o valor cheio e não deveria
+  ter a receita reduzida. O campo `fee_details` (que discrimina quem paga
+  cada componente) não veio nos dados consultados — só o resumo embutido
+  em `order.payments[]`, não o endpoint completo `/payments/{id}`.
+  **Recomendação:** acompanhar, num período maior, se `desconto` bate
+  consistentemente com o Mercado Turbo (ou com o extrato real de
+  recebimento do Mercado Pago) pedido a pedido — se aparecer um pedido
+  onde o cupom NÃO deveria ter sido descontado, é sinal de que a regra
+  precisa diferenciar por tipo/origem do cupom (exigiria mais dado da API,
+  possivelmente `/payments/{id}` completo em vez do resumo do pedido).
+
+## Correção de margem (24/08/2026): Row Level Security desligada em todas as tabelas do Supabase de produção
+- Ao investigar os Bugs 1-4 (ver `04-alteracoes.md` (15)), o Supabase
+  reportou que as 21 tabelas do banco de produção estão com Row Level
+  Security (RLS) **desligada** — qualquer requisição com a chave `anon`
+  (pública, usada por bibliotecas cliente Supabase) consegue ler ou editar
+  qualquer linha de qualquer tabela, sem autenticação nenhuma. O SQL de
+  correção (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`) NÃO foi aplicado
+  automaticamente — habilitar RLS sem as políticas de acesso corretas
+  bloquearia todo acesso ao banco, inclusive o do próprio ERP. **Como hoje
+  o ERP acessa o Postgres direto pela `DATABASE_URL`/`SUPABASE_DATABASE_URL`
+  (não pela API pública do Supabase com a chave `anon`), isso não afeta o
+  funcionamento atual do sistema** — mas é uma porta aberta se a chave
+  pública do projeto (`anon key`) algum dia vazar ou for usada em algum
+  código cliente. **Precisa de uma decisão do usuário** sobre quando
+  habilitar RLS com as políticas certas (fora do escopo desta correção de
+  margem).
+
 ## Unificação Produtos/Custo & Margem: migração de dados ainda não confirmada em produção (24/08/2026)
 - A migração que copia os dados de `custos_produto` (antiga tela "Custo &
   Margem") para `produtos` roda **automaticamente, uma única vez**, no

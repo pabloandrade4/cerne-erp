@@ -1,5 +1,25 @@
 # Próximos Passos
 
+- **Concluído em 24/08/2026, testado com dados reais localmente (Postgres
+  local + Supabase, via MCP):** correção dos 4 bugs de margem achados na
+  reconciliação PF ERP x Mercado Turbo (frete duplicado em pedidos do
+  mesmo carrinho, comissão não multiplicada pela quantidade, desconto de
+  cupom do pagamento não capturado, pedido pago não aparecendo no dia
+  certo) — ver `04-alteracoes.md` (15) para o relatório completo, causa
+  raiz de cada bug e os testes automatizados (`server/test/`). Falta:
+  - o usuário subir o próximo zip de código pro GitHub;
+  - depois do deploy, RESSINCRONIZAR os pedidos (histórico e/ou os últimos
+    30 dias) pra que os pedidos já existentes no banco de produção sejam
+    regravados com o frete/comissão/desconto corrigidos — os 4 bugs só
+    afetam pedidos sincronizados a partir de agora; pedidos já no banco
+    mantêm os valores antigos (errados) até serem ressincronizados;
+  - conferir de novo, pedido a pedido, a reconciliação com o Mercado
+    Turbo num dia fechado, com os pedidos ressincronizados, pra confirmar
+    que a diferença de R$2,74 (e o pedido que faltava) desapareceram;
+  - **decisão pendente:** ver `05-problemas-conhecidos.md` sobre o Bug 3
+    (premissa de que o cupom do pagamento sempre reduz a receita do
+    vendedor, não confirmada 100% com a API) e sobre o RLS desligado no
+    Supabase de produção (achado durante a investigação, não corrigido).
 - **Concluído em 24/08/2026, testado só localmente:** unificação das telas
   Produtos e Custo & Margem numa só (Produtos), sem mostrar margem, com
   migração automática dos dados antigos (deploy `ml18`) — ver
