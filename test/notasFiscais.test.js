@@ -39,6 +39,7 @@ describe('Notas Fiscais — 24/08/2026', { skip: !TEM_BANCO && 'defina DATABASE_
 
   after(async () => {
     await pool.query(`DELETE FROM notas_fiscais WHERE pedido_id = $1`, [PEDIDO_ID_1]);
+    await pool.end();
   });
 
   test('pedido sem nota registrada aparece como "pendente", sem número/série/chave inventados', async () => {

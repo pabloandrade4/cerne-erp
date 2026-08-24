@@ -97,6 +97,7 @@ describe(
       await pool.query('DELETE FROM ml_pedidos WHERE conta_ml_id = ANY($1)', [[CONTA_ML_ID, CONTA_ISOLAMENTO]]);
       await pool.query('DELETE FROM ml_contas WHERE id = ANY($1)', [[CONTA_ML_ID, CONTA_ISOLAMENTO]]);
       await pool.query('DELETE FROM empresas WHERE id = ANY($1)', [[EMPRESA_ID, EMPRESA_ISOLAMENTO]]);
+      await pool.end();
     });
 
     test('checklist 1 — um pedido novo entra no banco sozinho, usando exatamente a função que o ciclo automático chama', async () => {

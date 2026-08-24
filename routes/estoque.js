@@ -1,128 +1,128 @@
-// Estoque PRÓPRIO (nunca misturado com o Estoque Full do Mercado Livre —
-// ver routes/estoqueFull.js, que não guarda nada no banco). Mostra os
-// produtos cadastrados (tela Produtos) com a quantidade em estoque, custo
-// unitário e valor total em estoque. Ajuste manual por enquanto — cada
-// ajuste grava uma linha em estoque_movimentos, preparando o histórico de
-// movimentação mesmo sem ainda existir uma tela própria para vê-lo.
+// Tela Estoque — estoque disponível FORA do Full, direto dos anúncios do
+// Mercado Livre (pedido explícito do usuário: ele faz todos os lançamentos
+// e ajustes de estoque no Mercado Livre, o ERP nunca mais aceita ajuste
+// manual aqui). Somente leitura: lê o espelho gravado por
+// lib/mlEstoque.js (tipo='proprio'), sincronizado automaticamente a cada 1
+// minuto pelo mesmo ciclo de server/lib/syncScheduler.js — nunca busca ao
+// vivo na API a cada carregamento de tela (por isso a coluna "última
+// sincronização" faz sentido: é o horário em que aquele anúncio/variação
+// foi verificado pela última vez).
+//
+// Mostra os itens de TODAS as contas do Mercado Livre da empresa (cada
+// linha carrega sua própria loja/conta — nunca mistura entre empresas,
+// sempre filtrado por empresa_id). Se a empresa não tiver nenhuma conta
+// ativa no momento, os itens já sincronizados continuam aparecendo (dado
+// real, não inventado) com um aviso de que podem estar desatualizados —
+// nunca escondidos.
+//
+// Nunca inventa: quando a API não retornou a quantidade de um item,
+// `estoqueDisponivel` vem `null` e `pendente: true` (ver lib/mlEstoque.js).
 const express = require('express');
 const pool = require('../db/pool');
+const { sincronizarEstoqueConta } = require('../lib/mlEstoque');
 
 const router = express.Router();
 
 function serializeItem(row) {
-  const quantidade = row.quantidade === null ? 0 : Number(row.quantidade);
-  const custo = Number(row.custo);
   return {
-    produtoId: row.produto_id,
-    empresaId: row.empresa_id,
-    nome: row.nome,
+    id: row.id,
+    contaId: row.conta_ml_id,
+    loja: row.loja,
+    mlItemId: row.ml_item_id,
+    mlVariationId: row.ml_variation_id,
+    produto: row.titulo,
     sku: row.sku,
-    custoUnitario: custo,
-    quantidade,
-    valorTotal: Math.round(quantidade * custo * 100) / 100,
-    ativo: row.ativo,
-    estoqueAtualizadoEm: row.estoque_atualizado_em,
+    estoqueDisponivel: row.pendente ? null : (row.quantidade === null ? null : Number(row.quantidade)),
+    pendente: row.pendente,
+    motivoPendencia: row.motivo_pendencia,
+    status: row.status,
+    ultimaSincronizacao: row.sincronizado_em,
   };
 }
 
-// GET /api/estoque?empresaId=ID&status=ativos|inativos&search=texto
-// Lista todos os produtos da empresa (ativos e inativos, salvo filtro), com
-// a quantidade em estoque — produto sem nenhum ajuste ainda aparece com
-// quantidade 0 (nunca "sem dado").
+async function buscarPorTipo(empresaId, tipo) {
+  const { rows: contas } = await pool.query(
+    `SELECT id, nickname, status FROM ml_contas WHERE empresa_id = $1 ORDER BY created_at DESC`,
+    [empresaId]
+  );
+  const contasAtivas = contas.filter((c) => c.status === 'ativa');
+
+  const { rows: itens } = await pool.query(
+    `SELECT * FROM ml_estoque_itens WHERE empresa_id = $1 AND tipo = $2 ORDER BY titulo NULLS LAST, sku NULLS LAST`,
+    [empresaId, tipo]
+  );
+
+  const ultimaSincronizacaoGeral = itens.reduce((max, it) => {
+    if (!it.sincronizado_em) return max;
+    return !max || it.sincronizado_em > max ? it.sincronizado_em : max;
+  }, null);
+
+  let pendente = false;
+  let motivo = null;
+  let mensagem = null;
+  if (!contas.length) {
+    pendente = true;
+    motivo = 'sem_conta';
+    mensagem = 'Nenhuma conta do Mercado Livre conectada para esta empresa. Conecte em Marketplaces para ver o estoque aqui.';
+  } else if (!contasAtivas.length) {
+    pendente = true;
+    motivo = 'conta_com_erro';
+    mensagem = 'Nenhuma conta ativa no momento — os itens abaixo (se houver) são da última sincronização e podem estar desatualizados. Reconecte em Marketplaces.';
+  } else if (!itens.length) {
+    pendente = true;
+    motivo = 'aguardando_primeira_sincronizacao';
+    mensagem = 'Ainda não há dados sincronizados. A sincronização automática roda a cada 1 minuto — ou clique em "Sincronizar agora".';
+  }
+
+  return {
+    pendente,
+    motivo,
+    mensagem,
+    contas: contas.map((c) => ({ id: c.id, nickname: c.nickname, status: c.status })),
+    itens: itens.map(serializeItem),
+    ultimaSincronizacaoGeral,
+  };
+}
+
+// GET /api/estoque?empresaId=ID — aba "Estoque" (fora do Full).
 router.get('/', async (req, res, next) => {
   try {
-    const { empresaId, status, search } = req.query;
+    const { empresaId } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
-
-    const conditions = ['p.empresa_id = $1'];
-    const params = [empresaId];
-    if (status === 'ativos') conditions.push('p.ativo = TRUE');
-    else if (status === 'inativos') conditions.push('p.ativo = FALSE');
-    if (search) {
-      params.push('%' + search + '%');
-      const idx = params.length;
-      conditions.push('(p.nome ILIKE $' + idx + ' OR p.sku ILIKE $' + idx + ')');
-    }
-
-    const { rows } = await pool.query(
-      `SELECT p.id AS produto_id, p.empresa_id, p.nome, p.sku, p.custo, p.ativo,
-              e.quantidade, e.atualizado_em AS estoque_atualizado_em
-       FROM produtos p
-       LEFT JOIN estoque e ON e.produto_id = p.id
-       WHERE ${conditions.join(' AND ')}
-       ORDER BY p.nome`,
-      params
-    );
-    res.json({ itens: rows.map(serializeItem) });
+    res.json(await buscarPorTipo(empresaId, 'proprio'));
   } catch (err) { next(err); }
 });
 
-// PUT /api/estoque/:produtoId — ajuste manual: define a quantidade nova e
-// grava a movimentação (quantidade anterior, nova, diferença e observação).
-router.put('/:produtoId', async (req, res, next) => {
-  const client = await pool.connect();
+// POST /api/estoque/sincronizar { empresaId } — botão "Sincronizar agora"
+// (opção de emergência; a sincronização automática de 1 em 1 minuto já
+// cobre o caso normal). Sincroniza estoque (Full + fora do Full, mesma
+// varredura) de TODAS as contas ativas da empresa, isoladamente — uma
+// conta falhando não impede as demais.
+router.post('/sincronizar', async (req, res, next) => {
   try {
-    const produtoId = req.params.produtoId;
-    const novaQuantidade = Number(req.body.quantidade);
-    const observacao = req.body.observacao ? String(req.body.observacao).trim().slice(0, 500) : null;
+    const { empresaId } = req.body || {};
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
-    if (!Number.isInteger(novaQuantidade) || novaQuantidade < 0) {
-      return res.status(400).json({ errors: { quantidade: 'Informe uma quantidade inteira, maior ou igual a zero.' } });
-    }
-
-    await client.query('BEGIN');
-
-    const { rows: produtoRows } = await client.query('SELECT * FROM produtos WHERE id = $1', [produtoId]);
-    if (!produtoRows.length) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Produto não encontrado.' });
-    }
-
-    const { rows: estoqueRows } = await client.query('SELECT * FROM estoque WHERE produto_id = $1 FOR UPDATE', [produtoId]);
-    let estoque = estoqueRows[0];
-    const quantidadeAnterior = estoque ? estoque.quantidade : 0;
-
-    if (estoque) {
-      const { rows } = await client.query(
-        'UPDATE estoque SET quantidade = $1, atualizado_em = now() WHERE id = $2 RETURNING *',
-        [novaQuantidade, estoque.id]
-      );
-      estoque = rows[0];
-    } else {
-      const { rows } = await client.query(
-        'INSERT INTO estoque (produto_id, quantidade) VALUES ($1,$2) RETURNING *',
-        [produtoId, novaQuantidade]
-      );
-      estoque = rows[0];
-    }
-
-    await client.query(
-      `INSERT INTO estoque_movimentos (estoque_id, tipo, quantidade_anterior, quantidade_nova, diferenca, observacao)
-       VALUES ($1, 'ajuste_manual', $2, $3, $4, $5)`,
-      [estoque.id, quantidadeAnterior, novaQuantidade, novaQuantidade - quantidadeAnterior, observacao]
+    const { rows: contas } = await pool.query(
+      `SELECT id FROM ml_contas WHERE empresa_id = $1 AND status = 'ativa'`,
+      [empresaId]
     );
+    if (!contas.length) {
+      return res.status(400).json({ error: 'Nenhuma conta ativa do Mercado Livre para esta empresa.' });
+    }
 
-    await client.query('COMMIT');
-
-    const produto = produtoRows[0];
-    res.json({
-      item: serializeItem({
-        produto_id: produto.id,
-        empresa_id: produto.empresa_id,
-        nome: produto.nome,
-        sku: produto.sku,
-        custo: produto.custo,
-        ativo: produto.ativo,
-        quantidade: estoque.quantidade,
-        estoque_atualizado_em: estoque.atualizado_em,
-      }),
+    const resultados = await Promise.allSettled(contas.map((c) => sincronizarEstoqueConta(c.id)));
+    const erros = [];
+    resultados.forEach((r, i) => {
+      if (r.status === 'rejected') erros.push({ contaId: contas[i].id, erro: (r.reason && r.reason.message) || String(r.reason) });
     });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    next(err);
-  } finally {
-    client.release();
-  }
+
+    res.json({
+      ok: erros.length === 0,
+      contasSincronizadas: contas.length - erros.length,
+      contasComErro: erros,
+    });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

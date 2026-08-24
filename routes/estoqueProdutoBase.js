@@ -1,3 +1,14 @@
+// DESATIVADO/LEGADO desde 26/08/2026 — pedido explícito do usuário: o
+// Mercado Livre passou a ser a fonte oficial de estoque, o ERP não aceita
+// mais ajuste manual (ver docs/02-decisoes.md). A tela "Estoque" do menu
+// agora usa routes/estoque.js e routes/estoqueFull.js (espelho somente
+// leitura sincronizado automaticamente, agrupado por anúncio/variação, não
+// mais por produto base). Este arquivo continua montado (GET ainda
+// funciona, só para não perder o histórico do Galpão já registrado) mas o
+// PUT de ajuste manual abaixo foi desativado (410) e nenhuma tela do
+// front-end chama mais este endpoint.
+//
+// Comentário original (arquitetura anterior, mantido como histórico):
 // Tela Estoque (nova) — estoque físico agrupado por PRODUTO BASE, nunca por
 // SKU de venda (ver server/lib/produtoBaseConversao.js). Três origens:
 //   Galpão -> tabela estoque_produto_base (ajuste manual, aqui neste arquivo)
@@ -229,11 +240,19 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT /api/estoque-produto-base/:produtoBaseId — ajuste manual do Galpão
-// (mesmo padrão transacional de routes/estoque.js: BEGIN + SELECT FOR UPDATE
-// + upsert + histórico de movimentação + COMMIT). Nunca mexe no Full — Full
-// é sempre um espelho ao vivo da API do Mercado Livre, não é editável aqui.
-router.put('/:produtoBaseId', async (req, res, next) => {
+// PUT /api/estoque-produto-base/:produtoBaseId — DESATIVADO (410) desde
+// 26/08/2026: o Mercado Livre é a fonte oficial de estoque agora, o ERP não
+// aceita mais ajuste manual (pedido explícito do usuário — ver
+// docs/02-decisoes.md). O código antigo fica comentado como histórico, mas
+// nunca mais roda.
+router.put('/:produtoBaseId', async (req, res) => {
+  return res.status(410).json({
+    error: 'Ajuste manual de estoque foi desativado. O Mercado Livre é a fonte oficial das quantidades — faça o ajuste diretamente lá; o ERP sincroniza automaticamente a cada 1 minuto.',
+  });
+});
+
+/* Handler antigo, mantido comentado como histórico (nunca mais executado):
+router.put('/:produtoBaseId_DESATIVADO', async (req, res, next) => {
   const client = await pool.connect();
   try {
     const produtoBaseId = req.params.produtoBaseId;
@@ -308,5 +327,6 @@ router.put('/:produtoBaseId', async (req, res, next) => {
     client.release();
   }
 });
+*/
 
 module.exports = router;

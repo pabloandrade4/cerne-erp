@@ -16,7 +16,7 @@
 //
 // Se DATABASE_URL não estiver definida, os testes deste arquivo são pulados
 // (não falham) — pra não quebrar quem rodar `node --test` sem banco.
-const { test, describe, before } = require('node:test');
+const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const TEM_BANCO = !!process.env.DATABASE_URL;
@@ -33,6 +33,10 @@ describe('Bugs 3 e 4 — pedidos reais, banco de teste seedado', { skip: !TEM_BA
     const ate = new Date(desde.getTime() + 24 * 60 * 60 * 1000);
     const resultado = await buscarPedidosDoPeriodo({ empresaId: EMPRESA_ID, desde, ate });
     pedidos23 = resultado.pedidos;
+  });
+
+  after(async () => {
+    await require('../db/pool').end();
   });
 
   test('Bug 4: pedido criado em 22/08 mas fechado/pago em 23/08 aparece no período de 23/08', () => {

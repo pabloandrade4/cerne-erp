@@ -16,7 +16,7 @@
 // relatorioVendas.integration.test.js para como popular):
 //   DATABASE_URL=postgresql://usuario:senha@localhost:5432/cerne_dev_test \
 //     node --test relatorios.test.js
-const { test, describe, before } = require('node:test');
+const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const TEM_BANCO = !!process.env.DATABASE_URL;
@@ -41,6 +41,10 @@ describe('Relatórios — reconciliação com Visão Geral/Pedidos/Financeiro (2
     const resultado = await relatorioVendas.buscarPedidosDoPeriodo({ empresaId: EMPRESA_ID, desde, ate });
     pedidos = resultado.pedidos;
     resumoEsperado = relatorioVendas.resumirPeriodo(pedidos);
+  });
+
+  after(async () => {
+    await require('../db/pool').end();
   });
 
   test('Vendas e Margem: faturamento/tarifas/frete/imposto/custo batem exatamente com resumirPeriodo', async () => {

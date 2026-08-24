@@ -44,6 +44,7 @@ describe('DRE — 24/08/2026', { skip: !TEM_BANCO && 'defina DATABASE_URL aponta
 
   after(async () => {
     await pool.query(`DELETE FROM contas_pagar WHERE id = $1`, [contaPagaId]);
+    await pool.end();
   });
 
   test('receitaBruta = faturamento (não cancelado) + cancelamentos — nunca uma fórmula nova', async () => {

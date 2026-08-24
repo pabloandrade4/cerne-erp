@@ -562,3 +562,73 @@ CREATE TABLE IF NOT EXISTS notas_fiscais (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ============================================================
+-- Etapa: Estoque com o Mercado Livre como fonte oficial (26/08/2026)
+-- ============================================================
+-- Pedido explícito do usuário: ele faz todos os lançamentos/ajustes de
+-- estoque direto no Mercado Livre, então o ERP para de aceitar ajuste
+-- manual de estoque e passa a espelhar, só leitura, a quantidade real de
+-- cada anúncio/variação — sincronizada pelo mesmo ciclo automático de 1 em
+-- 1 minuto de server/lib/syncScheduler.js (Etapa "sincronização automática
+-- do Mercado Livre", ver mais acima), reaproveitado também para estoque.
+--
+-- `tipo` separa explicitamente Full de não-Full na MESMA tabela (nunca somados
+-- nem misturados numa consulta só) — 'proprio' = estoque disponível fora do
+-- Full (aba Estoque), 'full' = quantidade armazenada no Full (aba Estoque
+-- Full). Uma linha por (conta, anúncio, variação, tipo) — item sem variação
+-- usa ml_variation_id = NULL (tratado como uma única "variação" pela chave
+-- única abaixo, via COALESCE, pra nunca duplicar linha a cada sincronização).
+--
+-- Nunca inventa: quando a API não retorna a quantidade (ou retorna num
+-- formato que o ERP não reconhece — ver server/lib/mlEstoque.js sobre o
+-- recurso de User Products/estoque multi-origem, cuja resposta exata não
+-- pôde ser confirmada contra a documentação oficial nesta etapa, ver
+-- docs/05-problemas-conhecidos.md), `quantidade` fica NULL e `pendente`
+-- fica TRUE com o motivo em `motivo_pendencia` — a tela sempre mostra
+-- "Pendente", nunca 0 ou um número calculado.
+--
+-- `recurso_usado` registra qual recurso da API respondeu a quantidade desta
+-- linha ('available_quantity', 'user_products', 'available_quantity_fallback'
+-- ou 'full_inventory') — só para transparência/depuração, não é mostrado
+-- na tela nesta etapa.
+CREATE TABLE IF NOT EXISTS ml_estoque_itens (
+  id                 SERIAL PRIMARY KEY,
+  conta_ml_id        INTEGER NOT NULL REFERENCES ml_contas(id) ON DELETE CASCADE,
+  empresa_id         INTEGER NOT NULL REFERENCES empresas(id),
+  tipo               VARCHAR(10) NOT NULL, -- 'proprio' (fora do Full) | 'full'
+  ml_item_id         VARCHAR(30) NOT NULL,
+  ml_variation_id    BIGINT,
+  titulo             TEXT,
+  sku                VARCHAR(100),
+  loja               VARCHAR(200),
+  status             VARCHAR(30),
+  quantidade         INTEGER,
+  pendente           BOOLEAN NOT NULL DEFAULT FALSE,
+  motivo_pendencia   VARCHAR(50),
+  user_product_id    VARCHAR(30),
+  recurso_usado      VARCHAR(30),
+  sincronizado_em    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (tipo IN ('proprio', 'full'))
+);
+
+-- Chave de upsert (nunca duplica linha pra o mesmo anúncio/variação/tipo a
+-- cada ciclo de sincronização — mesmo padrão de idempotência de ml_pedidos
+-- por conta_ml_id+ml_order_id). COALESCE(ml_variation_id, 0) porque UNIQUE
+-- trata NULL como sempre distinto no Postgres — sem isso, um item sem
+-- variação criaria uma linha nova a cada sincronização em vez de atualizar
+-- a existente.
+CREATE UNIQUE INDEX IF NOT EXISTS ml_estoque_itens_unq
+  ON ml_estoque_itens (conta_ml_id, ml_item_id, (COALESCE(ml_variation_id, 0)), tipo);
+CREATE INDEX IF NOT EXISTS ml_estoque_itens_empresa_tipo_idx ON ml_estoque_itens (empresa_id, tipo);
+
+-- As tabelas antigas de estoque (`estoque`/`estoque_movimentos`, ligadas a
+-- `produtos`, e `estoque_produto_base`/`estoque_produto_base_movimentos`,
+-- ligadas a `produtos_base`) NÃO são apagadas nesta etapa — preservam
+-- histórico de ajustes manuais feitos antes desta mudança — mas param de
+-- ser alimentadas: a tela Estoque não oferece mais ajuste manual (pedido
+-- explícito do usuário), e as rotas antigas de ajuste (PUT em
+-- routes/estoque.js e routes/estoqueProdutoBase.js) foram desativadas. Ver
+-- docs/02-decisoes.md.

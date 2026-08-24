@@ -50,6 +50,7 @@ describe('Contas a Pagar / Contas a Receber / Recebimentos — 24/08/2026', { sk
     await pool.query(`DELETE FROM contas_pagar WHERE empresa_id = $1 AND descricao LIKE $2`, [EMPRESA_ID, PREFIXO_TESTE + '%']);
     await pool.query(`DELETE FROM contas_receber WHERE empresa_id = $1 AND descricao LIKE $2`, [EMPRESA_ID, PREFIXO_TESTE + '%']);
     await pool.query(`DELETE FROM fornecedores WHERE id = $1`, [fornecedorId]);
+    await pool.end();
   });
 
   describe('Contas a Pagar', () => {

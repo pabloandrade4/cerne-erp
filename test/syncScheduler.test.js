@@ -52,6 +52,7 @@ describe(
     after(async () => {
       await pool.query('DELETE FROM ml_contas WHERE id = ANY($1)', [[CONTA_ATIVA, CONTA_ERRO, CONTA_DESCONECTADA]]);
       await pool.query('DELETE FROM empresas WHERE id = ANY($1)', [[EMPRESA_A, EMPRESA_B]]);
+      await pool.end();
     });
 
     test('só chama sincronização para contas com status = ativa (nunca erro/desconectada)', async () => {

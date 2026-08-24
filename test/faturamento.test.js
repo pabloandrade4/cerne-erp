@@ -44,6 +44,7 @@ describe('Faturamento — 24/08/2026', { skip: !TEM_BANCO && 'defina DATABASE_UR
 
   after(async () => {
     await pool.query(`DELETE FROM faturamento_pedidos WHERE pedido_id = ANY($1::int[])`, [[PEDIDO_ID_1, PEDIDO_ID_2]]);
+    await pool.end();
   });
 
   test('pedido sem linha em faturamento_pedidos aparece como "aguardando_faturamento" por padrão', async () => {

@@ -1,71 +1,81 @@
-// Estoque Full — anúncios com logística "fulfillment" (Full) das contas do
-// Mercado Livre conectadas, com a quantidade real no centro de distribuição
-// quando a API disponibilizar. Visualização ao vivo, sem tabela no banco —
-// mesmo padrão de routes/anuncios.js. Nunca inventa: se a empresa não tiver
-// conta conectada, se a conexão estiver com erro, ou se a API falhar, a
-// resposta diz isso explicitamente (`pendente: true` + motivo).
+// Tela Estoque Full — quantidade armazenada no Full do Mercado Livre,
+// separada explicitamente da aba Estoque (fora do Full — ver routes/estoque.js).
+// Nunca soma nem mistura os dois saldos: cada linha aqui vem só de itens com
+// logistic_type='fulfillment' (mesmo critério de lib/mlFull.js/lib/mlEstoque.js).
+//
+// Somente leitura, lida do espelho gravado por lib/mlEstoque.js
+// (tipo='full'), sincronizado automaticamente a cada 1 minuto pelo mesmo
+// ciclo de server/lib/syncScheduler.js — não busca mais ao vivo na API a
+// cada carregamento (diferente da versão anterior desta tela).
 const express = require('express');
 const pool = require('../db/pool');
-const { buscarEstoqueFullDaConta } = require('../lib/mlFull');
 
 const router = express.Router();
 
-// GET /api/estoque-full?empresaId=ID&offset=0&limit=50
+function serializeItem(row) {
+  return {
+    id: row.id,
+    contaId: row.conta_ml_id,
+    loja: row.loja,
+    mlItemId: row.ml_item_id,
+    mlVariationId: row.ml_variation_id,
+    produto: row.titulo,
+    sku: row.sku,
+    estoqueDisponivel: row.pendente ? null : (row.quantidade === null ? null : Number(row.quantidade)),
+    pendente: row.pendente,
+    motivoPendencia: row.motivo_pendencia,
+    status: row.status,
+    ultimaSincronizacao: row.sincronizado_em,
+  };
+}
+
+// GET /api/estoque-full?empresaId=ID — aba "Estoque Full".
 router.get('/', async (req, res, next) => {
   try {
-    const { empresaId, offset, limit } = req.query;
+    const { empresaId } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
     const { rows: contas } = await pool.query(
-      `SELECT * FROM ml_contas WHERE empresa_id = $1 ORDER BY created_at DESC`,
+      `SELECT id, nickname, status FROM ml_contas WHERE empresa_id = $1 ORDER BY created_at DESC`,
+      [empresaId]
+    );
+    const contasAtivas = contas.filter((c) => c.status === 'ativa');
+
+    const { rows: itens } = await pool.query(
+      `SELECT * FROM ml_estoque_itens WHERE empresa_id = $1 AND tipo = 'full' ORDER BY titulo NULLS LAST, sku NULLS LAST`,
       [empresaId]
     );
 
+    const ultimaSincronizacaoGeral = itens.reduce((max, it) => {
+      if (!it.sincronizado_em) return max;
+      return !max || it.sincronizado_em > max ? it.sincronizado_em : max;
+    }, null);
+
+    let pendente = false;
+    let motivo = null;
+    let mensagem = null;
     if (!contas.length) {
-      return res.json({
-        pendente: true,
-        motivo: 'sem_conta',
-        mensagem: 'Nenhuma conta do Mercado Livre conectada para esta empresa. Conecte em Marketplaces para ver o estoque Full aqui.',
-        itens: [],
-        verificados: 0,
-        totalContaGeral: 0,
-      });
+      pendente = true;
+      motivo = 'sem_conta';
+      mensagem = 'Nenhuma conta do Mercado Livre conectada para esta empresa. Conecte em Marketplaces para ver o estoque Full aqui.';
+    } else if (!contasAtivas.length) {
+      pendente = true;
+      motivo = 'conta_com_erro';
+      mensagem = 'Nenhuma conta ativa no momento — os itens abaixo (se houver) são da última sincronização e podem estar desatualizados. Reconecte em Marketplaces.';
+    } else if (!itens.length) {
+      pendente = true;
+      motivo = 'aguardando_primeira_sincronizacao';
+      mensagem = 'Ainda não há dados sincronizados (ou esta conta não tem nenhum anúncio no Full). A sincronização automática roda a cada 1 minuto — ou clique em "Sincronizar agora".';
     }
 
-    const conta = contas[0];
-    if (conta.status !== 'ativa') {
-      return res.json({
-        pendente: true,
-        motivo: 'conta_com_erro',
-        mensagem: 'A conexão desta conta com o Mercado Livre está com erro ou desconectada. Reconecte em Marketplaces para ver o estoque Full aqui.',
-        conta: { id: conta.id, nickname: conta.nickname, status: conta.status },
-        itens: [],
-        verificados: 0,
-        totalContaGeral: 0,
-      });
-    }
-
-    try {
-      const resultado = await buscarEstoqueFullDaConta(conta.id, {
-        offset: Number(offset) || 0,
-        limit: Math.min(Number(limit) || 50, 100),
-      });
-      res.json({
-        pendente: false,
-        conta: { id: conta.id, nickname: conta.nickname, status: conta.status },
-        ...resultado,
-      });
-    } catch (err) {
-      res.json({
-        pendente: true,
-        motivo: 'erro_api',
-        mensagem: 'Não foi possível buscar o estoque Full agora (' + (err.message || 'erro na API do Mercado Livre') + '). Tente novamente em instantes.',
-        conta: { id: conta.id, nickname: conta.nickname, status: conta.status },
-        itens: [],
-        verificados: 0,
-        totalContaGeral: 0,
-      });
-    }
+    res.json({
+      pendente,
+      motivo,
+      mensagem,
+      contas: contas.map((c) => ({ id: c.id, nickname: c.nickname, status: c.status })),
+      itens: itens.map(serializeItem),
+      ultimaSincronizacaoGeral,
+    });
   } catch (err) { next(err); }
 });
 

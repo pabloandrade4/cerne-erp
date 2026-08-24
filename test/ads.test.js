@@ -17,7 +17,7 @@
 // Como rodar:
 //   DATABASE_URL=postgresql://usuario:senha@localhost:5432/cerne_dev_test \
 //     node --test ads.test.js
-const { test, describe, before } = require('node:test');
+const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const TEM_BANCO = !!process.env.DATABASE_URL;
@@ -44,6 +44,10 @@ describe('Ads — itens por pedido e agregação (25/08/2026)', { skip: !TEM_BAN
 
     const resultadoItens = await relatorioVendas.buscarItensDoPeriodo({ empresaId: EMPRESA_ID, desde, ate });
     itens = resultadoItens.itens;
+  });
+
+  after(async () => {
+    await require('../db/pool').end();
   });
 
   test('buscarItensDoPeriodo: todo item pertence a um pedido não cancelado real', () => {
