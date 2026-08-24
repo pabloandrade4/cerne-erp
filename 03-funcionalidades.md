@@ -3,6 +3,52 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
+## Sincronização automática do Mercado Livre (backend, a cada 1 minuto)
+- **Status:** concluído, testado localmente (Postgres real + servidor real
+  rodando via HTTP + 8 testes automatizados novos — a mecânica de
+  orquestração, o não-duplicar e o isolamento de erro entre contas
+  cobertos ponta a ponta com dados reais da conta PFEMBALAGEMS e a API do
+  Mercado Livre mockada, já que este ambiente não tem credenciais nem
+  internet reais). **Depende de o usuário fazer o upgrade do plano do
+  serviço `cerne-erp` no Render (Free → Starter) para funcionar de forma
+  confiável 24h em produção** — ver `02-decisoes.md` (19) e
+  `05-problemas-conhecidos.md`.
+- **O que é:** o ERP não depende mais só do botão manual "Sincronizar" no
+  dia a dia. O próprio servidor (nunca o navegador) roda um ciclo a cada 1
+  minuto verificando todas as contas do Mercado Livre conectadas e ativas
+  — pedidos novos, mudança de status, pagamentos, cancelamentos,
+  devoluções, envio, taxas/comissões, frete do vendedor e do comprador.
+  Combinado com o webhook já existente (notificação em tempo real): o
+  webhook cuida da atualização rápida de qualquer pedido, e o ciclo de 1
+  minuto é a camada de segurança/reconciliação (janela mais curta, 2 dias
+  por padrão — ver decisão acima). Nunca duplica pedido (mesma chave conta
+  + ID do pedido do Mercado Livre de sempre) e nunca mistura pedidos entre
+  contas/empresas (cada conta sincronizada isoladamente). Um erro numa
+  conta (ex: token inválido) nunca impede as outras contas nem os
+  próximos ciclos — fica isolado e registrado no log do servidor.
+- **Indicador discreto no header:** "Sincronizado há X segundos/minutos"
+  (ou "Última sincronização: HH:MM" depois de 1 hora), virando "Erro na
+  sincronização" (com o motivo no tooltip) quando o último ciclo falhou. Só
+  aparece quando a integração com o Mercado Livre está configurada no
+  servidor. Atualiza sozinho (relê o status já calculado pelo servidor a
+  cada ~20s, e recalcula o texto "há Xs" a cada ~5s) — o navegador nunca
+  sincroniza nada, só mostra um status que o servidor já calculou.
+- **Botão manual "Sincronizar agora" continua existindo**, como opção de
+  emergência — não é mais o único jeito de um pedido aparecer no ERP.
+- **Onde está:** `server/lib/syncScheduler.js` (o ciclo em si — chamado a
+  partir de `server/server.js` depois do `app.listen`), `GET
+  /api/integracoes/mercadolivre/status-automatico`
+  (`server/routes/integracoes.js`), `window` IIFE em
+  `server/public/index.html` (indicador do header, perto do
+  `window.CerneFiltro`). Reaproveita 100% de `lib/mlSync.js#sincronizarConta`
+  — nenhuma regra de cálculo/importação nova, só a orquestração de quando
+  chamar.
+- **O que falta:** o usuário fazer o upgrade de plano no Render (só ele
+  pode, é uma decisão financeira) e depois subir o zip; testar em produção
+  com uma conta real conectada (criar/aguardar um pedido novo e confirmar
+  que aparece sozinho, sem clicar em "Sincronizar" — ver
+  `06-proximos-passos.md`).
+
 ## Ads (Product Ads do Mercado Livre)
 - **Status:** concluído, testado localmente (servidor real + Postgres local
   + navegador via Playwright, com os pedidos reais da conta

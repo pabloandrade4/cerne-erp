@@ -3,6 +3,78 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-24 (19) — Sincronização automática do Mercado Livre: investigação do Render ANTES de implementar, e desenho da solução
+- **Instrução do usuário, seguida à risca antes de escrever qualquer
+  código:** "Verifique também o ambiente atual no Render. Se existir
+  alguma limitação do plano/serviço atual que impeça um processo confiável
+  a cada 1 minuto, me informe antes de criar uma solução improvisada."
+  Investigado via `mcp__Render__*` (dados reais do workspace do usuário,
+  não suposição) e documentação oficial do Render (WebFetch) antes de
+  escrever qualquer linha de código:
+  - O serviço `cerne-erp` estava no plano **Free**. Nesse plano, o Render
+    **derruba o processo inteiro** depois de 15 minutos sem receber
+    requisição HTTP — o que significa que um `setInterval` de 1 minuto
+    dentro do próprio processo Node **não sobrevive** (o timer para de
+    existir junto com o processo, e só volta quando uma nova requisição
+    chega, com atraso de cold start). Isso violava diretamente o requisito
+    "deve funcionar mesmo que nenhum usuário esteja com o ERP aberto".
+  - Alternativa "Cron Job" do Render (produto separado): sem plano
+    gratuito (mínimo ~US$1/mês + instância), documentação não confirma
+    suporte a intervalo de 1 minuto, e cada execução sobe uma instância
+    nova com o Render garantindo no máximo 1 execução ativa por vez
+    (atrasando a próxima se a anterior ainda estiver rodando) — não dá pra
+    garantir uma cadência exata de 1 minuto.
+  - Alternativa "Background Worker" (processo contínuo, não dependente de
+    tráfego HTTP): também sem plano gratuito nesse workspace (mínimo
+    Starter, ~US$7/mês).
+  - **Resultado informado ao usuário antes de qualquer implementação**,
+    com as opções acima — o usuário escolheu **fazer upgrade do
+    `cerne-erp` de Free para Starter** (ele mesmo, no painel do Render —
+    as ferramentas MCP disponíveis nesta sessão não têm um "trocar plano
+    de serviço existente", só criar serviço novo; e trocar plano é uma
+    decisão financeira que não é do Claude tomar sozinho de qualquer
+    forma). No plano Starter o serviço não dorme mais, e um `setInterval`
+    de 1 minuto dentro do próprio processo passa a ser confiável — a
+    arquitetura mais simples, reaproveitando 100% do código já existente
+    (`lib/mlSync.js#sincronizarConta`), sem criar um serviço novo no
+    Render nem um segundo caminho de deploy.
+- **Desenho do ciclo automático (`server/lib/syncScheduler.js`):**
+  `setInterval` de 1 minuto **no processo do servidor** (nunca no
+  navegador — proibido explicitamente pelo usuário), disparando um
+  primeiro ciclo imediatamente ao subir (não espera 1 minuto pro primeiro
+  pedido novo entrar). A cada ciclo: busca `SELECT id, empresa_id FROM
+  ml_contas WHERE status = 'ativa'` e chama `sincronizarConta` para cada
+  uma em paralelo via `Promise.allSettled` (nunca `Promise.all`) — uma
+  conta falhando nunca impede as outras nem os próximos ciclos (requisito
+  explícito do usuário). Trava contra ciclos sobrepostos: se um ciclo
+  ainda está rodando quando o próximo deveria disparar, o novo disparo é
+  simplesmente pulado (log de aviso), evitando acúmulo de execuções
+  concorrentes se a API do Mercado Livre estiver lenta.
+- **Janela de reconciliação menor que os 30 dias do botão manual (padrão:
+  2 dias, configurável por `ML_SYNC_RECONCILIACAO_DIAS`).** Repetir uma
+  busca de 30 dias inteira a cada 60 segundos não é viável (uma conta com
+  muitos pedidos já demora minutos — ver `05-problemas-conhecidos.md`) nem
+  necessário: a notificação em tempo real (webhook, já existente) cobre
+  pedidos de qualquer idade — o ciclo de 1 minuto é a camada de
+  segurança/reconciliação (exatamente a estratégia descrita pelo usuário:
+  "Webhook/notificação → atualização rápida" + "Sincronização a cada 1
+  minuto → segurança/reconciliação"), não a única forma de um pedido
+  entrar. Consequência assumida e documentada (não escondida): uma
+  mudança de status/pagamento num pedido com mais de 2 dias só é pega
+  automaticamente pelo webhook, não pelo ciclo de 1 minuto — ver
+  `05-problemas-conhecidos.md`.
+- **Status da sincronização é estado em memória do processo
+  (`syncScheduler.js`), não uma tabela nova no banco** — decisão pra não
+  criar schema/migração só para um indicador de UI. As informações por
+  conta que já existiam (`ml_contas.status/ultimo_erro/
+  ultima_sincronizacao_em`, usadas na tela Marketplaces) continuam do jeito
+  que estavam; o novo endpoint `GET
+  /api/integracoes/mercadolivre/status-automatico` expõe o "batimento
+  cardíaco" do ciclo automático em si (quando rodou pela última vez, se
+  deu erro, quais contas falharam) pro indicador discreto do header.
+  Reiniciar o servidor reseta esse estado (mostra "Aguardando 1ª
+  sincronização..." por até 1 minuto) — comportamento esperado, não um bug.
+
 ## 2026-08-25 (17) — Ads e Relatórios: fonte única desce a nível de item, Ads nunca mistura API real com cálculo próprio
 - Decidido que a margem por anúncio/SKU (precisa tanto por Ads quanto por
   Relatórios → Produtos) seria uma **extensão da mesma fonte única**

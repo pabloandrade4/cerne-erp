@@ -2,6 +2,75 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-24 (19) — Sincronização automática do Mercado Livre (backend, 1 em 1 minuto)
+- **Pedido do usuário, em 3 passos:** (1) sincronização automática no
+  BACKEND a cada 1 minuto, funcionando mesmo sem ninguém com o ERP aberto,
+  nunca via `setInterval` no navegador; (2) cobrir pedidos novos, mudança
+  de status, pagamentos, cancelamentos, devoluções, envio, taxas/comissões
+  e frete (vendedor e comprador), nunca duplicando (idempotência pelo ID
+  do Mercado Livre), combinando webhook (atualização rápida) com o ciclo
+  de 1 minuto (segurança/reconciliação); (3) indicador discreto de status
+  no ERP ("Sincronizado há Xs" / "Erro na sincronização"), com log do
+  erro, sem que um erro trave as próximas sincronizações. Antes de
+  implementar, o usuário pediu para verificar o ambiente do Render e
+  avisar antes de qualquer solução improvisada — ver `02-decisoes.md`
+  (19) para a investigação completa e a decisão tomada (upgrade do plano
+  Free → Starter, escolhida pelo próprio usuário depois do relatório).
+- **`server/lib/syncScheduler.js` (novo):** o coração da automação.
+  `iniciarSincronizacaoAutomatica()` é chamada uma vez, em
+  `server/server.js`, depois do `app.listen` — registra um `setInterval`
+  de 1 minuto (`ML_SYNC_INTERVALO_MS`, configurável, padrão 60000ms) e já
+  dispara o primeiro ciclo na hora (não espera 1 minuto pro primeiro
+  pedido aparecer). Cada ciclo (`executarCicloDeSincronizacao`): busca
+  `ml_contas` com `status = 'ativa'`, chama
+  `sincronizarConta(contaId, { diasAtras: ML_SYNC_RECONCILIACAO_DIAS })`
+  (padrão 2 dias — ver `02-decisoes.md` para o motivo da janela menor)
+  para cada uma via `Promise.allSettled`, isolando erro por conta, e
+  registra o resultado num objeto de estado em memória (usado pelo
+  indicador de status). Trava contra ciclos sobrepostos (se o ciclo
+  anterior ainda está rodando, o próximo disparo é pulado, com log de
+  aviso) e nunca deixa uma rejeição de promise sem `.catch` (poderia
+  derrubar o processo Node inteiro e travar todas as sincronizações
+  futuras). **Nenhuma regra de importação/cálculo nova** — chama
+  exatamente `lib/mlSync.js#sincronizarConta`, o mesmo código que o botão
+  manual sempre usou.
+- **`server/routes/integracoes.js` (novo endpoint, aditivo):** `GET
+  /api/integracoes/mercadolivre/status-automatico` expõe o estado do
+  ciclo automático (última execução, se deu erro, quais contas falharam)
+  — usado só pelo indicador do header. Nada nos endpoints existentes
+  (webhook, sincronizar manual, sincronizar-historico) foi alterado.
+- **`server/public/index.html` (aditivo):** novo indicador discreto no
+  header (`#mlSyncStatus`, ao lado dos seletores de empresa/período),
+  mostrando "Sincronizado há Xs/Xmin" (relativo) ou "Última
+  sincronização: HH:MM" (depois de 1h), virando "Erro na sincronização"
+  (motivo no tooltip) quando o último ciclo falhou. Só aparece quando a
+  integração com o Mercado Livre está configurada no servidor
+  (`config-status`). Relê o status pronto do servidor a cada ~20s e
+  recalcula o texto relativo a cada ~5s — sem nenhuma chamada de
+  sincronização de verdade a partir do navegador (só leitura de um status
+  já calculado no servidor), respeitando a proibição explícita do usuário
+  de usar `setInterval` no front-end para sincronizar.
+- **Testes automatizados novos** (`server/test/syncScheduler.test.js` e
+  `server/test/mlSync.reconciliacao.integration.test.js`, 8 testes, todos
+  contra Postgres real): confirmam que só contas com `status='ativa'`
+  entram no ciclo (nunca `erro`/`desconectada`); que uma conta falhando
+  nunca impede outra nem o próximo ciclo, e o erro reportado nunca mistura
+  `contaId`/`empresaId`; que a trava contra sobreposição funciona (um 2º
+  disparo enquanto o 1º ainda roda é pulado); e, usando
+  `sincronizarConta` de verdade contra os 11 pedidos reais da conta
+  PFEMBALAGEMS (API do Mercado Livre mockada, já que este ambiente não
+  tem credenciais/internet reais): um pedido novo entra sozinho (mesma
+  função chamada pelo ciclo automático), rodar a sincronização de novo
+  nunca duplica, e uma mudança de status num pedido existente vira UPDATE
+  da mesma linha (nunca um pedido novo).
+- **`server/node_modules/pg|dotenv|express|exceljs` recriados** (stubs de
+  teste, gitignored, nunca vão pro deploy — precisaram ser recriados
+  porque foram removidos na empacotagem da etapa anterior). O stub do
+  `express` foi reescrito como um servidor HTTP real (módulo `http` do
+  Node), não só um capturador de rotas — permitiu testar o servidor de
+  ponta a ponta neste ambiente (`node server.js` respondendo requisições
+  HTTP de verdade), incluindo o endpoint novo de status.
+
 ## 2026-08-25 (18) — Ativação de Ads e Relatórios
 - **Pedido do usuário:** ativar mais 2 áreas do ERP que já existiam como
   placeholder no menu — Ads (dado real de Product Ads do Mercado Livre

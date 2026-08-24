@@ -1,5 +1,37 @@
 # Próximos Passos
 
+- **Concluído em 24/08/2026, testado localmente (Postgres real + servidor
+  real via HTTP, 8 testes automatizados novos — 80 no total, 0 falhas):**
+  sincronização automática do Mercado Livre a cada 1 minuto, no backend —
+  ver `04-alteracoes.md` (19) e `02-decisoes.md` (19). Falta, **nesta
+  ordem**:
+  1. **O usuário faz o upgrade do serviço `cerne-erp` no Render, de Free
+     para Starter** (painel do Render → Settings → Instance Type) — sem
+     isso, o ciclo de 1 minuto não roda de forma confiável 24h (ver
+     `05-problemas-conhecidos.md`). Essa etapa é do usuário, não existe
+     ferramenta disponível nesta sessão para trocar o plano de um serviço
+     já existente.
+  2. o usuário subir o próximo zip de código pro GitHub (deploy automático
+     no Render cuida do resto);
+  3. depois do deploy (e do upgrade de plano), confirmar em produção,
+     nesta ordem — igual ao checklist pedido pelo usuário:
+     - testar criando/aguardando um pedido novo na conta real conectada;
+     - confirmar que ele aparece no ERP automaticamente, sem clicar em
+       "Sincronizar" (o indicador do header deve mostrar "Sincronizado há
+       Xs" mudando a cada minuto);
+     - testar a sincronização repetida (esperar alguns minutos, deixar o
+       ciclo rodar de novo) e confirmar que não cria pedido duplicado;
+     - conferir os logs do Render: a linha `[sync automático] iniciado...`
+       aparece uma vez no boot, e o serviço não reinicia sozinho por
+       inatividade (sinal de que o Starter está mantendo o processo vivo);
+     - se o webhook do Mercado Livre ainda não foi configurado no painel
+       de desenvolvedor (ver pendência mais abaixo), considerar configurar
+       agora — o ciclo de 1 minuto cobre o essencial, mas o webhook cobre
+       pedidos com mais de 2 dias também (ver `05-problemas-conhecidos.md`).
+  - **por instrução explícita do usuário, esta etapa parou nestes 3
+    passos** — não avançar sozinho para otimizar a velocidade da
+    sincronização em si, mudar a janela de reconciliação, ou qualquer
+    outro módulo sem o usuário pedir.
 - **Concluído em 25/08/2026, testado localmente (servidor real + Postgres
   local + navegador via Playwright, com os pedidos reais da conta
   PFEMBALAGEMS, 12 testes automatizados novos — 72 no total, 0 falhas):**

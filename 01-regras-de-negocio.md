@@ -29,15 +29,39 @@ junto da nova).
   — nunca em texto puro, nunca expostos para o front-end. O token é renovado
   automaticamente pouco antes de expirar, usando o refresh token.
 - **Shopee ainda não foi desenvolvida** — só Mercado Livre por enquanto.
-- Sincronizar pedidos (botão "Sincronizar agora") traz, por padrão,
-  **somente os pedidos dos últimos 30 dias** (pedido explícito do usuário —
-  não traz o histórico completo). Existe, além dela, uma **sincronização
-  histórica** separada (por enquanto só via API, sem botão na tela) que traz
-  todo o período desde uma data escolhida — ver `## Banco de dados` abaixo.
-- Sincronizar de novo (resync) nunca duplica pedido: cada pedido é
-  identificado pelo ID do Mercado Livre + conta, e é atualizado (não
-  recriado) se já existir. Vale tanto para a sincronização normal (30 dias)
-  quanto para a histórica.
+- **Desde 24/08/2026, o ERP não depende mais do botão manual para
+  funcionar no dia a dia** (ver `04-alteracoes.md` (19)). Existe uma
+  **sincronização automática, executada pelo próprio servidor** (nunca pelo
+  navegador de quem está com o ERP aberto — funciona mesmo sem ninguém
+  logado), que roda **a cada 1 minuto**, verificando **todas as contas do
+  Mercado Livre conectadas e com status "ativa"** (nunca as com erro/
+  desconectadas). O botão "Sincronizar agora" continua existindo — vira uma
+  opção de emergência/manual, não o único jeito de os pedidos entrarem.
+- A cada execução (automática ou manual), o ERP verifica: pedidos novos,
+  mudança de status, pagamentos, cancelamentos, devoluções, informações de
+  envio, taxas/comissões, frete do vendedor, frete do comprador e as demais
+  informações financeiras já importadas — sempre pelo mesmo caminho de
+  código (`lib/mlSync.js#sincronizarConta`), então nunca existe uma "versão
+  automática" com regras diferentes da manual.
+- Sincronizar pedidos (botão "Sincronizar agora" ou o ciclo automático)
+  traz, por padrão, **somente os pedidos dos últimos 30 dias** (pedido
+  explícito do usuário — não traz o histórico completo). Existe, além
+  dela, uma **sincronização histórica** separada (por enquanto só via API,
+  sem botão na tela) que traz todo o período desde uma data escolhida —
+  ver `## Banco de dados` abaixo.
+- **A sincronização automática de 1 em 1 minuto usa uma janela mais curta**
+  (por padrão, últimos 2 dias — configurável no servidor via
+  `ML_SYNC_RECONCILIACAO_DIAS`), não os 30 dias do botão manual: repetir uma
+  busca de 30 dias inteira a cada 60 segundos não é viável (uma conta com
+  muitos pedidos pode levar minutos para sincronizar sozinha — ver
+  `05-problemas-conhecidos.md`) nem necessário, porque a notificação em
+  tempo real (webhook, ver seção própria abaixo) já cobre pedidos de
+  qualquer idade — o ciclo de 1 minuto é a camada de
+  **segurança/reconciliação**, não a única forma de um pedido entrar.
+- Sincronizar de novo (resync, manual ou automático) nunca duplica pedido:
+  cada pedido é identificado pelo ID do Mercado Livre + conta, e é
+  atualizado (não recriado) se já existir. Vale para a sincronização normal
+  (30 dias), a automática (janela curta) e a histórica.
 - **Regra central: nunca inventar/estimar valor financeiro.** Comissão,
   tarifas, frete — só são gravados se a API do Mercado Livre realmente
   retornar aquele campo para aquele pedido. Se a API não retornar, o campo
@@ -53,13 +77,25 @@ junto da nova).
 - O payload bruto (resposta original da API) de cada pedido, envio e custo de
   envio é guardado separado dos campos já organizados, para auditoria futura.
 - **Pedido novo entra no sistema sozinho, sem precisar clicar em
-  "Sincronizar".** O Mercado Livre avisa o ERP em tempo real (webhook,
-  tópico `orders_v2`) assim que um pedido é criado/atualizado, e o ERP já
-  importa esse pedido automaticamente na hora — mesma lógica/regras de
-  sempre (nunca inventar valor, nunca duplicar pedido). O botão
-  "Sincronizar agora" continua existindo, como reforço manual/para trazer
-  pedidos de antes de a conta ter sido conectada — ele não é mais o único
-  jeito de um pedido aparecer no sistema.
+  "Sincronizar".** Duas camadas, combinadas (estratégia pedida pelo
+  usuário): o Mercado Livre avisa o ERP em tempo real (webhook, tópico
+  `orders_v2`) assim que um pedido é criado/atualizado, e o ERP já importa
+  esse pedido automaticamente na hora — **atualização rápida**; além disso,
+  o ciclo automático de 1 em 1 minuto (acima) verifica de novo as contas
+  ativas — **segurança/reconciliação**, cobrindo o que a notificação não
+  tenha avisado por qualquer motivo. As duas usam exatamente a mesma
+  lógica/regras de sempre (nunca inventar valor, nunca duplicar pedido). O
+  botão "Sincronizar agora" continua existindo, como opção de
+  emergência/manual — ele não é mais o único jeito de um pedido aparecer no
+  sistema.
+- **Status da sincronização, visível no ERP:** um indicador discreto no
+  cabeçalho mostra "Sincronizado há X segundos/minutos" (ou "Última
+  sincronização: HH:MM" quando faz mais de uma hora), e "Erro na
+  sincronização" quando o último ciclo automático falhou — com o motivo
+  disponível ao passar o mouse, e sempre registrado no log do servidor para
+  análise. Um erro numa sincronização nunca impede as próximas (nem de
+  outras contas no mesmo ciclo, nem dos próximos ciclos) — ver
+  `lib/syncScheduler.js`.
 
 ## Banco de dados (armazenamento permanente)
 - **Supabase (Postgres) é o banco principal e permanente do ERP.** Todas as
@@ -103,7 +139,14 @@ junto da nova).
 - Notificação de uma conta que não está conectada neste ERP é ignorada.
 - Regra combinada com o usuário: se a notificação chegar mas a importação
   falhar por algum motivo, o pedido não fica perdido — a próxima
-  sincronização (manual ou periódica) cobre esse pedido normalmente.
+  sincronização (manual ou automática, a cada 1 minuto) cobre esse pedido
+  normalmente, desde que dentro da janela de reconciliação (ver seção
+  **Mercado Livre**, acima).
+- **Continua não confirmado com uma notificação real do Mercado Livre em
+  produção** (só testado com payloads simulados) — ver
+  `05-problemas-conhecidos.md`. Isso não bloqueia o funcionamento do ERP: a
+  sincronização automática de 1 em 1 minuto (acima) é a camada de segurança
+  justamente para esse cenário.
 
 ## Shopee
 _(sem regras registradas ainda)_

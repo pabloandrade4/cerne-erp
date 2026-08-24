@@ -348,7 +348,11 @@ desenvolvimento, para não serem esquecidas.
   precisar clicar em "Sincronizar".
 - Enquanto o webhook não estiver configurado (ou se alguma notificação
   falhar por qualquer motivo), o botão "Sincronizar agora" continua
-  funcionando normalmente como reforço/backup.
+  funcionando normalmente como reforço/backup — e, desde 24/08/2026, o
+  ciclo automático de 1 em 1 minuto (ver `04-alteracoes.md` (19)) também
+  cobre esse caso automaticamente, dentro da janela de reconciliação (2
+  dias por padrão — pedidos mais antigos que o webhook não avisar
+  continuam dependendo do botão manual, ver item acima).
 
 ## `mcp__Render__query_render_postgres` não funciona
 - A ferramenta de consulta direta ao Postgres do Render (via MCP) retorna
@@ -382,12 +386,61 @@ desenvolvimento, para não serem esquecidas.
   diretamente no painel/documentação do Supabase — não tenho esse dado
   para registrar aqui com certeza.
 
+## Sincronização automática (1 em 1 minuto) depende do usuário fazer upgrade do plano no Render — AÇÃO NECESSÁRIA
+- **Confirmado em 24/08/2026** (investigação pedida pelo usuário antes de
+  implementar a sincronização automática — ver `02-decisoes.md` (19)): o
+  serviço `cerne-erp` estava no plano **Free** do Render, que derruba o
+  processo inteiro depois de 15 minutos sem receber requisição HTTP. Um
+  `setInterval` de 1 minuto dentro do processo (a implementação feita
+  nesta etapa, ver `04-alteracoes.md` (19)) **não roda de forma confiável
+  nesse plano** — o timer para de existir junto com o processo sempre que
+  o ERP fica um tempo sem uso, voltando só na próxima requisição HTTP
+  (cold start).
+- **O usuário decidiu fazer upgrade do serviço para o plano Starter**
+  (~US$7/mês) — a opção recomendada, porque remove o "dormir" e deixa o
+  `setInterval` funcionando 24h sem precisar de nenhum serviço adicional
+  no Render nem gambiarra (ex: um ping externo mantendo o serviço
+  acordado, que o próprio usuário pediu para evitar). **Esse upgrade
+  precisa ser feito pelo próprio usuário no painel do Render** (Settings →
+  Instance Type do serviço `cerne-erp`) — as ferramentas MCP do Render
+  disponíveis nesta sessão não têm um comando para trocar o plano de um
+  serviço já existente, e é uma decisão financeira que não cabe ao Claude
+  tomar sozinho de qualquer forma.
+- **Enquanto o upgrade não for feito**, o serviço continua funcionando
+  normalmente para todo o resto do ERP (o comportamento de sempre no plano
+  Free — cold start na primeira visita depois de um tempo sem acesso), mas
+  o ciclo automático de 1 minuto só roda de fato enquanto o processo
+  estiver de pé — ou seja, só enquanto alguém estiver usando o ERP com
+  alguma frequência (cada requisição HTTP mantém o processo acordado por
+  mais 15 minutos). O botão manual "Sincronizar agora" continua
+  funcionando normalmente nesse meio-tempo, como sempre funcionou.
+- **Depois do upgrade**, vale conferir nos logs do Render que a linha
+  `[sync automático] iniciado — verificando contas ativas...` aparece uma
+  vez no boot e que o serviço não reinicia sozinho por inatividade — sinal
+  de que o plano Starter está mesmo mantendo o processo vivo.
+
+## Sincronização automática: mudança num pedido com mais de 2 dias depende do webhook, não do ciclo de 1 minuto
+- A janela de reconciliação do ciclo automático é de **2 dias** por padrão
+  (`ML_SYNC_RECONCILIACAO_DIAS`), não os 30 dias do botão manual — decisão
+  registrada em `02-decisoes.md` (19) por causa do tempo que uma
+  sincronização de muitos pedidos leva (ver item abaixo). Isso significa
+  que uma mudança de status/pagamento/devolução num pedido com **mais de 2
+  dias** só é capturada automaticamente pelo **webhook** (notificação em
+  tempo real), não pelo ciclo de 1 minuto. **Não é um bug** — é a
+  estratégia combinada com o usuário (webhook = atualização rápida
+  cobrindo qualquer idade de pedido; ciclo de 1 minuto = segurança/
+  reconciliação de curto prazo). A consequência prática é que, enquanto o
+  webhook não for confirmado funcionando ao vivo (ver item abaixo), uma
+  mudança tardia num pedido antigo pode não entrar automaticamente — o
+  botão manual "Sincronizar agora" (30 dias) continua cobrindo esse caso.
+
 ## Serviço web também está no plano gratuito do Render
-- O serviço `cerne-erp` está no plano **Free**. Nesse plano o Render
-  "dorme" o serviço após um período sem acessos, e a primeira requisição
-  depois disso demora mais (cold start, alguns segundos). Não afeta os
-  dados, só a velocidade de resposta na primeira visita. Se isso incomodar,
-  dá pra migrar para um plano pago mais adiante.
+- **Ver o item acima** ("Sincronização automática depende do usuário fazer
+  upgrade") para o motivo pelo qual isso passou a importar de verdade
+  nesta etapa. Continua valendo o comportamento de sempre nesse plano: o
+  Render "dorme" o serviço após um período sem acessos, e a primeira
+  requisição depois disso demora mais (cold start, alguns segundos). Não
+  afeta os dados, só a velocidade de resposta na primeira visita.
 
 ## Existe um registro de teste na tabela de Empresas
 - Durante o teste do CRUD na URL pública, foi cadastrada uma empresa de
