@@ -16,7 +16,7 @@ const ExcelJS = require('exceljs');
 const pool = require('../db/pool');
 const { calcularResultadoVenda, round2 } = require('../lib/resultadoVenda');
 const { calcularPeriodo, diaBRT } = require('../lib/periodo');
-const { buscarPedidosDoPeriodo, resumirPeriodo } = require('../lib/relatorioVendas');
+const { buscarPedidosDoPeriodo, resumirPeriodo, SQL_DATA_EFETIVA, SQL_DESCONTO_CUPOM } = require('../lib/relatorioVendas');
 
 const router = express.Router();
 
@@ -62,7 +62,7 @@ async function buscarStatusDoPeriodo(empresaId, desde, ate) {
   const { rows } = await pool.query(
     `SELECT DISTINCT p.status FROM ml_pedidos p
      JOIN ml_contas c ON c.id = p.conta_ml_id
-     WHERE c.empresa_id = $1 AND p.data_criacao >= $2 AND p.data_criacao < $3 AND p.status IS NOT NULL
+     WHERE c.empresa_id = $1 AND ${SQL_DATA_EFETIVA} >= $2 AND ${SQL_DATA_EFETIVA} < $3 AND p.status IS NOT NULL
      ORDER BY p.status`,
     [empresaId, desde, ate]
   );
@@ -131,25 +131,18 @@ function formatarNomeArquivo(periodoCalc, extensao) {
   return `${base}.${extensao}`;
 }
 
-// Descontos por pedido: full_unit_price (preço original) vs unit_price
-// (preço pago), somado por item — dado real já guardado na sincronização do
-// Mercado Livre (não é uma regra financeira nova). Se algum item do pedido
-// não tem preço original informado pela API, o desconto desse pedido fica
-// `null` (pendente) — nunca é tratado como zero.
-async function buscarDescontosPorPedido(pedidoIds) {
-  if (!pedidoIds.length) return {};
-  const { rows } = await pool.query(
-    `SELECT pedido_id,
-            CASE WHEN bool_and(preco_unitario_original IS NOT NULL)
-                 THEN SUM((preco_unitario_original - preco_unitario) * COALESCE(quantidade, 0))
-                 ELSE NULL END AS desconto_total
-     FROM ml_pedido_itens
-     WHERE pedido_id = ANY($1::int[])
-     GROUP BY pedido_id`,
-    [pedidoIds]
-  );
-  return Object.fromEntries(rows.map((r) => [r.pedido_id, r.desconto_total === null ? null : Number(r.desconto_total)]));
-}
+// Descontos por pedido: até 24/08/2026 este relatório calculava aqui,
+// sozinho, a partir de full_unit_price (preço "de") vs unit_price (preço
+// pago) — mas esse campo vem NULL da API na prática (nunca visto preenchido
+// nos pedidos reais conferidos na reconciliação PF ERP x Mercado Turbo), e
+// o desconto que realmente bateu com a diferença de margem observada era
+// outro: o cupom do pagamento (payments[].coupon_amount — Bug 3, ver
+// lib/resultadoVenda.js e docs/04-alteracoes.md). Pra "Descontos" nesta
+// planilha bater exatamente com o que é subtraído no cálculo de margem
+// (Valor da venda − Descontos − Taxas − Frete − Imposto − Custo = Margem),
+// o campo `desconto` de cada pedido já vem pronto de
+// buscarPedidosDoPeriodo/resumirPeriodo (fonte única, mesma usada em Visão
+// Geral/Pedidos/Financeiro) — não é mais calculado à parte aqui.
 
 // Uma linha por pedido (não por item) — mesma granularidade já mostrada na
 // tela Pedidos (produto/SKU resumidos quando o pedido tem mais de um item).
@@ -214,6 +207,7 @@ function linhasResumo(resumo, totalUnidades) {
     ['Total faturado', money(resumo.faturamento.valor, semPedidos), 'money'],
     ['Total de pedidos', resumo.qtdPedidos, 'int'],
     ['Total de unidades', totalUnidades, 'int'],
+    ['Total de descontos (cupom)', money(resumo.desconto.valor, semPedidos), 'money'],
     ['Total de taxas/comissões', money(resumo.tarifas.valor, semPedidos), 'money'],
     ['Total de frete do vendedor', money(resumo.freteVendedor.valor, semPedidos), 'money'],
     ['Total de imposto', money(resumo.imposto.valor, semPedidos), 'money'],
@@ -349,9 +343,6 @@ router.get('/relatorio', async (req, res, next) => {
     });
     const filtrados = filtrarPedidos(todos, { contaId, status, busca });
 
-    const descontos = await buscarDescontosPorPedido(filtrados.map((p) => p.id));
-    filtrados.forEach((p) => { p.desconto = descontos[p.id] !== undefined ? descontos[p.id] : null; });
-
     const resumo = resumirPeriodo(filtrados);
     const totalUnidades = filtrados.filter((p) => !p.cancelado).reduce((s, p) => s + (p.qtdUnidades || 0), 0);
     const vazio = filtrados.length === 0;
@@ -390,7 +381,8 @@ router.get('/relatorio', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT p.*, e.id AS empresa_id_real, c.nickname AS conta_nickname
+      `SELECT p.*, e.id AS empresa_id_real, c.nickname AS conta_nickname,
+              ${SQL_DESCONTO_CUPOM} AS desconto_cupom
        FROM ml_pedidos p
        JOIN ml_contas c ON c.id = p.conta_ml_id
        JOIN empresas e ON e.id = c.empresa_id
@@ -464,6 +456,7 @@ router.get('/:id', async (req, res, next) => {
     const pagamentoTaxaMarketplace = toNum(pedido.pagamento_taxa_marketplace);
     const freteVendedor = toNum(pedido.frete_vendedor);
     const freteComprador = toNum(pedido.frete_comprador);
+    const desconto = toNum(pedido.desconto_cupom) || 0;
 
     if (taxaVenda === null) pendencias.push('O Mercado Livre não retornou a comissão (sale_fee) deste pedido.');
     if (freteVendedor === null) pendencias.push('O Mercado Livre não retornou o custo de frete do vendedor deste pedido.');
@@ -478,6 +471,7 @@ router.get('/:id', async (req, res, next) => {
       freteVendedor,
       custoProduto: custoProdutoFinal,
       aliquotaImposto,
+      desconto,
     });
     const margemPercentual = resultado !== null && valorVenda ? round2((resultado / valorVenda) * 100) : null;
 
@@ -504,6 +498,7 @@ router.get('/:id', async (req, res, next) => {
       itens: itensDetalhados,
       resultadoFinanceiro: {
         valorVenda,
+        desconto,
         tarifasMl: { total: tarifasTotal, componentes: tarifasComponentes },
         freteVendedor,
         freteComprador,

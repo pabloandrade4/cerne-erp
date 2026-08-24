@@ -1650,7 +1650,7 @@
         { label:'Faturamento', icon:'barChart', tint:'copper', note:'Bruto no período (vendas não canceladas)',
           valueHtml: resumo.faturamento.valor!==null ? escapeHtml(money(resumo.faturamento.valor, moeda)) : '<span class="dash">'+statusText(hasOrders,resumo.faturamento.pendentes)+'</span>' },
         { label:'Margem de contribuição (R$)', icon:'wallet', tint: resumo.margemContribuicao.valor===null ? 'muted' : (resumo.margemContribuicao.valor>=0?'success':'danger'),
-          note:'Venda − taxas − frete vendedor − imposto − custo produto',
+          note:'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto',
           valueHtml: resumo.margemContribuicao.valor!==null
             ? '<span class="'+(resumo.margemContribuicao.valor>=0?'pos':'neg')+'">'+escapeHtml(moneySigned(resumo.margemContribuicao.valor, moeda))+'</span>'
             : '<span class="dash">'+statusText(hasOrders,resumo.margemContribuicao.pendentes)+'</span>' },
@@ -1671,6 +1671,7 @@
         { label:'Pedidos cancelados', icon:'x', tint: resumo.cancelados.quantidade>0 ? 'warning' : 'muted',
           valueHtml: String(resumo.cancelados.quantidade),
           subNote: resumo.cancelados.quantidade>0 ? ('não entram nos valores acima'+(resumo.cancelados.valor!==null?(' · '+money(resumo.cancelados.valor,moeda)):'')) : null },
+        secMoneyCard('Descontos (cupom)', 'tag', resumo.desconto),
         secMoneyCard('Taxas/comissões', 'receipt', resumo.tarifas),
         secMoneyCard('Frete do vendedor', 'truck', resumo.freteVendedor),
         secMoneyCard('Imposto', 'fileText', resumo.imposto),
@@ -2047,6 +2048,7 @@
 
         + '<div class="detail-section-title">Margem de contribuição desta venda</div>'
         + bdLine('Valor da venda', rf.valorVenda, false)
+        + (rf.desconto ? bdLine('(−) Desconto (cupom do pagamento)', rf.desconto, true) : '')
         + bdLine('(−) Taxas/comissões Mercado Livre', rf.tarifasMl.total, true)
         + (tarifasSideNote ? '<div class="bd-side-note">'+tarifasSideNote+'</div>' : '')
         + bdLine('(−) Frete do vendedor', rf.freteVendedor, true)
@@ -2170,6 +2172,7 @@
 
           + '<div class="detail-section-title" style="margin-top:4px;">Resultado</div>'
           + linha('Faturamento bruto', r.faturamento, moeda, hasOrders, false)
+          + linha('(−) Descontos (cupom do pagamento)', r.desconto, moeda, hasOrders, true)
           + linha('(−) Taxas e comissões', r.tarifas, moeda, hasOrders, true)
           + linha('(−) Frete pago pelo vendedor', r.freteVendedor, moeda, hasOrders, true)
           + linha('(−) Impostos', r.imposto, moeda, hasOrders, true)

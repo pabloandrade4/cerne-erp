@@ -89,7 +89,9 @@ CREATE TABLE IF NOT EXISTS ml_pedidos (
   frete_comprador               NUMERIC(12,2),  -- receiver.cost — pago pelo comprador
   frete_vendedor                NUMERIC(12,2),  -- senders[].cost — cobrado do vendedor
 
-  -- Comissão do Mercado Livre sobre a venda (soma de order_items[].sale_fee)
+  -- Comissão do Mercado Livre sobre a venda (soma de order_items[].sale_fee
+  -- × quantity de cada item — corrigido em 24/08/2026, ver docs/04-alteracoes.md;
+  -- sale_fee vem da API por unidade, não pela linha inteira)
   taxa_venda_total              NUMERIC(12,2),
 
   -- Payload bruto da API, preservado para auditoria (separado dos campos normalizados acima)
@@ -116,7 +118,7 @@ CREATE TABLE IF NOT EXISTS ml_pedido_itens (
   preco_unitario             NUMERIC(12,2),  -- unit_price
   preco_unitario_original    NUMERIC(12,2),  -- full_unit_price (quando diferente = desconto)
   valor_total_item           NUMERIC(12,2),
-  taxa_venda                 NUMERIC(12,2)   -- sale_fee do item
+  taxa_venda                 NUMERIC(12,2)   -- sale_fee × quantidade (comissão TOTAL da linha — corrigido em 24/08/2026, ver docs/04-alteracoes.md)
 );
 
 -- Custo do produto por SKU, por empresa.
@@ -290,6 +292,15 @@ CREATE TABLE IF NOT EXISTS ml_pedido_pagamentos (
   raw_pagamento       JSONB,
   UNIQUE (pedido_id, ml_payment_id)
 );
+
+-- Adicionada em 24/08/2026 (Bug 3 da reconciliação PF ERP x Mercado Turbo,
+-- ver docs/04-alteracoes.md): desconto de cupom (Mercado Livre/PIX) aplicado
+-- no pagamento — payments[].coupon_amount. NULL nas linhas sincronizadas
+-- antes desta data (não preenchido retroativamente por migração de dados —
+-- lib/relatorioVendas.js usa COALESCE com o valor já existente dentro de
+-- raw_pagamento, que sempre teve o dado completo, então nenhum pedido
+-- antigo fica com o cálculo errado por causa disso).
+ALTER TABLE ml_pedido_pagamentos ADD COLUMN IF NOT EXISTS coupon_amount NUMERIC(12,2);
 
 -- Acompanhamento da sincronização HISTÓRICA (importa todos os pedidos desde
 -- uma data específica, ex: 01/07/2026 — diferente da sincronização normal,
