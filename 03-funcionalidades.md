@@ -3,6 +3,71 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
+## DRE (Demonstrativo de Resultado do Exercício)
+- **Status:** concluído, testado localmente (servidor real + Postgres
+  local + navegador via Playwright, com dados reais da conta
+  "PFEMBALAGEMS", 60 testes automatizados incluindo o cenário de período
+  sem nenhum pedido). Ainda não testado ao vivo em produção.
+- **O que é:** demonstrativo de resultado por empresa e período (Receita
+  Bruta → Cancelamentos/Devoluções → Descontos → Receita Líquida → Custo
+  dos Produtos → Taxas e Comissões → Frete do vendedor → Impostos →
+  Margem de Contribuição → Despesas/Contas pagas do período → Resultado
+  Final), sempre em R$ e em % sobre o faturamento. Nenhuma fórmula nova:
+  reaproveita a mesma fonte única de vendas (Visão Geral/Pedidos/
+  Financeiro/Relatórios) e a mesma consulta de Contas a Pagar já
+  existente. Nunca inventa valor — período sem pedido mostra "Sem dados";
+  informação faltando (ex: custo de SKU não cadastrado) mostra "Pendente"
+  só na linha afetada. Filtro de empresa/período do header funciona
+  nesta tela.
+- **Onde está:** `server/lib/dre.js`, `server/routes/dre.js`,
+  `server/public/index.html` (módulo `window.DRE`). Sem tabela própria no
+  banco — calculada ao vivo.
+- **O que falta:** cadastrar custo em todos os SKUs vendidos (hoje vários
+  pedidos ficam com "Custo dos Produtos"/"Margem de Contribuição"
+  pendentes por falta de cadastro em Produtos — não é um bug da DRE, é a
+  regra "nunca inventar valor" já usada em toda a parte financeira do
+  ERP).
+
+## Faturamento
+- **Status:** concluído, testado localmente (servidor real + Postgres
+  local + navegador via Playwright, incluindo seleção múltipla e ação em
+  lote pela interface). Ainda não testado ao vivo em produção. **Sem
+  emissão real de NF-e** — fora do escopo desta etapa.
+- **O que é:** hub central dos pedidos que precisam ser faturados. Lista
+  pedidos reais (data, número, marketplace, loja, cliente, valor, status
+  do pedido, situação de faturamento), com 4 situações possíveis
+  (Aguardando faturamento, Faturado, Erro, Cancelado). Suporta pesquisar
+  pedido, filtrar por empresa/período (header) e por situação, selecionar
+  vários pedidos e aplicar uma ação em lote. Nunca duplica dado do
+  pedido — situação de faturamento fica numa tabela própria vinculada por
+  `pedido_id` (1:1, upsert), cliente/loja/marketplace sempre vêm do
+  pedido original via JOIN.
+- **Onde está:** `server/lib/faturamento.js`, `server/routes/faturamento.js`,
+  `server/public/index.html` (módulo `window.Faturamento`).
+- **O que falta:** integração real de emissão de NF-e (SEFAZ) — por
+  instrução explícita do usuário, fica para uma etapa futura.
+
+## Notas Fiscais
+- **Status:** concluído, testado localmente (servidor real + Postgres
+  local + navegador via Playwright, incluindo preencher e emitir uma nota
+  pela interface de ponta a ponta). Ainda não testado ao vivo em
+  produção. **Sem integração real com a SEFAZ** — fora do escopo desta
+  etapa.
+- **O que é:** estrutura para registrar e acompanhar notas fiscais
+  vinculadas a pedidos (número, série, pedido, empresa/CNPJ, cliente,
+  valor, data de emissão, chave de acesso quando existir, status:
+  Pendente/Emitida/Cancelada/Rejeitada). Cada pedido tem no máximo 1 nota
+  (`pedido_id` único, upsert) — nunca duplica dado do pedido. Marcar como
+  "Emitida" exige número, série, data de emissão e chave de acesso (44
+  dígitos); sem isso o sistema recusa a mudança, nunca inventa esses
+  dados. Abrir uma nota mostra os dados do pedido relacionado (mesma
+  fonte da tela Pedidos).
+- **Onde está:** `server/lib/notasFiscais.js`, `server/routes/notasFiscais.js`,
+  `server/public/index.html` (módulo `window.NotasFiscais`).
+- **O que falta:** integração real com a SEFAZ (emissão/consulta/
+  cancelamento de verdade) — por instrução explícita do usuário, fica
+  para uma etapa futura.
+
 ## Contas a Pagar (cadastro manual)
 - **Status:** concluído, testado localmente (servidor real + Postgres local
   + navegador via Playwright, com dados reais da conta "PFEMBALAGEMS").

@@ -2,6 +2,27 @@
 
 - **Concluído em 24/08/2026, testado localmente (servidor real + Postgres
   local + navegador via Playwright, com os 11 pedidos reais da conta
+  PFEMBALAGEMS):** ativação de DRE, Faturamento e Notas Fiscais — ver
+  `04-alteracoes.md` (17) e `02-decisoes.md` (16). Falta:
+  - o usuário subir o próximo zip de código pro GitHub (deploy automático
+    no Render cuida do resto);
+  - depois do deploy, testar as três telas ao vivo em produção: DRE com
+    mais de uma empresa/período (inclusive um período sem nenhum pedido,
+    pra confirmar o "Sem dados"), Faturamento marcando situação
+    individual e em lote, Notas Fiscais preenchendo e emitindo uma nota
+    completa (número/série/data/chave de 44 dígitos) e conferindo que
+    aparece corretamente vinculada ao pedido certo;
+  - conferir que o filtro de empresa/período do header funciona nas três
+    telas com dado real de mais de uma empresa;
+  - cadastrar custo nos SKUs que ainda estão sem, em Produtos, pra "Custo
+    dos Produtos"/"Margem de Contribuição" pararem de aparecer como
+    "Pendente" na DRE (ver `05-problemas-conhecidos.md`) — não é uma
+    tarefa de código, é cadastro de dado;
+  - **por instrução explícita do usuário, esta etapa parou aqui** — não
+    avançar sozinho para emissão real de NF-e (SEFAZ), integração com
+    Shopee, IA ou qualquer outra área sem o usuário pedir.
+- **Concluído em 24/08/2026, testado localmente (servidor real + Postgres
+  local + navegador via Playwright, com os 11 pedidos reais da conta
   PFEMBALAGEMS):** ativação de Contas a Pagar, Contas a Receber e
   Recebimentos (deploy `ml17`) — ver `04-alteracoes.md` (16) e
   `02-decisoes.md` (15). Falta:

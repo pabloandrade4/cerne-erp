@@ -2,6 +2,99 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-24 (17) — Ativação de DRE, Faturamento e Notas Fiscais
+- **Pedido do usuário:** ativar mais 3 áreas do ERP que já existiam como
+  placeholder no menu — DRE (visão por período em R$ e %, usando dado
+  real já existente, sem inventar valor), Faturamento (hub de pedidos a
+  faturar, com status e ações em lote, sem emissão real de NF-e) e Notas
+  Fiscais (estrutura de registro/acompanhamento vinculada ao pedido, sem
+  integração com a SEFAZ). Regras explícitas: nunca duplicar pedido;
+  nunca misturar empresas/CNPJs; nunca inventar valor, número de NF-e ou
+  chave de acesso; não implementar SEFAZ ainda; não alterar outras áreas
+  nesta etapa; parar depois dessas três áreas.
+- **DRE — demonstrativo por período, sem fórmula financeira nova.**
+  Reorganiza em forma de waterfall os mesmos números já calculados por
+  `lib/relatorioVendas.js` (`buscarPedidosDoPeriodo` + `resumirPeriodo`,
+  intocado) e `lib/contasPagar.js` (`resumoContasPagar`, intocado): Receita
+  Bruta, (-) Cancelamentos/Devoluções, (-) Descontos concedidos, = Receita
+  Líquida, (-) Custo dos Produtos, (-) Taxas e Comissões dos marketplaces,
+  (-) Frete do vendedor, (-) Impostos, = Margem de Contribuição (sempre
+  lida direto de `resumirPeriodo`, nunca recalculada), (-) Despesas/Contas
+  pagas do período, = Resultado Final. Cada linha mostra R$ e % sobre o
+  faturamento. Período sem nenhum pedido mostra "Sem dados" em toda linha
+  de receita (nunca R$ 0,00); informação faltando numa parte específica
+  (ex: custo de SKU) mostra "Pendente" só ali.
+- **Faturamento — situação de faturamento por pedido, sem emissão real.**
+  Tabela nova (`faturamento_pedidos`, 1:1 com `ml_pedidos` via `pedido_id`
+  único), reaproveitando a mesma fonte única de pedidos (left join — um
+  pedido sem linha registrada aparece como "Aguardando faturamento" por
+  padrão). Lista data, número do pedido, marketplace, loja, cliente,
+  valor, status do pedido e situação de faturamento (Aguardando
+  faturamento/Faturado/Erro/Cancelado). Suporta pesquisar pedido, filtrar
+  por empresa/período (header) e por situação, seleção múltipla com ação
+  em lote (Marcar como Faturado/Erro/Cancelado — nomeada assim de
+  propósito, nunca "Emitir NF-e", já que a emissão real está fora do
+  escopo). Mudar a situação nunca duplica linha — sempre upsert por
+  `pedido_id`.
+- **Notas Fiscais — 1 nota por pedido, sem inventar número/chave.**
+  Tabela nova (`notas_fiscais`, 1:1 com `ml_pedidos` via `pedido_id`
+  único, upsert). Campos: número, série, pedido, empresa/CNPJ (via JOIN,
+  nunca duplicado), cliente (via JOIN), valor, data de emissão, chave de
+  acesso (quando existir), status (Pendente/Emitida/Cancelada/Rejeitada).
+  Marcar como "Emitida" **exige** número, série, data de emissão e chave
+  de acesso (44 dígitos, validado) — sem os 4 campos o backend recusa a
+  mudança, nunca aceita uma emissão incompleta. Um pedido sem nota
+  registrada aparece corretamente como "Pendente", com todos os campos da
+  nota em branco. Abrir uma nota mostra os dados do pedido relacionado
+  (data, cliente, loja, status, itens), reaproveitando o mesmo endpoint de
+  detalhe já usado em Pedidos.
+- **`ON DELETE CASCADE`** adicionado nas duas novas FKs para
+  `ml_pedidos(id)` — a sincronização real nunca apaga pedido (é sempre
+  upsert), então isso não deveria disparar em produção; existe pra nunca
+  deixar uma situação de faturamento/nota órfã, e pra não travar o teste
+  de idempotência já existente (que apaga e recria os pedidos seedados a
+  cada execução).
+- **Arquivos novos:** `server/lib/dre.js`, `server/lib/faturamento.js`,
+  `server/lib/notasFiscais.js` (regra de negócio); `server/routes/dre.js`,
+  `server/routes/faturamento.js`, `server/routes/notasFiscais.js` (API);
+  `server/test/dre.test.js`, `server/test/faturamento.test.js`,
+  `server/test/notasFiscais.test.js` (26 testes automatizados novos, 0
+  falhas); 3 módulos novos em `server/public/index.html`
+  (`window.DRE`, `window.Faturamento`, `window.NotasFiscais`).
+- **Arquivos alterados (aditivo, sem regressão):** `server/db/schema.sql`
+  (2 tabelas novas: `faturamento_pedidos`, `notas_fiscais`),
+  `server/server.js` (3 rotas novas registradas).
+- **Correção incidental no stub de teste local do driver `pg`
+  (`server/node_modules/pg/index.js`, não vai pro deploy — está no
+  `.gitignore`):** um array JS num parâmetro de query estava sendo
+  codificado como JSON (`'[...]'::jsonb`), o que quebrava qualquer query
+  no padrão `= ANY($N::int[])`/`= ANY($N::text[])` — incluindo código já
+  existente antes desta etapa (`routes/pedidos.js`,
+  `lib/produtoBaseConversao.js`), só nunca exercitado num teste de
+  integração até agora. Corrigido para emitir literal de array nativo do
+  Postgres (`'{a,b,c}'`), igual ao driver `pg` real faz.
+- **Testado:** 26 testes novos + os 34 já existentes (Financeiro +
+  correção de margem) = 60 testes, 0 falhas. Testado também de ponta a
+  ponta com o servidor real rodando localmente (Postgres local, com os 11
+  pedidos reais da conta PFEMBALAGEMS): as três telas carregam com dado
+  real via requisição HTTP direta e navegador real (Playwright); DRE
+  mostra "Sem dados" pra empresa sem pedido e valores reais pra empresa
+  com pedido, e reage à troca de empresa no filtro do header;
+  Faturamento — pesquisa, filtro por status, ação em lote pela interface
+  (seleção múltipla) e mudança individual de situação, tudo persistindo
+  no banco; Notas Fiscais — preenchimento e emissão de uma nota completa
+  pela interface (número, série, data, chave de 44 dígitos), validação
+  rejeitando emissão incompleta e chave inválida, e o pedido aparecendo
+  corretamente como "Pendente" antes da emissão. Um bug real foi achado e
+  corrigido durante o teste manual pela interface: o modal de Notas
+  Fiscais mostrava "Valor do pedido" sempre em branco porque lia
+  `pedido.valorTotal` (campo que não existe na resposta de
+  `GET /api/pedidos/:id`) em vez do `valorPedido` já retornado pela
+  própria listagem de Notas Fiscais — corrigido em
+  `server/public/index.html`. Dados de teste (linhas de
+  `faturamento_pedidos`/`notas_fiscais` criadas durante os testes) foram
+  removidos do banco local ao final.
+
 ## 2026-08-24 (16) — Ativação do módulo Financeiro: Contas a Pagar, Contas a Receber e Recebimentos
 - **Pedido do usuário:** ativar 3 áreas do Financeiro que já existiam como
   placeholder no menu — Contas a Pagar, Contas a Receber (as duas com

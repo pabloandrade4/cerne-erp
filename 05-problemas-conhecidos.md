@@ -3,6 +3,18 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## DRE: Custo dos Produtos e Margem de Contribuição ficam "Pendente" quando falta custo cadastrado no SKU (24/08/2026)
+- Ao ativar a DRE (ver `04-alteracoes.md` (17) e `02-decisoes.md` (16)),
+  confirmado com dado real que vários pedidos da conta de teste
+  (PFEMBALAGEMS) ainda não têm custo cadastrado em Produtos para o SKU
+  vendido — por isso "Custo dos Produtos" e "Margem de Contribuição"
+  aparecem como "Pendente" na DRE para praticamente qualquer período
+  consultado hoje. **Não é um bug** — é a mesma regra "nunca inventar
+  valor" já usada em Pedidos/Financeiro/Visão Geral desde a etapa de
+  Custos: sem custo cadastrado, o sistema não calcula/estima a margem, só
+  mostra que está faltando. Resolve sozinho conforme o usuário cadastra o
+  custo de cada SKU em Produtos — não exige nenhuma mudança na DRE.
+
 ## Recebimentos: API do Mercado Livre não traz data de liberação nem valor repassado (24/08/2026)
 - Ao ativar a tela Recebimentos (ver `04-alteracoes.md` (16) e
   `02-decisoes.md` (15)), foi confirmado por consulta direta ao banco de

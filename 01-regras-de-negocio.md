@@ -402,13 +402,81 @@ _(sem regras registradas ainda)_
 _(sem regras registradas ainda)_
 
 ## DRE
-_(sem regras registradas ainda)_
+- **Ativado em 24/08/2026.** Nenhuma fórmula financeira nova — é a mesma
+  fonte única já usada em Visão Geral/Pedidos/Financeiro/Relatórios
+  (`lib/relatorioVendas.js`) reorganizada em formato de demonstrativo, mais
+  a mesma consulta já usada em Contas a Pagar (`resumoContasPagar`) para a
+  linha de despesas do período.
+- Linhas mostradas, sempre em R$ **e** em % sobre o faturamento (a mesma
+  base já usada pela Margem de Contribuição em Financeiro/Visão Geral —
+  vendas não canceladas do período): Receita Bruta, (-) Cancelamentos/
+  Devoluções, (-) Descontos concedidos (cupom), = Receita Líquida, (-)
+  Custo dos Produtos, (-) Taxas e Comissões dos marketplaces, (-) Frete do
+  vendedor, (-) Impostos, = Margem de Contribuição, (-) Despesas/Contas
+  pagas no período, = Resultado Final.
+- A **Margem de Contribuição é sempre lida direto de `resumirPeriodo`**
+  (nunca recalculada por subtração das linhas do demonstrativo), pra nunca
+  divergir do valor já mostrado em Pedidos/Visão Geral/Financeiro. Em
+  casos raros de pendência parcial, a soma das linhas do demonstrativo
+  pode não bater centavo a centavo com esse número — o número da Margem
+  de Contribuição é sempre o correto.
+- Despesas/Contas pagas do período = exatamente o "pago no período" já
+  mostrado em Contas a Pagar — sempre um valor real (nunca "Pendente"),
+  independente de ter havido venda ou não no período.
+- **Nunca inventa valor.** Sem nenhum pedido no período inteiro, todas as
+  linhas de receita mostram "Sem dados" (nunca R$ 0,00) — mesma convenção
+  já usada na Visão Geral. Havendo pedido no período mas faltando alguma
+  informação (ex: custo do produto ainda não cadastrado para algum SKU
+  vendido), a linha correspondente mostra "Pendente". Resultado Final só é
+  calculado quando a Margem de Contribuição em si é conhecida.
+- Filtros de empresa e período do cabeçalho (`window.CerneFiltro`)
+  funcionam normalmente, mesmo padrão já usado nas outras telas.
 
 ## Faturamento
-_(sem regras registradas ainda)_
+- **Ativado em 24/08/2026** como o hub central dos pedidos que precisam
+  ser faturados — **sem emissão real de NF-e nesta etapa** (a emissão de
+  verdade, ainda sem integração com a SEFAZ, é a tela "Emissão de notas
+  fiscais", abaixo). Por isso as ações em lote se chamam "Marcar como
+  Faturado/Erro/Cancelado", nunca "Emitir NF-e".
+- Lista todos os pedidos reais do período (mesma fonte única de Pedidos),
+  com a situação de faturamento de cada um. Status possíveis: Aguardando
+  faturamento (padrão, quando o pedido ainda não tem nenhuma situação
+  registrada), Faturado, Erro, Cancelado.
+- A situação de faturamento fica numa tabela própria
+  (`faturamento_pedidos`), no máximo 1 linha por pedido, vinculada por
+  `pedido_id` — **nunca duplica dado do pedido**: cliente, loja,
+  marketplace e valor sempre vêm do pedido original via JOIN.
+- Suporta: pesquisar por número do pedido/loja/cliente, filtrar por
+  empresa e por período (filtros do cabeçalho), filtrar por situação de
+  faturamento, selecionar vários pedidos de uma vez (multi-seleção) e
+  aplicar uma ação em lote sobre os selecionados.
+- Trocar a situação de um pedido (individualmente ou em lote) nunca cria
+  uma segunda linha — é sempre um upsert por `pedido_id`.
 
 ## Emissão de notas fiscais
-_(sem regras registradas ainda)_
+- **Ativado em 24/08/2026** como estrutura para registrar e acompanhar
+  notas fiscais vinculadas a pedidos — **sem integração real com a SEFAZ
+  nesta etapa**: nenhuma nota é de fato transmitida/autorizada perante o
+  fisco, é só o registro manual dos dados da nota no ERP.
+- Cada pedido tem no máximo 1 nota fiscal registrada (`notas_fiscais`, 1
+  linha por pedido, vinculada por `pedido_id`, upsert) — **nunca duplica
+  dado do pedido**: cliente e loja sempre vêm do pedido original via
+  JOIN. Histórico de múltiplas notas por pedido (ex: nota rejeitada e
+  reemitida) fica para uma etapa futura, se for pedido.
+- Status possíveis: Pendente (padrão, quando nenhuma nota foi registrada
+  ainda para o pedido), Emitida, Cancelada, Rejeitada.
+- **Nunca inventa número de NF-e nem chave de acesso.** Marcar uma nota
+  como "Emitida" exige informar número, série, data de emissão e chave de
+  acesso (44 dígitos) — o sistema rejeita a tentativa se faltar qualquer
+  um desses campos, pra nunca fingir uma emissão que não aconteceu de
+  verdade. Um pedido sem nota registrada aparece corretamente como
+  "Pendente", com número/série/chave em branco.
+- Abrir uma nota mostra os dados do pedido relacionado (data, cliente,
+  loja, status do pedido, valor, itens) — mesma fonte já usada na tela de
+  Pedidos.
+- Filtros de empresa e período do cabeçalho funcionam normalmente; a tela
+  também suporta pesquisar por número do pedido/nota/cliente e filtrar
+  por status da nota.
 
 ## Relatórios
 _(sem regras registradas ainda)_

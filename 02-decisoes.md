@@ -3,6 +3,67 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-24 (16) — DRE, Faturamento e Notas Fiscais: waterfall sem fórmula nova, situação de faturamento e nota 1:1 com o pedido
+- Ao ativar a DRE, decidido que ela **não teria tabela nem cálculo
+  financeiro próprio** — é sempre montada ao vivo, reorganizando em forma
+  de demonstrativo os mesmos números já calculados por
+  `lib/relatorioVendas.js` (vendas) e `lib/contasPagar.js` (despesas do
+  período), sem duplicar nem reimplementar nenhuma fórmula. Motivo: é a
+  mesma filosofia de "fonte única" já usada em Recebimentos — evita o
+  risco de a DRE divergir das outras telas assim que uma regra de cálculo
+  mudar em um único lugar.
+- Decidido que a **Margem de Contribuição da DRE é sempre lida direto de
+  `resumirPeriodo`**, nunca recalculada por subtração das linhas do
+  demonstrativo (Receita Líquida − Custo − Taxas − Frete − Impostos).
+  Motivo: em casos raros de pendência parcial (um pedido com uma
+  informação faltando mas outra presente), a soma das linhas poderia, em
+  teoria, divergir em centavos do valor real — e a Margem de Contribuição
+  precisa ser idêntica à mostrada em Pedidos/Visão Geral/Financeiro,
+  sempre.
+- Acrescentada a linha "Descontos concedidos (cupom)" à DRE, mesmo não
+  estando na lista literal pedida pelo usuário — decisão tomada pra que a
+  subtração em cascata (Receita Bruta → Receita Líquida) feche
+  exatamente com a Margem de Contribuição já usada nas outras telas, já
+  que `resumirPeriodo` sempre desconta o cupom da receita. Ficou como uma
+  linha própria e visível (nunca escondida dentro de outra), pra não
+  disfarçar de onde vem a diferença.
+- Adotado o mesmo gate de "Sem dados" x "0 de verdade" já usado na Visão
+  Geral: só quando o período inteiro não tem NENHUM pedido (nem
+  cancelado) é que as linhas de receita mostram "Sem dados" (null); um
+  grupo vazio dentro de um período que TEM pedidos (ex: nenhum
+  cancelamento) mostra R$ 0,00 — zero de verdade, não pendência.
+- Faturamento decidido como um **rastreador de situação por pedido**
+  (`faturamento_pedidos`, 1:1 com `ml_pedidos`, `pedido_id` único), não
+  uma tabela de lançamento manual como Contas a Pagar — reaproveita a
+  mesma fonte única de pedidos e só guarda a situação de faturamento por
+  cima. Um pedido sem linha registrada é tratado como
+  "aguardando_faturamento" por padrão (não é criada uma linha para todo
+  pedido só de inicialização).
+- Ações em lote do Faturamento nomeadas deliberadamente "Marcar como
+  Faturado/Erro/Cancelado" — nunca "Emitir NF-e" — porque a emissão real
+  (SEFAZ) está fora do escopo desta etapa, por instrução explícita do
+  usuário.
+- Notas Fiscais decidida como **1 nota por pedido** (`notas_fiscais`,
+  `pedido_id` único, upsert), a estrutura mais simples que atende "vinculado
+  ao pedido, sem duplicar pedido" — um histórico de múltiplas notas por
+  pedido (útil pra casos de rejeição/reemissão) fica registrado como
+  próximo passo, não implementado agora.
+- Marcar uma nota como "Emitida" **exige** número, série, data de emissão
+  e chave de acesso (44 dígitos) — validado no backend antes de gravar.
+  Decisão direta da instrução do usuário de nunca inventar número de NF-e
+  nem chave de acesso: sem os 4 campos, o sistema recusa a mudança de
+  status em vez de aceitar uma "emissão" incompleta/fictícia.
+- `faturamento_pedidos.pedido_id` e `notas_fiscais.pedido_id` ganharam
+  `ON DELETE CASCADE` para `ml_pedidos(id)`. Motivo: a sincronização real
+  do Mercado Livre nunca apaga um pedido de verdade (é sempre upsert),
+  então isso não deveria disparar em produção — existe só pra nunca
+  deixar uma situação de faturamento ou nota "órfã" apontando pra um
+  pedido inexistente, e pra não travar o teste automatizado de
+  idempotência (que apaga e recria os pedidos seedados a cada execução).
+- Nenhuma das duas telas duplica `cliente`/`loja`/`marketplace`/CNPJ da
+  empresa nas tabelas novas — esses campos são sempre lidos do pedido
+  original via JOIN no momento da consulta, nunca gravados de novo.
+
 ## 2026-08-24 (15) — Financeiro: status calculado, imutabilidade após baixa, e Recebimentos sem tabela própria
 - Ao ativar Contas a Pagar/Receber, decidido não gravar "vencido"/
   "atrasado" como valor de status — só `pendente/pago/cancelado` (ou
