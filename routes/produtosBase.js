@@ -1,0 +1,420 @@
+// Produto base + vínculo de SKU: o estoque físico não é controlado pelo
+// SKU do kit vendido no Mercado Livre (ex: '100CX-19X12X12'), e sim pelo
+// modelo físico real por trás dele (ex: 'CX-19X12X12'). Aqui fica só a
+// ESTRUTURA (produto base, SKU de venda, multiplicador) e a conversão de
+// venda para quantidade física — nada de estoque, Full, compras,
+// relatórios, margem ou financeiro é lido/alterado por este arquivo
+// (pedido explícito do usuário nesta etapa). Ver docs/01-regras-de-negocio.md
+// e docs/02-decisoes.md.
+const express = require('express');
+const pool = require('../db/pool');
+const { interpretarSku } = require('../lib/skuProdutoBase');
+
+const router = express.Router();
+
+function serializeProdutoBase(row) {
+  return {
+    id: row.id,
+    empresaId: row.empresa_id,
+    codigo: row.codigo,
+    nome: row.nome,
+    ativo: row.ativo,
+    criadoEm: row.created_at,
+    atualizadoEm: row.updated_at,
+  };
+}
+
+function serializeVinculo(row) {
+  return {
+    id: row.id,
+    empresaId: row.empresa_id,
+    sku: row.sku,
+    produtoBaseId: row.produto_base_id,
+    produtoBaseCodigo: row.produto_base_codigo,
+    produtoBaseNome: row.produto_base_nome,
+    multiplicador: row.multiplicador,
+    origem: row.origem,
+    criadoEm: row.created_at,
+    atualizadoEm: row.updated_at,
+  };
+}
+
+const SELECT_VINCULO = `
+  SELECT v.*, pb.codigo AS produto_base_codigo, pb.nome AS produto_base_nome
+  FROM produto_base_skus v
+  JOIN produtos_base pb ON pb.id = v.produto_base_id
+`;
+
+// Busca o produto base pelo código (por empresa); cria se ainda não existir.
+async function obterOuCriarProdutoBase(empresaId, codigo, nome) {
+  const codigoLimpo = String(codigo || '').trim();
+  if (!codigoLimpo) throw Object.assign(new Error('Informe o código do produto base.'), { status: 400 });
+
+  const existente = await pool.query(
+    'SELECT * FROM produtos_base WHERE empresa_id = $1 AND codigo = $2',
+    [empresaId, codigoLimpo]
+  );
+  if (existente.rows.length) return existente.rows[0];
+
+  const { rows } = await pool.query(
+    `INSERT INTO produtos_base (empresa_id, codigo, nome) VALUES ($1,$2,$3) RETURNING *`,
+    [empresaId, codigoLimpo, nome ? String(nome).trim() : null]
+  );
+  return rows[0];
+}
+
+// ============================================================
+// Produtos base (CRUD)
+// ============================================================
+
+// GET /api/produtos-base?empresaId=ID&status=ativos|inativos&search=texto
+router.get('/', async (req, res, next) => {
+  try {
+    const { empresaId, status, search } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+
+    const conditions = ['empresa_id = $1'];
+    const params = [empresaId];
+    if (status === 'ativos') conditions.push('ativo = TRUE');
+    else if (status === 'inativos') conditions.push('ativo = FALSE');
+    if (search) {
+      params.push('%' + search + '%');
+      const idx = params.length;
+      conditions.push(`(codigo ILIKE $${idx} OR nome ILIKE $${idx})`);
+    }
+
+    const { rows } = await pool.query(
+      `SELECT * FROM produtos_base WHERE ${conditions.join(' AND ')} ORDER BY codigo`,
+      params
+    );
+    res.json({ produtosBase: rows.map(serializeProdutoBase) });
+  } catch (err) { next(err); }
+});
+
+// POST /api/produtos-base — cria um produto base
+router.post('/', async (req, res, next) => {
+  try {
+    const empresaId = Number(req.body.empresaId);
+    const codigo = String(req.body.codigo || '').trim();
+    const nome = req.body.nome ? String(req.body.nome).trim() : null;
+
+    const errors = {};
+    if (!empresaId) errors.empresaId = 'Selecione a empresa.';
+    if (!codigo) errors.codigo = 'Informe o código do produto base.';
+    else if (codigo.length > 100) errors.codigo = 'Código muito longo (máx. 100 caracteres).';
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+
+    const { rows } = await pool.query(
+      `INSERT INTO produtos_base (empresa_id, codigo, nome) VALUES ($1,$2,$3) RETURNING *`,
+      [empresaId, codigo, nome]
+    );
+    res.status(201).json({ produtoBase: serializeProdutoBase(rows[0]) });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ errors: { codigo: 'Já existe um produto base com esse código nesta empresa.' } });
+    next(err);
+  }
+});
+
+// PUT /api/produtos-base/:id — edita código/nome
+router.put('/:id', async (req, res, next) => {
+  try {
+    const fields = [];
+    const values = [];
+    let i = 1;
+
+    if (req.body.codigo !== undefined) {
+      const codigo = String(req.body.codigo || '').trim();
+      if (!codigo) return res.status(400).json({ errors: { codigo: 'Informe o código do produto base.' } });
+      fields.push(`codigo = $${i++}`); values.push(codigo);
+    }
+    if (req.body.nome !== undefined) {
+      fields.push(`nome = $${i++}`); values.push(req.body.nome ? String(req.body.nome).trim() : null);
+    }
+    if (!fields.length) return res.status(400).json({ error: 'Nada para atualizar.' });
+
+    fields.push('updated_at = now()');
+    values.push(req.params.id);
+
+    const { rows } = await pool.query(
+      `UPDATE produtos_base SET ${fields.join(', ')} WHERE id = $${i} RETURNING *`,
+      values
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Produto base não encontrado.' });
+    res.json({ produtoBase: serializeProdutoBase(rows[0]) });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ errors: { codigo: 'Já existe um produto base com esse código nesta empresa.' } });
+    next(err);
+  }
+});
+
+// PATCH /api/produtos-base/:id/status — ativar/desativar
+router.patch('/:id/status', async (req, res, next) => {
+  try {
+    const ativo = Boolean(req.body.ativo);
+    const { rows } = await pool.query(
+      `UPDATE produtos_base SET ativo = $1, updated_at = now() WHERE id = $2 RETURNING *`,
+      [ativo, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Produto base não encontrado.' });
+    res.json({ produtoBase: serializeProdutoBase(rows[0]) });
+  } catch (err) { next(err); }
+});
+
+// ============================================================
+// Vínculos: SKU de venda -> produto base -> multiplicador
+// ============================================================
+
+// GET /api/produtos-base/vinculos?empresaId=ID — lista todos os vínculos já salvos
+router.get('/vinculos', async (req, res, next) => {
+  try {
+    const { empresaId } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+
+    const { rows } = await pool.query(
+      `${SELECT_VINCULO} WHERE v.empresa_id = $1 ORDER BY v.sku`,
+      [empresaId]
+    );
+    res.json({ vinculos: rows.map(serializeVinculo) });
+  } catch (err) { next(err); }
+});
+
+// GET /api/produtos-base/vinculos/sugestoes?empresaId=ID — SKUs que já
+// apareceram em pedidos reais desta empresa e AINDA NÃO têm vínculo
+// salvo, com uma sugestão de interpretação (quando o texto do SKU permite)
+// e quantas vezes cada SKU já apareceu. Não grava nada — é só uma prévia
+// para o usuário revisar/corrigir antes de confirmar.
+router.get('/vinculos/sugestoes', async (req, res, next) => {
+  try {
+    const { empresaId } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+
+    const { rows } = await pool.query(
+      `SELECT i.sku, COUNT(*) AS ocorrencias
+       FROM ml_pedido_itens i
+       JOIN ml_pedidos p ON p.id = i.pedido_id
+       JOIN ml_contas c ON c.id = p.conta_ml_id
+       WHERE c.empresa_id = $1
+         AND i.sku IS NOT NULL
+         AND i.sku NOT IN (SELECT sku FROM produto_base_skus WHERE empresa_id = $1)
+       GROUP BY i.sku
+       ORDER BY COUNT(*) DESC, i.sku`,
+      [empresaId]
+    );
+
+    const { rows: basesExistentes } = await pool.query(
+      'SELECT id, codigo FROM produtos_base WHERE empresa_id = $1',
+      [empresaId]
+    );
+    const baseIdPorCodigo = Object.fromEntries(basesExistentes.map((b) => [b.codigo, b.id]));
+
+    const sugestoes = rows.map((row) => {
+      const interpretado = interpretarSku(row.sku);
+      return {
+        sku: row.sku,
+        ocorrencias: Number(row.ocorrencias),
+        sugestao: interpretado
+          ? {
+              multiplicador: interpretado.multiplicador,
+              codigoBase: interpretado.codigoBase,
+              produtoBaseExistenteId: baseIdPorCodigo[interpretado.codigoBase] || null,
+            }
+          : null,
+      };
+    });
+
+    res.json({ sugestoes });
+  } catch (err) { next(err); }
+});
+
+// POST /api/produtos-base/vinculos — cria um vínculo SKU -> produto base
+// Aceita `produtoBaseId` (produto já existente) OU `codigoProdutoBase`
+// (cria o produto base na hora, se ainda não existir com esse código).
+// `origem` é 'manual' por padrão; quando o vínculo vem de uma sugestão
+// aceita como está, o chamador pode mandar `origem: 'automatico'` — de
+// qualquer forma, o vínculo salvo aqui é sempre o que vale.
+router.post('/vinculos', async (req, res, next) => {
+  try {
+    const empresaId = Number(req.body.empresaId);
+    const sku = String(req.body.sku || '').trim();
+    const multiplicador = Number(req.body.multiplicador);
+    const produtoBaseId = req.body.produtoBaseId ? Number(req.body.produtoBaseId) : null;
+    const codigoProdutoBase = req.body.codigoProdutoBase ? String(req.body.codigoProdutoBase).trim() : null;
+    const origem = req.body.origem === 'automatico' ? 'automatico' : 'manual';
+
+    const errors = {};
+    if (!empresaId) errors.empresaId = 'Selecione a empresa.';
+    if (!sku) errors.sku = 'Informe o SKU.';
+    if (!Number.isInteger(multiplicador) || multiplicador <= 0) errors.multiplicador = 'Informe um multiplicador inteiro maior que zero.';
+    if (!produtoBaseId && !codigoProdutoBase) errors.produtoBase = 'Informe o produto base (produtoBaseId ou codigoProdutoBase).';
+    if (Object.keys(errors).length) return res.status(400).json({ errors });
+
+    let baseId = produtoBaseId;
+    if (!baseId) {
+      const base = await obterOuCriarProdutoBase(empresaId, codigoProdutoBase);
+      baseId = base.id;
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO produto_base_skus (empresa_id, sku, produto_base_id, multiplicador, origem)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [empresaId, sku, baseId, multiplicador, origem]
+    );
+    const { rows: completo } = await pool.query(`${SELECT_VINCULO} WHERE v.id = $1`, [rows[0].id]);
+    res.status(201).json({ vinculo: serializeVinculo(completo[0]) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    if (err.code === '23505') return res.status(409).json({ errors: { sku: 'Esse SKU já tem um vínculo cadastrado nesta empresa — edite o vínculo existente.' } });
+    if (err.code === '23503') return res.status(400).json({ errors: { produtoBaseId: 'Produto base não encontrado.' } });
+    next(err);
+  }
+});
+
+// PUT /api/produtos-base/vinculos/:id — corrige manualmente o vínculo
+// (produto base e/ou multiplicador). Toda correção manual marca
+// origem = 'manual', mesmo que o vínculo tivesse começado automático.
+router.put('/vinculos/:id', async (req, res, next) => {
+  try {
+    const { rows: atuais } = await pool.query('SELECT * FROM produto_base_skus WHERE id = $1', [req.params.id]);
+    if (!atuais.length) return res.status(404).json({ error: 'Vínculo não encontrado.' });
+    const atual = atuais[0];
+
+    let baseId = atual.produto_base_id;
+    if (req.body.produtoBaseId !== undefined) {
+      baseId = Number(req.body.produtoBaseId);
+    } else if (req.body.codigoProdutoBase !== undefined) {
+      const base = await obterOuCriarProdutoBase(atual.empresa_id, req.body.codigoProdutoBase);
+      baseId = base.id;
+    }
+
+    let multiplicador = atual.multiplicador;
+    if (req.body.multiplicador !== undefined) {
+      multiplicador = Number(req.body.multiplicador);
+      if (!Number.isInteger(multiplicador) || multiplicador <= 0) {
+        return res.status(400).json({ errors: { multiplicador: 'Informe um multiplicador inteiro maior que zero.' } });
+      }
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE produto_base_skus
+       SET produto_base_id = $1, multiplicador = $2, origem = 'manual', updated_at = now()
+       WHERE id = $3 RETURNING id`,
+      [baseId, multiplicador, req.params.id]
+    );
+    const { rows: completo } = await pool.query(`${SELECT_VINCULO} WHERE v.id = $1`, [rows[0].id]);
+    res.json({ vinculo: serializeVinculo(completo[0]) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    if (err.code === '23503') return res.status(400).json({ errors: { produtoBaseId: 'Produto base não encontrado.' } });
+    next(err);
+  }
+});
+
+// DELETE /api/produtos-base/vinculos/:id — remove o vínculo (o SKU volta a
+// ficar "sem vínculo", aparecendo de novo em .../vinculos/sugestoes)
+router.delete('/vinculos/:id', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM produto_base_skus WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Vínculo não encontrado.' });
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// ============================================================
+// Conversão: venda (SKU + quantidade) -> quantidade física do produto base
+// ============================================================
+
+// Aplica os vínculos já salvos sobre uma lista de itens {sku, quantidade}.
+// Nunca adivinha: SKU sem vínculo salvo vai para `pendentes`, nunca soma
+// um valor estimado no total físico.
+async function converterItens(empresaId, itens) {
+  const skus = [...new Set(itens.map((it) => it.sku).filter(Boolean))];
+  let vinculosPorSku = {};
+  if (skus.length) {
+    const { rows } = await pool.query(
+      `${SELECT_VINCULO} WHERE v.empresa_id = $1 AND v.sku = ANY($2::text[])`,
+      [empresaId, skus]
+    );
+    vinculosPorSku = Object.fromEntries(rows.map((r) => [r.sku, r]));
+  }
+
+  const porProdutoBase = {};
+  const pendentes = [];
+  const detalhes = [];
+
+  for (const item of itens) {
+    const quantidade = Number(item.quantidade) || 0;
+    const vinculo = item.sku ? vinculosPorSku[item.sku] : null;
+
+    if (!vinculo) {
+      pendentes.push({ sku: item.sku || null, quantidade });
+      detalhes.push({ sku: item.sku || null, quantidade, vinculado: false });
+      continue;
+    }
+
+    const quantidadeFisica = quantidade * vinculo.multiplicador;
+    const chave = vinculo.produto_base_id;
+    if (!porProdutoBase[chave]) {
+      porProdutoBase[chave] = {
+        produtoBaseId: vinculo.produto_base_id,
+        codigo: vinculo.produto_base_codigo,
+        nome: vinculo.produto_base_nome,
+        quantidadeFisica: 0,
+      };
+    }
+    porProdutoBase[chave].quantidadeFisica += quantidadeFisica;
+    detalhes.push({
+      sku: item.sku,
+      quantidade,
+      vinculado: true,
+      produtoBaseCodigo: vinculo.produto_base_codigo,
+      multiplicador: vinculo.multiplicador,
+      quantidadeFisica,
+    });
+  }
+
+  return {
+    porProdutoBase: Object.values(porProdutoBase),
+    pendentes,
+    detalhes,
+  };
+}
+
+// POST /api/produtos-base/conversao — calculadora genérica
+// body: { empresaId, itens: [{ sku, quantidade }, ...] }
+router.post('/conversao', async (req, res, next) => {
+  try {
+    const empresaId = Number(req.body.empresaId);
+    const itens = Array.isArray(req.body.itens) ? req.body.itens : null;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    if (!itens || !itens.length) return res.status(400).json({ error: 'Informe ao menos um item ({ sku, quantidade }).' });
+
+    const resultado = await converterItens(empresaId, itens);
+    res.json(resultado);
+  } catch (err) { next(err); }
+});
+
+// GET /api/produtos-base/conversao/pedido/:pedidoId — converte os itens de
+// um pedido REAL já importado (demonstração com dado de verdade, sem
+// alterar nada do pedido em si).
+router.get('/conversao/pedido/:pedidoId', async (req, res, next) => {
+  try {
+    const { rows: pedidoRows } = await pool.query(
+      `SELECT p.id, p.ml_order_id, c.empresa_id
+       FROM ml_pedidos p JOIN ml_contas c ON c.id = p.conta_ml_id
+       WHERE p.id = $1`,
+      [req.params.pedidoId]
+    );
+    if (!pedidoRows.length) return res.status(404).json({ error: 'Pedido não encontrado.' });
+    const pedido = pedidoRows[0];
+
+    const { rows: itens } = await pool.query(
+      'SELECT sku, quantidade FROM ml_pedido_itens WHERE pedido_id = $1 ORDER BY id',
+      [pedido.id]
+    );
+
+    const resultado = await converterItens(pedido.empresa_id, itens);
+    res.json({ pedidoId: pedido.id, mlOrderId: String(pedido.ml_order_id), ...resultado });
+  } catch (err) { next(err); }
+});
+
+module.exports = router;

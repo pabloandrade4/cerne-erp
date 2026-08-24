@@ -311,3 +311,51 @@ CREATE TABLE IF NOT EXISTS ml_sync_historicos (
   atualizado_em          TIMESTAMPTZ NOT NULL DEFAULT now(),
   finalizado_em          TIMESTAMPTZ
 );
+
+-- ============================================================
+-- Etapa: Produto base e SKU (kit vendido no marketplace -> modelo físico)
+-- ============================================================
+--
+-- O estoque físico não é controlado pelo SKU do kit vendido (ex:
+-- '100CX-19X12X12'), e sim pelo modelo físico real por trás dele (ex:
+-- 'CX-19X12X12'). Um mesmo produto base pode ter vários SKUs de venda
+-- diferentes no Mercado Livre, cada um representando um kit de N unidades
+-- físicas. Estas duas tabelas ficam SEPARADAS de `produtos` (catálogo
+-- simples já existente) e de `custos_produto` (usada no cálculo de margem)
+-- de propósito — nenhuma das duas foi tocada nesta etapa, só a estrutura
+-- de produto base/SKU/multiplicador foi criada. Ver docs/02-decisoes.md.
+
+-- Produto base: o modelo físico de verdade, por empresa.
+CREATE TABLE IF NOT EXISTS produtos_base (
+  id             SERIAL PRIMARY KEY,
+  empresa_id     INTEGER NOT NULL REFERENCES empresas(id),
+  codigo         VARCHAR(100) NOT NULL,  -- ex: 'CX-19X12X12'
+  nome           VARCHAR(200),
+  ativo          BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, codigo)
+);
+
+-- Vínculo SKU de venda -> produto base -> multiplicador. O `sku` aqui é
+-- exatamente o mesmo texto gravado em ml_pedido_itens.sku (o SKU original
+-- do Mercado Livre nunca é alterado lá) — este vínculo só serve para
+-- TRADUZIR esse SKU em quantidade física, sem tocar no dado original do
+-- pedido. Um SKU aponta para um único produto base (não faz sentido um
+-- kit ser "metade de um produto, metade de outro" neste modelo).
+-- `origem` marca se o vínculo veio de uma sugestão automática (leitura do
+-- texto do SKU, ex: dígitos no início = multiplicador) ou foi cadastrado/
+-- corrigido manualmente — em ambos os casos o vínculo salvo no banco é
+-- que vale; a interpretação automática é só um ponto de partida, nunca a
+-- fonte de verdade.
+CREATE TABLE IF NOT EXISTS produto_base_skus (
+  id               SERIAL PRIMARY KEY,
+  empresa_id       INTEGER NOT NULL REFERENCES empresas(id),
+  sku              VARCHAR(100) NOT NULL,
+  produto_base_id  INTEGER NOT NULL REFERENCES produtos_base(id),
+  multiplicador    INTEGER NOT NULL CHECK (multiplicador > 0),
+  origem           VARCHAR(20) NOT NULL DEFAULT 'manual', -- 'manual' | 'automatico'
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, sku)
+);
