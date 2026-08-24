@@ -3,6 +3,79 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-26 (21) — Visão Geral: ativação da parte inferior (Evolução diária/Por marketplace, Fluxo de Caixa/Conexões & Empresas, Alertas & IA)
+- **Pedido do usuário, em 3 passos:** (1) ativar os gráficos "Evolução
+  diária" (faturamento + margem de contribuição por dia, respeitando o
+  período) e "Por marketplace" (faturamento, quantidade de pedidos e
+  participação % por canal, começando só com Mercado Livre e entrando
+  automaticamente quando houver outra integração) com dado real; (2)
+  ativar "Fluxo de Caixa" (contas a receber, contas a pagar, recebimentos
+  — saldo projetado só quando houver dado suficiente, nunca inventando
+  saldo bancário) e "Conexões & Empresas" (contagem real de
+  empresas/contas do Mercado Livre/Shopee, removendo texto fictício); (3)
+  ativar "Alertas & IA" como central de alertas por regras simples sobre
+  dado real, cada um levando pra tela relacionada quando possível. Regras
+  gerais repetidas pelo usuário: os 3 blocos respeitam SEMPRE
+  empresa+período do header (nunca um filtro próprio dentro deles), nunca
+  inventam dado, e nunca usam um cálculo financeiro diferente do que
+  Visão Geral/Pedidos/Financeiro/Relatórios já usam.
+- **Decisão — um único endpoint novo (`lib/visaoGeralPainel.js` +
+  `GET /api/visao-geral/painel`) para Por marketplace + Fluxo de Caixa +
+  Conexões & Empresas + Alertas, chamado em paralelo ao
+  `/api/relatorios/resumo-vendas` já existente** (que já cobre Evolução
+  diária via o campo `serieDiaria`, reaproveitado tal e qual — nunca um
+  segundo cálculo). Os dois `fetch` rodam com `Promise.allSettled` e erro
+  isolado: se o endpoint novo falhar, os indicadores/gráfico principal
+  (que não dependem dele) continuam aparecendo normalmente — mesma
+  filosofia de isolamento de erro já usada em outras partes do projeto
+  (ex: sincronização por conta em `syncScheduler.js`).
+- **Decisão — "Por marketplace" agrupa por CANAL, não por loja/conta**
+  (diferente de `relatorioMarketplaces`, usado em Relatórios, que agrupa
+  por conta/loja individual). Hoje só existe uma origem de pedido no ERP
+  (`ml_pedidos`), então o canal é sempre "Mercado Livre" — a função
+  `identificarCanal(pedido)` foi escrita como um único ponto central pra
+  decidir o canal de cada pedido, exatamente para que, quando uma segunda
+  integração existir, baste os pedidos dela informarem seu próprio canal
+  ali — sem alterar mais nada desta tela (pedido explícito do usuário).
+- **Decisão — nunca implementar "saldo projetado" com um número.** O ERP
+  não tem (e esta etapa não criou) nenhum cadastro de saldo bancário
+  real — sem um saldo inicial de verdade, qualquer "saldo projetado"
+  seria inventado. Por isso este campo sempre volta `valor: null` com o
+  motivo `sem_saldo_bancario_cadastrado`, e a tela mostra "Indisponível"
+  em vez de esconder a linha (mesmo padrão de transparência já usado no
+  resto do projeto — nunca "some" um conceito, sempre explica por que
+  falta).
+- **Decisão — limiar de "estoque muito baixo" = 5 unidades, simples e
+  documentado** (não uma previsão de demanda). O usuário pediu
+  explicitamente para não criar ainda uma IA complexa — "primeiro
+  transforme essa área em uma central de alertas úteis". O alerta só
+  considera itens de `ml_estoque_itens` já sincronizados (`pendente =
+  FALSE` e quantidade não nula) — nunca a partir de um dado que a API do
+  Mercado Livre não retornou.
+- **Decisão — "recebimento atrasado" mapeado para `contas_receber.atrasado`,
+  não para a tela Recebimentos (repasses do Mercado Livre).** A tela
+  Recebimentos ainda não tem nenhuma data de liberação real (ver
+  `lib/recebimentosMl.js` — `dataPrevistaLiberacao` sempre `null`, API do
+  Mercado Livre não retorna esse dado nesta integração), então
+  estruturalmente não existe como calcular "atraso" ali. Contas a Receber
+  já tem esse conceito pronto e testado (`resumoContasReceber.atrasado`) —
+  reaproveitado sem alteração.
+- **Decisão — "SKU sem custo cadastrado" e "pedido sem custo" vêm dos
+  ITENS/PEDIDOS vendidos no período** (`buscarItensDoPeriodo`/
+  `buscarPedidosDoPeriodo`, os mesmos de sempre), não de uma consulta
+  direta na tabela `produtos`. `produtos.custo` é `NOT NULL` no schema —
+  todo produto cadastrado já tem custo — então "sem custo" nunca significa
+  uma linha com o campo vazio, e sim um SKU vendido que não tem NENHUMA
+  linha correspondente em `produtos` (mesmo `LEFT JOIN` que Relatórios >
+  Produtos já usa).
+- **Verificado por auditoria e teste automatizado:** os 3 blocos nunca
+  quebram nem inventam dado com uma empresa vazia (sem conta do Mercado
+  Livre, sem pedido) — testado com uma empresa fabricada sem nenhum dado.
+  Testado também trocando empresa e período de verdade no navegador
+  (Playwright, servidor real + Postgres local): os 3 blocos mudam
+  juntos, os alertas levam pra tela certa ao clicar, e "Saldo projetado"
+  nunca mostra número nenhum.
+
 ## 2026-08-26 (20) — Estoque: Mercado Livre vira a fonte oficial, ajuste manual removido
 - **Pedido do usuário, em 3 ajustes:** (1) estoque deve vir dos anúncios do
   Mercado Livre, usando o recurso certo por tipo de conta (User Products/

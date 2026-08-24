@@ -2,6 +2,73 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-26 (21) — Visão Geral: ativação da parte inferior da tela (Evolução diária/Por marketplace, Fluxo de Caixa/Conexões & Empresas, Alertas & IA)
+- **Pedido do usuário, em 3 passos:** (1) ativar os gráficos "Evolução
+  diária" (faturamento + margem de contribuição por dia, respeitando o
+  período do header) e "Por marketplace" (faturamento, quantidade de
+  pedidos e participação % no faturamento por canal, começando só com
+  Mercado Livre e entrando automaticamente quando houver outra
+  integração) com dado real, nunca inventado; (2) ativar "Fluxo de Caixa"
+  (contas a receber, contas a pagar, recebimentos, saldo projetado só
+  quando houver dado suficiente — nunca inventar saldo bancário) e
+  "Conexões & Empresas" (contagem real de empresas e contas do Mercado
+  Livre/Shopee, removendo os textos fictícios de demonstração); (3)
+  ativar "Alertas & IA" como uma central de alertas por regras simples
+  sobre dado real (produto/SKU sem custo, pedido sem custo, margem
+  negativa, erro de sincronização do Mercado Livre, conta a pagar
+  vencida, recebimento atrasado, estoque zerado/muito baixo), cada
+  alerta levando o usuário pra tela relacionada ao clicar. Regra
+  repetida pelo usuário em todos os 3 passos: empresa e período do
+  header sempre, nenhum filtro próprio dentro desses blocos, e nunca um
+  cálculo financeiro diferente do que Visão Geral/Pedidos/Financeiro/
+  Relatórios já usam. Ver `01-regras-de-negocio.md` e `02-decisoes.md`
+  (21) para as regras e decisões completas.
+- **`server/lib/visaoGeralPainel.js` (novo):** toda a regra de negócio dos
+  4 blocos novos (Evolução diária reaproveita o `serieDiaria` já existente
+  de `/api/relatorios/resumo-vendas`, sem precisar de código novo).
+  Exporta `painelVisaoGeral` (função principal) e as peças testáveis
+  isoladamente: `identificarCanal`/`porCanal` (agrupamento por canal —
+  hoje sempre "Mercado Livre", já preparado para uma segunda integração),
+  `resumoRecebimentos`/`fluxoDeCaixa` (contas a pagar/receber via
+  `lib/contasPagar.js`/`lib/contasReceber.js`, recebimentos via
+  `lib/recebimentosMl.js` — sem nenhuma consulta nova ao banco além da
+  estritamente necessária), `conexoesEEmpresas` (contagem de empresas +
+  contas `ml_contas` da empresa selecionada, com status/última
+  sincronização), `gerarAlertas` (as 7 regras de alerta, cada uma citada
+  acima — a de estoque zerado/baixo é a única que consulta o banco
+  diretamente aqui, as outras 6 usam só o que já foi buscado).
+- **`server/routes/visaoGeral.js` (novo):** `GET /api/visao-geral/painel`
+  — router fino, só valida `empresaId` e chama `painelVisaoGeral`. Montado
+  em `server.js` como `/api/visao-geral`.
+- **`server/public/index.html`:** as 3 funções que antes só desenhavam
+  placeholder (`secondaryChartsHTML`, `connectionsPanelHTML`,
+  `alertsPanelHTML`) foram movidas pra dentro do módulo `window.Overview`
+  e reescritas pra usar dado real — precisavam do `state`/formatação que
+  só existem lá. `chartHTML` (o SVG do gráfico principal) ganhou um
+  parâmetro `opts` opcional (`heightPx`/`emptyClass`/`emptyMsg`) só pra
+  permitir uma versão compacta no card "Evolução diária" — o desenho e o
+  cálculo continuam exatamente os mesmos. `loadResumo` agora busca
+  `/api/relatorios/resumo-vendas` e `/api/visao-geral/painel` em paralelo
+  (`Promise.allSettled`) com erro isolado: se o painel novo falhar, os
+  indicadores/gráfico principal (que não dependem dele) continuam
+  aparecendo normalmente. Alertas viraram linhas clicáveis
+  (`.alert-row`, `data-page`) que chamam a função `navigate()` já
+  existente — mesma navegação de clicar num item do menu.
+- **Testes automatizados novos** (`server/test/visaoGeralPainel.test.js`,
+  13 testes): 7 sem banco (funções puras — `porCanal`/`resumoRecebimentos`
+  com pedidos fabricados, confirmando a matemática de agrupamento/
+  porcentagem/pendência) e 6 contra Postgres real (os 7 tipos de alerta
+  disparando juntos numa empresa fabricada, nenhum alerta inventado numa
+  empresa limpa, `conexoesEEmpresas` com e sem conta conectada, e
+  `painelVisaoGeral` de ponta a ponta contra a empresa 900 — 11 pedidos
+  reais já seedados — e contra uma empresa vazia). Suíte completa do
+  projeto (123 testes) rodada sem falhas depois da mudança. Testado
+  também manualmente com Playwright contra um servidor real: troca de
+  empresa (uma com dado real, outra fabricada com conta em erro e conta a
+  pagar vencida) e troca de período (Hoje/Este mês) atualizando os 5
+  blocos corretamente, e clique num alerta navegando pra Marketplaces e
+  para Contas a Pagar como esperado.
+
 ## 2026-08-26 (20) — Estoque: Mercado Livre vira a fonte oficial, ajuste manual removido
 - **Pedido do usuário, em 3 ajustes:** (1) o estoque exibido no ERP deve vir
   sempre dos anúncios/variações da conta do Mercado Livre conectada

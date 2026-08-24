@@ -3,6 +3,29 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Visão Geral: "Por marketplace" só valida com 1 canal (Mercado Livre); "Saldo projetado" nunca aparece até existir cadastro de saldo bancário (26/08/2026)
+- Ao ativar a parte inferior da Visão Geral (ver `04-alteracoes.md` (21) e
+  `02-decisoes.md` (21)), dois pontos ficam registrados aqui — nenhum dos
+  dois é um bug, são limitações estruturais esperadas:
+  1. **"Por marketplace" nunca foi testado com mais de 1 canal de
+     verdade**, porque o ERP só integra o Mercado Livre até agora. O
+     agrupamento (`identificarCanal`/`porCanal`, em
+     `lib/visaoGeralPainel.js`) foi escrito de propósito para uma segunda
+     integração (ex: Shopee) aparecer automaticamente como uma linha
+     nova, mas isso só pode ser confirmado de verdade quando essa segunda
+     integração existir — hoje é só uma garantia de desenho, não um teste
+     com dado real de 2 canais.
+  2. **"Saldo projetado" sempre mostra "Indisponível"** — não é uma
+     sincronização pendente nem um bug, é uma decisão: o ERP não tem
+     nenhuma tela/tabela de saldo bancário ainda, então não existe um
+     saldo inicial real para projetar a partir dele. Isso só muda quando
+     (e se) o usuário pedir uma funcionalidade de saldo bancário — não faz
+     parte desta etapa.
+- **Não precisa de ação agora** — só um lembrete pra não estranhar "Por
+  marketplace" mostrando sempre 1 linha só, e "Saldo projetado" nunca
+  mostrando um número, até que essas duas funcionalidades (Shopee, saldo
+  bancário) existam.
+
 ## Estoque: formato exato da resposta de User Products (estoque multi-origem) não confirmado (26/08/2026)
 - Ao reescrever o módulo de Estoque para usar o Mercado Livre como fonte
   oficial (ver `04-alteracoes.md` (20) e `02-decisoes.md` (20)), o usuário

@@ -509,12 +509,62 @@ cada uma e o status (em desenvolvimento / concluída).
   (`GET /api/relatorios/resumo-vendas`), `server/lib/relatorioVendas.js`,
   `server/public/index.html` (módulo `window.CerneFiltro` — dono do filtro
   do header — e módulo `window.Overview`, que só lê o filtro dele).
-- **O que falta:** os outros 3 gráficos da tela (Evolução diária, Por
-  marketplace, Fluxo de caixa) continuam como empty-state — não foram
-  pedidos nesta etapa. Comparativo com o período anterior (Δ) também não
-  foi implementado agora. O filtro do header ainda controla só a Visão
-  Geral — Pedidos e Financeiro continuam com seletor próprio dentro da
-  página (não foi pedido estender agora).
+- **O que falta:** comparativo com o período anterior (Δ) não foi
+  implementado. O filtro do header ainda controla só a Visão Geral —
+  Pedidos e Financeiro continuam com seletor próprio dentro da página (não
+  foi pedido estender agora). Ver a seção abaixo para a parte inferior da
+  tela (Evolução diária/Por marketplace/Fluxo de Caixa/Conexões &
+  Empresas/Alertas & IA), ativada em 26/08/2026.
+
+## Visão Geral — parte inferior: Evolução diária, Por marketplace, Fluxo de Caixa, Conexões & Empresas, Alertas & IA (26/08/2026)
+- **Status:** concluído e testado localmente (Postgres real + servidor
+  real via HTTP + navegador real via Playwright, trocando empresa e
+  período de verdade — 13 testes automatizados novos, 123 no total, 0
+  falhas). Substitui os 5 blocos que antes mostravam dado de demonstração/
+  "em breve" — pedido explícito do usuário, em 3 passos.
+- **O que é:** os 5 blocos abaixo, todos respeitando SEMPRE a
+  empresa/período do header (nenhum filtro próprio) e nunca recalculando
+  nada — só reaproveitam as mesmas funções já usadas em Visão Geral/
+  Pedidos/Financeiro/Relatórios:
+  - **Evolução diária:** versão compacta do gráfico "Faturamento x Margem
+    de contribuição" já existente logo acima — mesmo dado (`serieDiaria`),
+    nunca um segundo cálculo.
+  - **Por marketplace:** faturamento, quantidade de pedidos e participação
+    % no faturamento, agrupado por CANAL de venda (não por loja/conta
+    individual — diferente de Relatórios > Marketplaces). Hoje só existe
+    "Mercado Livre" (única integração de pedidos do ERP); a função que
+    decide o canal de cada pedido é central e única, pra uma segunda
+    integração (ex: Shopee) aparecer sozinha aqui no futuro, sem alterar
+    mais nada desta tela.
+  - **Fluxo de Caixa:** contas a receber em aberto, contas a pagar em
+    aberto, recebimentos do Mercado Livre (líquido esperado no período) —
+    os mesmos números de Contas a Pagar/Contas a Receber/Recebimentos.
+    **Saldo projetado** sempre "Indisponível — sem saldo bancário
+    cadastrado" (o ERP não tem esse cadastro ainda; nunca inventa um
+    saldo).
+  - **Conexões & Empresas:** quantidade real de empresas cadastradas;
+    Mercado Livre (quantidade de contas conectadas, status, última
+    sincronização); Shopee (sempre "Nenhuma conta conectada" — integração
+    não existe ainda). Nenhum texto fictício.
+  - **Alertas & IA:** central de alertas por regras simples sobre dado
+    real (não uma IA/modelo preditivo ainda): SKU sem custo cadastrado,
+    pedido sem custo (impede a margem), venda com margem negativa, erro de
+    sincronização do Mercado Livre, conta a pagar vencida, recebimento
+    (conta a receber) atrasado, estoque zerado/muito baixo (≤ 5 unidades,
+    só item já sincronizado). Clicar num alerta navega pra tela
+    relacionada (Produtos, Pedidos, Marketplaces, Contas a Pagar, Contas a
+    Receber ou Estoque).
+- **Onde está:** `server/lib/visaoGeralPainel.js` (toda a regra dos 4
+  blocos novos), `server/routes/visaoGeral.js`
+  (`GET /api/visao-geral/painel`), `server/public/index.html` (dentro do
+  módulo `window.Overview` — `evolucaoDiariaMiniHTML`,
+  `porMarketplaceHTML`, `fluxoDeCaixaHTML`, `connectionsPanelHTML`,
+  `alertsPanelHTML`).
+- **O que falta:** nada pedido nesta etapa. Fora do escopo (não pedido):
+  Shopee de verdade (o "Por marketplace"/"Conexões" já está preparado pra
+  quando existir), saldo bancário cadastrável (pré-requisito de "saldo
+  projetado"), e uma IA/modelo preditivo de verdade nos alertas (o pedido
+  explícito foi começar simples, por regras).
 
 ## Financeiro (primeira versão — só Mercado Livre)
 - **Status:** concluído.

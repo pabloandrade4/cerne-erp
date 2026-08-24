@@ -182,6 +182,43 @@ _(sem regras registradas ainda)_
   calculado com uma parte inventada.
 - Ver a regra de **pedidos cancelados** em "Outras regras gerais", abaixo —
   vale igualmente aqui.
+- **Parte inferior da tela — ativada em 26/08/2026** (pedido do usuário, em
+  3 passos; antes ficava com dado de demonstração/"em breve"). Os 5 blocos
+  abaixo usam SEMPRE a empresa e o período do header — nenhum filtro
+  próprio — e nunca recalculam nada: reaproveitam exatamente as mesmas
+  funções de Visão Geral/Pedidos/Financeiro/Relatórios
+  (`lib/relatorioVendas.js`, `lib/contasPagar.js`, `lib/contasReceber.js`,
+  `lib/recebimentosMl.js`). Ver `lib/visaoGeralPainel.js`,
+  `02-decisoes.md` (21) e `04-alteracoes.md` (21) para o desenho completo.
+  - **Evolução diária:** o mesmo gráfico de Faturamento x Margem de
+    contribuição por dia mostrado acima, numa versão compacta — mesmo
+    dado, nunca um segundo cálculo.
+  - **Por marketplace:** faturamento, quantidade de pedidos e participação
+    % no faturamento, agrupado por canal de venda. Hoje existe só o
+    Mercado Livre (única integração de pedidos do ERP) — a tela já está
+    escrita para, quando uma segunda integração existir (ex: Shopee),
+    aparecer como uma linha nova automaticamente, sem precisar mudar mais
+    nada nesta tela.
+  - **Fluxo de Caixa:** contas a receber em aberto, contas a pagar em
+    aberto e recebimentos do Mercado Livre (líquido esperado no período) —
+    os mesmos números já mostrados em Contas a Pagar/Contas a
+    Receber/Recebimentos. **Saldo projetado** sempre aparece como
+    "Indisponível" — o ERP ainda não tem nenhum cadastro de saldo
+    bancário real, e sem um saldo inicial de verdade esse número nunca
+    pode ser calculado com segurança (nunca um valor inventado).
+  - **Conexões & Empresas:** quantidade real de empresas cadastradas;
+    Mercado Livre — quantidade de contas conectadas, status e última
+    sincronização; Shopee — sempre "Nenhuma conta conectada" (integração
+    ainda não existe). Nenhum texto fictício de demonstração.
+  - **Alertas & IA:** central de alertas por regras simples sobre dado
+    real (não é uma IA/modelo preditivo ainda) — SKU sem custo
+    cadastrado, pedido sem custo (impede a margem), venda com margem de
+    contribuição negativa, erro de sincronização do Mercado Livre, conta a
+    pagar vencida, recebimento (conta a receber) atrasado, e estoque
+    zerado/muito baixo (≤ 5 unidades, só para item já sincronizado — nunca
+    a partir de um dado pendente). Clicar num alerta abre a tela
+    relacionada (ex: clicar em "SKU ABC está sem custo cadastrado" abre
+    Produtos).
 
 ## Pedidos
 - Pedidos do sistema hoje vêm só do Mercado Livre (Shopee ainda não existe).

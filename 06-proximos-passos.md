@@ -1,6 +1,32 @@
 # Próximos Passos
 
 - **Concluído em 26/08/2026, testado localmente (Postgres real + servidor
+  real via HTTP + navegador real via Playwright, trocando empresa e
+  período de verdade — 13 testes automatizados novos, 123 no total, 0
+  falhas):** ativação da parte inferior da Visão Geral — Evolução diária +
+  Por marketplace, Fluxo de Caixa + Conexões & Empresas, Alertas & IA —
+  ver `04-alteracoes.md` (21) e `02-decisoes.md` (21). Falta, **nesta
+  ordem**:
+  1. o usuário subir o próximo zip de código pro GitHub (deploy automático
+     no Render cuida do resto);
+  2. depois do deploy, confirmar ao vivo em produção que os 5 blocos
+     aparecem com dado real da conta "PFEMBALAGEMS" (ou outra conta real
+     conectada) e que trocar empresa/período no header atualiza todos
+     juntos, igual ao testado aqui;
+  3. clicar em pelo menos 1 alerta real de cada tipo que aparecer, para
+     confirmar que a navegação leva pra tela certa (testado aqui só com
+     alertas fabricados/uma empresa de teste, nunca com o alerta
+     aparecendo organicamente em produção);
+  4. quando o usuário cadastrar custo nos SKUs pendentes (mesma pendência
+     já registrada pra DRE/Relatórios/Ads), conferir que os alertas "SKU
+     sem custo"/"pedido sem custo" desaparecem sozinhos;
+  - **por instrução explícita do usuário, esta etapa parou nestes 3
+    passos** — não avançar sozinho para Shopee de verdade, cadastro de
+    saldo bancário (pré-requisito de "saldo projetado"), ou uma IA/modelo
+    preditivo nos alertas, sem o usuário pedir (ver
+    `05-problemas-conhecidos.md` para o que fica registrado sobre esses
+    dois primeiros pontos).
+- **Concluído em 26/08/2026, testado localmente (Postgres real + servidor
   real via HTTP + Mercado Livre mockado, 29 testes automatizados novos —
   110 no total, 0 falhas):** reescrita do módulo Estoque para usar o
   Mercado Livre como fonte oficial das quantidades, quantidade somente
