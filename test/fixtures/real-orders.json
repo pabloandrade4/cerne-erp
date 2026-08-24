@@ -1,0 +1,5254 @@
+[
+  {
+    "ml_order_id": 2000018066590190,
+    "order": {
+      "id": 2000018066590190,
+      "tags": [
+        "order_has_discount",
+        "paid",
+        "not_delivered"
+      ],
+      "buyer": {
+        "id": 141239387,
+        "nickname": "DIASDASILVACAMILA17",
+        "last_name": "Dias da Silva",
+        "first_name": "Camila",
+        "billing_info": {
+          "id": "879407024289818545"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "paid",
+      "context": {
+        "site": "MLB",
+        "flows": [],
+        "channel": "marketplace"
+      },
+      "pack_id": null,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 175138670036,
+          "reason": "Caixa De Papelao Correios Sedex 19x12x12 Kit 25 Pac Sedex 25 Caixas",
+          "status": "rejected",
+          "card_id": 9842687143,
+          "site_id": "MLB",
+          "order_id": 2000018066590190,
+          "payer_id": 141239387,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "12523",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-22T13:45:19.000-04:00",
+          "installments": 1,
+          "payment_type": "credit_card",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 0,
+          "date_approved": null,
+          "shipping_cost": 0,
+          "status_detail": "cc_rejected_insufficient_amount",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            ""
+          ],
+          "payment_method_id": "master",
+          "total_paid_amount": 33.47,
+          "authorization_code": null,
+          "date_last_modified": "2026-08-22T13:45:21.000-04:00",
+          "installment_amount": 33.47,
+          "transaction_amount": 33.47,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": null,
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        },
+        {
+          "id": 174338067653,
+          "reason": "Caixa De Papelao Correios Sedex 19x12x12 Kit 25 Pac Sedex 25 Caixas",
+          "status": "rejected",
+          "card_id": 9842687143,
+          "site_id": "MLB",
+          "order_id": 2000018066590190,
+          "payer_id": 141239387,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "12523",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T12:50:30.000-04:00",
+          "installments": 1,
+          "payment_type": "credit_card",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 0,
+          "date_approved": null,
+          "shipping_cost": 0,
+          "status_detail": "cc_rejected_insufficient_amount",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            ""
+          ],
+          "payment_method_id": "master",
+          "total_paid_amount": 33.47,
+          "authorization_code": null,
+          "date_last_modified": "2026-08-23T12:50:33.000-04:00",
+          "installment_amount": 33.47,
+          "transaction_amount": 33.47,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": null,
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        },
+        {
+          "id": 175275304266,
+          "reason": "Caixa De Papelao Correios Sedex 19x12x12 Kit 25 Pac Sedex 25 Caixas",
+          "status": "approved",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018066590190,
+          "payer_id": 141239387,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "12501",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T12:51:21.000-04:00",
+          "installments": 1,
+          "payment_type": "bank_transfer",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 0,
+          "date_approved": "2026-08-23T12:55:01.000-04:00",
+          "shipping_cost": 0,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "pix",
+          "total_paid_amount": 33.47,
+          "authorization_code": "PIXE31872495202608231654za1e7b5xQWz",
+          "date_last_modified": "2026-08-23T12:55:01.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 33.47,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": "1",
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        }
+      ],
+      "shipping": {
+        "id": 47831974135
+      },
+      "fulfilled": null,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T12:55:01.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB6824626196",
+            "title": "Caixa De Papelao Correios Sedex 19x12x12 Kit 25 Pac Sedex 25 Caixas",
+            "warranty": "Sem garantia",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "25CX-19X12X12",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU3982495115",
+            "seller_custom_field": null,
+            "variation_attributes": [
+              {
+                "id": "COLOR",
+                "name": "Cor",
+                "value_id": "68450495",
+                "value_name": "25 Caixas"
+              }
+            ]
+          },
+          "stock": {
+            "node_id": "BRP24863800511",
+            "store_id": "79994348"
+          },
+          "bundle": null,
+          "quantity": 1,
+          "sale_fee": 3.85,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 33.47,
+          "currency_id": "BRL",
+          "gross_price": 59.99,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 1,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 33.47,
+      "static_tags": [],
+      "date_created": "2026-08-22T13:45:18.000-04:00",
+      "last_updated": "2026-08-23T12:56:40.000-04:00",
+      "total_amount": 33.47,
+      "cancel_detail": null,
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47831974135,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "pending",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018066590190,
+      "base_cost": 18.2,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": "buffered",
+      "created_by": "receiver",
+      "order_cost": 33.47,
+      "service_id": 157861,
+      "customer_id": null,
+      "items_types": [
+        "conveyable",
+        "new"
+      ],
+      "receiver_id": 141239387,
+      "carrier_info": null,
+      "date_created": "2026-08-22T13:45:18.591-04:00",
+      "last_updated": "2026-08-23T12:55:03.803-04:00",
+      "market_place": "MELI",
+      "logistic_type": "xd_drop_off",
+      "application_id": null,
+      "priority_class": {
+        "id": "60"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": 1582562193,
+        "city": {
+          "id": "QlItU1BNaXJhc3NvbA",
+          "name": "Mirassol"
+        },
+        "node": {
+          "node_id": "BRP24863800511"
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [],
+        "agency": null,
+        "comment": "XXXXXXX",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": "BR-be0a6c7571be6ff3e4f07780c606a1ab",
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": 54584006,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Portal da Cidade Amiga"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "geolocation_last_updated": "2026-03-20T18:25:25.857Z"
+      },
+      "shipping_items": [
+        {
+          "id": "MLB6824626196",
+          "bundle": null,
+          "quantity": 1,
+          "domain_id": null,
+          "sender_id": 2486380051,
+          "dimensions": "18.0x28.0x30.0,2000.0",
+          "description": "Caixa De Papelao Correios Sedex 19x12x12 Kit 25 Pac Sedex 25 Caixas",
+          "user_product_id": "MLBU3982495115",
+          "item_ponderation": null,
+          "dimensions_source": {
+            "id": "MLB6824626196__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": null,
+        "date_handling": "2026-08-23T12:55:03.000-04:00",
+        "date_returned": null,
+        "date_cancelled": null,
+        "date_delivered": null,
+        "date_first_visit": null,
+        "date_not_delivered": null,
+        "date_ready_to_ship": null
+      },
+      "cost_components": {
+        "ratio": 26.15,
+        "compensation": 0,
+        "gap_discount": 0,
+        "loyal_discount": 0,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 2039621666,
+        "cost": 0,
+        "name": "Normal ao endereço",
+        "buffering": {
+          "date": "2026-08-25T00:00:00.000Z"
+        },
+        "list_cost": 7.95,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "60"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 515462,
+        "estimated_delivery_time": {
+          "date": "2026-08-25T00:00:00.000-03:00",
+          "type": "known_frame",
+          "unit": "hour",
+          "offset": {
+            "date": "2026-08-29T00:00:00.000-03:00",
+            "shipping": 48
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 48,
+          "pay_before": "2026-08-25T10:05:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": "2026-08-25T03:00:00Z"
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "MEL Distribution",
+      "tracking_number": null,
+      "receiver_address": {
+        "id": 1132490098,
+        "city": {
+          "id": "QlItU1BNYWNhdHViYQ",
+          "name": "Macatuba"
+        },
+        "node": null,
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "default_buying_address"
+        ],
+        "agency": null,
+        "comment": null,
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": null,
+        "latitude": -22.506167,
+        "zip_code": "17290390",
+        "longitude": -48.710019,
+        "location_id": 1206113,
+        "street_name": "Rua Rio Branco",
+        "address_line": "Rua Rio Branco 248",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Jardim Veneza"
+        },
+        "receiver_name": "Camila Dias da Silva",
+        "street_number": "248",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "delivery_preference": "residential",
+        "geolocation_last_updated": "2025-02-13T17:10:32.883Z"
+      },
+      "snapshot_packing": {
+        "pack_hash": "9",
+        "snapshot_id": "d7c35613-f554-4df7-b48a-8d0c482216ec"
+      },
+      "substatus_history": [],
+      "date_first_printed": null,
+      "return_tracking_number": null,
+      "threshold_cancellation": null
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 7.95,
+          "fees": [],
+          "save": 3.41,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 3.41
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 0,
+        "fees": [],
+        "save": 18.2,
+        "user_id": 141239387,
+        "discounts": [
+          {
+            "rate": 1,
+            "type": "ratio",
+            "promoted_amount": 18.2
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [],
+        "compensations": []
+      },
+      "gross_amount": 29.56,
+      "base_exchange": null
+    }
+  },
+  {
+    "ml_order_id": 2000018075073530,
+    "order": {
+      "id": 2000018075073530,
+      "tags": [
+        "b2b",
+        "pack_order",
+        "order_has_discount",
+        "paid",
+        "delivered"
+      ],
+      "buyer": {
+        "id": 96025078,
+        "nickname": "STOFFELFORGE",
+        "last_name": "Stoffel",
+        "first_name": "Thiago",
+        "billing_info": {
+          "id": "879337829380337413"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "paid",
+      "context": {
+        "site": "MLB",
+        "flows": [
+          "b2b"
+        ],
+        "channel": "marketplace"
+      },
+      "pack_id": 2000014666807263,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 175241635084,
+          "reason": "50 Caixa De Papelão 16x11x8 Forte Ecommerce Pac Envios Corre 50",
+          "status": "approved",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018075073530,
+          "payer_id": 96025078,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "2007",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T08:14:55.000-04:00",
+          "installments": 1,
+          "payment_type": "account_money",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 0,
+          "date_approved": "2026-08-23T08:14:55.000-04:00",
+          "shipping_cost": 0,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "account_money",
+          "total_paid_amount": 43,
+          "authorization_code": null,
+          "date_last_modified": "2026-08-23T08:14:55.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 43,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": null,
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        }
+      ],
+      "shipping": {
+        "id": 47836015568
+      },
+      "fulfilled": true,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T08:14:55.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB6250265642",
+            "title": "50 Caixa De Papelão 16x11x8 Forte Ecommerce Pac Envios Corre 50",
+            "warranty": "Garantia de fábrica: 30 dias",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "50CX-16X11X8",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU3784289223",
+            "seller_custom_field": null,
+            "variation_attributes": []
+          },
+          "stock": {
+            "node_id": "BRSP04",
+            "store_id": null
+          },
+          "bundle": null,
+          "quantity": 1,
+          "sale_fee": 2.36,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 43,
+          "currency_id": "BRL",
+          "gross_price": 69,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 1,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 43,
+      "static_tags": [
+        "b2b"
+      ],
+      "date_created": "2026-08-23T08:14:52.000-04:00",
+      "last_updated": "2026-08-23T16:50:56.000-04:00",
+      "total_amount": 43,
+      "cancel_detail": null,
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47836015568,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "delivered",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018075073530,
+      "base_cost": 23.71,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": null,
+      "created_by": "receiver",
+      "order_cost": 76.47,
+      "service_id": 277362,
+      "customer_id": null,
+      "items_types": [
+        "conveyable",
+        "new"
+      ],
+      "receiver_id": 96025078,
+      "carrier_info": null,
+      "date_created": "2026-08-23T08:14:52.875-04:00",
+      "last_updated": "2026-08-23T16:50:54.568-04:00",
+      "market_place": "MELI",
+      "logistic_type": "fulfillment",
+      "application_id": null,
+      "priority_class": {
+        "id": "10"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": null,
+        "city": {
+          "id": "QlItU1BDYWphbWFy",
+          "name": "Cajamar"
+        },
+        "node": {
+          "node_id": "BRSP04",
+          "logistic_center_id": "BRSP04"
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "logistic_center_BRSP04",
+          "warehouse"
+        ],
+        "agency": null,
+        "comment": null,
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": null,
+        "version": null,
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": null,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Empresarial Paineira (Jordanésia)"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": null,
+        "geolocation_source": null,
+        "geolocation_last_updated": null
+      },
+      "shipping_items": [
+        {
+          "id": "MLB6250265642",
+          "bundle": null,
+          "quantity": 1,
+          "sender_id": 2486380051,
+          "dimensions": "60.0x35.0x21.0,3590.0",
+          "description": "50 Caixa De Papelão 16x11x8 Forte Ecommerce Pac Envios Corre 50",
+          "user_product_id": "MLBU3784289223",
+          "item_ponderation": 56.23,
+          "dimensions_source": {
+            "id": "MLB6250265642__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        },
+        {
+          "id": "MLB6824626196",
+          "bundle": null,
+          "quantity": 1,
+          "sender_id": 2486380051,
+          "dimensions": "60.0x35.0x21.0,3590.0",
+          "description": "Caixa De Papelao Correios Sedex 19x12x12 Kit 25 Pac Sedex 25 Caixas",
+          "user_product_id": "MLBU3982495115",
+          "item_ponderation": 43.77,
+          "dimensions_source": {
+            "id": "MLB6824626196__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": "2026-08-23T12:56:42.477-04:00",
+        "date_handling": "2026-08-23T08:15:02.000-04:00",
+        "date_returned": null,
+        "date_cancelled": null,
+        "date_delivered": "2026-08-23T16:48:55.000-04:00",
+        "date_first_visit": "2026-08-23T16:48:55.000-04:00",
+        "date_not_delivered": null,
+        "date_ready_to_ship": "2026-08-23T08:15:02.000-04:00"
+      },
+      "cost_components": {
+        "ratio": 35.07,
+        "compensation": 0,
+        "gap_discount": 0,
+        "loyal_discount": 0.25,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 2140508753,
+        "cost": 0.99,
+        "name": "Prioritario ao endereço",
+        "buffering": {
+          "date": null
+        },
+        "list_cost": 16.89,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "10"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 512746,
+        "estimated_delivery_time": {
+          "date": "2026-08-23T00:00:00.000-03:00",
+          "type": "known",
+          "unit": "hour",
+          "offset": {
+            "date": null,
+            "shipping": null
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 0,
+          "pay_before": "2026-08-23T11:06:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": null
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "MEL Distribution - Same Day",
+      "tracking_number": "FWGKV73J2FOO7DDPLGO4YISB4E",
+      "receiver_address": {
+        "id": 1052361353,
+        "city": {
+          "id": "BR-SP-14",
+          "name": "Jundiaí"
+        },
+        "node": null,
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "billing",
+          "default_buying_address",
+          "default_return_address",
+          "default_selling_address",
+          "shipping"
+        ],
+        "agency": null,
+        "comment": "Referencia: Portao Branco com interfone",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": "BR-74217a4cf8477deba55a38b6e19e32b4",
+        "latitude": -23.18507,
+        "zip_code": "13212170",
+        "longitude": -46.962776,
+        "location_id": 614854,
+        "street_name": "Rua Doutor Caetano Genari",
+        "address_line": "Rua Doutor Caetano Genari 392",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Parque Residencial Eloy Chaves"
+        },
+        "receiver_name": "Thiago De Melo G Stoffel",
+        "street_number": "392",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "delivery_preference": "residential",
+        "geolocation_last_updated": "2025-01-13T20:53:43.017Z"
+      },
+      "snapshot_packing": {
+        "pack_hash": "1",
+        "snapshot_id": "d22b6e24-f2f4-45e8-bf17-4488535601ec"
+      },
+      "substatus_history": [
+        {
+          "date": "2026-08-23T08:14:59.640-04:00",
+          "status": "pending",
+          "substatus": "shipment_paid"
+        },
+        {
+          "date": "2026-08-23T08:15:02.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_warehouse"
+        },
+        {
+          "date": "2026-08-23T09:27:01.199-04:00",
+          "status": "ready_to_ship",
+          "substatus": "ready_to_pack"
+        },
+        {
+          "date": "2026-08-23T12:31:06.909-04:00",
+          "status": "ready_to_ship",
+          "substatus": "packed"
+        },
+        {
+          "date": "2026-08-23T12:39:04.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_packing_list"
+        }
+      ],
+      "date_first_printed": "2026-08-23T12:30:22.478-04:00",
+      "return_tracking_number": null
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 15.9,
+          "fees": [],
+          "save": 6.82,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 6.82
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 0.99,
+        "fees": [],
+        "save": 33.07,
+        "user_id": 96025078,
+        "discounts": [
+          {
+            "rate": 0.41,
+            "type": "loyal",
+            "promoted_amount": 14.11
+          },
+          {
+            "rate": 0.56,
+            "type": "ratio",
+            "promoted_amount": 19.17
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [
+          {
+            "amount": 0.99,
+            "sender_id": 2486380051
+          }
+        ],
+        "compensations": []
+      },
+      "gross_amount": 56.99,
+      "base_exchange": null
+    }
+  },
+  {
+    "ml_order_id": 2000018075078724,
+    "order": {
+      "id": 2000018075078724,
+      "tags": [
+        "b2b",
+        "pack_order",
+        "order_has_discount",
+        "paid",
+        "delivered"
+      ],
+      "buyer": {
+        "id": 96025078,
+        "nickname": "STOFFELFORGE",
+        "last_name": "Stoffel",
+        "first_name": "Thiago",
+        "billing_info": {
+          "id": "879337829380337413"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "paid",
+      "context": {
+        "site": "MLB",
+        "flows": [
+          "b2b"
+        ],
+        "channel": "marketplace"
+      },
+      "pack_id": 2000014666807263,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 175241601136,
+          "reason": "Caixa De Papelao Correios Sedex 19x12x12 Kit 25 Pac Sedex 25 Caixas",
+          "status": "approved",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018075078724,
+          "payer_id": 96025078,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "2007",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T08:14:56.000-04:00",
+          "installments": 1,
+          "payment_type": "account_money",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 0,
+          "date_approved": "2026-08-23T08:14:56.000-04:00",
+          "shipping_cost": 0,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "account_money",
+          "total_paid_amount": 33.47,
+          "authorization_code": null,
+          "date_last_modified": "2026-08-23T08:14:56.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 33.47,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": null,
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        }
+      ],
+      "shipping": {
+        "id": 47836015568
+      },
+      "fulfilled": true,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T08:14:56.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB6824626196",
+            "title": "Caixa De Papelao Correios Sedex 19x12x12 Kit 25 Pac Sedex 25 Caixas",
+            "warranty": "Sem garantia",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "25CX-19X12X12",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU3982495115",
+            "seller_custom_field": null,
+            "variation_attributes": [
+              {
+                "id": "COLOR",
+                "name": "Cor",
+                "value_id": "68450495",
+                "value_name": "25 Caixas"
+              }
+            ]
+          },
+          "stock": {
+            "node_id": "BRSP04",
+            "store_id": null
+          },
+          "bundle": null,
+          "quantity": 1,
+          "sale_fee": 3.85,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 33.47,
+          "currency_id": "BRL",
+          "gross_price": 59.99,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 1,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 33.47,
+      "static_tags": [
+        "b2b"
+      ],
+      "date_created": "2026-08-23T08:14:52.000-04:00",
+      "last_updated": "2026-08-23T16:50:56.000-04:00",
+      "total_amount": 33.47,
+      "cancel_detail": null,
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47836015568,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "delivered",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018075073530,
+      "base_cost": 23.71,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": null,
+      "created_by": "receiver",
+      "order_cost": 76.47,
+      "service_id": 277362,
+      "customer_id": null,
+      "items_types": [
+        "conveyable",
+        "new"
+      ],
+      "receiver_id": 96025078,
+      "carrier_info": null,
+      "date_created": "2026-08-23T08:14:52.875-04:00",
+      "last_updated": "2026-08-23T16:50:54.568-04:00",
+      "market_place": "MELI",
+      "logistic_type": "fulfillment",
+      "application_id": null,
+      "priority_class": {
+        "id": "10"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": null,
+        "city": {
+          "id": "QlItU1BDYWphbWFy",
+          "name": "Cajamar"
+        },
+        "node": {
+          "node_id": "BRSP04",
+          "logistic_center_id": "BRSP04"
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "logistic_center_BRSP04",
+          "warehouse"
+        ],
+        "agency": null,
+        "comment": null,
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": null,
+        "version": null,
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": null,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Empresarial Paineira (Jordanésia)"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": null,
+        "geolocation_source": null,
+        "geolocation_last_updated": null
+      },
+      "shipping_items": [
+        {
+          "id": "MLB6250265642",
+          "bundle": null,
+          "quantity": 1,
+          "sender_id": 2486380051,
+          "dimensions": "60.0x35.0x21.0,3590.0",
+          "description": "50 Caixa De Papelão 16x11x8 Forte Ecommerce Pac Envios Corre 50",
+          "user_product_id": "MLBU3784289223",
+          "item_ponderation": 56.23,
+          "dimensions_source": {
+            "id": "MLB6250265642__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        },
+        {
+          "id": "MLB6824626196",
+          "bundle": null,
+          "quantity": 1,
+          "sender_id": 2486380051,
+          "dimensions": "60.0x35.0x21.0,3590.0",
+          "description": "Caixa De Papelao Correios Sedex 19x12x12 Kit 25 Pac Sedex 25 Caixas",
+          "user_product_id": "MLBU3982495115",
+          "item_ponderation": 43.77,
+          "dimensions_source": {
+            "id": "MLB6824626196__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": "2026-08-23T12:56:42.477-04:00",
+        "date_handling": "2026-08-23T08:15:02.000-04:00",
+        "date_returned": null,
+        "date_cancelled": null,
+        "date_delivered": "2026-08-23T16:48:55.000-04:00",
+        "date_first_visit": "2026-08-23T16:48:55.000-04:00",
+        "date_not_delivered": null,
+        "date_ready_to_ship": "2026-08-23T08:15:02.000-04:00"
+      },
+      "cost_components": {
+        "ratio": 35.07,
+        "compensation": 0,
+        "gap_discount": 0,
+        "loyal_discount": 0.25,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 2140508753,
+        "cost": 0.99,
+        "name": "Prioritario ao endereço",
+        "buffering": {
+          "date": null
+        },
+        "list_cost": 16.89,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "10"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 512746,
+        "estimated_delivery_time": {
+          "date": "2026-08-23T00:00:00.000-03:00",
+          "type": "known",
+          "unit": "hour",
+          "offset": {
+            "date": null,
+            "shipping": null
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 0,
+          "pay_before": "2026-08-23T11:06:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": null
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "MEL Distribution - Same Day",
+      "tracking_number": "FWGKV73J2FOO7DDPLGO4YISB4E",
+      "receiver_address": {
+        "id": 1052361353,
+        "city": {
+          "id": "BR-SP-14",
+          "name": "Jundiaí"
+        },
+        "node": null,
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "billing",
+          "default_buying_address",
+          "default_return_address",
+          "default_selling_address",
+          "shipping"
+        ],
+        "agency": null,
+        "comment": "Referencia: Portao Branco com interfone",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": "BR-74217a4cf8477deba55a38b6e19e32b4",
+        "latitude": -23.18507,
+        "zip_code": "13212170",
+        "longitude": -46.962776,
+        "location_id": 614854,
+        "street_name": "Rua Doutor Caetano Genari",
+        "address_line": "Rua Doutor Caetano Genari 392",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Parque Residencial Eloy Chaves"
+        },
+        "receiver_name": "Thiago De Melo G Stoffel",
+        "street_number": "392",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "delivery_preference": "residential",
+        "geolocation_last_updated": "2025-01-13T20:53:43.017Z"
+      },
+      "snapshot_packing": {
+        "pack_hash": "1",
+        "snapshot_id": "d22b6e24-f2f4-45e8-bf17-4488535601ec"
+      },
+      "substatus_history": [
+        {
+          "date": "2026-08-23T08:14:59.640-04:00",
+          "status": "pending",
+          "substatus": "shipment_paid"
+        },
+        {
+          "date": "2026-08-23T08:15:02.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_warehouse"
+        },
+        {
+          "date": "2026-08-23T09:27:01.199-04:00",
+          "status": "ready_to_ship",
+          "substatus": "ready_to_pack"
+        },
+        {
+          "date": "2026-08-23T12:31:06.909-04:00",
+          "status": "ready_to_ship",
+          "substatus": "packed"
+        },
+        {
+          "date": "2026-08-23T12:39:04.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_packing_list"
+        }
+      ],
+      "date_first_printed": "2026-08-23T12:30:22.478-04:00",
+      "return_tracking_number": null
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 15.9,
+          "fees": [],
+          "save": 6.82,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 6.82
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 0.99,
+        "fees": [],
+        "save": 33.07,
+        "user_id": 96025078,
+        "discounts": [
+          {
+            "rate": 0.41,
+            "type": "loyal",
+            "promoted_amount": 14.11
+          },
+          {
+            "rate": 0.56,
+            "type": "ratio",
+            "promoted_amount": 19.17
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [
+          {
+            "amount": 0.99,
+            "sender_id": 2486380051
+          }
+        ],
+        "compensations": []
+      },
+      "gross_amount": 56.99,
+      "base_exchange": null
+    }
+  },
+  {
+    "ml_order_id": 2000018077005362,
+    "order": {
+      "id": 2000018077005362,
+      "tags": [
+        "order_has_discount",
+        "paid",
+        "not_delivered"
+      ],
+      "buyer": {
+        "id": 510431715,
+        "nickname": "DANIELBATAS",
+        "last_name": "DE OLIVEIRA",
+        "first_name": "DANIEL BATASINI",
+        "billing_info": {
+          "id": "879384304277255198"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "paid",
+      "context": {
+        "site": "MLB",
+        "flows": [],
+        "channel": "marketplace"
+      },
+      "pack_id": null,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 174326052321,
+          "reason": "Kit 50 Caixa De Papelao 16x11x6 Embalagem Pequena Correios Marrom-claro",
+          "status": "approved",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018077005362,
+          "payer_id": 510431715,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "12501",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T11:19:43.000-04:00",
+          "installments": 1,
+          "payment_type": "bank_transfer",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 1.77,
+          "date_approved": "2026-08-23T12:01:19.000-04:00",
+          "shipping_cost": 0,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "pix",
+          "total_paid_amount": 33.57,
+          "authorization_code": "PIXE9040088820260823160168376683606",
+          "date_last_modified": "2026-08-23T12:01:19.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 35.34,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": "1",
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        }
+      ],
+      "shipping": {
+        "id": 47836615531
+      },
+      "fulfilled": null,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T12:01:20.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB4960557523",
+            "title": "Kit 50 Caixa De Papelao 16x11x6 Embalagem Pequena Correios Marrom-claro",
+            "warranty": "Garantia do vendedor: 30 dias",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "50CX-16X11X6",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU4464434321",
+            "seller_custom_field": null,
+            "variation_attributes": [
+              {
+                "id": "COLOR",
+                "name": "Cor",
+                "value_id": "283154",
+                "value_name": "Marrom-claro"
+              }
+            ]
+          },
+          "stock": {
+            "node_id": "BRSP02",
+            "store_id": null
+          },
+          "bundle": null,
+          "quantity": 1,
+          "sale_fee": 1.74,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 35.34,
+          "currency_id": "BRL",
+          "gross_price": 59.99,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 1,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 35.34,
+      "static_tags": [],
+      "date_created": "2026-08-23T11:19:43.000-04:00",
+      "last_updated": "2026-08-23T12:02:58.000-04:00",
+      "total_amount": 35.34,
+      "cancel_detail": null,
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47836615531,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "shipped",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018077005362,
+      "base_cost": 29.4,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": null,
+      "created_by": "receiver",
+      "order_cost": 35.34,
+      "service_id": 966283,
+      "customer_id": null,
+      "items_types": [
+        "conveyable",
+        "new"
+      ],
+      "receiver_id": 510431715,
+      "carrier_info": null,
+      "date_created": "2026-08-23T11:19:43.260-04:00",
+      "last_updated": "2026-08-23T22:58:26.070-04:00",
+      "market_place": "MELI",
+      "logistic_type": "fulfillment",
+      "application_id": null,
+      "priority_class": {
+        "id": "60"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": null,
+        "city": {
+          "id": "QlItU1BDYWphbWFy",
+          "name": "Cajamar"
+        },
+        "node": {
+          "node_id": "BRSP02",
+          "logistic_center_id": "BRSP02"
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "logistic_center_BRSP02",
+          "warehouse"
+        ],
+        "agency": null,
+        "comment": "XXXXXXX",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": null,
+        "version": null,
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": null,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Empresarial Colina"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": null,
+        "geolocation_last_updated": null
+      },
+      "shipping_items": [
+        {
+          "id": "MLB4960557523",
+          "bundle": null,
+          "quantity": 1,
+          "domain_id": null,
+          "sender_id": 2486380051,
+          "dimensions": "15.0x33.0x39.0,1840.0",
+          "description": "Kit 50 Caixa De Papelao 16x11x6 Embalagem Pequena Correios Marrom-claro",
+          "user_product_id": "MLBU4464434321",
+          "item_ponderation": null,
+          "dimensions_source": {
+            "id": "MLB4960557523__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": "2026-08-23T22:57:11.069-04:00",
+        "date_handling": "2026-08-23T12:01:21.000-04:00",
+        "date_returned": null,
+        "date_cancelled": null,
+        "date_delivered": null,
+        "date_first_visit": null,
+        "date_not_delivered": null,
+        "date_ready_to_ship": "2026-08-23T12:01:21.000-04:00"
+      },
+      "cost_components": {
+        "ratio": 27.95,
+        "compensation": 0,
+        "gap_discount": 0,
+        "loyal_discount": 0.23,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 4072482198,
+        "cost": 0,
+        "name": "Normal ao endereço",
+        "buffering": {
+          "date": null
+        },
+        "list_cost": 7.95,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "60"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 515462,
+        "estimated_delivery_time": {
+          "date": "2026-08-29T00:00:00.000-03:00",
+          "type": "known_frame",
+          "unit": "hour",
+          "offset": {
+            "date": "2026-09-02T00:00:00.000-03:00",
+            "shipping": 48
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 144,
+          "pay_before": "2026-08-24T23:15:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": "2026-08-29T03:00:00Z"
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "J&T Service Partner",
+      "tracking_number": "888002454343813",
+      "receiver_address": {
+        "id": 1331210395,
+        "city": {
+          "id": "TUxCQ1BPUjk2MDFm",
+          "name": "Porto Velho"
+        },
+        "node": null,
+        "state": {
+          "id": "BR-RO",
+          "name": "Rondônia"
+        },
+        "types": [
+          "default_buying_address"
+        ],
+        "agency": null,
+        "comment": "MYPHARM FARMÁCIA",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": "BR-e96a3acbe432530a30171517c1b26554",
+        "latitude": -8.758258,
+        "zip_code": "76801243",
+        "longitude": -63.902826,
+        "location_id": 11920681,
+        "street_name": "Avenida Campos Sales",
+        "address_line": "Avenida Campos Sales 3059",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Olaria"
+        },
+        "receiver_name": "Daniel Batasini de Oliveira",
+        "street_number": "3059",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "delivery_preference": "business",
+        "geolocation_last_updated": "2025-01-31T13:28:04.33Z"
+      },
+      "snapshot_packing": {
+        "pack_hash": "5",
+        "snapshot_id": "85569964-5eac-425c-8072-0eb76b65315c"
+      },
+      "substatus_history": [
+        {
+          "date": "2026-08-23T12:01:21.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_warehouse"
+        },
+        {
+          "date": "2026-08-23T16:36:18.501-04:00",
+          "status": "ready_to_ship",
+          "substatus": "ready_to_pack"
+        },
+        {
+          "date": "2026-08-23T18:15:28.153-04:00",
+          "status": "ready_to_ship",
+          "substatus": "packed"
+        },
+        {
+          "date": "2026-08-23T18:24:37.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_packing_list"
+        }
+      ],
+      "date_first_printed": "2026-08-23T16:36:19.134-04:00",
+      "return_tracking_number": null,
+      "threshold_cancellation": null
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 7.95,
+          "fees": [],
+          "save": 3.41,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 3.41
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 0,
+        "fees": [],
+        "save": 29.4,
+        "user_id": 510431715,
+        "discounts": [
+          {
+            "rate": 0.32,
+            "type": "loyal",
+            "promoted_amount": 9.4
+          },
+          {
+            "rate": 0.68,
+            "type": "ratio",
+            "promoted_amount": 20
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [],
+        "compensations": []
+      },
+      "gross_amount": 40.76,
+      "base_exchange": null
+    }
+  },
+  {
+    "ml_order_id": 2000018078185798,
+    "order": {
+      "id": 2000018078185798,
+      "tags": [
+        "pack_order",
+        "order_has_discount",
+        "paid",
+        "not_delivered"
+      ],
+      "buyer": {
+        "id": 357169900,
+        "nickname": "ANAL4615827",
+        "last_name": "MARTINS ANDRADE",
+        "first_name": "ALEXANDRE",
+        "billing_info": {
+          "id": "879406395603681507"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "paid",
+      "context": {
+        "site": "MLB",
+        "flows": [],
+        "channel": "marketplace"
+      },
+      "pack_id": 2000014669675047,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 174337951549,
+          "reason": "100 Caixa De Papelao 16x11x8 Forte Ondualdo Maleta Ecommerce Bege",
+          "status": "approved",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018078185798,
+          "payer_id": 357169900,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "2007",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T12:48:40.000-04:00",
+          "installments": 1,
+          "payment_type": "account_money",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 0,
+          "date_approved": "2026-08-23T12:48:40.000-04:00",
+          "shipping_cost": 0,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "account_money",
+          "total_paid_amount": 145.4,
+          "authorization_code": null,
+          "date_last_modified": "2026-08-23T12:48:40.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 145.4,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": null,
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        }
+      ],
+      "shipping": {
+        "id": 47837129713
+      },
+      "fulfilled": null,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T12:48:41.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB4770369549",
+            "title": "100 Caixa De Papelao 16x11x8 Forte Ondualdo Maleta Ecommerce Bege",
+            "warranty": "Garantia de fábrica: 30 dias",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "100CX-16X11X8",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU4096450296",
+            "seller_custom_field": null,
+            "variation_attributes": [
+              {
+                "id": "COLOR",
+                "name": "Cor",
+                "value_id": "52001",
+                "value_name": "Bege"
+              }
+            ]
+          },
+          "stock": {
+            "node_id": "BRP24863800511",
+            "store_id": "79994348"
+          },
+          "bundle": null,
+          "quantity": 2,
+          "sale_fee": 5.66,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 72.7,
+          "currency_id": "BRL",
+          "gross_price": 157.8,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 2,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 145.4,
+      "static_tags": [],
+      "date_created": "2026-08-23T12:48:37.000-04:00",
+      "last_updated": "2026-08-23T12:50:12.000-04:00",
+      "total_amount": 145.4,
+      "cancel_detail": null,
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47837129713,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "pending",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018078185798,
+      "base_cost": 55.41,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": "buffered",
+      "created_by": "receiver",
+      "order_cost": 145.4,
+      "service_id": 157861,
+      "customer_id": null,
+      "items_types": [
+        "new",
+        "conveyable"
+      ],
+      "receiver_id": 357169900,
+      "carrier_info": null,
+      "date_created": "2026-08-23T12:48:38.019-04:00",
+      "last_updated": "2026-08-23T12:48:46.117-04:00",
+      "market_place": "MELI",
+      "logistic_type": "xd_drop_off",
+      "application_id": null,
+      "priority_class": {
+        "id": "20"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": 1582562193,
+        "city": {
+          "id": "QlItU1BNaXJhc3NvbA",
+          "name": "Mirassol"
+        },
+        "node": {
+          "node_id": "BRP24863800511"
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [],
+        "agency": null,
+        "comment": "XXXXXXX",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": "BR-be0a6c7571be6ff3e4f07780c606a1ab",
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": 54584006,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Portal da Cidade Amiga"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "geolocation_last_updated": "2026-03-20T18:25:25.857Z"
+      },
+      "shipping_items": [
+        {
+          "id": "MLB4770369549",
+          "bundle": null,
+          "quantity": 2,
+          "sender_id": 2486380051,
+          "dimensions": "50.0x41.0x30.0,9200.0",
+          "description": "100 Caixa De Papelao 16x11x8 Forte Ondualdo Maleta Ecommerce Bege",
+          "user_product_id": "MLBU4096450296",
+          "item_ponderation": 100,
+          "dimensions_source": {
+            "id": "MLB4770369549__1",
+            "origin": "bmp"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": null,
+        "date_handling": "2026-08-23T12:48:44.000-04:00",
+        "date_returned": null,
+        "date_cancelled": null,
+        "date_delivered": null,
+        "date_first_visit": null,
+        "date_not_delivered": null,
+        "date_ready_to_ship": null
+      },
+      "cost_components": {
+        "ratio": 43.52,
+        "compensation": 0,
+        "gap_discount": 0,
+        "loyal_discount": 0,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 4106770992,
+        "cost": 26.99,
+        "name": "Normal",
+        "buffering": {
+          "date": "2026-08-25T00:00:00.000Z"
+        },
+        "list_cost": 46.88,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "20"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 100009,
+        "estimated_delivery_time": {
+          "date": "2026-08-26T00:00:00.000-03:00",
+          "type": "known_frame",
+          "unit": "hour",
+          "offset": {
+            "date": "2026-08-28T00:00:00.000-03:00",
+            "shipping": 48
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 48,
+          "pay_before": "2026-08-25T09:30:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": null
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "MEL Distribution",
+      "tracking_number": null,
+      "receiver_address": {
+        "id": 1351121642,
+        "city": {
+          "id": "BR-RJ-01",
+          "name": "Rio de Janeiro"
+        },
+        "node": null,
+        "state": {
+          "id": "BR-RJ",
+          "name": "Rio de Janeiro"
+        },
+        "types": [
+          "default_buying_address"
+        ],
+        "agency": null,
+        "comment": "casa 101",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": "BR-abfbb8adae52bcba0f746970c55b252c",
+        "latitude": -22.910827,
+        "zip_code": "20710270",
+        "longitude": -43.274593,
+        "location_id": 4198994,
+        "street_name": "Rua Padre Roma",
+        "address_line": "Rua Padre Roma 96",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Engenho Novo"
+        },
+        "receiver_name": "Alexandre Martins Andrade",
+        "street_number": "96",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "delivery_preference": "residential",
+        "geolocation_last_updated": "2025-04-13T16:24:35.505Z"
+      },
+      "snapshot_packing": {
+        "pack_hash": "18",
+        "snapshot_id": "7c735844-4b63-47f9-a9d6-a83dacb02298"
+      },
+      "substatus_history": [
+        {
+          "date": "2026-08-23T12:48:42.044-04:00",
+          "status": "pending",
+          "substatus": "shipment_paid"
+        }
+      ],
+      "date_first_printed": null,
+      "return_tracking_number": null
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 19.89,
+          "fees": [],
+          "save": 8.53,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 8.53
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 26.99,
+        "fees": [],
+        "save": 23.41,
+        "user_id": 357169900,
+        "discounts": [
+          {
+            "rate": 0.47,
+            "type": "ratio",
+            "promoted_amount": 23.63
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [
+          {
+            "amount": 26.99,
+            "sender_id": 2486380051
+          }
+        ],
+        "compensations": []
+      },
+      "gross_amount": 79.04,
+      "base_exchange": null
+    }
+  },
+  {
+    "ml_order_id": 2000018078186456,
+    "order": {
+      "id": 2000018078186456,
+      "tags": [
+        "order_has_discount",
+        "paid",
+        "not_delivered"
+      ],
+      "buyer": {
+        "id": 1415005223,
+        "nickname": "LEONARIACASTRO",
+        "last_name": "Castro",
+        "first_name": "Leonaria",
+        "billing_info": {
+          "id": "879406619023111739"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "paid",
+      "context": {
+        "site": "MLB",
+        "flows": [],
+        "channel": "marketplace"
+      },
+      "pack_id": null,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 174337923527,
+          "reason": "25 Caixas De Papelão Correios 20x14x8 Sedex Pac Envios Bege Marrom-claro",
+          "status": "approved",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018078186456,
+          "payer_id": 1415005223,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "12501",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T12:48:25.000-04:00",
+          "installments": 1,
+          "payment_type": "bank_transfer",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 1.67,
+          "date_approved": "2026-08-23T12:50:05.000-04:00",
+          "shipping_cost": 8.99,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "pix",
+          "total_paid_amount": 40.79,
+          "authorization_code": "PIXE16501555202608231649b80371df426",
+          "date_last_modified": "2026-08-23T12:50:05.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 33.47,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": "1",
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        }
+      ],
+      "shipping": {
+        "id": 47837128647
+      },
+      "fulfilled": null,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T12:50:06.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB4829261651",
+            "title": "25 Caixas De Papelão Correios 20x14x8 Sedex Pac Envios Bege Marrom-claro",
+            "warranty": "Garantia de fábrica: 30 dias",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "25CX-20X14X8",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU4176065115",
+            "seller_custom_field": null,
+            "variation_attributes": [
+              {
+                "id": "COLOR",
+                "name": "Cor",
+                "value_id": "283154",
+                "value_name": "Marrom-claro"
+              }
+            ]
+          },
+          "stock": {
+            "node_id": "BRSP04",
+            "store_id": null
+          },
+          "bundle": null,
+          "quantity": 1,
+          "sale_fee": 3.66,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 33.47,
+          "currency_id": "BRL",
+          "gross_price": 58,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 1,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 42.46,
+      "static_tags": [],
+      "date_created": "2026-08-23T12:48:24.000-04:00",
+      "last_updated": "2026-08-23T12:51:49.000-04:00",
+      "total_amount": 33.47,
+      "cancel_detail": null,
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47837128647,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "ready_to_ship",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018078186456,
+      "base_cost": 28.3,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": "in_packing_list",
+      "created_by": "receiver",
+      "order_cost": 33.47,
+      "service_id": 3022162,
+      "customer_id": null,
+      "items_types": [
+        "new",
+        "conveyable"
+      ],
+      "receiver_id": 1415005223,
+      "carrier_info": null,
+      "date_created": "2026-08-23T12:48:24.646-04:00",
+      "last_updated": "2026-08-23T22:05:43.269-04:00",
+      "market_place": "MELI",
+      "logistic_type": "fulfillment",
+      "application_id": null,
+      "priority_class": {
+        "id": "60"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": null,
+        "city": {
+          "id": "QlItU1BDYWphbWFy",
+          "name": "Cajamar"
+        },
+        "node": {
+          "node_id": "BRSP04",
+          "logistic_center_id": "BRSP04"
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "logistic_center_BRSP04",
+          "warehouse"
+        ],
+        "agency": null,
+        "comment": null,
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": null,
+        "version": null,
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": null,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Empresarial Paineira (Jordanésia)"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": null,
+        "geolocation_source": null,
+        "geolocation_last_updated": null
+      },
+      "shipping_items": [
+        {
+          "id": "MLB4829261651",
+          "bundle": null,
+          "quantity": 1,
+          "domain_id": null,
+          "sender_id": 2486380051,
+          "dimensions": "16.0x25.0x38.0,1640.0",
+          "description": "25 Caixas De Papelão Correios 20x14x8 Sedex Pac Envios Bege Marrom-claro",
+          "user_product_id": "MLBU4176065115",
+          "item_ponderation": null,
+          "dimensions_source": {
+            "id": "MLB4829261651__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": null,
+        "date_handling": "2026-08-23T12:50:08.000-04:00",
+        "date_returned": null,
+        "date_cancelled": null,
+        "date_delivered": null,
+        "date_first_visit": null,
+        "date_not_delivered": null,
+        "date_ready_to_ship": "2026-08-23T12:50:08.000-04:00"
+      },
+      "cost_components": {
+        "ratio": 27.95,
+        "compensation": 0,
+        "gap_discount": 0,
+        "loyal_discount": 0,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 712564376,
+        "cost": 8.99,
+        "name": "Normal ao endereço",
+        "buffering": {
+          "date": null
+        },
+        "list_cost": 16.94,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "60"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 515462,
+        "estimated_delivery_time": {
+          "date": "2026-08-30T00:00:00.000-03:00",
+          "type": "known_frame",
+          "unit": "hour",
+          "offset": {
+            "date": "2026-09-03T00:00:00.000-03:00",
+            "shipping": 48
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 144,
+          "pay_before": "2026-08-24T14:06:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": "2026-08-27T03:00:00Z"
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "J&T Slow",
+      "tracking_number": "888002460960709",
+      "receiver_address": {
+        "id": 1546306256,
+        "city": {
+          "id": "TUxCQ0JBSWI5ZmVk",
+          "name": "Baixa Grande do Ribeiro"
+        },
+        "node": null,
+        "state": {
+          "id": "BR-PI",
+          "name": "Piauí"
+        },
+        "types": [
+          "default_buying_address"
+        ],
+        "agency": null,
+        "comment": "Na loja Lai belle Referencia: Fica ao lado da escola deisa arimateia e ao lado da grandon engenharia, casa de portão preto grudado numa grade verde",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 0,
+        "version": "BR-a4101cec63a9503eb13d8a5a9e1e2b5c",
+        "latitude": -7.855076,
+        "zip_code": "64868000",
+        "longitude": -45.215548,
+        "location_id": 83817614,
+        "street_name": "Rua João Ribeiro",
+        "address_line": "Rua João Ribeiro 1849",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Outro"
+        },
+        "receiver_name": "Leonaria de Castro sobrinho",
+        "street_number": "1849",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": "RANGE_INTERPOLATED",
+        "geolocation_source": "photo-driver",
+        "delivery_preference": "business",
+        "geolocation_last_updated": "2026-08-20T16:47:34.992Z"
+      },
+      "snapshot_packing": {
+        "pack_hash": "2",
+        "snapshot_id": "9f1d66fa-71fd-4b73-bbc6-a0d9b3424301"
+      },
+      "substatus_history": [
+        {
+          "date": "2026-08-23T12:50:08.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_warehouse"
+        },
+        {
+          "date": "2026-08-23T20:11:39.011-04:00",
+          "status": "ready_to_ship",
+          "substatus": "ready_to_pack"
+        },
+        {
+          "date": "2026-08-23T22:05:41.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_packing_list"
+        }
+      ],
+      "date_first_printed": "2026-08-23T20:16:30.253-04:00",
+      "return_tracking_number": null
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 7.95,
+          "fees": [],
+          "save": 3.41,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 3.41
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 8.99,
+        "fees": [],
+        "save": 19.31,
+        "user_id": 1415005223,
+        "discounts": [
+          {
+            "rate": 0.69,
+            "type": "ratio",
+            "promoted_amount": 20
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [
+          {
+            "amount": 8.99,
+            "sender_id": 2486380051
+          }
+        ],
+        "compensations": []
+      },
+      "gross_amount": 40.35,
+      "base_exchange": null
+    }
+  },
+  {
+    "ml_order_id": 2000018081695020,
+    "order": {
+      "id": 2000018081695020,
+      "tags": [
+        "b2b",
+        "pack_order",
+        "order_has_discount",
+        "paid",
+        "not_delivered"
+      ],
+      "buyer": {
+        "id": 2554041875,
+        "nickname": "FBAFDCGHE95499",
+        "last_name": "FRANCA COMPARIN",
+        "first_name": "GIOVANI",
+        "billing_info": {
+          "id": "879471368331066141"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "paid",
+      "context": {
+        "site": "MLB",
+        "flows": [
+          "b2b"
+        ],
+        "channel": "marketplace"
+      },
+      "pack_id": 2000014673035971,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 175303689660,
+          "reason": "50 Caixa De Papelão 16x11x8 Forte Ecommerce Pac Envios Corre 50",
+          "status": "approved",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018081695020,
+          "payer_id": 2554041875,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "2007",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T17:05:57.000-04:00",
+          "installments": 1,
+          "payment_type": "account_money",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 0,
+          "date_approved": "2026-08-23T17:05:57.000-04:00",
+          "shipping_cost": 0,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "account_money",
+          "total_paid_amount": 86,
+          "authorization_code": null,
+          "date_last_modified": "2026-08-23T17:05:57.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 86,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": null,
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        }
+      ],
+      "shipping": {
+        "id": 47838666497
+      },
+      "fulfilled": null,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T17:05:57.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB6250265642",
+            "title": "50 Caixa De Papelão 16x11x8 Forte Ecommerce Pac Envios Corre 50",
+            "warranty": "Garantia de fábrica: 30 dias",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "50CX-16X11X8",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU3784289223",
+            "seller_custom_field": null,
+            "variation_attributes": []
+          },
+          "stock": {
+            "node_id": "BRPR01",
+            "store_id": null
+          },
+          "bundle": null,
+          "quantity": 2,
+          "sale_fee": 2.36,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 43,
+          "currency_id": "BRL",
+          "gross_price": 138,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 2,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 86,
+      "static_tags": [
+        "b2b"
+      ],
+      "date_created": "2026-08-23T17:05:55.000-04:00",
+      "last_updated": "2026-08-23T17:07:31.000-04:00",
+      "total_amount": 86,
+      "cancel_detail": null,
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47838666497,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "shipped",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018081695020,
+      "base_cost": 32.71,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": null,
+      "created_by": "receiver",
+      "order_cost": 86,
+      "service_id": 157861,
+      "customer_id": null,
+      "items_types": [
+        "conveyable",
+        "new"
+      ],
+      "receiver_id": 2554041875,
+      "carrier_info": null,
+      "date_created": "2026-08-23T17:05:55.604-04:00",
+      "last_updated": "2026-08-23T22:35:39.206-04:00",
+      "market_place": "MELI",
+      "logistic_type": "fulfillment",
+      "application_id": null,
+      "priority_class": {
+        "id": "10"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": null,
+        "city": {
+          "id": "TUxCQ0FSQTU2YTVm",
+          "name": "Araucária"
+        },
+        "node": {
+          "node_id": "BRPR01",
+          "logistic_center_id": "BRPR01"
+        },
+        "state": {
+          "id": "BR-PR",
+          "name": "Paraná"
+        },
+        "types": [
+          "logistic_center_BRPR01",
+          "warehouse"
+        ],
+        "agency": null,
+        "comment": null,
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": null,
+        "version": null,
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": null,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Fazenda Velha"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": null,
+        "geolocation_source": null,
+        "geolocation_last_updated": null
+      },
+      "shipping_items": [
+        {
+          "id": "MLB6250265642",
+          "bundle": null,
+          "quantity": 2,
+          "sender_id": 2486380051,
+          "dimensions": "60.0x31.0x21.0,4180.0",
+          "description": "50 Caixa De Papelão 16x11x8 Forte Ecommerce Pac Envios Corre 50",
+          "user_product_id": "MLBU3784289223",
+          "item_ponderation": 100,
+          "dimensions_source": {
+            "id": "MLB6250265642__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": "2026-08-23T22:35:35.539-04:00",
+        "date_handling": "2026-08-23T17:06:00.000-04:00",
+        "date_returned": null,
+        "date_cancelled": null,
+        "date_delivered": null,
+        "date_first_visit": null,
+        "date_not_delivered": null,
+        "date_ready_to_ship": "2026-08-23T17:06:00.000-04:00"
+      },
+      "cost_components": {
+        "ratio": 34.78,
+        "compensation": 0,
+        "gap_discount": 0,
+        "loyal_discount": 0,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 3482812649,
+        "cost": 9.99,
+        "name": "Prioritario",
+        "buffering": {
+          "date": null
+        },
+        "list_cost": 25.89,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "10"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 507945,
+        "estimated_delivery_time": {
+          "date": "2026-08-24T00:00:00.000-03:00",
+          "type": "known",
+          "unit": "hour",
+          "offset": {
+            "date": null,
+            "shipping": null
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 24,
+          "pay_before": "2026-08-24T13:00:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": null
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "MEL Distribution",
+      "tracking_number": "FT4MXFF2IJIMJP3GKP3JMH6LUA",
+      "receiver_address": {
+        "id": 1581114718,
+        "city": {
+          "id": "TUxCQ0NVUjYyZmY1",
+          "name": "Curitiba"
+        },
+        "node": null,
+        "state": {
+          "id": "BR-PR",
+          "name": "Paraná"
+        },
+        "types": [
+          "default_buying_address"
+        ],
+        "agency": null,
+        "comment": null,
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": "BR-3b4f9d0876736fc1b826a97d3cc54235",
+        "latitude": -25.421956,
+        "zip_code": "82300650",
+        "longitude": -49.343923,
+        "location_id": 7852410,
+        "street_name": "Rua José Beppi Lucca",
+        "address_line": "Rua José Beppi Lucca 158",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "São Braz"
+        },
+        "receiver_name": "Giovani Franca Comparin",
+        "street_number": "158",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "delivery_preference": "residential",
+        "geolocation_last_updated": "2026-05-31T14:11:55.345Z"
+      },
+      "snapshot_packing": {
+        "pack_hash": "1",
+        "snapshot_id": "00137448-9cb6-45d9-8485-9c9bdae6e1de"
+      },
+      "substatus_history": [
+        {
+          "date": "2026-08-23T17:05:58.553-04:00",
+          "status": "pending",
+          "substatus": "shipment_paid"
+        },
+        {
+          "date": "2026-08-23T17:06:00.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_warehouse"
+        },
+        {
+          "date": "2026-08-23T19:52:36.101-04:00",
+          "status": "ready_to_ship",
+          "substatus": "ready_to_pack"
+        },
+        {
+          "date": "2026-08-23T20:25:26.784-04:00",
+          "status": "ready_to_ship",
+          "substatus": "packed"
+        },
+        {
+          "date": "2026-08-23T20:47:05.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_packing_list"
+        }
+      ],
+      "date_first_printed": "2026-08-23T19:55:01.137-04:00",
+      "return_tracking_number": null
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 15.9,
+          "fees": [],
+          "save": 6.82,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 6.82
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 9.99,
+        "fees": [],
+        "save": 18.14,
+        "user_id": 2554041875,
+        "discounts": [
+          {
+            "rate": 0.65,
+            "type": "ratio",
+            "promoted_amount": 18.88
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [
+          {
+            "amount": 9.99,
+            "sender_id": 2486380051
+          }
+        ],
+        "compensations": []
+      },
+      "gross_amount": 51.59,
+      "base_exchange": null
+    }
+  },
+  {
+    "ml_order_id": 2000018082412310,
+    "order": {
+      "id": 2000018082412310,
+      "tags": [
+        "b2b",
+        "pack_order",
+        "order_has_discount",
+        "paid",
+        "not_delivered",
+        "price_per_quantity"
+      ],
+      "buyer": {
+        "id": 56069640,
+        "nickname": "MAYARAEVINICIUSSTORE",
+        "last_name": "",
+        "first_name": "53 038 459 MAYARA SILVA DOS SANTOS",
+        "billing_info": {
+          "id": "879483946309128167"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "paid",
+      "context": {
+        "site": "MLB",
+        "flows": [
+          "b2b"
+        ],
+        "channel": "marketplace"
+      },
+      "pack_id": 2000014673712011,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 174374342337,
+          "reason": "25 Caixas De Papelão Correios 20x14x8 Sedex Pac Envios Bege Marrom-claro",
+          "status": "approved",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018082412310,
+          "payer_id": 56069640,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "2007",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T17:55:48.000-04:00",
+          "installments": 1,
+          "payment_type": "account_money",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 0,
+          "date_approved": "2026-08-23T17:55:49.000-04:00",
+          "shipping_cost": 0,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "account_money",
+          "total_paid_amount": 59.96,
+          "authorization_code": null,
+          "date_last_modified": "2026-08-23T17:55:49.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 59.96,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": null,
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        }
+      ],
+      "shipping": {
+        "id": 47839255254
+      },
+      "fulfilled": null,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T17:55:49.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB4829261651",
+            "title": "25 Caixas De Papelão Correios 20x14x8 Sedex Pac Envios Bege Marrom-claro",
+            "warranty": "Garantia de fábrica: 30 dias",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "25CX-20X14X8",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU4176065115",
+            "seller_custom_field": null,
+            "variation_attributes": [
+              {
+                "id": "COLOR",
+                "name": "Cor",
+                "value_id": "283154",
+                "value_name": "Marrom-claro"
+              }
+            ]
+          },
+          "stock": {
+            "node_id": "BRSP04",
+            "store_id": null
+          },
+          "bundle": null,
+          "quantity": 2,
+          "sale_fee": 3.45,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 29.98,
+          "currency_id": "BRL",
+          "gross_price": 59.96,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 2,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 59.96,
+      "static_tags": [
+        "price_per_quantity",
+        "b2b"
+      ],
+      "date_created": "2026-08-23T17:55:47.000-04:00",
+      "last_updated": "2026-08-23T17:57:24.000-04:00",
+      "total_amount": 59.96,
+      "cancel_detail": null,
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47839255254,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "shipped",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018082412310,
+      "base_cost": 13.93,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": null,
+      "created_by": "receiver",
+      "order_cost": 59.96,
+      "service_id": 157861,
+      "customer_id": null,
+      "items_types": [
+        "new",
+        "conveyable"
+      ],
+      "receiver_id": 56069640,
+      "carrier_info": null,
+      "date_created": "2026-08-23T17:55:47.427-04:00",
+      "last_updated": "2026-08-24T01:49:44.019-04:00",
+      "market_place": "MELI",
+      "logistic_type": "fulfillment",
+      "application_id": null,
+      "priority_class": {
+        "id": "10"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": null,
+        "city": {
+          "id": "QlItU1BDYWphbWFy",
+          "name": "Cajamar"
+        },
+        "node": {
+          "node_id": "BRSP04",
+          "logistic_center_id": "BRSP04"
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "logistic_center_BRSP04",
+          "warehouse"
+        ],
+        "agency": null,
+        "comment": null,
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": null,
+        "version": null,
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": null,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Empresarial Paineira (Jordanésia)"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": null,
+        "geolocation_source": null,
+        "geolocation_last_updated": null
+      },
+      "shipping_items": [
+        {
+          "id": "MLB4829261651",
+          "bundle": null,
+          "quantity": 2,
+          "sender_id": 2486380051,
+          "dimensions": "38.0x32.0x25.0,3280.0",
+          "description": "25 Caixas De Papelão Correios 20x14x8 Sedex Pac Envios Bege Marrom-claro",
+          "user_product_id": "MLBU4176065115",
+          "item_ponderation": 100,
+          "dimensions_source": {
+            "id": "MLB4829261651__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": "2026-08-24T01:49:25.506-04:00",
+        "date_handling": "2026-08-23T17:55:53.000-04:00",
+        "date_returned": null,
+        "date_cancelled": null,
+        "date_delivered": null,
+        "date_first_visit": null,
+        "date_not_delivered": null,
+        "date_ready_to_ship": "2026-08-23T17:55:53.000-04:00"
+      },
+      "cost_components": {
+        "ratio": 21.75,
+        "compensation": 0,
+        "gap_discount": 0,
+        "loyal_discount": 0.31,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 2312580616,
+        "cost": 0,
+        "name": "Prioritario",
+        "buffering": {
+          "date": null
+        },
+        "list_cost": 9.75,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "10"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 507945,
+        "estimated_delivery_time": {
+          "date": "2026-08-24T00:00:00.000-03:00",
+          "type": "known",
+          "unit": "hour",
+          "offset": {
+            "date": null,
+            "shipping": null
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 24,
+          "pay_before": "2026-08-24T12:00:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": null
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "MEL Distribution",
+      "tracking_number": "GRL4UOV2IBJLXLXAQONXEBU7YQ",
+      "receiver_address": {
+        "id": 16786887,
+        "city": {
+          "id": "BR-SP-35",
+          "name": "Carapicuíba"
+        },
+        "node": null,
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "default_buying_address",
+          "default_selling_address",
+          "flex_pickup",
+          "shipping"
+        ],
+        "agency": null,
+        "comment": "Apto 46 Bloco 3 - A Referencia: Entrega fica no Residencial Primavera",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": "BR-f2ab117f46b3666c0d238b7733865396",
+        "latitude": -23.532077,
+        "zip_code": "06386000",
+        "longitude": -46.845642,
+        "location_id": 611136,
+        "street_name": "Estrada Tambory",
+        "address_line": "Estrada Tambory 1328",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Vila Mercês"
+        },
+        "receiver_name": "Vinicius Antonio Silva",
+        "street_number": "1328",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "delivery_preference": "residential",
+        "geolocation_last_updated": "2026-07-20T20:03:16.066Z"
+      },
+      "snapshot_packing": {
+        "pack_hash": "11",
+        "snapshot_id": "f85435d0-86bc-4584-8b73-a5a511e69a57"
+      },
+      "substatus_history": [
+        {
+          "date": "2026-08-23T17:55:48.095-04:00",
+          "status": "pending",
+          "substatus": "shipment_paid"
+        },
+        {
+          "date": "2026-08-23T17:55:53.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_warehouse"
+        },
+        {
+          "date": "2026-08-23T19:16:34.388-04:00",
+          "status": "ready_to_ship",
+          "substatus": "ready_to_pack"
+        },
+        {
+          "date": "2026-08-23T20:00:33.058-04:00",
+          "status": "ready_to_ship",
+          "substatus": "packed"
+        },
+        {
+          "date": "2026-08-23T20:04:05.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_packing_list"
+        }
+      ],
+      "date_first_printed": "2026-08-23T19:24:21.230-04:00",
+      "return_tracking_number": null,
+      "threshold_cancellation": 65
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 9.75,
+          "fees": [],
+          "save": 4.18,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 4.18
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 0,
+        "fees": [],
+        "save": 23.73,
+        "user_id": 56069640,
+        "discounts": [
+          {
+            "rate": 0.49,
+            "type": "loyal",
+            "promoted_amount": 11.73
+          },
+          {
+            "rate": 0.51,
+            "type": "ratio",
+            "promoted_amount": 12
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [],
+        "compensations": []
+      },
+      "gross_amount": 37.66,
+      "base_exchange": null
+    }
+  },
+  {
+    "ml_order_id": 2000018082460366,
+    "order": {
+      "id": 2000018082460366,
+      "tags": [
+        "b2b",
+        "order_has_discount",
+        "paid",
+        "not_delivered"
+      ],
+      "buyer": {
+        "id": 1853056893,
+        "nickname": "5520240611232327",
+        "last_name": "",
+        "first_name": "50.263.957 VALERIA NATHALIA SA 50.263.957 VALERIA NATHALIA SA",
+        "billing_info": {
+          "id": "879485034375465136"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "paid",
+      "context": {
+        "site": "MLB",
+        "flows": [
+          "b2b"
+        ],
+        "channel": "marketplace"
+      },
+      "pack_id": null,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 174374211551,
+          "reason": "Kit 50 Caixa De Papelao 16x11x6 Embalagem Pequena Correios Marrom-claro",
+          "status": "approved",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018082460366,
+          "payer_id": 1853056893,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "12501",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T17:59:47.000-04:00",
+          "installments": 1,
+          "payment_type": "bank_transfer",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 1.77,
+          "date_approved": "2026-08-23T18:00:04.000-04:00",
+          "shipping_cost": 9.99,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "pix",
+          "total_paid_amount": 43.56,
+          "authorization_code": "PIXE378802062026082321595QWQP4X7O4J",
+          "date_last_modified": "2026-08-23T18:00:04.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 35.34,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": "1",
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        }
+      ],
+      "shipping": {
+        "id": 47839000371
+      },
+      "fulfilled": null,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T18:00:04.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB4960557523",
+            "title": "Kit 50 Caixa De Papelao 16x11x6 Embalagem Pequena Correios Marrom-claro",
+            "warranty": "Garantia do vendedor: 30 dias",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "50CX-16X11X6",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU4464434321",
+            "seller_custom_field": null,
+            "variation_attributes": [
+              {
+                "id": "COLOR",
+                "name": "Cor",
+                "value_id": "283154",
+                "value_name": "Marrom-claro"
+              }
+            ]
+          },
+          "stock": {
+            "node_id": "BRSP02",
+            "store_id": null
+          },
+          "bundle": null,
+          "quantity": 1,
+          "sale_fee": 1.74,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 35.34,
+          "currency_id": "BRL",
+          "gross_price": 59.99,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 1,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 45.33,
+      "static_tags": [
+        "b2b"
+      ],
+      "date_created": "2026-08-23T17:59:46.000-04:00",
+      "last_updated": "2026-08-23T18:01:25.000-04:00",
+      "total_amount": 35.34,
+      "cancel_detail": null,
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47839000371,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "shipped",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018082460366,
+      "base_cost": 29.5,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": null,
+      "created_by": "receiver",
+      "order_cost": 35.34,
+      "service_id": 157861,
+      "customer_id": null,
+      "items_types": [
+        "conveyable",
+        "new"
+      ],
+      "receiver_id": 1853056893,
+      "carrier_info": null,
+      "date_created": "2026-08-23T17:59:47.019-04:00",
+      "last_updated": "2026-08-24T02:58:08.534-04:00",
+      "market_place": "MELI",
+      "logistic_type": "fulfillment",
+      "application_id": null,
+      "priority_class": {
+        "id": "60"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": null,
+        "city": {
+          "id": "QlItU1BDYWphbWFy",
+          "name": "Cajamar"
+        },
+        "node": {
+          "node_id": "BRSP02",
+          "logistic_center_id": "BRSP02"
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "logistic_center_BRSP02",
+          "warehouse"
+        ],
+        "agency": null,
+        "comment": "XXXXXXX",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": null,
+        "version": null,
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": null,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Empresarial Colina"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": null,
+        "geolocation_last_updated": null
+      },
+      "shipping_items": [
+        {
+          "id": "MLB4960557523",
+          "bundle": null,
+          "quantity": 1,
+          "domain_id": null,
+          "sender_id": 2486380051,
+          "dimensions": "15.0x33.0x39.0,1840.0",
+          "description": "Kit 50 Caixa De Papelao 16x11x6 Embalagem Pequena Correios Marrom-claro",
+          "user_product_id": "MLBU4464434321",
+          "item_ponderation": null,
+          "dimensions_source": {
+            "id": "MLB4960557523__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": "2026-08-24T02:57:10.180-04:00",
+        "date_handling": "2026-08-23T18:00:06.000-04:00",
+        "date_returned": null,
+        "date_cancelled": null,
+        "date_delivered": null,
+        "date_first_visit": null,
+        "date_not_delivered": null,
+        "date_ready_to_ship": "2026-08-23T18:00:06.000-04:00"
+      },
+      "cost_components": {
+        "ratio": 27.95,
+        "compensation": 0,
+        "gap_discount": 0,
+        "loyal_discount": 0,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 250824869,
+        "cost": 9.99,
+        "name": "Normal ao endereço",
+        "buffering": {
+          "date": null
+        },
+        "list_cost": 17.94,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "60"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 515462,
+        "estimated_delivery_time": {
+          "date": "2026-08-26T00:00:00.000-03:00",
+          "type": "known_frame",
+          "unit": "hour",
+          "offset": {
+            "date": "2026-08-29T00:00:00.000-03:00",
+            "shipping": 48
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 96,
+          "pay_before": "2026-08-24T01:15:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": "2026-08-26T03:00:00Z"
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "MEL Distribution",
+      "tracking_number": "Q4RS3ZKFVBKTDICWNSAEMCT3WY",
+      "receiver_address": {
+        "id": 1396529973,
+        "city": {
+          "id": "TUxCQ0FSQWEyZDQz",
+          "name": "Aracaju"
+        },
+        "node": null,
+        "state": {
+          "id": "BR-SE",
+          "name": "Sergipe"
+        },
+        "types": [
+          "billing",
+          "default_buying_address",
+          "default_return_address",
+          "default_selling_address",
+          "shipping"
+        ],
+        "agency": null,
+        "comment": null,
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": "BR-9ba762e522d1ad2ccdbdf470166dc8f9",
+        "latitude": -10.889813,
+        "zip_code": "49066060",
+        "longitude": -37.049903,
+        "location_id": 3648768,
+        "street_name": "Rua Renato Ferreira",
+        "address_line": "Rua Renato Ferreira 241",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Industrial"
+        },
+        "receiver_name": ".. VALERIA NATHALIA SANTOS FERREIRA",
+        "street_number": "241",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "delivery_preference": "business",
+        "geolocation_last_updated": "2025-07-24T13:08:54.342Z"
+      },
+      "snapshot_packing": {
+        "pack_hash": "3",
+        "snapshot_id": "fd260ca9-6ff9-4b9c-82dc-42072fcf9284"
+      },
+      "substatus_history": [
+        {
+          "date": "2026-08-23T18:00:06.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_warehouse"
+        },
+        {
+          "date": "2026-08-23T20:02:53.860-04:00",
+          "status": "ready_to_ship",
+          "substatus": "ready_to_pack"
+        },
+        {
+          "date": "2026-08-23T20:38:54.637-04:00",
+          "status": "ready_to_ship",
+          "substatus": "packed"
+        },
+        {
+          "date": "2026-08-23T20:43:04.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_packing_list"
+        }
+      ],
+      "date_first_printed": "2026-08-23T20:02:54.482-04:00",
+      "return_tracking_number": null
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 7.95,
+          "fees": [],
+          "save": 3.41,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 3.41
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 9.99,
+        "fees": [],
+        "save": 19.51,
+        "user_id": 1853056893,
+        "discounts": [
+          {
+            "rate": 0.67,
+            "type": "ratio",
+            "promoted_amount": 20
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [
+          {
+            "amount": 9.99,
+            "sender_id": 2486380051
+          }
+        ],
+        "compensations": []
+      },
+      "gross_amount": 41.35,
+      "base_exchange": null
+    }
+  },
+  {
+    "ml_order_id": 2000018086572830,
+    "order": {
+      "id": 2000018086572830,
+      "tags": [
+        "b2b",
+        "pack_order",
+        "order_has_discount",
+        "not_delivered",
+        "not_paid"
+      ],
+      "buyer": {
+        "id": 493385963,
+        "nickname": "PRIMORBAGSS",
+        "last_name": "Lima silva",
+        "first_name": "ANDERSON",
+        "billing_info": {
+          "id": "879554217512477883"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "cancelled",
+      "context": {
+        "site": "MLB",
+        "flows": [
+          "b2b"
+        ],
+        "channel": "marketplace"
+      },
+      "pack_id": 2000014677735699,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 175342412720,
+          "reason": "50 Caixa De Papelão 16x11x8 Forte Ecommerce Pac Envios Corre 50",
+          "status": "refunded",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018086572830,
+          "payer_id": 493385963,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "2007",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T22:34:44.000-04:00",
+          "installments": 1,
+          "payment_type": "account_money",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 0,
+          "date_approved": "2026-08-23T22:34:44.000-04:00",
+          "shipping_cost": 0,
+          "status_detail": "by_admin",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            ""
+          ],
+          "payment_method_id": "account_money",
+          "total_paid_amount": 86,
+          "authorization_code": null,
+          "date_last_modified": "2026-08-24T00:38:03.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 86,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": null,
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 86
+        }
+      ],
+      "shipping": {
+        "id": 47841037792
+      },
+      "fulfilled": false,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T22:35:20.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB6250265642",
+            "title": "50 Caixa De Papelão 16x11x8 Forte Ecommerce Pac Envios Corre 50",
+            "warranty": "Garantia de fábrica: 30 dias",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "50CX-16X11X8",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU3784289223",
+            "seller_custom_field": null,
+            "variation_attributes": []
+          },
+          "stock": {
+            "node_id": "BRSP04",
+            "store_id": null
+          },
+          "bundle": null,
+          "quantity": 2,
+          "sale_fee": 2.12,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 43,
+          "currency_id": "BRL",
+          "gross_price": 138,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 2,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 0,
+      "static_tags": [
+        "b2b"
+      ],
+      "date_created": "2026-08-23T22:34:43.000-04:00",
+      "last_updated": "2026-08-24T00:38:04.000-04:00",
+      "total_amount": 86,
+      "cancel_detail": {
+        "code": "pack_splitted",
+        "date": "2026-08-24T00:38:04.000-04:00",
+        "group": "internal",
+        "description": "Purchases has splitted the pack",
+        "requested_by": "meli",
+        "application_id": "6494265323272007"
+      },
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47841037792,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "cancelled",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018086572830,
+      "base_cost": 23.28,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": "pack_splitted",
+      "created_by": "receiver",
+      "order_cost": 86,
+      "service_id": 255682,
+      "customer_id": null,
+      "items_types": [
+        "new",
+        "conveyable"
+      ],
+      "receiver_id": 493385963,
+      "carrier_info": null,
+      "date_created": "2026-08-23T22:34:43.485-04:00",
+      "last_updated": "2026-08-24T00:38:23.545-04:00",
+      "market_place": "MELI",
+      "logistic_type": "fulfillment",
+      "application_id": null,
+      "priority_class": {
+        "id": "10"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": null,
+        "city": {
+          "id": "QlItU1BDYWphbWFy",
+          "name": "Cajamar"
+        },
+        "node": {
+          "node_id": "BRSP04",
+          "logistic_center_id": "BRSP04"
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "logistic_center_BRSP04",
+          "warehouse"
+        ],
+        "agency": null,
+        "comment": null,
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": null,
+        "version": null,
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": null,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Empresarial Paineira (Jordanésia)"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": null,
+        "geolocation_source": null,
+        "geolocation_last_updated": null
+      },
+      "shipping_items": [
+        {
+          "id": "MLB6250265642",
+          "bundle": null,
+          "quantity": 2,
+          "sender_id": 2486380051,
+          "dimensions": "60.0x31.0x21.0,4180.0",
+          "description": "50 Caixa De Papelão 16x11x8 Forte Ecommerce Pac Envios Corre 50",
+          "user_product_id": "MLBU3784289223",
+          "item_ponderation": 100,
+          "dimensions_source": {
+            "id": "MLB6250265642__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": null,
+        "date_handling": "2026-08-23T22:35:24.000-04:00",
+        "date_returned": null,
+        "date_cancelled": "2026-08-24T00:38:06.499-04:00",
+        "date_delivered": null,
+        "date_first_visit": null,
+        "date_not_delivered": null,
+        "date_ready_to_ship": "2026-08-23T22:35:24.000-04:00"
+      },
+      "cost_components": {
+        "ratio": 35.18,
+        "compensation": 0,
+        "gap_discount": 0,
+        "loyal_discount": 0.25,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 3046543251,
+        "cost": 0,
+        "name": "Retirada Prioritaria na agência",
+        "buffering": {
+          "date": null
+        },
+        "list_cost": 16.3,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "10"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 512146,
+        "estimated_delivery_time": {
+          "date": "2026-08-24T00:00:00.000-03:00",
+          "type": "known",
+          "unit": "hour",
+          "offset": {
+            "date": null,
+            "shipping": null
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 24,
+          "pay_before": "2026-08-24T00:06:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": null
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "Agências Mercado Livre",
+      "tracking_number": "SI32RKNOYFJNFI23ZDBIQHUFFM",
+      "receiver_address": {
+        "id": null,
+        "city": {
+          "id": "BR-SP-44",
+          "name": "São Paulo"
+        },
+        "node": {
+          "node_id": null,
+          "logistic_center_id": null
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "agency_address"
+        ],
+        "agency": {
+          "type": "place",
+          "phone": "",
+          "agency_id": "194666917",
+          "carrier_id": 849817033,
+          "open_hours": "Segunda à sexta das 9:30 à 18:30 hs. - Sábado das 9:30 à 17:30 hs.",
+          "description": "Agência Mercado Livre - AQUALEX"
+        },
+        "comment": "AQUALEX(temos estacionamento no local)",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "latitude": -23.4065513,
+        "zip_code": "05204150",
+        "longitude": -46.7578708,
+        "street_name": "RUA ÁGUAS CLARAS DO SUL",
+        "address_line": "RUA ÁGUAS CLARAS DO SUL 570",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "VILA PERUS"
+        },
+        "receiver_name": "Manoel Anderson de Lima Silva",
+        "street_number": "570",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": null,
+        "geolocation_source": null,
+        "delivery_preference": "business",
+        "geolocation_last_updated": null
+      },
+      "snapshot_packing": {
+        "pack_hash": "1",
+        "snapshot_id": "b8124f2c-300d-4381-932a-db411d7d6678"
+      },
+      "substatus_history": [
+        {
+          "date": "2026-08-23T22:34:44.999-04:00",
+          "status": "pending",
+          "substatus": "shipment_paid"
+        },
+        {
+          "date": "2026-08-23T22:35:24.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_warehouse"
+        },
+        {
+          "date": "2026-08-24T00:13:19.016-04:00",
+          "status": "ready_to_ship",
+          "substatus": "ready_to_pack"
+        }
+      ],
+      "date_first_printed": "2026-08-24T00:25:03.405-04:00",
+      "return_tracking_number": null,
+      "threshold_cancellation": 100
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 16.3,
+          "fees": [],
+          "save": 6.98,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 6.98
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 0,
+        "fees": [],
+        "save": 32.9,
+        "user_id": 493385963,
+        "discounts": [
+          {
+            "rate": 0.43,
+            "type": "loyal",
+            "promoted_amount": 14.02
+          },
+          {
+            "rate": 0.57,
+            "type": "ratio",
+            "promoted_amount": 18.88
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [],
+        "compensations": []
+      },
+      "gross_amount": 56.18,
+      "base_exchange": null
+    }
+  },
+  {
+    "ml_order_id": 2000018086627042,
+    "order": {
+      "id": 2000018086627042,
+      "tags": [
+        "order_has_discount",
+        "paid",
+        "not_delivered"
+      ],
+      "buyer": {
+        "id": 45886467,
+        "nickname": "JOAO_EDIO",
+        "last_name": "Martinelli",
+        "first_name": "João",
+        "billing_info": {
+          "id": "879555620682856140"
+        }
+      },
+      "taxes": {
+        "id": null,
+        "amount": null,
+        "currency_id": null
+      },
+      "seller": {
+        "id": 2486380051
+      },
+      "status": "paid",
+      "context": {
+        "site": "MLB",
+        "flows": [],
+        "channel": "marketplace"
+      },
+      "pack_id": null,
+      "feedback": {
+        "buyer": null,
+        "seller": null
+      },
+      "payments": [
+        {
+          "id": 175342828734,
+          "reason": "Caixa Mudança Mercado Envio 19x12x12 Onda B 50 Cx Montavel Marrom-claro",
+          "status": "approved",
+          "card_id": null,
+          "site_id": "MLB",
+          "order_id": 2000018086627042,
+          "payer_id": 45886467,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "2007",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T22:41:19.000-04:00",
+          "installments": 1,
+          "payment_type": "account_money",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 0.86,
+          "date_approved": "2026-08-23T22:41:22.000-04:00",
+          "shipping_cost": 0,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "account_money",
+          "total_paid_amount": 15.08,
+          "authorization_code": null,
+          "date_last_modified": "2026-08-23T22:41:22.000-04:00",
+          "installment_amount": null,
+          "transaction_amount": 15.94,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": null,
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        },
+        {
+          "id": 175342437628,
+          "reason": "Caixa Mudança Mercado Envio 19x12x12 Onda B 50 Cx Montavel Marrom-claro",
+          "status": "approved",
+          "card_id": 9500384996,
+          "site_id": "MLB",
+          "order_id": 2000018086627042,
+          "payer_id": 45886467,
+          "collector": {
+            "id": 2486380051
+          },
+          "coupon_id": null,
+          "issuer_id": "12749",
+          "currency_id": "BRL",
+          "status_code": null,
+          "date_created": "2026-08-23T22:41:19.000-04:00",
+          "installments": 2,
+          "payment_type": "credit_card",
+          "reference_id": null,
+          "taxes_amount": 0,
+          "coupon_amount": 1.81,
+          "date_approved": "2026-08-23T22:41:23.000-04:00",
+          "shipping_cost": 1.99,
+          "status_detail": "accredited",
+          "activation_uri": null,
+          "operation_type": "regular_payment",
+          "deferred_period": null,
+          "marketplace_fee": 0,
+          "overpaid_amount": 0,
+          "available_actions": [
+            "refund"
+          ],
+          "payment_method_id": "visa",
+          "total_paid_amount": 41.9,
+          "authorization_code": "412168",
+          "date_last_modified": "2026-08-23T22:41:23.000-04:00",
+          "installment_amount": 20.95,
+          "transaction_amount": 37.53,
+          "transaction_order_id": null,
+          "atm_transfer_reference": {
+            "company_id": null,
+            "transaction_id": null
+          },
+          "transaction_amount_refunded": 0
+        }
+      ],
+      "shipping": {
+        "id": 47840789471
+      },
+      "fulfilled": null,
+      "mediations": [],
+      "buying_mode": "buy_equals_pay",
+      "currency_id": "BRL",
+      "date_closed": "2026-08-23T22:41:26.000-04:00",
+      "order_items": [
+        {
+          "item": {
+            "id": "MLB4576683601",
+            "title": "Caixa Mudança Mercado Envio 19x12x12 Onda B 50 Cx Montavel Marrom-claro",
+            "warranty": "Garantia de fábrica: 30 dias",
+            "condition": "new",
+            "attributes": [
+              {
+                "id": "ITEM_CONDITION",
+                "values": [
+                  {
+                    "id": "2230284"
+                  }
+                ]
+              }
+            ],
+            "net_weight": null,
+            "seller_sku": "50CX-19X12X12",
+            "category_id": "MLB30180",
+            "global_price": null,
+            "release_date": null,
+            "variation_id": null,
+            "user_product_id": "MLBU3871259871",
+            "seller_custom_field": null,
+            "variation_attributes": [
+              {
+                "id": "COLOR",
+                "name": "Cor",
+                "value_id": "283154",
+                "value_name": "Marrom-claro"
+              }
+            ]
+          },
+          "stock": {
+            "node_id": "BRSP11",
+            "store_id": null
+          },
+          "bundle": null,
+          "quantity": 1,
+          "sale_fee": 5.84,
+          "compat_id": null,
+          "discounts": null,
+          "element_id": null,
+          "unit_price": 53.47,
+          "currency_id": "BRL",
+          "gross_price": 58.99,
+          "kit_instance_id": null,
+          "listing_type_id": "gold_special",
+          "picked_quantity": null,
+          "base_currency_id": null,
+          "base_exchange_rate": null,
+          "manufacturing_days": null,
+          "requested_quantity": {
+            "value": 1,
+            "measure": "unit"
+          }
+        }
+      ],
+      "paid_amount": 55.46,
+      "static_tags": [],
+      "date_created": "2026-08-23T22:41:18.000-04:00",
+      "last_updated": "2026-08-23T22:43:01.000-04:00",
+      "total_amount": 53.47,
+      "cancel_detail": null,
+      "order_request": {
+        "change": null,
+        "return": null
+      },
+      "shipping_cost": null,
+      "status_detail": null,
+      "related_orders": null,
+      "manufacturing_ending_date": null
+    },
+    "envio": {
+      "id": 47840789471,
+      "mode": "me2",
+      "tags": [],
+      "type": "forward",
+      "status": "ready_to_ship",
+      "sibling": {
+        "reason": null,
+        "source": null,
+        "sibling_id": null,
+        "description": null,
+        "date_created": null,
+        "last_updated": null
+      },
+      "site_id": "MLB",
+      "comments": null,
+      "order_id": 2000018086627042,
+      "base_cost": 37.1,
+      "quotation": null,
+      "sender_id": 2486380051,
+      "substatus": "in_warehouse",
+      "created_by": "receiver",
+      "order_cost": 53.47,
+      "service_id": 157861,
+      "customer_id": null,
+      "items_types": [
+        "new",
+        "non_conveyable"
+      ],
+      "receiver_id": 45886467,
+      "carrier_info": null,
+      "date_created": "2026-08-23T22:41:18.709-04:00",
+      "last_updated": "2026-08-24T01:36:21.895-04:00",
+      "market_place": "MELI",
+      "logistic_type": "fulfillment",
+      "application_id": null,
+      "priority_class": {
+        "id": "25"
+      },
+      "return_details": null,
+      "sender_address": {
+        "id": null,
+        "city": {
+          "id": "BR-SP-41",
+          "name": "Guarulhos"
+        },
+        "node": {
+          "node_id": "BRSP11",
+          "logistic_center_id": "BRSP11"
+        },
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "logistic_center_BRSP11",
+          "warehouse"
+        ],
+        "agency": null,
+        "comment": "XXXXXXX",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": null,
+        "version": null,
+        "latitude": 0,
+        "zip_code": "XXXXXXX",
+        "longitude": 0,
+        "location_id": null,
+        "street_name": "XXXXXXX",
+        "address_line": "XXXXXXX",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Cumbica"
+        },
+        "street_number": "XXXXXXX",
+        "geolocation_type": null,
+        "geolocation_source": null,
+        "geolocation_last_updated": null
+      },
+      "shipping_items": [
+        {
+          "id": "MLB4576683601",
+          "bundle": null,
+          "quantity": 1,
+          "domain_id": null,
+          "sender_id": 2486380051,
+          "dimensions": "16.0x35.0x52.0,2980.0",
+          "description": "Caixa Mudança Mercado Envio 19x12x12 Onda B 50 Cx Montavel Marrom-claro",
+          "user_product_id": "MLBU3871259871",
+          "item_ponderation": null,
+          "dimensions_source": {
+            "id": "MLB4576683601__1",
+            "origin": "fd"
+          },
+          "measurable_picked_quantity": null
+        }
+      ],
+      "status_history": {
+        "date_shipped": null,
+        "date_handling": "2026-08-23T22:41:27.000-04:00",
+        "date_returned": null,
+        "date_cancelled": null,
+        "date_delivered": null,
+        "date_first_visit": null,
+        "date_not_delivered": null,
+        "date_ready_to_ship": "2026-08-23T22:41:27.000-04:00"
+      },
+      "cost_components": {
+        "ratio": 8.95,
+        "compensation": 0,
+        "gap_discount": 15.7,
+        "loyal_discount": 0.4,
+        "special_discount": 0
+      },
+      "shipping_option": {
+        "id": 3370389412,
+        "cost": 1.99,
+        "name": "Prioritario",
+        "buffering": {
+          "date": null
+        },
+        "list_cost": 10.94,
+        "currency_id": "BRL",
+        "delivery_type": "estimated",
+        "pickup_promise": {
+          "to": null,
+          "from": null
+        },
+        "priority_class": {
+          "id": "25"
+        },
+        "processing_time": null,
+        "delivery_promise": "estimated",
+        "shipping_method_id": 507946,
+        "estimated_delivery_time": {
+          "date": "2026-08-25T00:00:00.000-03:00",
+          "type": "known",
+          "unit": "hour",
+          "offset": {
+            "date": null,
+            "shipping": null
+          },
+          "handling": 0,
+          "schedule": null,
+          "shipping": 24,
+          "pay_before": "2026-08-24T22:00:00.000-03:00",
+          "time_frame": {
+            "to": null,
+            "from": null
+          }
+        },
+        "estimated_delivery_final": {
+          "date": null
+        },
+        "estimated_delivery_limit": {
+          "date": null
+        },
+        "estimated_schedule_limit": {
+          "date": null
+        },
+        "desired_promised_delivery": {
+          "from": null
+        },
+        "estimated_delivery_extended": {
+          "date": null
+        }
+      },
+      "tracking_method": "MEL Distribution",
+      "tracking_number": "WHH5B7W4Y5M4ZEINXGNMVCX7DE",
+      "receiver_address": {
+        "id": 1201725487,
+        "city": {
+          "id": "BR-SP-22",
+          "name": "Praia Grande"
+        },
+        "node": null,
+        "state": {
+          "id": "BR-SP",
+          "name": "São Paulo"
+        },
+        "types": [
+          "default_buying_address"
+        ],
+        "agency": null,
+        "comment": "casa Referencia: Quadra da Kennedy, Rua do açougue Boi Nobre.",
+        "country": {
+          "id": "BR",
+          "name": "Brasil"
+        },
+        "scoring": 1,
+        "version": "BR-f28a4e974e8048acd74a107f3742f005",
+        "latitude": -24.03778,
+        "zip_code": "11705430",
+        "longitude": -46.507335,
+        "location_id": 4363246,
+        "street_name": "Avenida Anita Barrella",
+        "address_line": "Avenida Anita Barrella 580",
+        "intersection": null,
+        "municipality": {
+          "id": null,
+          "name": null
+        },
+        "neighborhood": {
+          "id": null,
+          "name": "Maracanã"
+        },
+        "receiver_name": "João Edio Martinelli Filho",
+        "street_number": "580",
+        "receiver_phone": "XXXXXXX",
+        "geolocation_type": "ROOFTOP",
+        "geolocation_source": "geolocation-visits",
+        "delivery_preference": "residential",
+        "geolocation_last_updated": "2025-01-17T17:04:23.422Z"
+      },
+      "snapshot_packing": {
+        "pack_hash": "1",
+        "snapshot_id": "1b18d62c-26f1-440b-9626-b33fbd249392"
+      },
+      "substatus_history": [
+        {
+          "date": "2026-08-23T22:41:27.000-04:00",
+          "status": "ready_to_ship",
+          "substatus": "in_warehouse"
+        }
+      ],
+      "date_first_printed": null,
+      "return_tracking_number": null
+    },
+    "custosEnvio": {
+      "senders": [
+        {
+          "cost": 8.95,
+          "fees": [],
+          "save": 3.84,
+          "charges": {
+            "charge_flex": 0
+          },
+          "user_id": 2486380051,
+          "discounts": [
+            {
+              "rate": 0.3,
+              "type": "mandatory",
+              "promoted_amount": 3.84
+            }
+          ],
+          "compensation": 0,
+          "compensations": []
+        }
+      ],
+      "receiver": {
+        "cost": 1.99,
+        "fees": [],
+        "save": 35.11,
+        "user_id": 45886467,
+        "discounts": [
+          {
+            "rate": 0.53,
+            "type": "loyal",
+            "promoted_amount": 20
+          },
+          {
+            "rate": 0.42,
+            "type": "gap",
+            "promoted_amount": 15.7
+          }
+        ],
+        "compensation": 0,
+        "cost_details": [
+          {
+            "amount": 1.99,
+            "sender_id": 2486380051
+          }
+        ],
+        "compensations": []
+      },
+      "gross_amount": 50.48,
+      "base_exchange": null
+    }
+  }
+]

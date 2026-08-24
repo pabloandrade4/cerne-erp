@@ -21,6 +21,7 @@ const recebimentosRouter = require('./routes/recebimentos');
 const dreRouter = require('./routes/dre');
 const faturamentoRouter = require('./routes/faturamento');
 const notasFiscaisRouter = require('./routes/notasFiscais');
+const adsRouter = require('./routes/ads');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,6 +50,7 @@ app.use('/api/recebimentos', recebimentosRouter);
 app.use('/api/dre', dreRouter);
 app.use('/api/faturamento', faturamentoRouter);
 app.use('/api/notas-fiscais', notasFiscaisRouter);
+app.use('/api/ads', adsRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));

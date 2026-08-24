@@ -986,7 +986,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','purchases','payable','receivable','settlements','dre','billing','invoices'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','purchases','payable','receivable','settlements','dre','billing','invoices','ads','reports'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1023,6 +1023,8 @@
     else if(id === 'dre'){ inner += '<div id="dreRoot"></div>'; }
     else if(id === 'billing'){ inner += '<div id="faturamentoRoot"></div>'; }
     else if(id === 'invoices'){ inner += '<div id="notasFiscaisRoot"></div>'; }
+    else if(id === 'ads'){ inner += '<div id="adsRoot"></div>'; }
+    else if(id === 'reports'){ inner += '<div id="relatoriosRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1060,6 +1062,8 @@
     if(id === 'dre' && window.DRE) window.DRE.load();
     if(id === 'billing' && window.Faturamento) window.Faturamento.load();
     if(id === 'invoices' && window.NotasFiscais) window.NotasFiscais.load();
+    if(id === 'ads' && window.Ads) window.Ads.load();
+    if(id === 'reports' && window.Relatorios) window.Relatorios.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -4561,11 +4565,350 @@
     window.NotasFiscais = { load };
   })();
 
+  /* ================= ADS — Product Ads real do Mercado Livre =================
+     Ativado em 25/08/2026. Duas fontes bem separadas (ver lib/ads.js):
+     investimento/vendas atribuídas/ROAS/ACOS vêm SEMPRE da API de Advertising
+     do Mercado Livre (nunca calculados aqui); faturamento real/margem "antes
+     do Ads" vêm da MESMA fonte única de Pedidos/DRE/Financeiro
+     (lib/relatorioVendas.js). Nunca inventa valor: quando a API de Ads não
+     está disponível pra uma conta, os campos aparecem como "Pendente de
+     sincronização" — nunca um número estimado. Empresa e período vêm do
+     filtro do header (window.CerneFiltro); loja é um filtro só desta tela. */
+  (function(){
+    const state = { loading:false, error:null, data:null, contaId:'' };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? null : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pendenteSync(){ return '<span style="color:var(--text-faint);font-style:italic;" title="Este dado depende da API de Publicidade do Mercado Livre, que ainda não retornou (ou a conta não tem acesso a Product Ads).">Pendente de sincronização</span>'; }
+    function pendenteCusto(){ return '<span style="color:var(--text-faint);font-style:italic;" title="Falta cadastrar o custo de algum SKU deste anúncio em Produtos.">pendente</span>'; }
+    function moneyOrPend(v){ return v===null||v===undefined ? pendenteSync() : money(v); }
+    function roasFmt(v){ return v===null||v===undefined ? pendenteSync() : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})+'x'; }
+    function pctFmt(v){ return v===null||v===undefined ? pendenteSync() : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+
+    async function apiAds(empresaId, periodo, contaId){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      const res = await fetch('/api/ads?'+params.toString());
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os dados de Ads.');
+      return body;
+    }
+
+    async function loadAds(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiAds(filtro.empresaId, filtro.periodo, state.contaId); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    function load(){ loadAds(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-ads');
+      if(page && page.classList.contains('active')) loadAds();
+      else render();
+    });
+
+    function render(){
+      const root = document.getElementById('adsRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver Ads aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:820px;">Investimento, ROAS e ACOS vêm direto da API de Publicidade (Product Ads) do Mercado Livre — nunca um valor estimado pelo ERP. Faturamento real e margem "antes do Ads" vêm da mesma fonte de Pedidos/DRE/Financeiro. TACOS = investimento em Ads ÷ faturamento REAL do anúncio no período (não o "atribuído" pelo Mercado Livre). Margem depois do Ads = margem real de contribuição − investimento em Ads: venda − taxas − frete do vendedor − imposto − custo do produto − Ads.</div>';
+
+      if(state.data){
+        html += '<div class="toolbar">'
+          + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+            + '<div class="empresa-picker" style="margin-bottom:0;"><select id="adsLojaSelect">'
+              + '<option value="">Todas as lojas</option>'
+              + state.data.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+            + '</select></div>'
+          + '</div>'
+        + '</div>';
+
+        if(state.data.situacaoPorConta && state.data.situacaoPorConta.some(s=>!s.disponivel)){
+          html += '<div class="table-card" style="padding:12px 16px;margin-bottom:14px;border-left:3px solid var(--warning);">'
+            + state.data.situacaoPorConta.filter(s=>!s.disponivel).map(s=>
+              '<div style="font-size:12.5px;color:var(--text-muted);display:flex;gap:8px;align-items:flex-start;margin:4px 0;">'
+                + '<span style="color:var(--warning);flex-shrink:0;">'+svg('alertCircle')+'</span>'
+                + '<span><strong>'+escapeHtml(s.loja||('Conta '+s.contaId))+'</strong>: '+escapeHtml(s.mensagem||'Dados de Ads indisponíveis para esta conta.')+'</span>'
+              + '</div>'
+            ).join('')
+          + '</div>';
+        }
+      }
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando Ads…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data && state.data.semConta){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma conta do Mercado Livre conectada</h2>'
+          + '<p class="lead">Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> para ver Ads aqui.</p></div>';
+      } else if(state.data && !state.data.linhas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('megaphone')+'</div>'
+          + '<h2>Nenhum anúncio com venda ou dado de Ads no período</h2>'
+          + '<p class="lead">Não há vendas nem métricas de publicidade para "'+escapeHtml((state.data.periodo&&state.data.periodo.label)||'')+'". Escolha outro período ou verifique a sincronização de pedidos.</p></div>';
+      } else if(state.data){
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Anúncio / SKU</th><th>Loja</th><th>Investimento</th><th>Vendas atrib. (qtd)</th><th>Faturamento atrib.</th>'
+          + '<th>ROAS</th><th>ACOS</th><th>TACOS</th><th>Margem antes do Ads</th><th>Custo Ads</th><th>Margem depois do Ads</th>'
+          + '</tr></thead><tbody>'
+          + state.data.linhas.map(l => '<tr>'
+            + '<td class="produto-cell"><div class="cell-stack"><span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+              + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span></div></td>'
+            + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+            + '<td class="mono">'+moneyOrPend(l.investimento)+'</td>'
+            + '<td class="mono">'+(l.qtdVendasAtribuidas===null||l.qtdVendasAtribuidas===undefined ? pendenteSync() : l.qtdVendasAtribuidas)+'</td>'
+            + '<td class="mono">'+moneyOrPend(l.faturamentoAtribuido)+'</td>'
+            + '<td class="mono">'+roasFmt(l.roas)+'</td>'
+            + '<td class="mono">'+pctFmt(l.acos)+'</td>'
+            + '<td class="mono">'+pctFmt(l.tacos)+'</td>'
+            + '<td class="mono">'+(l.semVendaReal ? '<span style="color:var(--text-faint);">sem venda no período</span>' : (l.margemAntesDoAds===null ? pendenteCusto() : money(l.margemAntesDoAds)))+'</td>'
+            + '<td class="mono">'+moneyOrPend(l.custoAds)+'</td>'
+            + '<td class="mono" style="'+(l.margemDepoisDoAds!==null && l.margemDepoisDoAds!==undefined?(l.margemDepoisDoAds>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.margemDepoisDoAds===null||l.margemDepoisDoAds===undefined ? (l.semMetricasAds ? pendenteSync() : pendenteCusto()) : money(l.margemDepoisDoAds))+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>'
+          + '<div class="field-hint" style="margin-top:6px;">"Pendente de sincronização" = a API de Publicidade do Mercado Livre ainda não retornou esse dado (ou a conta não tem Product Ads habilitado) — nunca um valor estimado. "pendente" = falta cadastrar o custo de algum SKU deste anúncio em <strong>Produtos</strong>.</div>';
+      }
+
+      root.innerHTML = html;
+
+      const selLoja = document.getElementById('adsLojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadAds(); });
+    }
+
+    window.Ads = { load };
+  })();
+
+  /* ================= RELATÓRIOS — categorias com dados 100% reaproveitados =================
+     Ativado em 25/08/2026. Regra central do usuário: os números aqui usam as
+     MESMAS regras já usadas em Visão Geral/Pedidos/Financeiro (nenhum
+     cálculo novo) — ver lib/relatoriosAgregados.js no backend. Empresa e
+     período vêm do filtro do header; loja e SKU são filtros desta tela.
+     Exportação (XLSX/CSV) sempre respeita os filtros atuais. */
+  (function(){
+    const CATEGORIAS = [
+      ['vendas-margem','Vendas e Margem'],
+      ['produtos','Produtos'],
+      ['marketplaces','Marketplaces / Lojas'],
+    ];
+    const state = { loading:false, error:null, categoria:'vendas-margem', contaId:'', sku:'', lojas:[], data:null };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? null : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pctFmt(v){ return v===null||v===undefined ? null : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    function pend(){ return '<span style="color:var(--text-faint);font-style:italic;">pendente</span>'; }
+    function pendSync(){ return '<span style="color:var(--text-faint);font-style:italic;">Pendente de sincronização</span>'; }
+    function moneyOrPend(v){ return v===null||v===undefined ? pend() : money(v); }
+
+    async function apiLojas(empresaId){
+      try{
+        const res = await fetch('/api/integracoes/mercadolivre?empresaId='+empresaId);
+        const body = await res.json();
+        return (body && body.contas) || [];
+      }catch(e){ return []; }
+    }
+
+    async function apiCategoria(categoria, empresaId, periodo, contaId, sku){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      if(categoria === 'produtos' && sku.trim()) params.set('sku', sku.trim());
+      const path = categoria === 'vendas-margem' ? '/api/relatorios/vendas-margem'
+        : categoria === 'produtos' ? '/api/relatorios/produtos'
+        : '/api/relatorios/marketplaces';
+      const res = await fetch(path+'?'+params.toString());
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o relatório.');
+      return body;
+    }
+
+    async function loadRelatorio(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const [dados, lojas] = await Promise.all([
+          apiCategoria(state.categoria, filtro.empresaId, filtro.periodo, state.contaId, state.sku),
+          apiLojas(filtro.empresaId),
+        ]);
+        state.data = dados;
+        state.lojas = lojas;
+      }catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    function load(){ loadRelatorio(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-reports');
+      if(page && page.classList.contains('active')) loadRelatorio();
+      else render();
+    });
+
+    function baixarExportacao(formato){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId) return;
+      const params = new URLSearchParams({ categoria: state.categoria, empresaId: filtro.empresaId, periodo: filtro.periodo, formato });
+      if(state.contaId) params.set('contaId', state.contaId);
+      if(state.categoria === 'produtos' && state.sku.trim()) params.set('sku', state.sku.trim());
+      window.location.href = '/api/relatorios/exportar?'+params.toString();
+    }
+
+    function renderVendasMargem(d){
+      const semPedidos = d.resumo.qtdPedidos === 0;
+      const linhas = [
+        ['Faturamento', semPedidos ? 0 : d.resumo.faturamento.valor, 'money'],
+        ['Pedidos', d.resumo.qtdPedidos, 'int'],
+        ['Unidades vendidas', d.totalUnidades, 'int'],
+        ['Taxas/comissões', semPedidos ? 0 : d.resumo.tarifas.valor, 'money'],
+        ['Frete vendedor', semPedidos ? 0 : d.resumo.freteVendedor.valor, 'money'],
+        ['Imposto', semPedidos ? 0 : d.resumo.imposto.valor, 'money'],
+        ['Custo dos produtos', d.resumo.custoProduto.valor, 'money'],
+        ['Ads', d.ads.disponivel ? d.ads.valor : null, 'money-sync'],
+        ['Margem de contribuição (R$)', d.resumo.margemContribuicao.valor, 'money'],
+        ['Margem de contribuição (%)', semPedidos ? 0 : d.resumo.margemPercentual, 'percent'],
+      ];
+      let html = '<div class="panel" style="max-width:640px;">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('lineChart')+'</span>Vendas e Margem</div><span class="panel-note">'+escapeHtml((d.periodo&&d.periodo.label)||'')+'</span></div>'
+        + linhas.map(([label, valor, tipo])=>{
+            const valorHtml = tipo === 'money' ? moneyOrPend(valor)
+              : tipo === 'money-sync' ? (valor===null ? pendSync() : money(valor))
+              : tipo === 'percent' ? (valor===null ? pend() : pctFmt(valor))
+              : valor;
+            return '<div class="bd-row"><span class="bd-label">'+label+'</span><span class="bd-value">'+valorHtml+'</span></div>';
+          }).join('')
+        + (d.ads.disponivel && d.ads.parcial ? '<div class="bd-side-note">Ads: dado parcial — alguma loja está com a sincronização de Ads indisponível no momento.</div>' : '')
+        + '<div class="bd-side-note">Mesmos números e regras de Visão Geral, Pedidos e Financeiro para o mesmo período/loja — nenhum cálculo separado.</div>'
+      + '</div>';
+      return html;
+    }
+
+    function renderProdutos(d){
+      if(!d.linhas.length){
+        return '<div class="empty-panel"><div class="empty-icon">'+svg('box')+'</div>'
+          + '<h2>Nenhum produto vendido no período</h2>'
+          + '<p class="lead">Não há itens de pedido para os filtros selecionados.</p></div>';
+      }
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>SKU</th><th>Quantidade vendida</th><th>Faturamento</th><th>Custo</th><th>Imposto</th><th>Margem gerada</th>'
+        + '</tr></thead><tbody>'
+        + d.linhas.map(l => '<tr>'
+          + '<td class="mono">'+escapeHtml(l.sku)+(l.rateado?' <span title="Frete/desconto/tarifas deste SKU foram rateados proporcionalmente porque ele às vezes divide pedido com outros itens." style="color:var(--text-faint);font-size:11px;">(rateado)</span>':'')+'</td>'
+          + '<td class="tab-nums">'+l.quantidade+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.faturamento)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.custo)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.imposto)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.margemContribuicao)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>'
+        + '<div class="field-hint" style="margin-top:6px;">"pendente" = falta cadastrar o custo do SKU em <strong>Produtos</strong> e/ou o Mercado Livre não retornou alguma tarifa — nunca um valor estimado.</div>';
+    }
+
+    function renderMarketplaces(d){
+      const linhas = state.contaId ? d.linhas.filter(l=>String(l.contaMlId)===String(state.contaId)) : d.linhas;
+      if(!linhas.length){
+        return '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma loja com pedidos no período</h2>'
+          + '<p class="lead">Não há pedidos para os filtros selecionados.</p></div>';
+      }
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Loja</th><th>Faturamento</th><th>Pedidos</th><th>Taxas/comissões</th><th>Frete vendedor</th><th>Custo</th><th>Margem R$</th><th>Margem %</th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.resumo.faturamento.valor)+'</td>'
+          + '<td class="tab-nums">'+l.resumo.qtdPedidos+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.resumo.tarifas.valor)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.resumo.freteVendedor.valor)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.resumo.custoProduto.valor)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.resumo.margemContribuicao.valor)+'</td>'
+          + '<td class="mono">'+(l.resumo.margemPercentual===null?pend():pctFmt(l.resumo.margemPercentual))+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    function render(){
+      const root = document.getElementById('relatoriosRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver Relatórios aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div class="seg" id="relCategoriaSeg">'
+          + CATEGORIAS.map(([chave,label])=>'<button data-categoria="'+chave+'" class="'+(state.categoria===chave?'active':'')+'">'+label+'</button>').join('')
+        + '</div>'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="relLojaSelect">'
+            + '<option value="">Todas as lojas</option>'
+            + state.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+          + '</select></div>'
+          + (state.categoria==='produtos' ? '<div class="search-box" style="margin-bottom:0;">'+svg('search')+'<input type="text" id="relSkuInput" placeholder="Buscar SKU" value="'+escapeHtml(state.sku)+'"></div>' : '')
+        + '</div>'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          + '<button class="ghost-btn" id="relXlsxBtn" type="button" style="cursor:pointer; opacity:1;" title="Exportar este relatório em Excel com os filtros atuais">'+svg('fileText')+'<span>Exportar (Excel)</span></button>'
+          + '<button class="ghost-btn" id="relCsvBtn" type="button" style="cursor:pointer; opacity:1;" title="Exportar este relatório em CSV com os filtros atuais">'+svg('fileText')+'<span>CSV</span></button>'
+        + '</div>'
+      + '</div>';
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando relatório…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data){
+        if(state.categoria === 'vendas-margem') html += renderVendasMargem(state.data);
+        else if(state.categoria === 'produtos') html += renderProdutos(state.data);
+        else html += renderMarketplaces(state.data);
+      }
+
+      root.innerHTML = html;
+
+      const seg = document.getElementById('relCategoriaSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{
+        if(state.categoria === b.dataset.categoria) return;
+        state.categoria = b.dataset.categoria;
+        loadRelatorio();
+      }));
+      const selLoja = document.getElementById('relLojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadRelatorio(); });
+      const skuInput = document.getElementById('relSkuInput');
+      if(skuInput) skuInput.addEventListener('input', ()=>{
+        state.sku = skuInput.value;
+        clearTimeout(skuInput._t);
+        skuInput._t = setTimeout(loadRelatorio, 300);
+      });
+      const xlsxBtn = document.getElementById('relXlsxBtn');
+      if(xlsxBtn) xlsxBtn.addEventListener('click', ()=> baixarExportacao('xlsx'));
+      const csvBtn = document.getElementById('relCsvBtn');
+      if(csvBtn) csvBtn.addEventListener('click', ()=> baixarExportacao('csv'));
+    }
+
+    window.Relatorios = { load };
+  })();
+
   // Só navega para a rota inicial depois que TODOS os módulos acima (Empresas,
   // Marketplaces, Pedidos, Custos, Produtos, Fornecedores, Anúncios, Estoque,
   // Estoque Full, Compras, Contas a Pagar, Contas a Receber, Recebimentos,
-  // DRE, Faturamento, Notas Fiscais) já estão definidos — chamar isso mais
-  // cedo fazia a tela de destino do OAuth do Mercado Livre
+  // DRE, Faturamento, Notas Fiscais, Ads, Relatórios) já estão definidos —
+  // chamar isso mais cedo fazia a tela de destino do OAuth do Mercado Livre
   // (#marketplaces?ml=...) e outras rotas carregarem em branco no primeiro
   // load/refresh.
   navigate(location.hash ? location.hash.slice(1) : 'overview');
