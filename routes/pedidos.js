@@ -406,11 +406,16 @@ router.get('/:id', async (req, res, next) => {
       [pedido.id]
     );
 
+    // Custo por SKU vem de `produtos` (tela Produtos, desde 24/08/2026 — ver
+    // db/schema.sql e docs/02-decisoes.md) — mesma fonte usada em
+    // lib/relatorioVendas.js, pra nunca divergir entre a lista de Pedidos e
+    // o detalhe do pedido. Não filtra por produtos.ativo (ver comentário em
+    // relatorioVendas.js sobre o mesmo ponto).
     const skus = [...new Set(itens.map((i) => i.sku).filter(Boolean))];
     let custosPorSku = {};
     if (skus.length) {
       const { rows: custosRows } = await pool.query(
-        'SELECT sku, custo FROM custos_produto WHERE empresa_id = $1 AND sku = ANY($2::text[])',
+        'SELECT sku, custo FROM produtos WHERE empresa_id = $1 AND sku = ANY($2::text[])',
         [empresaId, skus]
       );
       custosPorSku = Object.fromEntries(custosRows.map((c) => [c.sku, Number(c.custo)]));

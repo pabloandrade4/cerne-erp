@@ -1,74 +1,17 @@
-// Custo do produto por SKU + configuração de imposto (percentual), por
-// empresa. Usado no cálculo do resultado da venda (routes/pedidos.js).
+// Configuração de imposto (alíquota percentual), por empresa. Usado no
+// cálculo do resultado da venda (lib/relatorioVendas.js -> lib/resultadoVenda.js).
 // O imposto é uma configuração do ERP — nunca vem do Mercado Livre.
+//
+// Desde 24/08/2026, o cadastro de custo por SKU (antes neste mesmo arquivo,
+// como "/api/custos-produto") foi unificado com a tela Produtos — ver
+// routes/produtos.js, db/schema.sql e docs/02-decisoes.md. As rotas de
+// custo por SKU foram removidas daqui; o campo de alíquota de imposto
+// abaixo continua único por empresa (não por produto), só que agora
+// chamado a partir da tela Produtos em vez de uma aba separada.
 const express = require('express');
 const pool = require('../db/pool');
 
 const router = express.Router();
-
-function serializeCusto(row) {
-  return {
-    id: row.id,
-    empresaId: row.empresa_id,
-    sku: row.sku,
-    custo: Number(row.custo),
-    criadoEm: row.criado_em,
-    atualizadoEm: row.atualizado_em,
-  };
-}
-
-// GET /api/custos-produto?empresaId=ID
-router.get('/custos-produto', async (req, res, next) => {
-  try {
-    const { empresaId } = req.query;
-    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
-    const { rows } = await pool.query(
-      'SELECT * FROM custos_produto WHERE empresa_id = $1 ORDER BY sku',
-      [empresaId]
-    );
-    res.json({ custos: rows.map(serializeCusto) });
-  } catch (err) { next(err); }
-});
-
-// POST /api/custos-produto — cadastra ou atualiza o custo de um SKU (upsert por empresa+sku)
-router.post('/custos-produto', async (req, res, next) => {
-  try {
-    const empresaId = req.body.empresaId;
-    const sku = String(req.body.sku || '').trim();
-    const custo = Number(req.body.custo);
-
-    const errors = {};
-    if (!empresaId) errors.empresaId = 'Selecione a empresa.';
-    if (!sku) errors.sku = 'Informe o SKU.';
-    if (!Number.isFinite(custo) || custo < 0) errors.custo = 'Informe um custo válido (maior ou igual a zero).';
-    if (Object.keys(errors).length) return res.status(400).json({ errors });
-
-    const { rows } = await pool.query(
-      `INSERT INTO custos_produto (empresa_id, sku, custo, atualizado_em)
-       VALUES ($1,$2,$3, now())
-       ON CONFLICT (empresa_id, sku) DO UPDATE SET custo = EXCLUDED.custo, atualizado_em = now()
-       RETURNING *`,
-      [empresaId, sku, custo]
-    );
-    res.status(201).json({ custo: serializeCusto(rows[0]) });
-  } catch (err) { next(err); }
-});
-
-// PUT /api/custos-produto/:id — edita o valor do custo
-router.put('/custos-produto/:id', async (req, res, next) => {
-  try {
-    const custo = Number(req.body.custo);
-    if (!Number.isFinite(custo) || custo < 0) {
-      return res.status(400).json({ errors: { custo: 'Informe um custo válido (maior ou igual a zero).' } });
-    }
-    const { rows } = await pool.query(
-      'UPDATE custos_produto SET custo = $1, atualizado_em = now() WHERE id = $2 RETURNING *',
-      [custo, req.params.id]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Custo não encontrado.' });
-    res.json({ custo: serializeCusto(rows[0]) });
-  } catch (err) { next(err); }
-});
 
 // GET /api/config-financeiro/:empresaId — alíquota de imposto configurada (0 se ainda não configurada)
 router.get('/config-financeiro/:empresaId', async (req, res, next) => {

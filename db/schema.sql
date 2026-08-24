@@ -119,8 +119,14 @@ CREATE TABLE IF NOT EXISTS ml_pedido_itens (
   taxa_venda                 NUMERIC(12,2)   -- sale_fee do item
 );
 
--- Custo do produto por SKU, por empresa (cadastro manual, usado no cálculo
--- financeiro da venda).
+-- Custo do produto por SKU, por empresa.
+-- LEGADO (24/08/2026): esta tabela era usada pela antiga tela "Custo &
+-- Margem" e no cálculo financeiro da venda. Nessa data, a tela foi unificada
+-- com "Produtos" (ver docs/02-decisoes.md e docs/04-alteracoes.md) — SKU e
+-- custo passaram a ser cadastrados/editados só em `produtos`, e o cálculo de
+-- margem passou a ler o custo de lá. Esta tabela FICA NO BANCO, com os dados
+-- antigos preservados (não apagada, não editada), só para histórico/
+-- auditoria — nenhuma rota ou cálculo do ERP lê ou escreve nela desde então.
 CREATE TABLE IF NOT EXISTS custos_produto (
   id             SERIAL PRIMARY KEY,
   empresa_id     INTEGER NOT NULL REFERENCES empresas(id),
@@ -143,13 +149,12 @@ CREATE TABLE IF NOT EXISTS config_financeiro (
 -- Etapa: Produtos, Anúncios (visualização) e Fornecedores
 -- ============================================================
 
--- Cadastro simples de produtos, por empresa. Ainda sem kits, composição nem
--- controle de estoque automático (não pedido nesta etapa) — catálogo
--- deliberadamente simples: nome, SKU, custo e status. Fica SEPARADA de
--- "custos_produto" (usada no cálculo de margem das vendas do Mercado Livre)
--- de propósito, para não alterar essa fonte de cálculo já em uso nesta
--- etapa — ver docs/02-decisoes.md sobre essa decisão e o que falta pra
--- unificar as duas no futuro.
+-- Cadastro simples de produtos, por empresa: nome, SKU, custo e status.
+-- Ainda sem kits nem composição.
+-- Desde 24/08/2026, esta é a ÚNICA fonte de custo por SKU usada no cálculo
+-- de margem das vendas do Mercado Livre (lib/relatorioVendas.js) — a antiga
+-- tabela "custos_produto" (tela separada "Custo & Margem") foi unificada
+-- aqui; ver o comentário em `custos_produto`, acima, e docs/02-decisoes.md.
 CREATE TABLE IF NOT EXISTS produtos (
   id             SERIAL PRIMARY KEY,
   empresa_id     INTEGER NOT NULL REFERENCES empresas(id),
@@ -398,4 +403,20 @@ CREATE TABLE IF NOT EXISTS estoque_produto_base_movimentos (
   diferenca                 INTEGER NOT NULL,
   observacao                TEXT,
   criado_em                 TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- Etapa: Unificação Produtos + Custo & Margem (24/08/2026)
+-- ============================================================
+
+-- Marca migrações de DADOS (não de schema) já aplicadas neste banco — schema
+-- em si é sempre reaplicado com segurança via CREATE TABLE/ALTER ... IF NOT
+-- EXISTS (db/migrate.js), mas uma migração que MOVE dados (ex: copiar
+-- custos_produto para produtos) só pode rodar uma vez: rodar de novo a cada
+-- boot sobrescreveria, para sempre, qualquer custo que o usuário venha a
+-- editar depois em Produtos com o valor antigo de custos_produto. Ver
+-- db/migrate.js.
+CREATE TABLE IF NOT EXISTS migracoes_aplicadas (
+  nome         VARCHAR(100) PRIMARY KEY,
+  aplicado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -827,7 +827,7 @@
         bullets:['Dados cadastrais e fiscais por CNPJ','Vínculo de lojas e contas por empresa','Regimes tributários e configurações','Usuários com acesso por empresa'] },
       { id:'marketplaces', title:'Marketplaces', icon:'store', action:'Conectar conta', desc:'Contas do Mercado Livre e lojas da Shopee conectadas ao ERP.',
         bullets:['Múltiplas contas do Mercado Livre','Múltiplas lojas da Shopee','Status de sincronização por conta','Taxas e regras específicas de cada canal'] },
-      { id:'products', title:'Produtos', icon:'box', action:'Novo produto', desc:'Cadastro simples de produtos: nome, SKU, custo e status.',
+      { id:'products', title:'Produtos', icon:'box', action:'Novo produto', desc:'Cadastro de produtos: nome, SKU, custo e status — e a alíquota de imposto da empresa. Usados no cálculo de margem das vendas (Pedidos, Visão Geral, Financeiro e Relatórios); a margem não aparece aqui.',
         bullets:['Ficha técnica e custo do produto','Variações e SKUs','Vínculo com anúncios do ML e Shopee','Curva ABC de vendas'] },
       { id:'anuncios', title:'Anúncios', icon:'tag', action:'Atualizar', desc:'Anúncios reais das contas do Mercado Livre conectadas — título, SKU, loja, preço, estoque, status e tipo.',
         bullets:['Sincronizado ao vivo com o Mercado Livre','SKU, preço e estoque de cada anúncio','Vínculo com a loja/conta conectada','Edição de preço e estoque (próxima etapa)'] },
@@ -859,8 +859,6 @@
         bullets:['Emissão de NF-e por pedido','Status de autorização na SEFAZ','Cancelamentos e cartas de correção','Vínculo com transportadoras'] },
     ]},
     { id:'analise', label:'Análise', open:false, items:[
-      { id:'costs', title:'Custos & Margem', icon:'percent', action:'Recalcular', desc:'Custo real e margem por produto e por pedido, considerando todas as taxas.',
-        bullets:['Composição de custo por produto','Margem líquida por pedido','Impacto de taxas e Ads no lucro','Ranking de produtos por margem'] },
       { id:'ads', title:'Ads', icon:'megaphone', action:'Conectar Ads', desc:'Investimento e retorno das campanhas de publicidade dentro dos marketplaces.',
         bullets:['Investimento por conta e campanha','ACOS e ROAS por produto','Impacto do Ads na margem real','Sugestões de otimização'] },
       { id:'reports', title:'Relatórios', icon:'lineChart', action:'Novo relatório', desc:'Relatórios operacionais e financeiros configuráveis.',
@@ -987,7 +985,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','costs','finance','products','anuncios','suppliers','stock','purchases'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','purchases'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1008,7 +1006,6 @@
     else if(id === 'companies'){ inner += '<div id="empresasRoot"></div>'; }
     else if(id === 'marketplaces'){ inner += '<div id="marketplacesRoot"></div>'; }
     else if(id === 'orders'){ inner += '<div id="pedidosRoot"></div>'; }
-    else if(id === 'costs'){ inner += '<div id="custosRoot"></div>'; }
     else if(id === 'finance'){ inner += '<div id="financeRoot"></div>'; }
     else if(id === 'products'){ inner += '<div id="produtosRoot"></div>'; }
     else if(id === 'suppliers'){ inner += '<div id="fornecedoresRoot"></div>'; }
@@ -1040,7 +1037,6 @@
     if(id === 'companies' && window.Empresas) window.Empresas.load();
     if(id === 'marketplaces' && window.Marketplaces) window.Marketplaces.load(queryStr);
     if(id === 'orders' && window.Pedidos) window.Pedidos.load();
-    if(id === 'costs' && window.Custos) window.Custos.load();
     if(id === 'finance' && window.Financeiro) window.Financeiro.load();
     if(id === 'products' && window.Produtos) window.Produtos.load();
     if(id === 'suppliers' && window.Fornecedores) window.Fornecedores.load();
@@ -2204,156 +2200,16 @@
     window.Financeiro = { load };
   })();
 
-  /* ================= CUSTOS & MARGEM — custo por SKU + imposto ================= */
-  (function(){
-    const state = { empresas:[], empresaId:null, loadingEmpresas:false, custos:[], loading:false, aliquota:0, savingAliquota:false };
-
-    function toast(message, type){
-      const wrap = document.getElementById('toastWrap');
-      const el = document.createElement('div');
-      el.className = 'toast ' + (type||'success');
-      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
-      wrap.appendChild(el);
-      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
-    }
-    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-    function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return '—'; } }
-    function money(v){ return 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
-
-    async function apiEmpresasAtivas(){
-      const res = await fetch('/api/empresas?status=ativas');
-      return ((await res.json()).empresas) || [];
-    }
-    async function apiJson(path, opts){
-      const res = await fetch(path, { headers:{'Content-Type':'application/json'}, ...opts });
-      let body = null; try{ body = await res.json(); }catch(e){}
-      if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
-      return body;
-    }
-
-    async function loadAll(){
-      state.loading = true; render();
-      try{
-        const [custosData, configData] = await Promise.all([
-          apiJson('/api/custos-produto?empresaId='+state.empresaId),
-          apiJson('/api/config-financeiro/'+state.empresaId),
-        ]);
-        state.custos = custosData.custos;
-        state.aliquota = configData.aliquotaImposto;
-      }catch(e){ toast(e.message, 'error'); }
-      state.loading = false; render();
-    }
-
-    async function load(){
-      state.loadingEmpresas = true; render();
-      try{
-        state.empresas = await apiEmpresasAtivas();
-        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
-          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
-        }
-      }catch(e){ state.empresas = []; }
-      state.loadingEmpresas = false;
-      if(state.empresaId) await loadAll(); else render();
-    }
-
-    function render(){
-      const root = document.getElementById('custosRoot');
-      if(!root) return;
-
-      if(!state.loadingEmpresas && !state.empresas.length){
-        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
-          + '<h2>Nenhuma empresa ativa</h2>'
-          + '<p class="lead">Cadastre e ative uma empresa para configurar custos de produto e imposto.</p></div>';
-        return;
-      }
-
-      let html = '<div class="empresa-picker"><label>Empresa</label><select id="cstEmpresaSelect">'
-        + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
-      + '</select></div>';
-
-      html += '<div class="section-label"><span>Imposto configurado</span></div>'
-        + '<div class="inline-form">'
-          + '<div class="field narrow"><label>Alíquota de imposto (%)</label><input type="text" inputmode="decimal" id="cstAliquota" value="'+(state.loading?'':state.aliquota)+'"></div>'
-          + '<button class="btn-primary" id="cstSaveAliquota" type="button">'+svg('check')+'<span>Salvar</span></button>'
-          + '<div class="field-hint" style="margin:0;">Percentual aplicado sobre o valor da venda. Não vem do Mercado Livre — é uma configuração do ERP.</div>'
-        + '</div>';
-
-      html += '<div class="section-label"><span>Custo de produto por SKU</span></div>'
-        + '<div class="inline-form">'
-          + '<div class="field narrow"><label>SKU</label><input type="text" id="cstSku" placeholder="Ex: CAM-AZ-M"></div>'
-          + '<div class="field narrow"><label>Custo (R$)</label><input type="text" inputmode="decimal" id="cstCusto" placeholder="0,00"></div>'
-          + '<button class="btn-primary" id="cstAddCusto" type="button">'+svg('plus')+'<span>Salvar SKU</span></button>'
-        + '</div>';
-
-      if(state.loading){
-        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
-      } else if(!state.custos.length){
-        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
-          + '<h2>Nenhum custo cadastrado</h2>'
-          + '<p class="lead">Cadastre o custo de cada SKU acima para o ERP calcular o resultado real das vendas.</p></div>';
-      } else {
-        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>SKU</th><th>Custo</th><th>Atualizado em</th><th></th>'
-          + '</tr></thead><tbody>'
-          + state.custos.map(c => '<tr>'
-            + '<td class="mono">'+escapeHtml(c.sku)+'</td>'
-            + '<td class="mono">'+money(c.custo)+'</td>'
-            + '<td class="tab-nums">'+fmtDateTime(c.atualizadoEm)+'</td>'
-            + '<td><div class="row-actions"><button class="row-ic-btn" data-edit-sku="'+escapeHtml(c.sku)+'" data-edit-custo="'+c.custo+'" title="Editar" type="button">'+svg('edit')+'</button></div></td>'
-          + '</tr>').join('')
-          + '</tbody></table></div></div>';
-      }
-
-      root.innerHTML = html;
-
-      const sel = document.getElementById('cstEmpresaSelect');
-      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadAll(); });
-
-      const saveAliquota = document.getElementById('cstSaveAliquota');
-      if(saveAliquota) saveAliquota.addEventListener('click', async ()=>{
-        const val = Number(String(document.getElementById('cstAliquota').value).replace(',','.'));
-        if(!Number.isFinite(val) || val<0 || val>100){ toast('Informe um percentual entre 0 e 100.', 'error'); return; }
-        saveAliquota.disabled = true;
-        try{
-          await apiJson('/api/config-financeiro/'+state.empresaId, { method:'PUT', body: JSON.stringify({ aliquotaImposto: val }) });
-          state.aliquota = val;
-          toast('Alíquota de imposto salva.');
-        }catch(err){ toast(err.message, 'error'); }
-        saveAliquota.disabled = false;
-      });
-
-      const addCusto = document.getElementById('cstAddCusto');
-      if(addCusto) addCusto.addEventListener('click', async ()=>{
-        const sku = document.getElementById('cstSku').value.trim();
-        const custo = Number(String(document.getElementById('cstCusto').value).replace(',','.'));
-        if(!sku){ toast('Informe o SKU.', 'error'); return; }
-        if(!Number.isFinite(custo) || custo<0){ toast('Informe um custo válido.', 'error'); return; }
-        addCusto.disabled = true;
-        try{
-          await apiJson('/api/custos-produto', { method:'POST', body: JSON.stringify({ empresaId: state.empresaId, sku, custo }) });
-          toast('Custo do SKU salvo.');
-          await loadAll();
-        }catch(err){ toast(err.message, 'error'); }
-        addCusto.disabled = false;
-      });
-
-      root.querySelectorAll('[data-edit-sku]').forEach(b=> b.addEventListener('click', ()=>{
-        document.getElementById('cstSku').value = b.dataset.editSku;
-        document.getElementById('cstCusto').value = b.dataset.editCusto;
-        document.getElementById('cstSku').scrollIntoView({behavior:'smooth', block:'center'});
-      }));
-    }
-
-    window.Custos = { load };
-  })();
-
   /* ================= PRODUTOS — cadastro simples, por empresa =================
-     Nome, SKU, custo e status. Sem kits/composição/estoque automático ainda
-     (não pedido nesta etapa) — catálogo simples e funcional, salvo no banco.
-     É uma tabela separada de "custos_produto" (usada no cálculo de margem
-     das vendas) — ver docs/02-decisoes.md. */
+     Nome, SKU, custo e status — e a alíquota de imposto da empresa (movida
+     pra cá em 24/08/2026, junto com a extinção da aba separada "Custo &
+     Margem"; ver docs/02-decisoes.md). Sem kits/composição/estoque
+     automático ainda. Esta é a fonte de custo por SKU usada no cálculo de
+     margem das vendas (lib/relatorioVendas.js) — mas a MARGEM em si nunca
+     aparece nesta tela, só em Pedidos/Visão Geral/Financeiro/Relatórios. */
   (function(){
-    const state = { empresas:[], empresaId:null, loadingEmpresas:false, items:[], loading:false, error:null, status:'todos', search:'' };
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, items:[], loading:false, error:null, status:'todos', search:'',
+      aliquota:0, loadingAliquota:false, savingAliquota:false };
 
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
@@ -2377,6 +2233,12 @@
       if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
     }
+    async function apiConfig(path, opts){
+      const res = await fetch('/api/config-financeiro'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
 
     async function loadItens(){
       state.loading = true; state.error = null; render();
@@ -2390,6 +2252,15 @@
       finally{ state.loading = false; render(); }
     }
 
+    async function loadAliquota(){
+      state.loadingAliquota = true; render();
+      try{
+        const data = await apiConfig('/'+state.empresaId, { method:'GET' });
+        state.aliquota = data.aliquotaImposto;
+      }catch(err){ toast(err.message, 'error'); }
+      finally{ state.loadingAliquota = false; render(); }
+    }
+
     async function load(){
       state.loadingEmpresas = true; render();
       try{
@@ -2399,7 +2270,7 @@
         }
       }catch(e){ state.empresas = []; }
       state.loadingEmpresas = false;
-      if(state.empresaId) await loadItens(); else render();
+      if(state.empresaId) await Promise.all([loadItens(), loadAliquota()]); else render();
     }
 
     function render(){
@@ -2413,15 +2284,24 @@
         return;
       }
 
-      let html = '<div class="toolbar">'
-        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="prdEmpresaSelect">'
-          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
-        + '</select></div>'
-        + '<div class="seg" id="prdSeg">'
-          + [['todos','Todos'],['ativos','Ativos'],['inativos','Inativos']].map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
-        + '</div>'
-        + '<div class="search-box">'+svg('search')+'<input type="text" id="prdSearch" placeholder="Buscar por nome ou SKU" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
-      + '</div>';
+      let html = '<div class="empresa-picker"><label>Empresa</label><select id="prdEmpresaSelect">'
+        + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+      + '</select></div>';
+
+      html += '<div class="section-label"><span>Imposto configurado</span></div>'
+        + '<div class="inline-form">'
+          + '<div class="field narrow"><label>Alíquota de imposto (%)</label><input type="text" inputmode="decimal" id="prdAliquota" value="'+(state.loadingAliquota?'':state.aliquota)+'"></div>'
+          + '<button class="btn-primary" id="prdSaveAliquota" type="button">'+svg('check')+'<span>Salvar</span></button>'
+          + '<div class="field-hint" style="margin:0;">Percentual aplicado sobre o valor de cada venda, para todos os produtos desta empresa. Não vem do Mercado Livre — é uma configuração do ERP.</div>'
+        + '</div>';
+
+      html += '<div class="section-label"><span>Produtos cadastrados</span></div>'
+        + '<div class="toolbar">'
+          + '<div class="seg" id="prdSeg">'
+            + [['todos','Todos'],['ativos','Ativos'],['inativos','Inativos']].map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+          + '</div>'
+          + '<div class="search-box">'+svg('search')+'<input type="text" id="prdSearch" placeholder="Buscar por nome ou SKU" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+        + '</div>';
 
       if(state.loading){
         html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando produtos…</span></div></div>';
@@ -2457,7 +2337,19 @@
       root.innerHTML = html;
 
       const sel = document.getElementById('prdEmpresaSelect');
-      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadItens(); });
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadItens(); loadAliquota(); });
+      const saveAliquota = document.getElementById('prdSaveAliquota');
+      if(saveAliquota) saveAliquota.addEventListener('click', async ()=>{
+        const val = Number(String(document.getElementById('prdAliquota').value).replace(',','.'));
+        if(!Number.isFinite(val) || val<0 || val>100){ toast('Informe um percentual entre 0 e 100.', 'error'); return; }
+        saveAliquota.disabled = true;
+        try{
+          await apiConfig('/'+state.empresaId, { method:'PUT', body: JSON.stringify({ aliquotaImposto: val }) });
+          state.aliquota = val;
+          toast('Alíquota de imposto salva.');
+        }catch(err){ toast(err.message, 'error'); }
+        saveAliquota.disabled = false;
+      });
       const seg = document.getElementById('prdSeg');
       if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadItens(); }));
       const search = document.getElementById('prdSearch');

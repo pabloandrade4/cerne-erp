@@ -1,9 +1,16 @@
 // Cadastro simples de produtos, por empresa: nome, SKU, custo e status
 // (ativo/inativo). Ainda não tem kits, composição nem controle de estoque
-// automático — pedido explícito do usuário nesta etapa foi um cadastro
-// simples e funcional, salvo no banco. Ver docs/02-decisoes.md sobre por que
-// esta tabela é separada de "custos_produto" (usada no cálculo de margem das
-// vendas do Mercado Livre).
+// automático.
+//
+// Desde 24/08/2026: esta é a ÚNICA fonte de custo por SKU usada no cálculo
+// de margem das vendas do Mercado Livre (lib/relatorioVendas.js lê direto
+// da tabela `produtos`). A antiga tela separada "Custo & Margem" (tabela
+// `custos_produto`) foi removida e seus dados migrados pra cá — ver
+// db/migrate.js, db/schema.sql e docs/02-decisoes.md. A margem em si
+// continua calculada só nas vendas (Pedidos/Visão Geral/Financeiro/
+// Relatórios) — esta tela nunca mostra margem, só cadastra/edita SKU e
+// custo (a alíquota de imposto, que continua única por empresa, é
+// cadastrada aqui também, mas via routes/custos.js -> config_financeiro).
 const express = require('express');
 const pool = require('../db/pool');
 
