@@ -2,6 +2,101 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-26 (20) — Estoque: Mercado Livre vira a fonte oficial, ajuste manual removido
+- **Pedido do usuário, em 3 ajustes:** (1) o estoque exibido no ERP deve vir
+  sempre dos anúncios/variações da conta do Mercado Livre conectada
+  (consultando o recurso certo conforme o tipo de conta — `user_product_id`
+  + endpoint de User Products para contas com estoque multi-origem, nunca
+  só `available_quantity`); (2) a tela Estoque deve mostrar
+  produto/anúncio, SKU, loja, ID do anúncio, estoque disponível, status e
+  última sincronização, com a quantidade **somente leitura** — o ajuste
+  manual de estoque no ERP foi **removido**; (3) separar por completo
+  Estoque (fora do Full) de Estoque Full, sem somar nem misturar os dois
+  saldos. Regra central, repetida pelo usuário: **nunca inventar
+  quantidade** quando a API não devolve o dado, e **nunca dar baixa manual
+  de estoque numa venda** — o Mercado Livre já é quem controla o saldo, o
+  ERP só espelha. Ver `01-regras-de-negocio.md` e `02-decisoes.md` (20)
+  para as regras e a decisão de arquitetura completas.
+- **Reescrita completa da lógica de Estoque**, abandonando o modelo
+  anterior de "produto base + multiplicador, agrupado" (etapas `ml15`/
+  `ml16`) para a tela de Estoque — ele foi descontinuado **só para fins de
+  estoque** (as tabelas/rotas de produto base continuam existindo, sem uso
+  por nenhuma tela; ver seção "Produto base" em `03-funcionalidades.md`).
+  No lugar, uma linha por anúncio/variação, sempre somente leitura,
+  persistida e sincronizada — não mais um cálculo ao vivo a cada
+  carregamento de página.
+- **`server/db/schema.sql` (aditivo):** nova tabela `ml_estoque_itens`
+  (uma linha por conta + anúncio + variação + `tipo` `proprio`/`full`),
+  com índice único (usando `COALESCE(ml_variation_id, 0)` porque o
+  Postgres trata `NULL` como sempre distinto numa constraint `UNIQUE`) que
+  garante upsert idempotente. Tabelas antigas de estoque (`estoque`,
+  `estoque_movimentos`, `estoque_produto_base`,
+  `estoque_produto_base_movimentos`) foram preservadas, só deixaram de ser
+  escritas.
+- **`server/lib/mlEstoque.js` (novo):** a lógica de sincronização.
+  `sincronizarEstoqueConta(contaId)` pagina todos os anúncios da conta,
+  busca detalhes em lote (incluindo `user_product_id`), e para cada
+  item/variação resolve a quantidade: se houver `user_product_id`, tenta
+  primeiro o endpoint de User Products (`buscarQuantidadeUserProduct`,
+  que testa 3 formatos plausíveis de resposta, já que a documentação do
+  Mercado Livre não confirma o formato exato — ver `05-problemas-conhecidos.md`),
+  caindo para `available_quantity` só se o formato não for reconhecido;
+  sem `user_product_id`, usa `available_quantity` direto. Estoque Full
+  usa o mesmo endpoint de inventário já validado em `lib/mlFull.js`
+  (`/inventories/{id}/stock/fulfillment`). Quando nenhum dado é
+  retornado, o item fica marcado `pendente` com o motivo — **nunca** um
+  valor inventado. SKU agora é resolvido por variação (antes só existia
+  no agregado por produto base).
+- **`server/lib/syncScheduler.js` (aditivo, reaproveitando a automação da
+  etapa 19):** o mesmo ciclo de 1 em 1 minuto agora também roda um
+  segundo laço `Promise.allSettled`, independente do laço de pedidos,
+  chamando `sincronizarEstoqueConta` por conta ativa — erro isolado por
+  conta, num estado separado (`estoqueUltimaExecucaoEm`,
+  `estoqueUltimoCicloOk`, `estoqueContasProcessadas`, `estoqueComErro`),
+  sem alterar em nada o comportamento/estado já existente da
+  sincronização de pedidos.
+- **`server/routes/estoque.js` e `server/routes/estoqueFull.js`
+  (reescritos):** `GET /` de cada um agora lê só o cache persistido em
+  `ml_estoque_itens` (filtrado por `tipo='proprio'` ou `tipo='full'`),
+  em vez de consultar a API do Mercado Livre a cada carregamento de
+  página. Novo `POST /api/estoque/sincronizar` (botão "Sincronizar
+  agora", compartilhado pelas duas telas) dispara a sincronização de
+  todas as contas ativas da empresa na hora.
+- **`server/routes/estoqueProdutoBase.js`:** o `PUT` de ajuste manual do
+  Galpão foi **desativado** — responde sempre `410` com a mensagem
+  explicando que o ajuste agora é feito direto no Mercado Livre. O corpo
+  original do handler foi preservado comentado, para referência
+  histórica. O `GET` (não usado pela tela) continua funcional.
+- **`server/public/index.html`:** a tela "Estoque" (com o filtro
+  Todos/Galpão/Full e o modal "Ajustar Galpão") foi substituída por uma
+  fábrica `criarTelaEstoqueSomenteLeitura()` compartilhada, instanciada
+  duas vezes — uma para a tela **Estoque** (`window.Estoque`, aba nova no
+  menu, fora do Full) e outra para a tela nova **Estoque Full**
+  (`window.EstoqueFull`, item novo no menu). As duas mostram a mesma
+  tabela somente leitura (produto/anúncio, SKU, loja, ID do anúncio,
+  estoque disponível, status, última sincronização), com seletor de
+  empresa, aviso de pendência quando aplicável, e o botão "Sincronizar
+  agora" que chama o `POST` novo.
+- **Confirmação por auditoria de código:** nem `lib/mlSync.js`
+  (sincronização de pedidos) nem `routes/pedidos.js` nunca tiveram lógica
+  de baixa de estoque numa venda — a regra "nunca dar baixa duplicada" já
+  estava estruturalmente satisfeita antes desta etapa; nenhuma lógica
+  nova desse tipo foi introduzida agora.
+- **Testes automatizados novos** (29 testes, todos contra Postgres real):
+  `server/test/mlEstoque.test.js` (24 — unitários de resolução de SKU/
+  quantidade e integração com os 3 formatos de resposta de User Products,
+  Full vs. não-Full nunca misturados, e o cenário exato pedido pelo
+  usuário: sincronizar com 500, sincronizar de novo com 800, confirmar
+  que o valor final é 800 sem duplicar linha, rodar uma 3ª vez para
+  confirmar idempotência) e `server/test/estoqueRoutes.test.js` (5 — as
+  rotas HTTP novas, incluindo o `410` do ajuste manual desativado). Suíte
+  completa do projeto (110 testes) rodada sem falhas depois da mudança.
+- **Pendente (precisa de ambiente de produção, fora do alcance deste
+  ambiente de teste):** confirmar ao vivo que uma mudança de quantidade
+  no Mercado Livre aparece no ERP após a sincronização, e validar o
+  caminho de User Products com uma conta real de estoque multi-origem —
+  ver `06-proximos-passos.md`.
+
 ## 2026-08-24 (19) — Sincronização automática do Mercado Livre (backend, 1 em 1 minuto)
 - **Pedido do usuário, em 3 passos:** (1) sincronização automática no
   BACKEND a cada 1 minuto, funcionando mesmo sem ninguém com o ERP aberto,

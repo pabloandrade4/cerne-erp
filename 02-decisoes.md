@@ -3,6 +3,76 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-26 (20) — Estoque: Mercado Livre vira a fonte oficial, ajuste manual removido
+- **Pedido do usuário, em 3 ajustes:** (1) estoque deve vir dos anúncios do
+  Mercado Livre, usando o recurso certo por tipo de conta (User Products/
+  estoque multi-origem quando aplicável, não só `available_quantity`); (2)
+  a tela Estoque mostra produto/anúncio, SKU, loja, ID do anúncio, estoque
+  disponível, status e última sincronização, com quantidade **somente
+  leitura** — ajuste manual removido/desativado; (3) Estoque (fora do
+  Full) e Estoque Full ficam **separados**, nunca somados sem deixar claro
+  de onde cada saldo veio. Muito importante: nunca dar baixa duplicada de
+  estoque numa venda quando o Mercado Livre já atualizou aquele saldo.
+- **Decisão de arquitetura — abandonar o modelo "produto base +
+  multiplicador, agrupado" da etapa anterior (`ml15`/`ml16`) para a tela
+  Estoque.** Esse modelo (uma linha por produto físico, somando kits de
+  tamanhos diferentes por um multiplicador salvo) foi desenhado quando o
+  Galpão era ajustado manualmente. A nova exigência do usuário — quantidade
+  somente leitura, direto do anúncio/variação, com as colunas SKU/loja/ID
+  do anúncio/status — é incompatível com esse agrupamento (um produto base
+  pode ter vários anúncios/SKUs, cada um com seu próprio saldo no Mercado
+  Livre; agrupar escondería justamente o detalhe por anúncio que o usuário
+  pediu para ver). Interpretação: a especificação de colunas do usuário é
+  explícita e detalhada o bastante para decidir sozinho, sem precisar
+  perguntar — as tabelas `produtos_base`/`produto_base_skus` e a tela
+  antiga continuam existindo (nada foi apagado, ver `04-alteracoes.md`),
+  só pararam de ser usadas pela tela Estoque.
+- **Duas telas separadas, não um filtro** — voltando ao formato anterior a
+  `ml15`/`ml16` (Estoque e Estoque Full como itens de menu distintos), só
+  que agora as DUAS são espelhos somente-leitura do Mercado Livre (antes,
+  só a Full era ao vivo — Estoque/Galpão era manual). Escolhido em vez de
+  manter um filtro único porque o pedido do usuário foi "não some ou
+  misture os dois saldos sem deixar claro de onde vieram" — duas telas com
+  endpoints próprios deixa a separação impossível de confundir, sem
+  depender de o usuário notar qual filtro está selecionado.
+- **Persistência com sincronização automática, em vez de busca ao vivo a
+  cada carregamento** (diferente do padrão anterior de Anúncios/Estoque
+  Full, que sempre buscavam ao vivo na API a cada tela aberta). Necessário
+  porque o usuário pediu uma coluna "última sincronização" (não faz
+  sentido sem persistir um horário) e pediu explicitamente para reaproveitar
+  o ciclo automático de 1 em 1 minuto já criado pra pedidos — então o
+  estoque agora é gravado (upsert) por esse mesmo ciclo, com um botão
+  "Sincronizar agora" como opção de emergência (mesmo padrão do botão
+  manual de pedidos).
+- **Nova tabela `ml_estoque_itens`** (uma linha por conta+anúncio+variação+
+  tipo, `tipo` = `proprio`/`full`) em vez de reaproveitar `estoque`/
+  `estoque_produto_base` — essas tabelas antigas são inerentemente "uma
+  linha por produto cadastrado no ERP" (produto ou produto base), enquanto
+  a nova exigência é "uma linha por anúncio/variação real no Mercado
+  Livre", um modelo de dados diferente que não caberia sem distorcer as
+  tabelas antigas (e sem risco de afetar quem ainda lê essas tabelas
+  antigas, já desativadas mas preservadas).
+- **Recurso de User Products (estoque multi-origem) implementado de forma
+  defensiva, com a limitação documentada em `05-problemas-conhecidos.md`:**
+  a Devsite oficial do Mercado Livre bloqueou (403) quase toda tentativa de
+  leitura automatizada da documentação nesta etapa — foi confirmado que
+  `GET /items/{id}` pode retornar `user_product_id` e que existe um
+  recurso de "estoque distribuído" para o modelo multi-origem, mas o
+  formato exato da resposta de `GET /user-products/{id}` não pôde ser
+  confirmado. Em vez de adivinhar um endpoint/formato específico e
+  arriscar mostrar um número errado, o código tenta alguns formatos
+  plausíveis e, se nenhum bater (ou a chamada falhar), cai pro
+  `available_quantity` do anúncio como segurança antes de marcar
+  "Pendente" — nunca inventa. Precisa de validação com uma conta real que
+  use esse modelo (ver `06-proximos-passos.md`).
+- **Confirmado por auditoria de código, não por suposição:** o ERP nunca
+  teve nenhuma lógica que decrementasse estoque ao importar um pedido
+  (`lib/mlSync.js` sempre foi só financeiro/operacional) — o requisito
+  "nunca dar baixa duplicada" do usuário já estava satisfeito antes desta
+  etapa; o cuidado tomado foi não introduzir esse tipo de lógica agora (o
+  saldo mostrado é sempre um espelho fresco do Mercado Livre, nunca uma
+  conta feita pelo ERP).
+
 ## 2026-08-24 (19) — Sincronização automática do Mercado Livre: investigação do Render ANTES de implementar, e desenho da solução
 - **Instrução do usuário, seguida à risca antes de escrever qualquer
   código:** "Verifique também o ambiente atual no Render. Se existir

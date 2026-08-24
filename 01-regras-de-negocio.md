@@ -301,60 +301,79 @@ _(sem regras registradas ainda)_
   Livre** — pedido explícito do usuário para primeiro visualizar
   corretamente os anúncios, antes de qualquer edição.
 
-## Produto base / SKU de venda / Multiplicador
-- **Produto base** é o produto físico real, controlado no Galpão —
-  independente de quantos SKUs diferentes o Mercado Livre usa pra vender
-  esse mesmo produto em kits de tamanhos diferentes (ex.: `25CX-19X12X12`,
-  `50CX-19X12X12`, `75CX-19X12X12` e `100CX-19X12X12` são quatro SKUs
-  vendidos, mas **um só** produto base: `CX-19X12X12`). **O estoque físico
-  nunca é controlado pelo SKU do kit vendido**, sempre pelo produto base.
-- O vínculo entre um SKU e um produto base carrega um **multiplicador**
-  (quantas unidades físicas aquele SKU representa) e uma **origem**
-  (`manual` ou `automatico`). Existe uma interpretação automática do
-  padrão "dígitos no início do SKU" pra **sugerir** esse vínculo, mas ela
-  nunca decide sozinha — **o vínculo que vale é sempre o que está salvo no
-  banco**, e pode ser corrigido manualmente a qualquer momento, sem
-  depender de o SKU seguir algum padrão.
+## Produto base / SKU de venda / Multiplicador (DEPRECIADO para fins de estoque desde 26/08/2026)
+- Este conceito (produto físico real por trás de vários SKUs/kits do
+  Mercado Livre, com um multiplicador de conversão) foi criado só pra
+  alimentar a tela Estoque de uma etapa anterior. Desde 26/08/2026 a tela
+  Estoque não usa mais produto base/multiplicador — ver seção "Estoque"
+  abaixo. As tabelas (`produtos_base`, `produto_base_skus`) e as rotas de
+  API (`routes/produtosBase.js`) continuam existindo (nada foi apagado),
+  mas não são mais lidas por nenhuma tela do menu.
 - **O SKU original recebido do Mercado Livre nunca é alterado** — nem no
-  pedido, nem em lugar nenhum. A conversão pra quantidade física acontece
-  só na hora de somar/mostrar estoque ou vendas, nunca sobrescrevendo o
-  dado original.
-- Conversão de venda (ou de estoque Full, que também é vendido em kits)
-  para quantidade física: `quantidade física = quantidade vendida ×
-  multiplicador`, somada por produto base. **Um SKU sem vínculo salvo
-  nunca é somado como zero** — fica separado como pendência, pra nunca
-  esconder um produto que ainda não foi mapeado.
+  pedido, nem em lugar nenhum, então nada nesta descontinuação afeta
+  cálculo de venda/margem/DRE (que nunca dependeram de produto base).
 
-## Estoque (Galpão + Full, por produto base)
-- Tela única de estoque físico, sempre agrupada por **produto base** — uma
-  linha por produto físico (nunca uma linha por SKU de kit vendido).
-- **Filtro Todos / Galpão / Full:** "Galpão" mostra só o estoque físico do
-  nosso galpão; "Full" mostra só o estoque armazenado no Full do Mercado
-  Livre (convertido de "kits no Full" pra unidades físicas, com o mesmo
-  multiplicador da venda); "Todos" soma os dois. **Galpão e Full continuam
-  guardados e calculados separadamente por baixo** — o filtro só muda o
-  que a tela mostra e o que os cards somam, nunca mistura os números
-  guardados.
-- **Valor financeiro do estoque** = quantidade física × custo do produto
-  base (não existe mais custo por SKU de kit pra fins de estoque — o custo
-  é sempre do produto físico). Produto base sem custo cadastrado aparece
-  como **"Pendente"** no valor — nunca soma como zero.
-- **Cards no topo** (quantidade total de caixas, valor total em estoque)
-  mudam conforme o filtro selecionado.
-- **Galpão:** número sempre real e conhecido (controlado só por nós) —
-  produto base sem nenhum ajuste ainda aparece com **0**, nunca "sem
-  dado". Ajuste manual por enquanto (sem entrada automática por compra
-  recebida nem reserva automática por pedido de venda) — toda alteração
-  grava uma movimentação (quantidade anterior, nova, diferença, observação
-  opcional, data/hora).
-- **Full:** busca ao vivo na API do Mercado Livre a cada carregamento
-  (nada persistido) — nunca editável nesta tela. Se a empresa não tiver
-  conta conectada, a conexão estiver com erro, ou a API falhar, os cards
-  que dependem do Full mostram **"Pendente"** (com o motivo) em vez de um
-  total que ignoraria o Full em silêncio. Um SKU do Full sem vínculo de
-  produto base, um anúncio sem SKU, ou um anúncio sem quantidade
-  disponível na API aparecem numa lista de pendências — nunca somados a
-  nenhum produto.
+## Estoque / Estoque Full — Mercado Livre como fonte oficial (26/08/2026)
+Reescrita completa da lógica do módulo, por pedido explícito do usuário: ele
+faz todos os lançamentos e ajustes de estoque **direto no Mercado Livre**, o
+ERP nunca mais aceita ajuste manual e nunca decide um saldo por conta
+própria — só espelha, somente leitura, o que o Mercado Livre responder. As
+regras "Galpão" / "produto base" / multiplicador descritas nas seções
+anteriores foram **substituídas** por este modelo (ficam documentadas ali
+só como histórico).
+
+- **Duas telas separadas** — nunca uma só com filtro combinado: **Estoque**
+  mostra o estoque disponível **fora do Full**; **Estoque Full** mostra,
+  separadamente, a quantidade armazenada no Full. As duas nunca somam nem
+  misturam saldo — cada uma lê um conjunto de linhas próprio (marcado por
+  `tipo` no banco: `proprio` ou `full`), então nunca existe ambiguidade
+  sobre de onde um número veio.
+- **Uma linha por anúncio/variação** (nunca agrupado por produto base ou
+  por "produto físico") — colunas: produto/anúncio, SKU, loja (conta do
+  Mercado Livre), ID do anúncio (+ ID da variação quando houver), estoque
+  disponível, status do anúncio e última sincronização.
+- **Quantidade é sempre somente leitura.** Não existe mais botão de
+  ajuste, modal, nem endpoint de escrita de quantidade nas telas Estoque/
+  Estoque Full — a única forma de mudar o saldo é ajustando direto no
+  Mercado Livre. Se o usuário mudar de 500 para 800 unidades lá, o ERP
+  mostra 800 depois da próxima sincronização (automática, até 1 minuto
+  depois, ou imediatamente com o botão "Sincronizar agora").
+- **Fonte da quantidade, por tipo de anúncio:**
+  - **Full** (`logistic_type = 'fulfillment'`): mesmo recurso já usado e
+    validado por Anúncios/Estoque Full antigo —
+    `/inventories/{inventory_id}/stock/fulfillment`.
+  - **Fora do Full, conta simples:** `available_quantity` do item/variação
+    (recurso simples, sempre disponível, documentado).
+  - **Fora do Full, conta com estoque multi-origem / User Products**
+    (anúncio com `user_product_id`): consulta `GET /user-products/{id}`
+    em vez de confiar só no `available_quantity` do anúncio. **Atenção:**
+    o formato exato da resposta desse recurso não pôde ser confirmado
+    contra a documentação oficial nem contra uma conta real nesta etapa
+    (ver `05-problemas-conhecidos.md`) — o parsing é defensivo (tenta
+    alguns formatos plausíveis) e, se não reconhecer a resposta ou a
+    chamada falhar, tenta o `available_quantity` do anúncio como
+    segurança antes de marcar como pendente. **Nunca inventa um número.**
+- **Sincronização automática**, reaproveitando o mesmo ciclo de 1 em 1
+  minuto criado para pedidos (`server/lib/syncScheduler.js`) — todas as
+  contas ativas são varridas, cada anúncio/variação é gravado (upsert,
+  nunca duplica) com a quantidade e o horário da sincronização. Erro numa
+  conta nunca afeta as demais nem o pedido de pedidos (laço independente).
+  O botão "Sincronizar agora" em cada tela é só a opção de emergência.
+- **Nunca inventa.** Quando a API não retorna a quantidade (ou o recurso
+  de User Products responde num formato não reconhecido), a linha fica com
+  quantidade `null` e "Pendente" na tela — nunca 0, nunca um número
+  calculado.
+- **Nunca dá baixa de estoque no ERP por causa de uma venda.** O ERP não
+  tem (e nunca teve) nenhuma lógica que decremente estoque ao importar um
+  pedido — a sincronização de pedidos (`lib/mlSync.js`) sempre foi só
+  financeira/operacional, nunca mexeu em nenhuma tabela de estoque. Como o
+  saldo mostrado é sempre um espelho fresco do que o Mercado Livre
+  retornou (nunca uma soma/subtração feita pelo ERP), não existe risco de
+  desconto duplicado.
+- Nunca mistura contas/empresas: cada linha carrega o `conta_ml_id`/
+  `empresa_id` de onde veio, e a tela mostra os itens de todas as contas
+  ativas conectadas à empresa selecionada (cada um com sua própria coluna
+  "Loja").
 
 ## Compras
 - Primeira versão simples de pedido de compra a um fornecedor: **criar,

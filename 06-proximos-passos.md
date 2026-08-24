@@ -1,5 +1,37 @@
 # Próximos Passos
 
+- **Concluído em 26/08/2026, testado localmente (Postgres real + servidor
+  real via HTTP + Mercado Livre mockado, 29 testes automatizados novos —
+  110 no total, 0 falhas):** reescrita do módulo Estoque para usar o
+  Mercado Livre como fonte oficial das quantidades, quantidade somente
+  leitura (ajuste manual removido), Estoque e Estoque Full separados em
+  duas telas — ver `04-alteracoes.md` (20) e `02-decisoes.md` (20). Falta,
+  **nesta ordem**:
+  1. o usuário subir o próximo zip de código pro GitHub (deploy automático
+     no Render cuida do resto);
+  2. depois do deploy, testar ao vivo em produção o cenário exato pedido
+     pelo usuário: mudar a quantidade de um anúncio no Mercado Livre (por
+     exemplo, de 500 para 800), esperar o ciclo automático de 1 minuto (ou
+     clicar em "Sincronizar agora") e confirmar que o valor novo aparece
+     corretamente na tela Estoque do ERP, sem duplicar linha e sem misturar
+     com o Full;
+  3. conferir que a separação Estoque / Estoque Full está correta com dado
+     real — a mesma conta/anúncio não pode aparecer com quantidades
+     diferentes nas duas telas por engano, e a soma de uma tela nunca deve
+     aparecer somada com a outra;
+  4. se a conta conectada usar estoque multi-origem (User Products),
+     validar que o caminho `user_product_id` está retornando o valor certo
+     — ver `05-problemas-conhecidos.md`, o formato exato da resposta dessa
+     API não foi confirmado contra uma chamada real; se a conta de teste
+     "PFEMBALAGEMS" não usar esse modelo, esse caminho específico continua
+     sem validação real até haver uma conta assim disponível;
+  5. confirmar que o botão de ajuste manual de estoque (Galpão) realmente
+     sumiu/está desativado em produção, e que nenhuma tela antiga ficou
+     acessível por link direto;
+  - **por instrução explícita do usuário, esta etapa parou nestes 3
+    ajustes** — não avançar sozinho para alertas de estoque baixo,
+    previsão de reposição, ou qualquer outra funcionalidade sem o usuário
+    pedir.
 - **Concluído em 24/08/2026, testado localmente (Postgres real + servidor
   real via HTTP, 8 testes automatizados novos — 80 no total, 0 falhas):**
   sincronização automática do Mercado Livre a cada 1 minuto, no backend —

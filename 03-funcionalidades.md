@@ -272,54 +272,68 @@ cada uma e o status (em desenvolvimento / concluída).
   base, CRUD de vínculos, sugestões de vínculo a partir dos pedidos reais,
   conversão de uma venda ou de um pedido específico para quantidade
   física).
-- **O que falta:** tela própria de cadastro/vínculo (hoje só existe a API —
-  usada pela tela Estoque para mostrar produto base e pela sugestão de
-  vínculos; cadastrar/corrigir um vínculo manualmente hoje precisa ser
-  feito direto pela API).
+- **O que falta:** nada — este conceito foi **descontinuado para fins de
+  estoque** em 26/08/2026 (ver seção "Estoque / Estoque Full" abaixo e
+  `02-decisoes.md` (20)). As tabelas e a API (`routes/produtosBase.js`)
+  continuam existindo, só não são mais lidas por nenhuma tela.
 
-## Estoque (Galpão + Full, por produto base)
-- **Status:** concluído localmente (aguardando deploy + teste ao vivo em
-  produção — ver `06-proximos-passos.md`).
-- **O que é:** tela única de estoque físico (substitui as antigas telas
-  separadas "Estoque" e "Estoque Full"), sempre agrupada por **produto
-  base** — nunca por SKU de kit (não existe mais uma linha para
-  `25CX-19X12X12` e outra para `50CX-19X12X12`; existe uma linha para
-  `CX-19X12X12`, com a soma física dos dois).
-  - **Filtro Todos / Galpão / Full** no topo: "Galpão" mostra só o estoque
-    físico do nosso galpão (tabela própria `estoque_produto_base`, ajuste
-    manual); "Full" mostra só o estoque armazenado no Full do Mercado
-    Livre (buscado ao vivo na API, convertido de "kits no Full" para
-    "unidades físicas" com o mesmo multiplicador salvo); "Todos" soma os
-    dois. Galpão e Full continuam guardados/calculados separadamente por
-    baixo — o filtro só muda o que aparece.
-  - **Cards no topo:** quantidade total de caixas e valor total em
-    estoque (quantidade física × custo do produto base), mudando conforme
-    o filtro selecionado.
-  - **Nunca inventa:** produto base sem custo cadastrado aparece como
-    "Pendente" no valor (não soma como zero); se o Full não puder ser
-    consultado agora (sem conta conectada, conta com erro, ou falha da
-    API do Mercado Livre), os cards mostram "Pendente" em vez de um total
-    que ignoraria o Full silenciosamente; SKU do Full sem vínculo de
-    produto base, anúncio sem SKU, ou anúncio sem quantidade disponível na
-    API aparecem numa lista de pendências, nunca somados a nenhum produto.
-  - **Ajuste manual** só existe para o Galpão (mesmo padrão transacional
-    da tela antiga: grava a movimentação com quantidade anterior/nova/
-    diferença). O Full nunca é editável aqui — é sempre um espelho ao vivo
-    da API do Mercado Livre.
-- **Onde está:** `server/lib/mlFull.js` (busca de todas as páginas de
-  anúncios Full de uma conta), `server/lib/produtoBaseConversao.js`
-  (conversão de SKU do Full para quantidade física, reaproveitada da
-  conversão de vendas), `server/routes/estoqueProdutoBase.js` (API:
-  agregação Galpão+Full por produto base com os três filtros, ajuste
-  manual do Galpão), `server/public/index.html` (tela — módulo
-  `window.Estoque`, único; `window.EstoqueFull` foi removido).
-- **O que falta:** entrada automática por compra recebida; reserva por
-  pedido de venda; tela de histórico de movimentação do Galpão (a tabela
-  já existe, só falta a tela); alertas de estoque mínimo; cadastro/edição
-  de vínculo SKU → produto base direto da tela (hoje só pela API); página
-  além da primeira janela de anúncios do Full continua limitada por um
-  teto defensivo de páginas (`maxPaginas`, ver `05-problemas-conhecidos.md`
-  se o catálogo Full for muito grande).
+## Estoque / Estoque Full — Mercado Livre como fonte oficial (26/08/2026)
+- **Status:** concluído e testado localmente (Postgres real + servidor
+  real via HTTP + Mercado Livre mockado — 29 testes automatizados novos,
+  cobrindo a lib de sincronização, a orquestração no ciclo automático e as
+  rotas HTTP; ver `06-proximos-passos.md` para o teste ao vivo em produção
+  ainda pendente). **Substitui por completo** a etapa anterior "Estoque
+  (Galpão + Full, por produto base)" — reescrita pedida explicitamente
+  pelo usuário, em 3 ajustes.
+- **O que é:** duas telas de menu separadas — **Estoque** (estoque
+  disponível fora do Full) e **Estoque Full** (quantidade armazenada no
+  Full) — cada uma somente leitura, uma linha por anúncio/variação do
+  Mercado Livre, com as colunas produto/anúncio, SKU, loja, ID do anúncio,
+  estoque disponível, status e última sincronização. Nunca somam ou
+  misturam os dois saldos (tabela nova `ml_estoque_itens`, com uma coluna
+  `tipo` = `proprio`/`full` que separa uma tela da outra na consulta).
+  - **Quantidade é sempre somente leitura** — sem modal, sem botão de
+    ajuste, sem PUT de escrita. O usuário faz todo o lançamento/ajuste de
+    estoque direto no Mercado Livre; o ERP só espelha o que a API retornar.
+  - **Sincronização automática**, reaproveitando o mesmo ciclo de 1 em 1
+    minuto criado para pedidos (`server/lib/syncScheduler.js`) — todas as
+    contas ativas são varridas a cada ciclo; erro numa conta nunca afeta
+    as demais nem a sincronização de pedidos (laço independente, com seu
+    próprio contador de erro). Botão "Sincronizar agora" em cada tela é a
+    opção de emergência (mesmo padrão do botão manual de pedidos).
+  - **Recurso da API por tipo de anúncio:** Full usa
+    `/inventories/{inventory_id}/stock/fulfillment` (já validado, mesma
+    lógica de antes); fora do Full usa `available_quantity` do anúncio/
+    variação, ou — quando o anúncio tem `user_product_id` (conta com
+    estoque multi-origem/User Products) — tenta primeiro `GET
+    /user-products/{id}` (formato de resposta não confirmado contra a API
+    real nesta etapa, parsing defensivo, cai pro `available_quantity` como
+    segurança; ver `05-problemas-conhecidos.md`).
+  - **Nunca inventa:** quando a API não retorna a quantidade (ou o formato
+    do recurso de User Products não é reconhecido), a linha fica com
+    quantidade `null` e "Pendente" na tela.
+  - **Nunca dá baixa de estoque por causa de uma venda** — confirmado por
+    auditoria de código que `lib/mlSync.js` nunca teve essa lógica; o saldo
+    mostrado é sempre um espelho fresco do Mercado Livre.
+- **Onde está:** `server/lib/mlEstoque.js` (sincronização — busca todas as
+  páginas de anúncios da conta, resolve a quantidade certa por anúncio/
+  variação, grava/atualiza em `ml_estoque_itens`), `server/lib/syncScheduler.js`
+  (dispara a sincronização de estoque a cada ciclo automático),
+  `server/routes/estoque.js` e `server/routes/estoqueFull.js` (API — leitura
+  do espelho + `POST /api/estoque/sincronizar` pro botão manual),
+  `server/db/schema.sql` (tabela `ml_estoque_itens`), `server/public/index.html`
+  (telas — `window.Estoque` e `window.EstoqueFull`, construídas pela mesma
+  função `criarTelaEstoqueSomenteLeitura` pra nunca divergir uma da outra).
+  As rotas antigas `server/routes/estoqueProdutoBase.js` (ajuste manual do
+  Galpão, agora retorna 410) e a tela/tabelas de produto base continuam no
+  código como histórico, desativadas.
+- **O que falta:** teste ao vivo em produção (mudar uma quantidade no
+  Mercado Livre e confirmar que aparece certa no ERP depois da
+  sincronização — só validável em produção, com uma conta real, ver
+  `06-proximos-passos.md`); validar o caminho de User Products com uma
+  conta real que use estoque multi-origem (a conta de teste
+  "PFEMBALAGEMS" não necessariamente usa esse modelo); alertas de estoque
+  mínimo/ruptura (fora do escopo pedido nesta etapa).
 
 ## Compras (primeira versão simples)
 - **Status:** concluído localmente (aguardando deploy + teste ao vivo em

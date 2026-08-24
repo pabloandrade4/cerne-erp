@@ -3,6 +3,47 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Estoque: formato exato da resposta de User Products (estoque multi-origem) não confirmado (26/08/2026)
+- Ao reescrever o módulo de Estoque para usar o Mercado Livre como fonte
+  oficial (ver `04-alteracoes.md` (20) e `02-decisoes.md` (20)), o usuário
+  pediu explicitamente para consultar o recurso certo conforme o tipo de
+  conta — contas com estoque multi-origem (`user_product_id`) devem usar o
+  endpoint de User Products, não só `available_quantity`. A documentação
+  pública do Mercado Livre foi consultada (`developers.mercadolivre.com.br`),
+  mas quase todas as tentativas de acesso retornaram bloqueio (403/robots) —
+  só uma página carregou com sucesso
+  (`https://developers.mercadolivre.com.br/en_us/user-products`),
+  confirmando que `GET /items/{id}` pode retornar `user_product_id` e que
+  existe um recurso de "distributed stock" por loja/depósito para contas
+  com a tag `warehouse_management`, mas **sem confirmar o formato exato**
+  (nomes de campo) da resposta de `GET /user-products/{id}`.
+- **Desenho defensivo por causa dessa incerteza:**
+  `buscarQuantidadeUserProduct` (`server/lib/mlEstoque.js`) tenta 3
+  formatos plausíveis de resposta, nesta ordem: `available_quantity` na
+  raiz, `stock.available_quantity`, e soma de `locations[].available_quantity`
+  (só se TODAS as locations tiverem um número — nunca soma parcial). Se
+  nenhum formato bater, o item fica `pendente` com motivo
+  `formato_resposta_nao_reconhecido` — nunca um valor inventado. Se a
+  chamada à API falhar, cai pra `available_quantity` do item (motivo
+  `available_quantity_fallback`) quando esse dado existir, ou também fica
+  pendente. Todos os 3 formatos e os 2 caminhos de erro têm teste
+  automatizado cobrindo (`server/test/mlEstoque.test.js`).
+- **Não é um bug conhecido, é uma lacuna de teste** — mesmo padrão já
+  registrado para a API de Ads (item abaixo). Além disso, **não há
+  confirmação de que a conta de teste "PFEMBALAGEMS" sequer usa o modelo
+  multi-origem** — é possível que ela só tenha `available_quantity` normal,
+  o que significa que este caminho específico (User Products) pode
+  continuar sem validação real mesmo depois do deploy, até o usuário
+  testar com uma conta que realmente use múltiplos depósitos.
+- **Precisa de confirmação do usuário ao vivo em produção:** depois do
+  deploy, se a conta "PFEMBALAGEMS" (ou outra conta real conectada) usa
+  User Products, sincronizar e conferir se `recursoUsado` (campo interno,
+  não exibido na tela) bate com o esperado, e se a quantidade mostrada
+  confere com o painel do Mercado Livre. Se aparecer `pendente` com motivo
+  `formato_resposta_nao_reconhecido` para itens que deveriam ter estoque,
+  o próximo passo é inspecionar a resposta real da API (log do servidor)
+  e ajustar `buscarQuantidadeUserProduct` pro formato real observado.
+
 ## Ads: API de Advertising (Product Ads) do Mercado Livre ainda não testada contra uma conta real (25/08/2026)
 - Ao ativar Ads (ver `04-alteracoes.md` (18) e `02-decisoes.md` (17)),
   essa foi a primeira vez que o projeto precisou integrar a API de
