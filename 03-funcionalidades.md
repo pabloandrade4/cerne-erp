@@ -99,19 +99,27 @@ cada uma e o status (em desenvolvimento / concluída).
   (decisão pendente do usuário sobre como); sugestão de reposição/IA de
   compras; anexar nota fiscal/boleto; aprovação de compra.
 
-## Produtos (cadastro simples)
+## Produtos (cadastro unificado: nome, SKU, custo, status e imposto)
 - **Status:** concluído localmente (aguardando deploy + teste ao vivo em
   produção — ver `06-proximos-passos.md`).
 - **O que é:** cadastro de produtos por empresa — nome, SKU, custo e
   status. Permite cadastrar, listar (com busca por nome/SKU e filtro
   ativos/inativos/todos), editar e ativar/desativar. Ainda sem kits,
   composição nem controle de estoque automático (não pedido nesta etapa).
-  Tabela separada da já existente `custos_produto` (usada no cálculo de
-  margem) — ver `02-decisoes.md` para o porquê.
-- **Onde está:** `server/routes/produtos.js` (API),
-  `server/public/index.html` (tela — módulo `window.Produtos`).
-- **O que falta:** unificar (ou não) com o custo já usado no cálculo de
-  margem das vendas; kits/composição; vínculo com estoque; exclusão
+  **Desde 24/08/2026, esta tela também é onde se configura a alíquota de
+  imposto da empresa** (única por empresa, não por produto) — a antiga
+  tela separada "Custo & Margem" foi removida e seus dados (SKU + custo)
+  migrados pra dentro de `produtos`, que passou a ser a ÚNICA fonte de
+  custo por SKU usada no cálculo de margem das vendas (Pedidos, Visão
+  Geral, Financeiro, Relatórios). Esta tela nunca mostra margem — só
+  cadastra os insumos do cálculo. Ver `02-decisoes.md` e
+  `04-alteracoes.md` (14).
+- **Onde está:** `server/routes/produtos.js` (API — SKU, custo, nome,
+  status), `server/routes/custos.js` (API — alíquota de imposto,
+  `/api/config-financeiro`), `server/db/migrate.js` (migração de dados de
+  `custos_produto` pra `produtos`, roda uma vez só), `server/public/
+  index.html` (tela — módulo `window.Produtos`).
+- **O que falta:** kits/composição; vínculo com estoque; exclusão
   definitiva.
 
 ## Anúncios (visualização ao vivo do Mercado Livre)
@@ -154,8 +162,9 @@ cada uma e o status (em desenvolvimento / concluída).
   empresa (tela **Marketplaces**), importação dos pedidos reais dos últimos
   30 dias com todos os valores discriminados (tela **Pedidos**), e
   cadastro de custo por SKU + alíquota de imposto para calcular o resultado
-  de cada venda (tela **Custos**). Ver as regras completas em
-  `01-regras-de-negocio.md` e as decisões técnicas em `02-decisoes.md`.
+  de cada venda (tela **Produtos**, desde 24/08/2026 — antes era uma tela
+  separada "Custo & Margem", ver `02-decisoes.md`). Ver as regras completas
+  em `01-regras-de-negocio.md` e as decisões técnicas em `02-decisoes.md`.
 - **Testado com conta real:** conta "PFEMBALAGEMS" conectada e sincronizada
   de verdade, com pedidos reais importados (ver `04-alteracoes.md` para o
   changelog e o relatório de teste enviado ao usuário).
@@ -164,9 +173,10 @@ cada uma e o status (em desenvolvimento / concluída).
   (criptografia dos tokens), `server/lib/pkce.js` (OAuth/PKCE),
   `server/routes/integracoes.js` (conectar/sincronizar),
   `server/routes/pedidos.js` (listar/detalhar pedidos + cálculo do
-  resultado), `server/routes/custos.js` (custo por SKU + imposto),
+  resultado), `server/routes/produtos.js` (custo por SKU),
+  `server/routes/custos.js` (alíquota de imposto, `/api/config-financeiro`),
   `server/public/index.html` (módulos `window.Marketplaces`,
-  `window.Pedidos`, `window.Custos`).
+  `window.Pedidos`, `window.Produtos`).
 - **O que falta:** Shopee, DRE/financeiro completo, IA, notas fiscais —
   nada disso foi pedido ainda. Também falta otimizar a sincronização para
   contas com muitos pedidos (ver `05-problemas-conhecidos.md`).
@@ -221,8 +231,10 @@ cada uma e o status (em desenvolvimento / concluída).
   agora, por pedido do usuário) — ver `06-proximos-passos.md`.
 - **Onde está:** `server/lib/resultadoVenda.js` (fórmula),
   `server/lib/relatorioVendas.js` (busca + agregação, compartilhado com
-  Visão Geral e Financeiro, **inalterado**), `server/lib/periodo.js`
-  (cálculo dos períodos), `server/routes/pedidos.js` (`GET /`, `GET /:id`,
+  Visão Geral e Financeiro — desde 24/08/2026 lê o custo por SKU de
+  `produtos` em vez de `custos_produto`, ver `04-alteracoes.md` (14), a
+  fórmula em si não mudou), `server/lib/periodo.js` (cálculo dos
+  períodos), `server/routes/pedidos.js` (`GET /`, `GET /:id`,
   `GET /relatorio` e os helpers de filtro/exportação), `server/public/
   index.html` (módulo `window.Pedidos`, tabela com a classe CSS
   `.compact-orders`, filtros de loja/status/busca, botões de relatório).

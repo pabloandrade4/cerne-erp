@@ -1,5 +1,25 @@
 # Próximos Passos
 
+- **Concluído em 24/08/2026, testado só localmente:** unificação das telas
+  Produtos e Custo & Margem numa só (Produtos), sem mostrar margem, com
+  migração automática dos dados antigos (deploy `ml18`) — ver
+  `04-alteracoes.md` (14) e `02-decisoes.md` (14). Falta:
+  - o usuário subir o próximo zip de código (`ml18`) pro GitHub;
+  - depois do deploy, conferir nos logs do Render que a migração rodou
+    (linha `[migrate] migração de dados aplicada: N SKU(s)...`) e só uma
+    vez — reiniciar o serviço depois não deve repetir essa linha;
+  - abrir a tela Produtos e confirmar que os produtos que já tinham custo
+    cadastrado na antiga Custo & Margem aparecem lá, com o custo certo
+    (nome = o próprio SKU, pra quem não tinha produto cadastrado ainda —
+    vale renomear pra um nome de verdade quando der);
+  - confirmar que a alíquota de imposto de cada empresa aparece certa no
+    topo da tela Produtos (o mesmo valor que estava configurado antes);
+  - conferir que a margem em Pedidos, Visão Geral, Financeiro e no
+    Relatório de Pedidos **não mudou** em relação a antes do deploy — os
+    números precisam bater exatamente com o que já estava calculado
+    (mesma fórmula, só a fonte do custo mudou de tabela);
+  - confirmar que a aba "Custo & Margem" sumiu do menu e que a tela
+    Produtos não mostra margem em nenhum lugar.
 - **Concluído em 24/08/2026, testado só localmente:** Relatório de Pedidos
   (Excel/CSV) e novos filtros de Loja/Status/Produto na tela Pedidos
   (deploy `ml17`) — ver `04-alteracoes.md` (13) e `03-funcionalidades.md`.
@@ -99,11 +119,14 @@
   (hoje é 100% manual, por instrução explícita) — inclui decisões de
   negócio como o que fazer com recebimento parcial ou compra editada
   depois de recebida. Ver `05-problemas-conhecidos.md`.
-- **Pendência aberta, sem prazo:** custo por SKU hoje existe em dois
-  lugares sem sincronia (tabela nova `produtos` e a já existente
-  `custos_produto`, usada no cálculo de margem das vendas) — ver
-  `05-problemas-conhecidos.md`. **Precisa de uma decisão do usuário** sobre
-  unificar as duas (e como) quando fizer sentido.
+- **RESOLVIDO em 24/08/2026:** custo por SKU usado no cálculo de margem
+  (tela Produtos) e custo do produto usado no valor do estoque
+  (`produtos_base.custo`, tela Estoque) continuam sendo **duas** fontes
+  separadas, sem sincronia entre si — ver `05-problemas-conhecidos.md`.
+  (As antigas `produtos.custo` e `custos_produto` foram unificadas nesta
+  data; só falta essa última, deliberadamente fora do escopo desta etapa.)
+  **Precisa de uma decisão do usuário** sobre unificar também essa (ex:
+  produto base virar a fonte única de custo físico) quando fizer sentido.
 - **Descoberto no teste ao vivo da correção anterior:** os períodos
   "7 dias" e "30 dias" ficam muito lentos (minutos, chegou a travar a aba)
   em Visão Geral/Pedidos/Financeiro com o volume real de pedidos da conta

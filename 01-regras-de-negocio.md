@@ -89,9 +89,11 @@ junto da nova).
   SKU/quantidade/valores), **todos os pagamentos** (tabela própria, um
   pedido pode ter mais de um pagamento), envio/logística, frete do
   comprador e do vendedor, taxas/comissão e status (incluindo cancelamento).
-  Cálculo de custo do produto e de imposto **não faz parte desta etapa** —
-  continua exatamente como já estava (`custos_produto` +
-  `config_financeiro`, usados por `lib/resultadoVenda.js`).
+  Cálculo de custo do produto e de imposto **não fez parte desta etapa** —
+  continuou como já estava até então (na época, `custos_produto` +
+  `config_financeiro`, usados por `lib/resultadoVenda.js`; desde 24/08/2026
+  o custo por SKU passou a vir de `produtos` — ver seção **Produtos**,
+  abaixo, e **Custos**, mais abaixo).
 
 ## Notificações do Mercado Livre (webhook)
 - O ERP recebe as notificações do Mercado Livre (evento de pedido novo/
@@ -217,16 +219,22 @@ _(sem regras registradas ainda)_
   produtos) nem controle de estoque automático** — pedido explícito do
   usuário para esta etapa ser só um cadastro simples e funcional. Isso pode
   vir depois, quando for pedido.
-- **Esta tabela (`produtos`) é separada da tabela de custo por SKU que já
-  existia (`custos_produto`, usada em Custos/Pedidos/Visão Geral/Financeiro
-  para calcular a margem das vendas do Mercado Livre).** As duas hoje não
-  têm nenhum vínculo entre si — cadastrar um produto aqui não atualiza (nem
-  é atualizado por) o custo usado no cálculo de margem, e vice-versa. Ver
-  `02-decisoes.md` para o porquê dessa separação nesta etapa, e
-  `06-proximos-passos.md` para a decisão pendente sobre unificar as duas no
-  futuro.
+- **Desde 24/08/2026, esta é a ÚNICA tela onde se cadastra/edita custo por
+  SKU e a alíquota de imposto da empresa** — a antiga tela separada "Custo
+  & Margem" foi removida, e o cadastro de custo (tabela `custos_produto`)
+  foi migrado pra dentro de `produtos`, que agora é a fonte de custo usada
+  no cálculo de margem das vendas do Mercado Livre (Pedidos, Visão Geral,
+  Financeiro e Relatórios). A alíquota de imposto continua única por
+  empresa (não por produto) — só passou a ser configurada nesta tela em vez
+  de numa aba própria. Ver `02-decisoes.md` e `04-alteracoes.md` (14).
+- **Esta tela NUNCA mostra margem de contribuição** — só cadastra/edita
+  SKU, custo e (a nível de empresa) o imposto. A margem calculada com esses
+  valores só aparece nas telas de vendas (Pedidos, Visão Geral, Financeiro,
+  Relatórios) — pedido explícito do usuário.
 - Por enquanto **não existe exclusão definitiva** de produto — só
-  ativar/desativar (mesma regra de Empresas).
+  ativar/desativar (mesma regra de Empresas). Desativar um produto não
+  apaga o custo usado no cálculo de vendas já feitas (ou futuras) daquele
+  SKU — é só uma flag de catálogo/visibilidade.
 
 ## Anúncios
 - Mostra os **anúncios reais das contas do Mercado Livre conectadas** — não
@@ -365,11 +373,17 @@ _(sem regras registradas ainda)_
 _(sem regras registradas ainda)_
 
 ## Custos
+- **Desde 24/08/2026, custo por SKU e alíquota de imposto são cadastrados
+  na tela Produtos** (não existe mais uma tela separada "Custo & Margem")
+  — ver seção **Produtos**, acima, e `02-decisoes.md`. As regras de cálculo
+  abaixo não mudaram, só onde o usuário cadastra os valores.
 - Custo do produto é cadastrado **por SKU**, por empresa (ex: SKU
   "50CX-24X15X10", custo R$ 32,50). Não vem do Mercado Livre — é digitado
   pelo usuário no ERP.
 - Alíquota de imposto é um **percentual configurado no ERP, por empresa**
-  (não vem do Mercado Livre nem de nenhum marketplace).
+  (não vem do Mercado Livre nem de nenhum marketplace) — continua única
+  por empresa, não por produto (decisão confirmada com o usuário em
+  24/08/2026, ver `02-decisoes.md`).
 - Resultado da venda de um pedido = valor da venda **(-)** comissão/tarifas
   reais do Mercado Livre **(-)** frete do vendedor **(-)** imposto (calculado
   com a alíquota configurada) **(-)** custo do produto (pelo SKU

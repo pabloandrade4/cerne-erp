@@ -3,6 +3,32 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Unificação Produtos/Custo & Margem: migração de dados ainda não confirmada em produção (24/08/2026)
+- A migração que copia os dados de `custos_produto` (antiga tela "Custo &
+  Margem") para `produtos` roda **automaticamente, uma única vez**, no
+  primeiro boot do servidor depois do deploy (`server/db/migrate.js`,
+  guardada pela tabela `migracoes_aplicadas` pra nunca rodar de novo e
+  sobrescrever uma edição feita depois pelo usuário — ver `02-decisoes.md`
+  para o desenho completo). Foi testada localmente (Postgres local): SKU
+  só em `custos_produto` cria produto novo (nome = SKU); SKU que já existia
+  nos dois lugares mantém o nome cadastrado e atualiza o custo para o valor
+  de `custos_produto` (a fonte que já estava valendo de verdade); rodar a
+  migração de novo não altera nada (idempotente); editar o custo em
+  Produtos depois da migração e "reiniciar o servidor" (chamar a migração
+  de novo) não reverte a edição.
+- **Não foi possível testar contra o banco de produção** (Supabase) neste
+  ambiente — só contra Postgres local com dados sintéticos. **Depois do
+  deploy, vale conferir**: (1) nos logs do Render, a linha `[migrate]
+  migração de dados aplicada: N SKU(s)...` apareceu uma vez só; (2) os
+  produtos que já tinham custo cadastrado em "Custo & Margem" aparecem
+  agora em Produtos, com o custo certo; (3) pedidos que já tinham resultado
+  calculado (margem) continuam mostrando os mesmos números de antes da
+  migração — nenhum valor mudou silenciosamente.
+- A alíquota de imposto (`config_financeiro`) **não foi migrada** porque
+  não precisou — ela já era, e continua sendo, uma configuração por
+  empresa (não por produto); só a tela que a exibe mudou (agora é
+  Produtos, não mais uma aba separada).
+
 ## Relatório de Pedidos: geração real do .xlsx/.csv ainda não testada em produção (24/08/2026)
 - A lógica de filtro, cálculo e montagem das linhas/resumo do relatório foi
   testada localmente contra dados sintéticos no Postgres (totais conferem
@@ -85,28 +111,30 @@ desenvolvimento, para não serem esquecidas.
   bater com o pedido?), o que fazer se a compra for editada depois de já
   ter dado entrada, etc.
 
-## Custo por SKU/produto existe em três lugares, sem sincronia entre eles
-- Ao ativar a tela **Produtos** (nome, SKU, custo, status), foi criada uma
-  tabela nova (`produtos`) — de propósito, **separada** da tabela
-  `custos_produto` já existente e usada no cálculo de margem das vendas do
-  Mercado Livre (telas Custos, Pedidos, Visão Geral e Financeiro). Ver o
-  porquê dessa separação em `02-decisoes.md`.
-- Em 24/08/2026, ao criar o **produto base** para a tela Estoque, entrou um
-  **terceiro** lugar com custo: `produtos_base.custo` — o custo do produto
-  físico, usado só pro valor financeiro do estoque (Galpão + Full). Foi
-  deliberadamente mantido separado de `produtos.custo` e de
-  `custos_produto` (o pedido do usuário foi mexer só na estrutura de
-  produto base e SKU nesta etapa) — mas agora existem três cadastros de
-  custo que não conversam entre si: `produtos.custo` (tela Produtos, sem
-  uso ainda), `custos_produto` (cálculo de margem das vendas) e
-  `produtos_base.custo` (valor do estoque).
-- Na prática, hoje: cadastrar/editar o custo em qualquer uma das três telas
-  não atualiza as outras duas.
-- **Precisa de uma decisão do usuário** sobre unificar essas três fontes de
-  custo no futuro (ex: produto base virar a fonte única de custo físico,
-  usada tanto pro estoque quanto pra margem) — não foi feito agora porque
-  fugiria do escopo explícito de cada uma dessas etapas ("não altere outras
-  áreas"). Ver `06-proximos-passos.md`.
+## Custo por SKU/produto: RESOLVIDO PARCIALMENTE em 24/08/2026 (2 das 3 fontes unificadas)
+- Até 23/08/2026, existiam **três** cadastros de custo sem sincronia entre
+  si: `produtos.custo` (tela Produtos, sem uso real ainda), `custos_produto`
+  (tela separada "Custo & Margem", a fonte de fato usada no cálculo de
+  margem das vendas do Mercado Livre) e `produtos_base.custo` (custo do
+  produto físico, usado só no valor financeiro do estoque).
+- **Em 24/08/2026, por pedido do usuário, as duas primeiras foram
+  unificadas:** a tela "Custo & Margem" foi removida, seus dados (SKU +
+  custo) migrados pra dentro de `produtos` (ver `04-alteracoes.md` (14) e
+  `02-decisoes.md`), e o cálculo de margem das vendas (Pedidos, Visão
+  Geral, Financeiro, Relatórios) passou a ler o custo de `produtos` em vez
+  de `custos_produto`. Agora só existem **duas** fontes de custo, não
+  sincronizadas entre si: `produtos.custo` (cadastro do produto/SKU —
+  usado na margem das vendas) e `produtos_base.custo` (produto físico —
+  usado só no valor do estoque).
+- **`produtos_base.custo` continua deliberadamente separado** — o pedido do
+  usuário nesta etapa foi só unificar Produtos com a antiga Custo & Margem,
+  não mexer em Estoque/produto base. Cadastrar/editar o custo em Produtos
+  não atualiza o custo do produto base (usado no estoque), e vice-versa.
+- **Continua precisando de uma decisão do usuário** sobre unificar também
+  essa última fonte no futuro (ex: produto base virar a fonte única de
+  custo físico, usada tanto pro estoque quanto pra margem das vendas) — não
+  foi feito agora porque fugiria do escopo explícito desta etapa ("não
+  altere outras funções"). Ver `06-proximos-passos.md`.
 
 ## Anúncios: sem tabela própria, primeira página limitada, SKU pode não vir da API
 - A tela **Anúncios** busca os dados ao vivo na API do Mercado Livre a

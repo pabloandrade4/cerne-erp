@@ -2,6 +2,61 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-24 (14) — Unificação Produtos + Custo & Margem (aba Custo & Margem removida)
+- **Aba "Custo & Margem" removida do menu.** Cadastro de custo por SKU e a
+  alíquota de imposto da empresa agora ficam só na tela **Produtos**, que
+  passa a servir para cadastrar/editar: nome, SKU, custo do produto,
+  status (ativo/inativo) e a alíquota de imposto da empresa. **Esta tela
+  nunca mostra margem** — pedido explícito do usuário.
+- **Dados preservados e migrados:** a tabela antiga `custos_produto`
+  continua no banco, intocada (histórico) — seus dados (SKU + custo) foram
+  copiados pra dentro de `produtos` numa migração automática que roda uma
+  única vez no primeiro boot após o deploy (nunca de novo, pra não
+  sobrescrever edições futuras do usuário — ver `02-decisoes.md` (14) para
+  o desenho completo e o porquê). SKU que só existia na Custo & Margem
+  virou um produto novo (nome = SKU, editável depois); SKU que já existia
+  também em Produtos teve o custo atualizado para o valor que estava
+  realmente em uso no cálculo (o de `custos_produto`), preservando o nome
+  já cadastrado.
+- **Cálculo de margem não mudou — só a fonte do custo.** A fórmula
+  continua exatamente a mesma (valor da venda − taxas/comissões − frete do
+  vendedor − imposto − custo do produto = margem de contribuição), usada
+  nas mesmas telas de sempre (Pedidos, Visão Geral, Financeiro,
+  Relatórios). `lib/relatorioVendas.js` e a rota de detalhe do pedido
+  (`routes/pedidos.js GET /:id`, que tinha sua própria busca de custo
+  separada) passaram a ler o custo de `produtos` em vez de
+  `custos_produto` — as duas fontes de cálculo continuam idênticas entre
+  si (lista de Pedidos e detalhe do pedido nunca divergem).
+- **Imposto continua uma alíquota única por empresa** (não virou um campo
+  por produto) — confirmado com o usuário antes de implementar, pra não
+  mudar o resultado financeiro calculado sem ele ter pedido isso de
+  propósito. Só a tela onde essa alíquota é configurada mudou.
+- **Backend:** `routes/custos.js` perdeu as rotas de custo por SKU
+  (`/api/custos-produto`), mantendo só `/api/config-financeiro` (alíquota
+  de imposto). `routes/produtos.js` não ganhou rota nova — já tinha CRUD
+  completo de SKU/custo. `db/migrate.js` ganhou a migração de dados
+  guardada por uma tabela nova `migracoes_aplicadas` (evita repetir a
+  migração a cada boot).
+- **Frontend:** módulo `window.Custos` removido inteiro; sua seção
+  "Imposto configurado" foi incorporada ao módulo `window.Produtos`
+  (topo da tela, acima da lista de produtos). Item "Custos & Margem"
+  removido do menu (grupo Análise).
+- **Testado localmente** (Postgres local): migração cria produto novo pra
+  SKU só em `custos_produto`; SKU já existente em ambos tem o custo
+  atualizado sem perder o nome; migração rodada de novo não repete (nem
+  reverte edição feita depois); rotas de Produtos (criar/editar/listar,
+  SKU duplicado rejeitado) e de imposto (`config-financeiro`) funcionando;
+  Pedidos (lista e detalhe) e o Relatório de Pedidos (CSV) calculando
+  custo/margem corretamente a partir de `produtos`, com os totais batendo
+  entre lista, detalhe e relatório. **Não testado contra o banco de
+  produção (Supabase)** — ver `05-problemas-conhecidos.md`.
+- Nenhum outro módulo foi alterado nesta tarefa.
+- **Onde está:** `server/routes/produtos.js`, `server/routes/custos.js`,
+  `server/routes/pedidos.js` (`GET /:id`), `server/lib/relatorioVendas.js`,
+  `server/db/schema.sql` (comentários + tabela `migracoes_aplicadas`),
+  `server/db/migrate.js` (migração de dados), `server/public/index.html`
+  (módulo `window.Produtos`, menu).
+
 ## 2026-08-24 (13) — Relatório de Pedidos (Excel/CSV) + filtros de Loja/Status/Produto na tela Pedidos
 - **Novos filtros na tela Pedidos:** além de empresa e período (já
   existentes), agora tem filtro por **loja** (conta do Mercado Livre),

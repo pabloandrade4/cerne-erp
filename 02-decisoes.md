@@ -3,6 +3,73 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-24 (14) — Unificação Produtos + Custo & Margem
+- Pedido do usuário: unificar as abas "Produtos" e "Custo & Margem" numa só
+  ("Produtos"), sem mostrar margem nessa tela — só cadastrar/editar SKU,
+  custo e imposto. Preservar os dados já existentes na antiga Custo &
+  Margem, migrando/reaproveitando SKU e custo pra dentro de Produtos. A
+  margem continua calculada nas vendas (Pedidos, Visão Geral, Financeiro,
+  Relatórios), com a mesma fórmula de sempre — só a fonte do custo muda de
+  tabela.
+- **Pergunta feita ao usuário antes de mexer:** o pedido descrevia a nova
+  tela Produtos com um campo "imposto" junto de SKU e custo — o que
+  sugeria imposto virar um cadastro por produto/SKU, diferente da alíquota
+  única por empresa que existe hoje. Perguntado diretamente; o usuário
+  confirmou que **o imposto continua uma alíquota única por empresa** — só
+  a tela onde ela é configurada mudou (de "Custo & Margem" pra "Produtos").
+  Essa resposta evitou uma mudança de comportamento financeiro não pedida
+  (transformar o imposto em algo por produto teria alterado o resultado
+  calculado de todas as vendas, sem o usuário ter pedido isso de propósito).
+- **Fonte de custo para o cálculo de margem passou de `custos_produto` para
+  `produtos`:** `lib/relatorioVendas.js` (usado por Pedidos, Visão Geral,
+  Financeiro, Relatórios) e a rota de detalhe do pedido
+  (`routes/pedidos.js`, `GET /:id` — tinha sua PRÓPRIA query separada pra
+  custo, que também precisou ser trocada, senão o detalhe do pedido
+  continuaria mostrando números diferentes da lista, o exato problema que
+  o compartilhamento de código dessas telas foi desenhado pra evitar) agora
+  fazem `LEFT JOIN produtos` em vez de `LEFT JOIN custos_produto`, mesma
+  lógica de nulo/pendência (nunca inventa custo faltando). Não filtra por
+  `produtos.ativo` de propósito — desativar um produto é só uma flag de
+  catálogo, não deveria apagar o custo usado no cálculo de vendas já
+  feitas ou futuras daquele SKU.
+- **Migração de dados: preservar, nunca inventar, nunca sobrescrever edição
+  futura.** A tabela `custos_produto` **fica no banco**, intocada, só como
+  histórico — nenhuma rota lê ou escreve nela mais. Uma migração de dados
+  (não de schema) copia cada linha de `custos_produto` pra `produtos`:
+  - SKU que só existia em `custos_produto` → cria produto novo em
+    `produtos`, usando o próprio SKU como nome (não existe nome cadastrado
+    lá pra reaproveitar, e nome é obrigatório na tabela `produtos`) — o
+    usuário pode editar o nome depois.
+  - SKU que já existia nos dois lugares → o custo de `produtos` é
+    **sobrescrito** pelo valor de `custos_produto` (não o contrário),
+    porque era essa a fonte que estava sendo usada de verdade no cálculo
+    de margem até aqui — preservar o valor antigo e não usado de
+    `produtos.custo` mudaria silenciosamente o resultado calculado das
+    vendas no dia do deploy. O nome já cadastrado em `produtos` é
+    preservado (só o custo é sobrescrito).
+  - **Crítico:** essa migração roda **uma única vez**, guardada por uma
+    tabela nova `migracoes_aplicadas`. Rodar de novo a cada boot do
+    servidor (como o `schema.sql` faz, com segurança, via `CREATE TABLE
+    IF NOT EXISTS`) sobrescreveria PARA SEMPRE qualquer custo que o
+    usuário venha a editar depois em Produtos, revertendo pro valor antigo
+    de `custos_produto` a cada deploy/reinício — um bug sério que foi
+    identificado e evitado antes de implementar, não depois. Testado
+    localmente confirmando que editar o custo depois da migração e rodar a
+    migração de novo NÃO reverte a edição (ver `05-problemas-conhecidos.md`).
+- **Backend:** `routes/custos.js` perdeu as rotas de custo por SKU
+  (`/api/custos-produto`, agora inexistentes — cadastro de custo passou a
+  ser só via `routes/produtos.js`, que já tinha CRUD completo de SKU +
+  custo) e manteve só `/api/config-financeiro` (alíquota de imposto,
+  inalterada). Nenhuma rota nova precisou ser criada em `produtos.js`
+  porque ele já suportava nome/SKU/custo/status — só o comentário de
+  cabeçalho foi atualizado pra refletir que agora é a fonte de verdade.
+- **Frontend:** o módulo `window.Custos` foi removido inteiro; sua seção
+  "Imposto configurado" (alíquota) foi movida pro topo do módulo
+  `window.Produtos`, acima da tabela de produtos — mesmo empresa
+  selecionada serve pros dois. A aba "Custos & Margem" foi removida do
+  menu (grupo Análise). A tabela de produtos continua sem coluna de
+  margem — só Produto/SKU/Custo/Status/Cadastrado em/ações, como já era.
+
 ## 2026-08-24 (13) — Relatório de Pedidos: reaproveitar cálculo existente, nunca duplicar
 - Pedido do usuário: adicionar um botão "Gerar relatório" na tela Pedidos,
   exportando Excel/CSV com os filtros da tela, usando **exatamente os
