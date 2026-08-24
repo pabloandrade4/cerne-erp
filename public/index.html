@@ -986,7 +986,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','purchases','payable','receivable','settlements'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','purchases','payable','receivable','settlements','dre','billing','invoices'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1020,6 +1020,9 @@
     else if(id === 'payable'){ inner += '<div id="contasPagarRoot"></div>'; }
     else if(id === 'receivable'){ inner += '<div id="contasReceberRoot"></div>'; }
     else if(id === 'settlements'){ inner += '<div id="recebimentosRoot"></div>'; }
+    else if(id === 'dre'){ inner += '<div id="dreRoot"></div>'; }
+    else if(id === 'billing'){ inner += '<div id="faturamentoRoot"></div>'; }
+    else if(id === 'invoices'){ inner += '<div id="notasFiscaisRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1054,6 +1057,9 @@
     if(id === 'payable' && window.ContasPagar) window.ContasPagar.load();
     if(id === 'receivable' && window.ContasReceber) window.ContasReceber.load();
     if(id === 'settlements' && window.Recebimentos) window.Recebimentos.load();
+    if(id === 'dre' && window.DRE) window.DRE.load();
+    if(id === 'billing' && window.Faturamento) window.Faturamento.load();
+    if(id === 'invoices' && window.NotasFiscais) window.NotasFiscais.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -4032,12 +4038,536 @@
     window.Recebimentos = { load };
   })();
 
+  /* ================= DRE — Demonstrativo de Resultado do Exercício =================
+     Ativado em 24/08/2026. Sem lógica financeira própria: só consome
+     GET /api/dre, que reorganiza os mesmos números já usados em Financeiro/
+     Visão Geral/Pedidos (lib/relatorioVendas.js) e o "pago no período" de
+     Contas a Pagar (lib/contasPagar.js) — ver docs/02-decisoes.md. Usa o
+     filtro do header (empresa + período), igual Contas a Pagar/Receber/
+     Recebimentos. */
+  (function(){
+    const state = { loading:false, error:null, data:null };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pct(v){ return v===null||v===undefined ? null : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+
+    async function apiDRE(empresaId, periodo){
+      const res = await fetch('/api/dre?empresaId='+empresaId+'&periodo='+periodo);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar a DRE.');
+      return body;
+    }
+
+    async function loadDRE(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data=null; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiDRE(filtro.empresaId, filtro.periodo); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    function load(){ loadDRE(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-dre');
+      if(page && page.classList.contains('active')) loadDRE();
+      else render();
+    });
+
+    function valorTexto(campo, hasOrders){
+      if(campo.valor===null) return hasOrders ? 'Pendente' : 'Sem dados';
+      return money(campo.valor);
+    }
+
+    function pctSpan(campo){
+      return (campo.percentual!==null && campo.percentual!==undefined)
+        ? ' <span style="font-size:11px;color:var(--text-muted);font-weight:500;">('+pct(campo.percentual)+' do faturamento)</span>' : '';
+    }
+
+    function linhaHTML(label, campo, hasOrders, opts){
+      opts = opts || {};
+      const pendNote = campo.valor!==null && campo.pendentes>0
+        ? ' <span style="font-size:10.5px;color:var(--text-faint);font-weight:500;">('+campo.pendentes+' pedido(s) sem essa informação)</span>' : '';
+      const valorHtml = campo.valor===null
+        ? '<span style="color:var(--text-faint);font-style:italic;font-family:\'Public Sans\',sans-serif;font-weight:500;">'+valorTexto(campo, hasOrders)+'</span>'
+        : (opts.negativo && campo.valor!==0 ? '− ' : '') + money(Math.abs(campo.valor)) + pctSpan(campo);
+      return '<div class="bd-row'+(opts.negativo?' neg':'')+'"><span class="bd-label">'+label+pendNote+'</span><span class="bd-value">'+valorHtml+'</span></div>';
+    }
+
+    function totalRowHTML(label, campo, hasOrders){
+      const positivo = campo.valor!==null && campo.valor>=0;
+      return '<div class="bd-row total"><span class="bd-label">'+label+'</span><span class="bd-value '+(campo.valor===null?'':(positivo?'positive':'negative'))+'">'
+        + valorTexto(campo, hasOrders) + (campo.valor!==null ? pctSpan(campo) : '') + '</span></div>';
+    }
+
+    function render(){
+      const root = document.getElementById('dreRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver a DRE aqui.</p></div>';
+        return;
+      }
+
+      let html = '';
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando DRE…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data){
+        const d = state.data.dre;
+        const l = d.linhas;
+        const hasOrders = d.hasOrders;
+
+        html += '<div class="panel" style="max-width:640px;">'
+          + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('barChart')+'</span>Demonstrativo de Resultado</div><span class="panel-note">'+escapeHtml(state.data.periodo.label)+'</span></div>'
+          + '<p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">'+d.qtdPedidos+' pedido(s) considerados na receita ('+d.qtdPedidosCancelados+' cancelado(s) — entram só na linha de cancelamentos). Percentuais calculados sobre o faturamento (vendas não canceladas do período).</p>'
+
+          + '<div class="detail-section-title" style="margin-top:4px;">Receita</div>'
+          + linhaHTML('Receita Bruta', l.receitaBruta, hasOrders)
+          + linhaHTML('(−) Cancelamentos/Devoluções', l.cancelamentos, hasOrders, {negativo:true})
+          + linhaHTML('(−) Descontos concedidos (cupom)', l.descontos, hasOrders, {negativo:true})
+          + totalRowHTML('= Receita Líquida', l.receitaLiquida, hasOrders)
+
+          + '<div class="detail-section-title">Deduções sobre a venda</div>'
+          + linhaHTML('(−) Custo dos Produtos', l.custoProdutos, hasOrders, {negativo:true})
+          + linhaHTML('(−) Taxas e Comissões dos marketplaces', l.taxasComissoes, hasOrders, {negativo:true})
+          + linhaHTML('(−) Frete do vendedor', l.freteVendedor, hasOrders, {negativo:true})
+          + linhaHTML('(−) Impostos', l.impostos, hasOrders, {negativo:true})
+          + totalRowHTML('= Margem de Contribuição', l.margemContribuicao, hasOrders)
+
+          + '<div class="detail-section-title">Despesas</div>'
+          + linhaHTML('(−) Despesas / Contas pagas no período', l.despesasPeriodo, true, {negativo:true})
+          + totalRowHTML('= Resultado Final', l.resultadoFinal, hasOrders)
+
+          + (!hasOrders ? '<div class="bd-side-note">Nenhum pedido no período e empresa selecionados — por isso as linhas de receita aparecem como "Sem dados". As despesas pagas no período (Contas a Pagar) continuam sendo um saldo real, independente de haver venda.</div>' : '')
+          + '<div class="bd-side-note">Usa exatamente o mesmo cálculo já usado em Pedidos, Financeiro e Relatórios (nenhuma fórmula nova) — e o mesmo "pago no período" já mostrado em Contas a Pagar.</div>'
+        + '</div>';
+      }
+
+      root.innerHTML = html;
+    }
+
+    window.DRE = { load };
+  })();
+
+  /* ================= FATURAMENTO — central dos pedidos a faturar =================
+     Ativado em 24/08/2026. NÃO duplica pedido: reaproveita a mesma fonte
+     única de pedidos (lib/relatorioVendas.js) e só acrescenta a situação de
+     faturamento de cada um (tabela faturamento_pedidos). Sem emissão real
+     de NF-e nesta etapa — só o acompanhamento manual, com o fluxo de
+     seleção múltipla já preparado. Usa o filtro do header. */
+  (function(){
+    const STATUS_OPCOES = [
+      ['aguardando_faturamento','Aguardando faturamento'],
+      ['faturado','Faturado'],
+      ['erro','Erro'],
+      ['cancelado','Cancelado'],
+    ];
+    const STATUS_LABEL = Object.fromEntries(STATUS_OPCOES);
+    const state = { loading:false, error:null, itens:[], status:'todos', search:'', selecionados:new Set() };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '—'; try{ const d=new Date(iso); return d.toLocaleDateString('pt-BR'); }catch(e){ return '—'; } }
+    function statusChipStyle(status){
+      const cor = status==='faturado' ? 'success' : status==='erro' ? 'danger' : status==='cancelado' ? 'text-muted' : 'warning';
+      const bg = status==='cancelado' ? 'var(--surface-2)' : 'var(--'+cor+'-soft)';
+      return 'color:var(--'+cor+');background:'+bg+';';
+    }
+
+    async function api(path, opts){
+      const res = await fetch('/api/faturamento'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+
+    async function loadItens(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.itens=[]; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(state.status !== 'todos') params.set('status', state.status);
+        if(state.search.trim()) params.set('search', state.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.itens = data.itens;
+        state.selecionados = new Set([...state.selecionados].filter(id => state.itens.some(i=>i.pedidoId===id)));
+      }catch(err){ state.error = err.message || 'Não foi possível carregar o faturamento.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    function load(){ loadItens(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-billing');
+      if(page && page.classList.contains('active')) loadItens();
+      else render();
+    });
+
+    async function aplicarStatusLote(status){
+      const ids = [...state.selecionados];
+      if(!ids.length) return;
+      try{
+        const result = await api('/lote', { method:'PATCH', body: JSON.stringify({ pedidoIds: ids, status }) });
+        toast(result.atualizados.length+' pedido(s) atualizado(s) para "'+STATUS_LABEL[status]+'".'+(result.falharam.length?(' '+result.falharam.length+' falharam.'):''));
+        state.selecionados = new Set();
+        loadItens();
+      }catch(err){ toast(err.message, 'error'); }
+    }
+
+    async function aplicarStatusUnico(pedidoId, status){
+      try{
+        await api('/'+pedidoId+'/situacao', { method:'PATCH', body: JSON.stringify({ status }) });
+        toast('Situação atualizada para "'+STATUS_LABEL[status]+'".');
+        loadItens();
+      }catch(err){ toast(err.message, 'error'); }
+    }
+
+    function render(){
+      const root = document.getElementById('faturamentoRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver o faturamento aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:760px;">Central dos pedidos que precisam ser faturados. Nesta etapa não há emissão real de NF-e — a situação de faturamento é controlada manualmente, preparando o fluxo para quando a emissão fiscal for ligada.</div>';
+
+      html += '<div class="toolbar">'
+        + '<div class="seg" id="fatSeg">'
+          + [['todos','Todos']].concat(STATUS_OPCOES).map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="fatSearch" placeholder="Buscar por pedido, loja ou cliente" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+      + '</div>';
+
+      if(state.selecionados.size > 0){
+        html += '<div class="toolbar" style="margin-top:0;"><span style="font-size:12.5px;color:var(--text-muted);font-weight:600;">'+state.selecionados.size+' selecionado(s):</span>'
+          + '<button class="ghost-btn" data-lote="faturado" style="cursor:pointer;opacity:1;">'+svg('checkCircle')+'<span>Marcar como Faturado</span></button>'
+          + '<button class="ghost-btn" data-lote="erro" style="cursor:pointer;opacity:1;">'+svg('alertCircle')+'<span>Marcar como Erro</span></button>'
+          + '<button class="ghost-btn" data-lote="cancelado" style="cursor:pointer;opacity:1;">'+svg('x')+'<span>Marcar como Cancelado</span></button>'
+        + '</div>';
+      }
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando pedidos…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(!state.itens.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('receipt')+'</div>'
+          + '<h2>Nenhum pedido encontrado</h2>'
+          + '<p class="lead">Nenhum pedido corresponde ao filtro atual no período selecionado.</p></div>';
+      } else {
+        const todosSelecionados = state.itens.length>0 && state.itens.every(i=>state.selecionados.has(i.pedidoId));
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th><input type="checkbox" id="fatSelectAll" '+(todosSelecionados?'checked':'')+'></th>'
+          + '<th>Data</th><th>Pedido</th><th>Marketplace</th><th>Loja</th><th>Cliente</th><th>Valor</th><th>Status do pedido</th><th>Faturamento</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.itens.map(i => '<tr'+(i.pedidoCancelado?' style="opacity:.6;"':'')+'>'
+            + '<td><input type="checkbox" data-sel="'+i.pedidoId+'" '+(state.selecionados.has(i.pedidoId)?'checked':'')+'></td>'
+            + '<td class="tab-nums">'+fmtDate(i.data)+'</td>'
+            + '<td class="mono">'+escapeHtml(i.mlOrderId)+'</td>'
+            + '<td>'+escapeHtml(i.marketplace)+'</td>'
+            + '<td>'+escapeHtml(i.loja||'—')+'</td>'
+            + '<td>'+escapeHtml(i.cliente||'—')+'</td>'
+            + '<td class="mono">'+money(i.valor)+'</td>'
+            + '<td>'+escapeHtml(i.statusPedido||'—')+'</td>'
+            + '<td><span class="status-chip" style="'+statusChipStyle(i.situacaoFaturamento)+'">'+STATUS_LABEL[i.situacaoFaturamento]+'</span></td>'
+            + '<td><select data-change="'+i.pedidoId+'" style="font-size:12px;padding:4px 6px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);">'
+              + STATUS_OPCOES.map(function(par){ return '<option value="'+par[0]+'" '+(i.situacaoFaturamento===par[0]?'selected':'')+'>'+par[1]+'</option>'; }).join('')
+            + '</select></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const seg = document.getElementById('fatSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadItens(); }));
+      const search = document.getElementById('fatSearch');
+      if(search) search.addEventListener('input', ()=>{
+        state.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadItens, 300);
+      });
+      root.querySelectorAll('[data-lote]').forEach(b=> b.addEventListener('click', ()=> aplicarStatusLote(b.dataset.lote)));
+      root.querySelectorAll('[data-change]').forEach(sel=> sel.addEventListener('change', ()=> aplicarStatusUnico(Number(sel.dataset.change), sel.value)));
+      const selectAll = document.getElementById('fatSelectAll');
+      if(selectAll) selectAll.addEventListener('change', ()=>{
+        if(selectAll.checked) state.itens.forEach(i=> state.selecionados.add(i.pedidoId));
+        else state.itens.forEach(i=> state.selecionados.delete(i.pedidoId));
+        render();
+      });
+      root.querySelectorAll('[data-sel]').forEach(cb=> cb.addEventListener('change', ()=>{
+        const id = Number(cb.dataset.sel);
+        if(cb.checked) state.selecionados.add(id); else state.selecionados.delete(id);
+        render();
+      }));
+    }
+
+    window.Faturamento = { load };
+  })();
+
+  /* ================= NOTAS FISCAIS — registro e acompanhamento =================
+     Ativado em 24/08/2026. Estrutura para registrar/acompanhar notas
+     relacionadas a um pedido — sem emissão real (SEFAZ) nesta etapa e sem
+     inventar número de NF-e/chave de acesso: só o que o usuário digitar
+     (de uma nota já emitida em outro sistema). NÃO duplica pedido — cada
+     nota é vinculada a um ml_pedidos existente (tabela notas_fiscais).
+     Usa o filtro do header. */
+  (function(){
+    const STATUS_OPCOES = [
+      ['pendente','Pendente'],
+      ['emitida','Emitida'],
+      ['cancelada','Cancelada'],
+      ['rejeitada','Rejeitada'],
+    ];
+    const STATUS_LABEL = Object.fromEntries(STATUS_OPCOES);
+    const state = { loading:false, error:null, itens:[], status:'todos', search:'' };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+    function statusChipStyle(status){
+      const cor = status==='emitida' ? 'success' : (status==='rejeitada'||status==='cancelada') ? 'danger' : 'warning';
+      return 'color:var(--'+cor+');background:var(--'+cor+'-soft);';
+    }
+
+    async function api(path, opts){
+      const res = await fetch('/api/notas-fiscais'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+    async function apiPedido(id){
+      const res = await fetch('/api/pedidos/'+id);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o pedido.');
+      return body;
+    }
+
+    async function loadItens(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.itens=[]; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(state.status !== 'todos') params.set('status', state.status);
+        if(state.search.trim()) params.set('search', state.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.itens = data.itens;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar as notas fiscais.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    function load(){ loadItens(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-invoices');
+      if(page && page.classList.contains('active')) loadItens();
+      else render();
+    });
+
+    function render(){
+      const root = document.getElementById('notasFiscaisRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver as notas fiscais aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:760px;">Estrutura para registrar e acompanhar notas relacionadas aos pedidos — sem integração real com a SEFAZ nesta etapa. Números de NF-e e chaves de acesso nunca são inventados: um pedido sem nota registrada aparece como "Pendente".</div>';
+
+      html += '<div class="toolbar">'
+        + '<div class="seg" id="nfSeg">'
+          + [['todos','Todos']].concat(STATUS_OPCOES).map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="nfSearch" placeholder="Buscar por pedido, cliente ou número da nota" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+      + '</div>';
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando notas fiscais…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(!state.itens.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('fileText')+'</div>'
+          + '<h2>Nenhum pedido encontrado</h2>'
+          + '<p class="lead">Nenhum pedido corresponde ao filtro atual no período selecionado.</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Número</th><th>Série</th><th>Pedido</th><th>Cliente</th><th>Valor</th><th>Emissão</th><th>Chave de acesso</th><th>Status</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.itens.map(i => '<tr>'
+            + '<td class="mono">'+(i.numero?escapeHtml(i.numero):'—')+'</td>'
+            + '<td class="mono">'+(i.serie?escapeHtml(i.serie):'—')+'</td>'
+            + '<td class="mono">'+escapeHtml(i.mlOrderId)+'</td>'
+            + '<td>'+escapeHtml(i.cliente||'—')+'</td>'
+            + '<td class="mono">'+(i.valor!==null?money(i.valor):'<span class="dash">—</span>')+'</td>'
+            + '<td class="tab-nums">'+(i.dataEmissao?fmtDate(i.dataEmissao):'—')+'</td>'
+            + '<td class="mono" style="font-size:11px;">'+(i.chaveAcesso?escapeHtml(i.chaveAcesso):'<span class="dash">—</span>')+'</td>'
+            + '<td><span class="status-chip" style="'+statusChipStyle(i.status)+'">'+STATUS_LABEL[i.status]+'</span></td>'
+            + '<td><div class="row-actions"><button class="row-ic-btn" data-abrir="'+i.pedidoId+'" title="Abrir" type="button">'+svg('eye')+'</button></div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const seg = document.getElementById('nfSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadItens(); }));
+      const search = document.getElementById('nfSearch');
+      if(search) search.addEventListener('input', ()=>{
+        state.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadItens, 300);
+      });
+      root.querySelectorAll('[data-abrir]').forEach(b=> b.addEventListener('click', ()=> openModal(Number(b.dataset.abrir))));
+    }
+
+    async function openModal(pedidoId){
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card wide"><div class="table-skel"><span class="spin"></span><span>Carregando pedido…</span></div></div></div>';
+      const closeEarly = ()=> modalRoot.innerHTML='';
+      document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='modalOverlay') closeEarly(); });
+
+      let pedidoData;
+      try{ pedidoData = await apiPedido(pedidoId); }
+      catch(err){ toast(err.message, 'error'); closeEarly(); return; }
+
+      const nota = state.itens.find(i => i.pedidoId === pedidoId) || {};
+      const pedido = pedidoData.pedido;
+      const moeda = pedido.moeda || 'BRL';
+      const moneyM = v => v===null||v===undefined ? '—' : (moeda==='BRL'?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
+
+      const html = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card wide">'
+        + '<div class="modal-head"><div class="modal-title">Nota fiscal — Pedido #'+pedido.mlOrderId+'</div><button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+        + '<div class="modal-sub">'+escapeHtml(pedido.loja||'—')+' · '+escapeHtml(pedido.compradorNickname||'—')+'</div>'
+
+        + '<div class="detail-section-title" style="margin-top:4px;">Dados do pedido</div>'
+        + '<div class="detail-grid">'
+          + '<div class="dg-item"><div class="dg-label">Data</div><div class="dg-value">'+new Date(pedido.dataCriacao).toLocaleDateString('pt-BR')+'</div></div>'
+          + '<div class="dg-item"><div class="dg-label">Cliente</div><div class="dg-value">'+escapeHtml(pedido.compradorNickname||'—')+'</div></div>'
+          + '<div class="dg-item"><div class="dg-label">Loja</div><div class="dg-value">'+escapeHtml(pedido.loja||'—')+'</div></div>'
+          + '<div class="dg-item"><div class="dg-label">Valor do pedido</div><div class="dg-value">'+moneyM(nota.valorPedido)+'</div></div>'
+          + '<div class="dg-item"><div class="dg-label">Status do pedido</div><div class="dg-value">'+escapeHtml(pedido.status||'—')+'</div></div>'
+        + '</div>'
+        + '<div class="detail-section-title">Itens</div>'
+        + (pedidoData.itens||[]).map(it => '<div class="item-row"><div><div class="ir-title">'+escapeHtml(it.titulo||it.mlItemId||'—')+'</div>'
+            + '<div class="ir-sku">'+(it.sku?('SKU '+escapeHtml(it.sku)):'sem SKU informado')+' · qtd '+it.quantidade+'</div></div>'
+            + '<div class="mono">'+moneyM(it.valorTotalItem)+'</div></div>').join('')
+
+        + '<div class="detail-section-title">Nota fiscal</div>'
+        + '<form id="nfForm">'
+          + '<div class="inline-form" style="margin-top:0;">'
+            + '<div class="field narrow"><label>Número</label><input type="text" id="fNumero" value="'+(nota.numero?escapeHtml(nota.numero):'')+'"><div class="field-error" id="eNumero" style="display:none;"></div></div>'
+            + '<div class="field narrow"><label>Série</label><input type="text" id="fSerie" value="'+(nota.serie?escapeHtml(nota.serie):'')+'"><div class="field-error" id="eSerie" style="display:none;"></div></div>'
+          + '</div>'
+          + '<div class="inline-form" style="margin-top:0;">'
+            + '<div class="field narrow"><label>Valor <span class="opt">(opcional)</span></label><input type="text" inputmode="decimal" id="fValor" value="'+(nota.valor!=null?String(nota.valor).replace('.',','):'')+'"><div class="field-error" id="eValor" style="display:none;"></div></div>'
+            + '<div class="field narrow"><label>Data de emissão</label><input type="date" id="fDataEmissao" value="'+(nota.dataEmissao||'')+'"><div class="field-error" id="eDataEmissao" style="display:none;"></div></div>'
+          + '</div>'
+          + '<div class="field"><label>Chave de acesso <span class="opt">(44 dígitos, quando existir)</span></label><input type="text" id="fChave" value="'+(nota.chaveAcesso?escapeHtml(nota.chaveAcesso):'')+'"><div class="field-error" id="eChaveAcesso" style="display:none;"></div></div>'
+          + '<div class="field"><label>Status</label><select id="fStatus">'
+            + STATUS_OPCOES.map(function(par){ return '<option value="'+par[0]+'" '+((nota.status||'pendente')===par[0]?'selected':'')+'>'+par[1]+'</option>'; }).join('')
+          + '</select></div>'
+          + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" value="'+(nota.observacao?escapeHtml(nota.observacao):'')+'"></div>'
+          + '<div class="modal-actions">'
+            + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+            + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Salvar nota fiscal</span></button>'
+          + '</div>'
+        + '</form>'
+      + '</div></div>';
+
+      modalRoot.innerHTML = html;
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+
+      document.getElementById('nfForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eNumero','eSerie','eValor','eDataEmissao','eChaveAcesso'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+
+        const valorRaw = document.getElementById('fValor').value.trim();
+        const payload = {
+          numero: document.getElementById('fNumero').value,
+          serie: document.getElementById('fSerie').value,
+          valor: valorRaw ? Number(valorRaw.replace(',','.')) : null,
+          dataEmissao: document.getElementById('fDataEmissao').value,
+          chaveAcesso: document.getElementById('fChave').value,
+          status: document.getElementById('fStatus').value,
+          observacao: document.getElementById('fObservacao').value,
+        };
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          await api('/pedido/'+pedidoId, { method:'PUT', body: JSON.stringify(payload) });
+          close();
+          toast('Nota fiscal salva.');
+          loadItens();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            let mostrou = false;
+            ['numero','serie','valor','dataEmissao','chaveAcesso'].forEach(function(campo){
+              if(err.errors[campo]){
+                const elId = 'e'+campo.charAt(0).toUpperCase()+campo.slice(1);
+                if(document.getElementById(elId)){ const el=document.getElementById(elId); el.textContent=err.errors[campo]; el.style.display='block'; mostrou = true; }
+              }
+            });
+            if(!mostrou) toast(err.message, 'error');
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    window.NotasFiscais = { load };
+  })();
+
   // Só navega para a rota inicial depois que TODOS os módulos acima (Empresas,
   // Marketplaces, Pedidos, Custos, Produtos, Fornecedores, Anúncios, Estoque,
-  // Estoque Full, Compras, Contas a Pagar, Contas a Receber, Recebimentos)
-  // já estão definidos — chamar isso mais cedo fazia a tela de destino do
-  // OAuth do Mercado Livre (#marketplaces?ml=...) e outras rotas
-  // carregarem em branco no primeiro load/refresh.
+  // Estoque Full, Compras, Contas a Pagar, Contas a Receber, Recebimentos,
+  // DRE, Faturamento, Notas Fiscais) já estão definidos — chamar isso mais
+  // cedo fazia a tela de destino do OAuth do Mercado Livre
+  // (#marketplaces?ml=...) e outras rotas carregarem em branco no primeiro
+  // load/refresh.
   navigate(location.hash ? location.hash.slice(1) : 'overview');
 
 })();

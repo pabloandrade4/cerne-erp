@@ -18,6 +18,9 @@ const estoqueProdutoBaseRouter = require('./routes/estoqueProdutoBase');
 const contasPagarRouter = require('./routes/contasPagar');
 const contasReceberRouter = require('./routes/contasReceber');
 const recebimentosRouter = require('./routes/recebimentos');
+const dreRouter = require('./routes/dre');
+const faturamentoRouter = require('./routes/faturamento');
+const notasFiscaisRouter = require('./routes/notasFiscais');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,6 +46,9 @@ app.use('/api/estoque-produto-base', estoqueProdutoBaseRouter);
 app.use('/api/contas-pagar', contasPagarRouter);
 app.use('/api/contas-receber', contasReceberRouter);
 app.use('/api/recebimentos', recebimentosRouter);
+app.use('/api/dre', dreRouter);
+app.use('/api/faturamento', faturamentoRouter);
+app.use('/api/notas-fiscais', notasFiscaisRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));

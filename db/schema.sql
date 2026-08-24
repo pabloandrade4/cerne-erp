@@ -499,3 +499,66 @@ CREATE TABLE IF NOT EXISTS contas_receber (
 -- disponível" (nunca um valor/data inventado) até que uma fonte real desses
 -- dados seja integrada (endpoint de settlements do ML, ou conciliação
 -- manual) — ver docs/05-problemas-conhecidos.md.
+
+-- ============================================================
+-- Etapa: DRE, Faturamento e Notas Fiscais (24/08/2026)
+-- ============================================================
+--
+-- A DRE NÃO tem tabela própria — é sempre calculada ao vivo em
+-- lib/dre.js, reaproveitando exatamente lib/relatorioVendas.js
+-- (buscarPedidosDoPeriodo + resumirPeriodo, intocado) para a parte de
+-- vendas, e lib/contasPagar.js (resumoContasPagar) para a linha de
+-- despesas/contas pagas do período — mesma filosofia já usada em
+-- Recebimentos (sem duplicar dado, sem uma segunda fórmula financeira
+-- paralela). Ver docs/02-decisoes.md para o desenho completo das linhas.
+--
+-- `ON DELETE CASCADE` no pedido_id de faturamento_pedidos e notas_fiscais:
+-- pedido do Mercado Livre nunca é apagado de verdade na sincronização real
+-- (é sempre upsert — ver docs/01-regras-de-negocio.md), então isso não
+-- deveria disparar em produção; existe pra a situação de faturamento/nota
+-- de um pedido nunca ficar "órfã" apontando pra um pedido que não existe
+-- mais, e para não travar a exclusão de um pedido de teste que também
+-- tenha faturamento/nota associados.
+
+-- Faturamento: situação de faturamento de um pedido já existente
+-- (ml_pedidos) — NUNCA duplica o pedido, só anota em que pé está o
+-- faturamento dele. `pedido_id` é UNIQUE (1 pedido = no máximo 1 registro
+-- de situação de faturamento). Um pedido sem linha aqui ainda é tratado
+-- pela aplicação como "aguardando_faturamento" (o valor padrão/implícito
+-- — só grava uma linha quando o usuário realmente muda o status pela
+-- primeira vez), então a tabela começa vazia e só cresce conforme o
+-- usuário for trabalhando a fila.
+CREATE TABLE IF NOT EXISTS faturamento_pedidos (
+  id           SERIAL PRIMARY KEY,
+  pedido_id    INTEGER NOT NULL UNIQUE REFERENCES ml_pedidos(id) ON DELETE CASCADE,
+  empresa_id   INTEGER NOT NULL REFERENCES empresas(id), -- denormalizado da empresa do pedido, só para filtro rápido — validado na aplicação que bate com a empresa real do pedido
+  status       VARCHAR(30) NOT NULL DEFAULT 'aguardando_faturamento', -- aguardando_faturamento | faturado | erro | cancelado
+  observacao   TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Notas Fiscais: estrutura para REGISTRAR e ACOMPANHAR notas relacionadas
+-- a um pedido — nesta etapa não existe emissão real (SEFAZ). `pedido_id`
+-- é UNIQUE (uma nota por pedido, nesta primeira versão — reemissão após
+-- rejeição/cancelamento fica para uma etapa futura, se for pedida; ver
+-- docs/02-decisoes.md). `numero`/`serie`/`chave_acesso`/`data_emissao`
+-- ficam NULL até o usuário realmente registrar uma nota já emitida (em
+-- outro sistema fiscal) — o ERP nunca gera/inventa esses valores sozinho.
+-- `cliente` e `empresa/CNPJ`, pedidos pelo usuário na tela, NÃO são
+-- colunas aqui — vêm sempre de um JOIN com ml_pedidos/empresas na hora de
+-- montar a resposta, para nunca duplicar um dado que já existe no pedido.
+CREATE TABLE IF NOT EXISTS notas_fiscais (
+  id             SERIAL PRIMARY KEY,
+  pedido_id      INTEGER NOT NULL UNIQUE REFERENCES ml_pedidos(id) ON DELETE CASCADE,
+  empresa_id     INTEGER NOT NULL REFERENCES empresas(id), -- denormalizado da empresa do pedido, mesma razão de faturamento_pedidos
+  numero         VARCHAR(20),
+  serie          VARCHAR(10),
+  chave_acesso   VARCHAR(44),
+  valor          NUMERIC(12,2),
+  data_emissao   DATE,
+  status         VARCHAR(20) NOT NULL DEFAULT 'pendente', -- pendente | emitida | cancelada | rejeitada
+  observacao     TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
