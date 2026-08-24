@@ -3,6 +3,77 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-24 (12) — Supabase como banco principal + sincronização histórica desde 01/07/2026
+- Pedido do usuário: parar de avançar módulos e corrigir a base de dados —
+  3 passos, nada além disso: (1) Supabase/PostgreSQL como fonte permanente
+  dos dados do Mercado Livre (Visão Geral não pode depender de chamar o
+  Mercado Livre em tempo real), (2) importar todo o histórico de pedidos
+  desde 01/07/2026 sem duplicar, (3) fazer a Visão Geral ler do banco.
+  Custo e imposto explicitamente **fora** desta etapa.
+- **Descoberta importante antes de mexer em qualquer coisa:** Visão Geral,
+  Pedidos e Financeiro **já liam só do Postgres** (`routes/relatorios.js` →
+  `lib/relatorioVendas.js` → `pool.query`), nunca chamavam a API do
+  Mercado Livre ao montar a tela. O passo 3 do pedido já estava
+  estruturalmente atendido — faltava confirmar isso ao vivo (feito, ver
+  `04-alteracoes.md`) e trocar o banco por trás para o Supabase.
+- **Por que Supabase, e não continuar no Postgres do Render:** o Postgres
+  gratuito do Render (`cerne-db`) expira em 20/09/2026 (ver
+  `05-problemas-conhecidos.md`) — trocar agora, dentro desta etapa,
+  resolve os dois problemas de uma vez (banco permanente + fonte única de
+  dados).
+- **Migração dos dados existentes:** feita a partir de dentro do próprio
+  app já publicado (que já tinha acesso legítimo ao banco antigo via
+  `DATABASE_URL`), através de uma rota administrativa temporária
+  (`server/routes/adminMigracao.js`, protegida por token em
+  `ADMIN_MIGRATION_TOKEN`, nunca exposto no front-end) que copiou tabela
+  por tabela preservando os IDs (necessário por causa das chaves
+  estrangeiras). Depois de confirmada a migração e a troca do
+  `DATABASE_URL` de produção para o Supabase, essa rota foi **removida do
+  projeto** (não faz parte do funcionamento normal do ERP) — junto com o
+  arquivo `server/routes/adminMigracao.js` e as duas linhas que a
+  registravam em `server.js`.
+- **Cópia em lotes, não linha por linha:** a primeira versão da migração
+  copiava uma linha por vez (um round-trip de rede por linha) e ficou
+  lenta demais indo até o Supabase (bancos em provedores/regiões
+  diferentes) com o volume real de dados (10.136 pedidos + itens).
+  Reescrita para `INSERT ... VALUES (...),(...),...` em lotes de 300
+  linhas — a mesma migração caiu de minutos sem terminar para ~55s.
+- **Nova tabela `ml_pedido_pagamentos`** (em vez de mexer nas colunas de
+  pagamento que já existiam em `ml_pedidos`): guarda **todos** os
+  pagamentos de um pedido (um pedido pode ter mais de um), com valor,
+  taxas, forma de pagamento, parcelas e status — preservando o cálculo
+  central de margem (`lib/resultadoVenda.js` / `lib/relatorioVendas.js`)
+  intacto, sem duplicar essa lógica em lugar nenhum.
+- **Sincronização histórica desenhada dia a dia, não em uma chamada só:**
+  para não esbarrar em limite de paginação da busca do Mercado Livre e
+  para poder retomar de onde parou se cair no meio (processo pode levar
+  bastante tempo — dezenas de dias de pedidos). Nova tabela
+  `ml_sync_historicos` guarda, por execução: data de início, data alvo,
+  **até que dia já foi processado** (`janela_concluida_ate`, funciona como
+  marcador de retomada), totais e eventuais erros por pedido. Roda em
+  segundo plano (responde na hora, processa depois) — mesmo padrão já
+  usado no webhook do Mercado Livre.
+- **Por que isso não duplica pedido, nem na primeira nem em execuções
+  seguintes:** cada pedido é gravado com `INSERT ... ON CONFLICT (conta_ml_id,
+  ml_order_id) DO UPDATE` — já existindo, atualiza; não existindo, cria.
+  Rodar a sincronização histórica de novo depois de `concluido` reprocessa
+  o período inteiro (não é um "pular tudo"), mas o resultado é o mesmo
+  conjunto de pedidos atualizado, nunca duplicado. Confirmado ao vivo
+  rodando a sincronização duas vezes seguidas — ver `04-alteracoes.md`.
+- **Bug encontrado e corrigido antes de qualquer deploy (nunca chegou a
+  rodar em produção quebrado):** o driver `pg` devolve colunas `DATE` como
+  objeto `Date` do JavaScript, não como string. O código original comparava
+  `'YYYY-MM-DD' <= objetoDate` para decidir se o dia-a-dia da sincronização
+  histórica devia continuar — essa comparação sempre dá `false` em
+  JavaScript (o objeto vira `NaN` ao ser coagido pra número, e qualquer
+  comparação com `NaN` é falsa), o que faria a sincronização parar depois
+  de processar só o primeiro dia. Encontrado por raciocínio sobre o
+  comportamento do driver antes de testar, confirmado com teste isolado, e
+  corrigido normalizando os dois lados para string (`YYYY-MM-DD`) antes de
+  comparar.
+- Conforme pedido, nenhum outro módulo foi avançado nesta etapa, e custo/
+  imposto continuam exatamente como já estavam (não foram tocados).
+
 ## 2026-08-23 (11) — Ativação de Estoque, Estoque Full e Compras
 - Pedido do usuário: ativar 3 áreas novas — Estoque (próprio), Estoque Full
   (renomeado de "Full", visualização real do Mercado Livre) e Compras —

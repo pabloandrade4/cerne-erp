@@ -208,14 +208,46 @@ cada uma e o status (em desenvolvimento / concluída).
 - **Status:** concluído.
 - **O que é:** o ERP deixou de ser só um layout estático — agora roda como um
   serviço web real (Node.js/Express) publicado no Render, com um banco
-  Postgres real e persistente (também no Render). Os dados não dependem mais
-  do navegador: continuam existindo depois de fechar/atualizar a página, ou
-  mesmo depois de reiniciar o serviço.
+  Postgres real e persistente. Os dados não dependem mais do navegador:
+  continuam existindo depois de fechar/atualizar a página, ou mesmo depois
+  de reiniciar o serviço.
+- **Banco principal: Supabase** (trocado do Postgres do Render para o
+  Supabase em 24/08/2026 — ver `## Supabase como banco principal +
+  sincronização histórica` abaixo e `02-decisoes.md` (12)).
 - **Onde está:** código em `server/` (backend) e `server/public/` (o mesmo
   front-end/design já aprovado, adaptado para consumir a API real).
 - **URL pública:** https://cerne-erp.onrender.com
 - **O que falta:** autenticação/login real (existe só uma tabela `users`
   preparada, sem tela nem rota ainda), e todos os outros módulos.
+
+## Supabase como banco principal + sincronização histórica
+- **Status:** concluído.
+- **O que é:** o Supabase/PostgreSQL passou a ser a fonte permanente de
+  dados sincronizados do Mercado Livre. Visão Geral, Pedidos e Financeiro
+  continuam lendo só do banco (nunca chamam a API do Mercado Livre em
+  tempo real) — confirmado ao vivo, com os 5 filtros de período
+  respondendo normalmente sem nenhuma chamada nova ao Mercado Livre. Todos
+  os dados existentes (empresas, contas do Mercado Livre, custos, config
+  financeira e os pedidos já sincronizados antes) foram migrados para o
+  Supabase sem perda.
+- **Sincronização histórica desde 01/07/2026:** executada com sucesso para
+  a conta "PFEMBALAGEMS" — **3.604 pedidos** encontrados e importados,
+  cobrindo o período de 01/07/2026 até 23/08/2026 (hoje), **0 erros**.
+  Rodada uma segunda vez para confirmar que não duplica pedido (mesmo
+  upsert por conta + ID do pedido do Mercado Livre). Detalhes completos em
+  `04-alteracoes.md`.
+- **Nova tabela `ml_pedido_pagamentos`:** guarda todos os pagamentos de
+  cada pedido (um pedido pode ter mais de um), sem mexer no cálculo
+  central de margem (`lib/resultadoVenda.js` / `lib/relatorioVendas.js`).
+- **Nova tabela `ml_sync_historicos`:** controla o progresso da
+  sincronização histórica (dia a dia, retomável se interrompida).
+- **Onde está:** `server/lib/mlSync.js` (lógica da sincronização
+  histórica), `server/routes/integracoes.js` (endpoints
+  `sincronizar-historico` e `sincronizar-historico/status`),
+  `server/db/schema.sql` (tabelas novas), `server/lib/periodo.js`
+  (`inicioDoDiaBRTDeString`, usado para andar dia a dia em BRT).
+- **O que falta:** custo do produto e imposto continuam exatamente como já
+  estavam — não fazem parte desta etapa (pedido explícito do usuário).
 
 ## Empresas (CRUD real)
 - **Status:** concluído.

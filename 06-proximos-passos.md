@@ -1,5 +1,17 @@
 # Próximos Passos
 
+- **Concluído em 24/08/2026:** Supabase como banco principal, migração dos
+  dados existentes, sincronização histórica desde 01/07/2026 (3.604
+  pedidos, 0 erros) e confirmação de que Visão Geral lê só do banco — ver
+  `04-alteracoes.md` (10) e `02-decisoes.md` (12). Por instrução explícita
+  do usuário, esta etapa não avançou nenhum outro módulo, e **custo do
+  produto e imposto continuam fora do escopo** — a próxima decisão do
+  usuário é se/quando entrar nisso.
+- **Pendência aberta, sem prazo:** decidir quando desligar o banco antigo
+  do Render (`cerne-db`) agora que o Supabase é o principal — ver
+  `05-problemas-conhecidos.md`. Também dá pra remover, sem pressa, as
+  variáveis de ambiente `SUPABASE_DATABASE_URL` e `ADMIN_MIGRATION_TOKEN`
+  do serviço no Render (não são mais usadas).
 - Sistema já está no ar (https://cerne-erp.onrender.com), com banco Postgres
   real, **Empresas** funcionando de ponta a ponta, a **integração real com
   o Mercado Livre** (conectar conta, importar pedidos dos últimos 30 dias,
@@ -62,9 +74,6 @@
   pra ativar o pedido caindo sozinho no sistema. Depois de configurado,
   confirmar com um pedido real que ele aparece sem precisar clicar em
   "Sincronizar" (ver `05-problemas-conhecidos.md`).
-- Antes de 20/09/2026: decidir com o usuário sobre migrar o Postgres do
-  Render do plano gratuito para um plano pago (ver
-  `05-problemas-conhecidos.md`).
 - Se o usuário quiser, otimizar a velocidade da sincronização do Mercado
   Livre para contas com muitos pedidos (ver `05-problemas-conhecidos.md`) —
   não fazer sem o usuário pedir.

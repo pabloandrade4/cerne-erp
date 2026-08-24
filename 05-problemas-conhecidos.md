@@ -180,13 +180,27 @@ desenvolvimento, para não serem esquecidas.
   via `mcp__Render__list_logs` (só os logs de build/boot aparecem) — não dá
   para usar esse caminho para depurar tráfego HTTP em tempo real.
 
-## Banco Postgres do Render está no plano gratuito (expira em 30 dias)
-- O banco `cerne-db` foi criado no plano **Free** do Render, que **expira em
-  20/09/2026**. Depois disso o Render pode apagar o banco se não for
-  migrado para um plano pago antes.
-- Ação necessária: antes dessa data, decidir com o usuário se migra para um
-  plano pago do Postgres no Render (para não perder os dados das empresas
-  cadastradas e dos próximos módulos).
+## RESOLVIDO (24/08/2026): banco principal trocado de Render Postgres para Supabase
+- O problema abaixo (Postgres do Render no plano Free, expirando em
+  20/09/2026) motivou a troca do banco principal para o **Supabase**, feita
+  em 24/08/2026 (ver `02-decisoes.md` (12) e `04-alteracoes.md` (10)). O
+  `DATABASE_URL` de produção já aponta para o Supabase — o ERP não depende
+  mais do Postgres antigo do Render para funcionar.
+- **Pendência que sobrou:** o banco antigo `cerne-db` (Render) ainda existe
+  e ainda tem os dados de antes da migração (não foi apagado). Fica com o
+  usuário decidir quando desligá-lo — recomendo manter por um tempo como
+  cópia de segurança até confirmar que o Supabase está estável em uso
+  normal, e só então decidir se apaga o `cerne-db` no painel do Render.
+- **Também sobrou (limpeza opcional, sem urgência):** as variáveis de
+  ambiente `SUPABASE_DATABASE_URL` e `ADMIN_MIGRATION_TOKEN`, criadas só
+  para a migração pontual, continuam configuradas no serviço do Render mas
+  não são mais usadas por nenhum código (a rota que as lia foi removida).
+  Não atrapalham nada ficando lá, mas o usuário pode removê-las no painel
+  do Render se quiser deixar limpo.
+- Vale a pena o usuário também checar os limites do plano gratuito do
+  Supabase (armazenamento, transferência, pausa por inatividade etc.)
+  diretamente no painel/documentação do Supabase — não tenho esse dado
+  para registrar aqui com certeza.
 
 ## Serviço web também está no plano gratuito do Render
 - O serviço `cerne-erp` está no plano **Free**. Nesse plano o Render

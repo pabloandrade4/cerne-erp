@@ -29,11 +29,15 @@ junto da nova).
   — nunca em texto puro, nunca expostos para o front-end. O token é renovado
   automaticamente pouco antes de expirar, usando o refresh token.
 - **Shopee ainda não foi desenvolvida** — só Mercado Livre por enquanto.
-- Sincronizar pedidos traz, por padrão, **somente os pedidos dos últimos 30
-  dias** (pedido explícito do usuário — não traz o histórico completo).
+- Sincronizar pedidos (botão "Sincronizar agora") traz, por padrão,
+  **somente os pedidos dos últimos 30 dias** (pedido explícito do usuário —
+  não traz o histórico completo). Existe, além dela, uma **sincronização
+  histórica** separada (por enquanto só via API, sem botão na tela) que traz
+  todo o período desde uma data escolhida — ver `## Banco de dados` abaixo.
 - Sincronizar de novo (resync) nunca duplica pedido: cada pedido é
   identificado pelo ID do Mercado Livre + conta, e é atualizado (não
-  recriado) se já existir.
+  recriado) se já existir. Vale tanto para a sincronização normal (30 dias)
+  quanto para a histórica.
 - **Regra central: nunca inventar/estimar valor financeiro.** Comissão,
   tarifas, frete — só são gravados se a API do Mercado Livre realmente
   retornar aquele campo para aquele pedido. Se a API não retornar, o campo
@@ -57,6 +61,38 @@ junto da nova).
   pedidos de antes de a conta ter sido conectada — ele não é mais o único
   jeito de um pedido aparecer no sistema.
 
+## Banco de dados (armazenamento permanente)
+- **Supabase (Postgres) é o banco principal e permanente do ERP.** Todas as
+  telas que mostram indicadores (Visão Geral, Pedidos, Financeiro) leem
+  **só do banco** — nunca fazem chamada em tempo real à API do Mercado
+  Livre para montar a tela. Os dados da API só chegam ao banco através da
+  sincronização (normal ou histórica) e do webhook.
+- Nenhuma credencial (chave de acesso do Supabase, tokens do Mercado Livre,
+  senha do banco) fica exposta no front-end — tudo fica em variável de
+  ambiente só do servidor.
+- Existe uma **sincronização histórica** (`POST
+  /api/integracoes/mercadolivre/:id/sincronizar-historico`, corpo `{ desde:
+  'YYYY-MM-DD' }`) que importa todos os pedidos de uma conta desde a data
+  informada até hoje — diferente da sincronização normal, que só pega os
+  últimos 30 dias. Roda em segundo plano (pode levar bastante tempo),
+  dia a dia, e pode ser consultada em `GET
+  .../sincronizar-historico/status?desde=YYYY-MM-DD`.
+- A sincronização histórica é **retomável**: se for interrompida, a próxima
+  execução com o mesmo `desde` continua de onde parou (não reprocessa dias
+  já concluídos) enquanto o status daquela execução não estiver
+  `concluido`. Depois de `concluido`, rodar de novo com o mesmo `desde`
+  cria uma nova execução que reprocessa o período inteiro — sem duplicar
+  pedido nenhum, porque a gravação de cada pedido é um "upsert" (identificado
+  por conta + ID do pedido no Mercado Livre): já existindo, atualiza; não
+  existindo, cria.
+- Para cada pedido são guardados: dados gerais do pedido, itens (com
+  SKU/quantidade/valores), **todos os pagamentos** (tabela própria, um
+  pedido pode ter mais de um pagamento), envio/logística, frete do
+  comprador e do vendedor, taxas/comissão e status (incluindo cancelamento).
+  Cálculo de custo do produto e de imposto **não faz parte desta etapa** —
+  continua exatamente como já estava (`custos_produto` +
+  `config_financeiro`, usados por `lib/resultadoVenda.js`).
+
 ## Notificações do Mercado Livre (webhook)
 - O ERP recebe as notificações do Mercado Livre (evento de pedido novo/
   atualizado) numa URL própria e as usa só para saber "tem pedido pra
@@ -71,6 +107,11 @@ junto da nova).
 _(sem regras registradas ainda)_
 
 ## Visão Geral
+- A tela **nunca chama a API do Mercado Livre em tempo real** — todos os
+  indicadores vêm de consulta ao banco (Supabase/Postgres), lendo os
+  pedidos já sincronizados. Confirmado ao vivo: a tela carrega e os 5
+  filtros de período funcionam normalmente mesmo sem nenhuma chamada nova
+  ao Mercado Livre no momento (ver `04-alteracoes.md`).
 - A tela usa dados reais dos pedidos do Mercado Livre já sincronizados —
   nada de indicador decorativo/estático. Mostra, para a empresa e o
   **período selecionado**: faturamento, quantidade de pedidos, margem de

@@ -2,6 +2,51 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-24 (10) — Supabase como banco principal + sincronização histórica desde 01/07/2026
+- Criado projeto no Supabase (com ajuda do usuário: reset de senha do
+  banco até conseguir uma connection string do **Session pooler**
+  funcionando — a conexão direta só aceita IPv6, incompatível com o
+  Render). Aplicado o schema completo (`server/db/schema.sql`) no Supabase.
+- Migrados todos os dados existentes do Postgres antigo (Render) para o
+  Supabase, preservando IDs: empresas, conta do Mercado Livre (tokens
+  continuam criptografados), custos por SKU, configuração financeira e os
+  **10.136 pedidos** (+ itens) já sincronizados antes desta etapa. Migração
+  feita por uma rota administrativa temporária, protegida por token —
+  removida do projeto depois de confirmada (ver `02-decisoes.md` (12)).
+- Trocado o `DATABASE_URL` de produção do Render para a connection string
+  do Supabase — novo deploy automático, confirmado `live`.
+- **Teste ao vivo confirmando o passo 3 do pedido (Visão Geral sem depender
+  do Mercado Livre em tempo real):** com o app já rodando no Supabase,
+  chamados os 5 filtros de período (Hoje, Ontem, 7 dias, 30 dias, Este mês)
+  direto na API (`/api/relatorios/resumo-vendas`) e conferido, pela aba de
+  rede do navegador, que **nenhuma chamada foi feita a `api.mercadolibre.com`**
+  — todos os 5 responderam 200 com dados vindos só do banco.
+- **Sincronização histórica desde 01/07/2026, conta "PFEMBALAGEMS"**
+  (`POST /api/integracoes/mercadolivre/1/sincronizar-historico`, `{desde:
+  "2026-07-01"}`): rodou em segundo plano, dia a dia, do dia 01/07/2026 até
+  hoje (23/08/2026) — **3.604 pedidos encontrados e importados, 0 erros**.
+  Levou cerca de 37 minutos. Guardado, para cada pedido: dados gerais,
+  itens, todos os pagamentos (tabela nova `ml_pedido_pagamentos`), envio/
+  logística, frete do comprador e do vendedor, taxas/comissão e status
+  (incluindo cancelamento) — exatamente como a API do Mercado Livre
+  retornou, sem custo de produto nem imposto (fora do escopo desta etapa).
+- **Confirmação de que rodar de novo não duplica** (testado ao vivo): a
+  sincronização histórica foi disparada uma segunda vez com o mesmo
+  `desde`, logo depois de terminar a primeira. Terminou com **3.608
+  pedidos encontrados/importados, 0 erros** — 4 a mais que a primeira
+  execução (3.604), e não o dobro: os 4 são pedidos novos que entraram de
+  verdade nos ~40 minutos entre uma execução e outra (confirmado batendo
+  com a contagem de pedidos dos últimos 30 dias em `/api/relatorios/
+  resumo-vendas`, que subiu de 2.440 para 2.444 no mesmo intervalo — a
+  mesma diferença de 4). Prova, na prática, que o `INSERT ... ON CONFLICT
+  (conta_ml_id, ml_order_id) DO UPDATE` funciona: reprocessar pedido que já
+  existe atualiza a linha, nunca cria uma segunda.
+- Removida a rota administrativa temporária de migração
+  (`server/routes/adminMigracao.js` e as 2 linhas que a registravam em
+  `server.js`) — não faz mais parte do projeto.
+- Conforme pedido, nenhum outro módulo foi avançado, e custo/imposto não
+  foram implementados nesta etapa.
+
 ## 2026-08-23 (9) — Teste ao vivo em produção de Estoque, Estoque Full e Compras + correção
 - Depois do usuário subir o zip anterior pro GitHub e o Render fazer o
   deploy automático, testei as 3 telas novas direto em produção
