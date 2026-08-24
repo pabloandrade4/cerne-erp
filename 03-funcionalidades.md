@@ -3,6 +3,64 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
+## Contas a Pagar (cadastro manual)
+- **Status:** concluído, testado localmente (servidor real + Postgres local
+  + navegador via Playwright, com dados reais da conta "PFEMBALAGEMS").
+  Ainda não testado ao vivo em produção.
+- **O que é:** tela para lançar manualmente obrigações a pagar (descrição,
+  empresa, fornecedor — quando houver —, categoria em texto livre, valor,
+  vencimento, data de pagamento, status, observação). Ações: cadastrar,
+  editar, excluir, cancelar, marcar como pago, pesquisar, filtrar por
+  status/empresa/período. KPIs no topo: total a pagar, vencendo hoje,
+  vencidas (sempre o saldo atual, sem filtro de período) e pagas no
+  período (com filtro). "Vencido" é sempre calculado na leitura, nunca
+  gravado no banco. Conta paga vira histórico imutável (não editável, não
+  excluível). Filtro de empresa/período do header funciona nesta tela.
+- **Onde está:** `server/lib/contasPagar.js`, `server/routes/contasPagar.js`,
+  `server/public/index.html` (módulo `window.ContasPagar`).
+- **O que falta:** integração com Compras (gerar conta a pagar
+  automaticamente a partir de uma compra recebida) e um plano de contas
+  de verdade para "categoria" (hoje é texto livre com sugestões).
+
+## Contas a Receber (cadastro manual)
+- **Status:** concluído, testado localmente (servidor real + Postgres local
+  + navegador via Playwright). Ainda não testado ao vivo em produção.
+- **O que é:** tela simétrica à Contas a Pagar, para valores a receber
+  (descrição, empresa, origem em texto livre, valor, data prevista, data
+  recebida, status, observação). Mesmas ações (cadastrar, editar, excluir,
+  cancelar, marcar como recebido, pesquisar, filtrar por status/empresa/
+  período) e mesmo desenho de KPIs/imutabilidade/status calculado (aqui,
+  "Atrasado"). Filtro de empresa/período do header funciona nesta tela.
+- **Onde está:** `server/lib/contasReceber.js`, `server/routes/contasReceber.js`,
+  `server/public/index.html` (módulo `window.ContasReceber`).
+- **O que falta:** vínculo automático com vendas/pedidos — hoje é 100%
+  manual, por pedido explícito do usuário ("allowing manual entry
+  initially").
+
+## Recebimentos (conciliação de repasse de marketplace)
+- **Status:** concluído, testado localmente (servidor real + Postgres local
+  + navegador via Playwright, com os 11 pedidos reais da conta
+  "PFEMBALAGEMS"). Ainda não testado ao vivo em produção.
+- **O que é:** tela somente leitura mostrando os pedidos com pagamento
+  aprovado no período (Mercado Livre, único marketplace integrado hoje),
+  com valor bruto, taxas/descontos (comissão + frete do vendedor +
+  desconto do cupom) e valor líquido esperado pelo ERP. **Não inventa
+  data nem valor de recebimento**: como a integração atual não traz esse
+  dado da API do Mercado Livre, "previsão de liberação", "valor
+  recebido" e "data do recebimento" aparecem sempre como "Informação não
+  disponível", e o status sempre como "A liberar" — pronta para, no
+  futuro, comparar o valor que o ERP esperava receber com o valor que o
+  marketplace realmente repassou assim que a API trouxer esse dado.
+  Filtro de empresa/período do header funciona nesta tela.
+- **Onde está:** `server/lib/recebimentosMl.js`, `server/routes/recebimentos.js`,
+  `server/public/index.html` (módulo `window.Recebimentos`). Sem tabela
+  própria no banco — calculada ao vivo a partir de `lib/relatorioVendas.js`
+  (mesma fonte já usada por Pedidos/Visão Geral/Financeiro).
+- **O que falta:** dado real de liberação/repasse do Mercado Livre (não
+  disponível na integração atual — ver `05-problemas-conhecidos.md`);
+  marketplaces além do Mercado Livre (Shopee etc., fora do escopo desta
+  etapa).
+
 ## Produto base + SKU de venda + Multiplicador
 - **Status:** concluído e **testado em produção** (deploy `ml15`, com dados
   reais da conta "PFEMBALAGEMS").

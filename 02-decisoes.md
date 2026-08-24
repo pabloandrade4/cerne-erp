@@ -3,6 +3,57 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-24 (15) — Financeiro: status calculado, imutabilidade após baixa, e Recebimentos sem tabela própria
+- Ao ativar Contas a Pagar/Receber, decidido não gravar "vencido"/
+  "atrasado" como valor de status — só `pendente/pago/cancelado` (ou
+  `a_receber/recebido/cancelado`) ficam no banco; o rótulo "vencido"/
+  "atrasado" é sempre calculado no momento da leitura, comparando com
+  "hoje" (fuso BRT). Motivo: evita depender de uma tarefa agendada (cron)
+  rodando todo dia só pra atualizar status — o cálculo é sempre correto,
+  não importa há quanto tempo o servidor está de pé.
+- Decidido que uma conta paga/recebida vira histórico imutável — não
+  editável, não excluível. Uma conta pendente pode ser editada/cancelada/
+  excluída livremente; uma cancelada não pode mais ser editada, mas pode
+  ser excluída (corrigir um cadastro errado). Motivo: depois que o
+  dinheiro entrou/saiu de verdade, alterar ou apagar o registro romperia
+  a rastreabilidade financeira.
+- KPIs de "total em aberto"/"vencendo hoje"/"vencidas" (e os equivalentes
+  de Contas a Receber) foram desenhados para NUNCA respeitar o filtro de
+  período do header — são sempre o saldo atual da empresa ("quanto eu
+  tenho em aberto agora", uma pergunta atemporal). Só "pago no período"/
+  "recebido no período" respeitam o período selecionado. A lista/tabela
+  de contas, essa sim, é sempre filtrada pelo período (por vencimento/
+  data prevista) — assim o filtro do header "funciona" na tela inteira,
+  sem descaracterizar o significado dos KPIs de saldo.
+- Recebimentos foi decidido **sem tabela própria no banco** — é sempre
+  calculado ao vivo a partir da mesma fonte única de pedidos
+  (`lib/relatorioVendas.js`) já usada por Pedidos/Visão Geral/Financeiro/
+  Relatórios, filtrando pagamento aprovado. Motivo: evita duplicar dado
+  (o pedido já existe no banco) e evita o risco de a tela de Recebimentos
+  ficar dessincronizada da fonte real assim que um pedido for cancelado/
+  estornado depois.
+- Taxas/descontos de Recebimentos somam comissão do Mercado Livre + frete
+  do vendedor + desconto do cupom (`tarifasMl + freteVendedor +
+  desconto`) — deliberadamente SEM imposto e SEM custo do produto, ao
+  contrário da "margem de contribuição" usada em Pedidos/Visão Geral.
+  Motivo: Recebimentos responde "quanto o marketplace realmente
+  repassa", uma pergunta puramente sobre o que o Mercado Livre desconta —
+  imposto e custo do produto não são descontados pelo marketplace, são
+  custos internos da empresa.
+- Confirmado, com consulta direta ao banco de produção (Supabase), que o
+  payload de pagamento salvo pela integração atual com o Mercado Livre
+  (`raw_pagamento`) não contém nenhum campo de data de liberação nem de
+  valor efetivamente repassado. Decidido não simular/estimar esses campos
+  de forma alguma — ficam sempre `null` na API, e a tela mostra
+  "Informação não disponível" (nunca uma data ou valor calculado) até que
+  a integração real traga esse dado. Status sempre "A liberar" como único
+  valor honesto possível hoje.
+- `categoria` (Contas a Pagar) e `origem` (Contas a Receber) foram
+  decididos como texto livre (não uma lista fixa/tabela de categorias)
+  porque o projeto ainda não tem um plano de contas definido — uma lista
+  de sugestões (`<datalist>`) ajuda a digitação sem travar o usuário numa
+  lista fechada.
+
 ## 2026-08-24 (14) — Unificação Produtos + Custo & Margem
 - Pedido do usuário: unificar as abas "Produtos" e "Custo & Margem" numa só
   ("Produtos"), sem mostrar margem nessa tela — só cadastrar/editar SKU,

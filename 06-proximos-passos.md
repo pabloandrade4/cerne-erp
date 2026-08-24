@@ -1,5 +1,25 @@
 # Próximos Passos
 
+- **Concluído em 24/08/2026, testado localmente (servidor real + Postgres
+  local + navegador via Playwright, com os 11 pedidos reais da conta
+  PFEMBALAGEMS):** ativação de Contas a Pagar, Contas a Receber e
+  Recebimentos (deploy `ml17`) — ver `04-alteracoes.md` (16) e
+  `02-decisoes.md` (15). Falta:
+  - o usuário subir o próximo zip de código (`ml17`) pro GitHub;
+  - depois do deploy, testar as três telas ao vivo em produção:
+    cadastrar/editar/excluir/marcar como pago(a) em Contas a Pagar e
+    Contas a Receber, e conferir que os dados persistem depois de
+    recarregar a página;
+  - conferir que o filtro de empresa/período do header funciona nas três
+    telas com dados reais de mais de uma empresa (trocar empresa e
+    período e ver a tabela/KPIs mudarem);
+  - acompanhar Recebimentos com o tempo — se a integração do Mercado
+    Livre um dia passar a trazer data de liberação/valor repassado, essa
+    tela precisa ser atualizada pra usar o dado real em vez de
+    "Informação não disponível" (ver `05-problemas-conhecidos.md`);
+  - **por instrução explícita do usuário, esta etapa parou aqui** — não
+    avançar sozinho para DRE completa, Faturamento, Notas Fiscais ou
+    qualquer outra área sem o usuário pedir.
 - **Concluído em 24/08/2026, testado com dados reais localmente (Postgres
   local + Supabase, via MCP):** correção dos 4 bugs de margem achados na
   reconciliação PF ERP x Mercado Turbo (frete duplicado em pedidos do

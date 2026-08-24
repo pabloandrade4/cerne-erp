@@ -2,6 +2,73 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-24 (16) — Ativação do módulo Financeiro: Contas a Pagar, Contas a Receber e Recebimentos
+- **Pedido do usuário:** ativar 3 áreas do Financeiro que já existiam como
+  placeholder no menu — Contas a Pagar, Contas a Receber (as duas com
+  lançamento manual) e Recebimentos (conciliação de repasse de marketplace
+  — hoje só Mercado Livre está integrado — com dado real da API, nunca
+  inventado). Regras explícitas: o filtro de empresa/período do HEADER
+  precisa funcionar nas três telas; nunca misturar dados entre CNPJs;
+  nunca usar dado fictício; não alterar DRE, Faturamento ou Notas Fiscais
+  nesta etapa; parar depois dessas três áreas.
+- **Contas a Pagar e Contas a Receber — cadastro manual, com status
+  calculado.** Duas tabelas novas (`contas_pagar`, `contas_receber`), CRUD
+  completo (cadastrar, editar, excluir, cancelar, marcar como pago/
+  recebido, pesquisar, filtrar por status/empresa/período), campos
+  exatamente como pedido (descrição, empresa, fornecedor — opcional, só em
+  Contas a Pagar —, categoria/origem em texto livre com sugestões, valor,
+  datas, status, observação). KPIs no topo: total em aberto, vencendo/
+  previsto hoje, vencidas/atrasadas (sempre o saldo atual da empresa, sem
+  filtro de período — respondem "quanto tem em aberto agora"), e pago/
+  recebido no período (esse sim filtrado pelo período do header). A lista
+  de contas é filtrada pelo período selecionado (por vencimento/data
+  prevista).
+- **"Vencido"/"Atrasado" nunca é um valor gravado no banco** — é sempre
+  calculado no momento da consulta, comparando o vencimento com a data de
+  hoje em fuso BRT. Evita depender de uma tarefa agendada rodando todo dia
+  só pra "promover" status.
+- **Imutabilidade:** uma conta marcada como paga/recebida não pode mais
+  ser editada nem excluída (fica só de histórico). Uma conta pendente pode
+  ser editada, cancelada ou excluída livremente; uma cancelada não pode
+  mais ser editada, mas ainda pode ser excluída.
+- **Recebimentos — conciliação com o Mercado Livre, sem inventar dado.**
+  Não é lançamento manual: mostra, ao vivo, os pedidos com pagamento
+  aprovado no período, reaproveitando a mesma fonte única de dados já
+  usada em Pedidos/Visão Geral/Financeiro (`lib/relatorioVendas.js`, nada
+  duplicado) — valor bruto, taxas/descontos (comissão do ML + frete do
+  vendedor + desconto do cupom) e o valor líquido que o ERP esperava
+  receber. **Conferido direto no banco de produção (Supabase) que a
+  integração atual com a API do Mercado Livre não traz nenhum dado de
+  liberação/repasse** (sem `money_release_date` ou equivalente no payload
+  de pagamento salvo) — por isso "previsão de liberação", "valor
+  recebido" e "data do recebimento" aparecem sempre como "Informação não
+  disponível", nunca um valor calculado ou chutado, e o status sempre
+  como "A liberar" (única opção honesta possível hoje). A tela já está
+  pronta para, no futuro, comparar valor esperado x valor realmente
+  repassado assim que essa informação existir na integração.
+- **Filtro do header:** as três telas leem o filtro de empresa/período
+  direto de `window.CerneFiltro` (mesmo padrão já usado pela Visão Geral)
+  — nunca um seletor próprio da tela — e recarregam sozinhas quando o
+  usuário troca empresa ou período no topo.
+- **Arquivos novos:** `server/lib/contasPagar.js`, `server/lib/contasReceber.js`,
+  `server/lib/recebimentosMl.js` (regra de negócio); `server/routes/contasPagar.js`,
+  `server/routes/contasReceber.js`, `server/routes/recebimentos.js` (API);
+  `server/test/financeiro.test.js` (13 testes automatizados, 0 falhas);
+  3 módulos novos em `server/public/index.html` (`window.ContasPagar`,
+  `window.ContasReceber`, `window.Recebimentos`).
+- **Arquivos alterados (aditivo, sem regressão):** `server/db/schema.sql`
+  (2 tabelas novas), `server/lib/relatorioVendas.js` (1 campo novo
+  exposto, `pagamentoStatus` — não muda nenhum valor já calculado),
+  `server/lib/periodo.js` (nova função `periodoParaDatasBRT`),
+  `server/server.js` (3 rotas novas registradas).
+- **Testado:** 13 testes novos + os 21 já existentes da correção de
+  margem = 34 testes, 0 falhas. Testado também de ponta a ponta com o
+  servidor real rodando localmente (Postgres local, com os 11 pedidos
+  reais da conta PFEMBALAGEMS já usados na correção de margem) via
+  requisição HTTP direta e navegador real (Playwright): as três telas
+  carregam com dado real, os filtros de empresa do header funcionam,
+  cadastro/edição/marcar como pago persistem no banco entre requisições.
+
 ## 2026-08-24 (15) — Correção da margem: 4 bugs achados na reconciliação PF ERP x Mercado Turbo
 - **Pedido do usuário:** o usuário conferiu, pedido a pedido, os 73 pedidos
   pagos em comum entre o ERP e uma ferramenta de referência externa

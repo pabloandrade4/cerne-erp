@@ -3,6 +3,22 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Recebimentos: API do Mercado Livre não traz data de liberação nem valor repassado (24/08/2026)
+- Ao ativar a tela Recebimentos (ver `04-alteracoes.md` (16) e
+  `02-decisoes.md` (15)), foi confirmado por consulta direta ao banco de
+  produção (Supabase) que o payload de pagamento salvo pela sincronização
+  atual (`raw_pagamento`) não tem nenhum campo de data de liberação do
+  dinheiro nem de valor efetivamente repassado — só dados da venda/
+  pagamento em si (aprovação, valor, taxas). Por isso os campos "previsão
+  de liberação", "valor recebido" e "data do recebimento" aparecem sempre
+  como "Informação não disponível" (nunca um valor inventado ou
+  estimado), e o status sempre como "A liberar". **Não é um bug** — é o
+  reflexo real do que a integração hoje entrega. A tela já está pronta
+  para, quando essa informação existir (endpoint de liberação do Mercado
+  Pago, ou um webhook de repasse), passar a mostrar e comparar valor
+  esperado x valor realmente recebido, sem precisar mudar o desenho da
+  tela — só preencher esses campos com dado real.
+
 ## Correção de margem (24/08/2026): premissa não confirmada com o usuário sobre quem paga o cupom (Bug 3)
 - O Bug 3 (ver `04-alteracoes.md` (15)) trata `payments[].coupon_amount`
   como um desconto que reduz a receita real do vendedor — decisão baseada
