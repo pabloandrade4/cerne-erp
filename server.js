@@ -15,6 +15,9 @@ const estoqueFullRouter = require('./routes/estoqueFull');
 const comprasRouter = require('./routes/compras');
 const produtosBaseRouter = require('./routes/produtosBase');
 const estoqueProdutoBaseRouter = require('./routes/estoqueProdutoBase');
+const contasPagarRouter = require('./routes/contasPagar');
+const contasReceberRouter = require('./routes/contasReceber');
+const recebimentosRouter = require('./routes/recebimentos');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,6 +40,9 @@ app.use('/api/estoque-full', estoqueFullRouter);
 app.use('/api/compras', comprasRouter);
 app.use('/api/produtos-base', produtosBaseRouter);
 app.use('/api/estoque-produto-base', estoqueProdutoBaseRouter);
+app.use('/api/contas-pagar', contasPagarRouter);
+app.use('/api/contas-receber', contasReceberRouter);
+app.use('/api/recebimentos', recebimentosRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));

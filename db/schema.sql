@@ -431,3 +431,71 @@ CREATE TABLE IF NOT EXISTS migracoes_aplicadas (
   nome         VARCHAR(100) PRIMARY KEY,
   aplicado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ============================================================
+-- Etapa: Financeiro — Contas a Pagar, Contas a Receber, Recebimentos (24/08/2026)
+-- ============================================================
+--
+-- Lançamento manual de conta a pagar, por empresa. `fornecedor_id` é
+-- OPCIONAL de propósito ("fornecedor, quando houver" — pedido do usuário):
+-- nem toda despesa tem fornecedor cadastrado (ex: imposto, aluguel, taxa
+-- bancária). `categoria` é texto livre (não uma tabela/enum fixo) — o ERP
+-- ainda não tem um plano de contas definido pelo usuário, então não
+-- inventamos uma taxonomia; o front-end sugere algumas categorias comuns
+-- via datalist, mas qualquer texto é aceito.
+--
+-- IMPORTANTE sobre o status "Vencido": NÃO é um valor gravado nesta coluna
+-- — é sempre calculado em tempo de consulta (status = 'pendente' E
+-- vencimento < hoje), em lib/contasPagar.js. Se fosse gravado, precisaria de
+-- um job em segundo plano "promovendo" pendente -> vencido sozinho todo dia
+-- (nada parecido existe no projeto — ver a mesma filosofia em `compras`,
+-- onde nenhuma transição de status é automática). Assim a coluna `status`
+-- só armazena o que o usuário realmente definiu (pendente/pago/cancelado),
+-- e "vencido" é sempre derivado da data de hoje, nunca fica desatualizado.
+CREATE TABLE IF NOT EXISTS contas_pagar (
+  id               SERIAL PRIMARY KEY,
+  empresa_id       INTEGER NOT NULL REFERENCES empresas(id),
+  fornecedor_id    INTEGER REFERENCES fornecedores(id),
+  descricao        VARCHAR(200) NOT NULL,
+  categoria        VARCHAR(100),
+  valor            NUMERIC(12,2) NOT NULL,
+  vencimento       DATE NOT NULL,
+  data_pagamento   DATE,
+  status           VARCHAR(20) NOT NULL DEFAULT 'pendente', -- pendente | pago | cancelado ("vencido" é calculado, nunca gravado)
+  observacao       TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Lançamento manual de conta a receber, por empresa. `origem` é texto livre
+-- (mesma razão de `categoria` em contas_pagar — sem plano de contas
+-- definido ainda). "Atrasado" segue a mesma regra de "Vencido" acima:
+-- calculado (status = 'a_receber' E data_prevista < hoje), nunca gravado.
+CREATE TABLE IF NOT EXISTS contas_receber (
+  id               SERIAL PRIMARY KEY,
+  empresa_id       INTEGER NOT NULL REFERENCES empresas(id),
+  descricao        VARCHAR(200) NOT NULL,
+  origem           VARCHAR(100),
+  valor            NUMERIC(12,2) NOT NULL,
+  data_prevista    DATE NOT NULL,
+  data_recebida    DATE,
+  status           VARCHAR(20) NOT NULL DEFAULT 'a_receber', -- a_receber | recebido | cancelado ("atrasado" é calculado, nunca gravado)
+  observacao       TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- A tela "Recebimentos" (repasses dos marketplaces) NÃO tem tabela própria
+-- nesta etapa — mesma decisão já tomada para Anúncios/Estoque Full: os
+-- dados reais que já temos (ml_pedidos + ml_pedido_pagamentos, já
+-- sincronizados) são suficientes para montar a visão, então ela é
+-- calculada ao vivo por lib/recebimentosMl.js (reaproveitando
+-- buscarPedidosDoPeriodo — a mesma fonte única de Visão Geral/Pedidos/
+-- Financeiro/Relatórios), sem duplicar pedido nenhum. O Mercado Livre não
+-- retorna data de liberação nem valor efetivamente repassado nos dados que
+-- esta integração já busca (order/payments) — confirmado lendo o
+-- raw_pagamento real de produção: não existe money_release_date nem campo
+-- parecido. Por isso a tela mostra essas colunas como "Informação não
+-- disponível" (nunca um valor/data inventado) até que uma fonte real desses
+-- dados seja integrada (endpoint de settlements do ML, ou conciliação
+-- manual) — ver docs/05-problemas-conhecidos.md.

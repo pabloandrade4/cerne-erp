@@ -812,6 +812,7 @@
     refreshCw:'<path d="M4 12a8 8 0 0 1 14-5.3L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-14 5.3L4 16"/><path d="M4 20v-4h4"/>',
     tag:'<path d="M11 3H4v7l10 10 7-7Z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/>',
     eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
+    trash:'<path d="M5 7h14"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6.5 7 7.3 19a2 2 0 0 0 2 1.8h5.4a2 2 0 0 0 2-1.8L17.5 7"/><path d="M10 11v6M14 11v6"/>',
   };
   function svg(name, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" '+(extra||'')+'>'+(ICON[name]||'')+'</svg>'; }
 
@@ -985,7 +986,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','purchases'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','purchases','payable','receivable','settlements'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -997,6 +998,10 @@
       inner += '<button class="primary-btn enabled" id="btnRefreshAnuncios" type="button">'+svg('refreshCw')+'<span>Atualizar</span></button>';
     } else if(id === 'purchases'){
       inner += '<button class="primary-btn enabled" id="btnNewCompra" type="button">'+svg('plus')+'<span>Nova compra</span></button>';
+    } else if(id === 'payable'){
+      inner += '<button class="primary-btn enabled" id="btnNewContaPagar" type="button">'+svg('plus')+'<span>Nova conta a pagar</span></button>';
+    } else if(id === 'receivable'){
+      inner += '<button class="primary-btn enabled" id="btnNewContaReceber" type="button">'+svg('plus')+'<span>Nova conta a receber</span></button>';
     } else if(id !== 'overview' && !REAL_MODULES.includes(id)){
       inner += '<button class="primary-btn" disabled>'+svg('plus')+'<span>'+(p.action||'Em breve')+'</span></button>';
     }
@@ -1012,6 +1017,9 @@
     else if(id === 'anuncios'){ inner += '<div id="anunciosRoot"></div>'; }
     else if(id === 'stock'){ inner += '<div id="estoqueRoot"></div>'; }
     else if(id === 'purchases'){ inner += '<div id="comprasRoot"></div>'; }
+    else if(id === 'payable'){ inner += '<div id="contasPagarRoot"></div>'; }
+    else if(id === 'receivable'){ inner += '<div id="contasReceberRoot"></div>'; }
+    else if(id === 'settlements'){ inner += '<div id="recebimentosRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1043,6 +1051,9 @@
     if(id === 'anuncios' && window.Anuncios) window.Anuncios.load();
     if(id === 'stock' && window.Estoque) window.Estoque.load();
     if(id === 'purchases' && window.Compras) window.Compras.load();
+    if(id === 'payable' && window.ContasPagar) window.ContasPagar.load();
+    if(id === 'receivable' && window.ContasReceber) window.ContasReceber.load();
+    if(id === 'settlements' && window.Recebimentos) window.Recebimentos.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -3388,11 +3399,645 @@
     window.Compras = { load };
   })();
 
+  /* ================= CONTAS A PAGAR — lançamento manual, por empresa =================
+     Ativado em 24/08/2026 (ver docs/04-alteracoes.md). Usa o filtro do
+     HEADER (empresa + período — window.CerneFiltro) em vez de um seletor
+     próprio dentro da tela, igual Visão Geral — pedido explícito do
+     usuário nesta etapa ("os filtros de empresa e período do header devem
+     funcionar nessas três telas"). "Vencido" é calculado no servidor
+     (nunca gravado) — ver server/lib/contasPagar.js. */
+  (function(){
+    const STATUS_OPCOES = [
+      ['pendente','Pendente'],
+      ['vencido','Vencido'],
+      ['pago','Pago'],
+      ['cancelado','Cancelado'],
+    ];
+    const STATUS_LABEL = Object.fromEntries(STATUS_OPCOES);
+    const state = { loading:false, error:null, contas:[], resumo:null, status:'todos', search:'' };
+    let categoriasSugeridas = null;
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+    function secCardHTML(k){
+      return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
+        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div></div></div>';
+    }
+    function statusChipStyle(status){
+      const cor = status==='pago' ? 'success' : status==='vencido' ? 'danger' : status==='cancelado' ? 'text-muted' : 'warning';
+      const bg = status==='cancelado' ? 'var(--surface-2)' : 'var(--'+cor+'-soft)';
+      return 'color:var(--'+cor+');background:'+bg+';';
+    }
+
+    async function api(path, opts){
+      const res = await fetch('/api/contas-pagar'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+    async function apiFornecedoresAtivos(empresaId){
+      const res = await fetch('/api/fornecedores?empresaId='+empresaId+'&status=ativos');
+      return ((await res.json()).fornecedores) || [];
+    }
+    async function apiCategorias(){
+      if(categoriasSugeridas) return categoriasSugeridas;
+      try{ const res = await fetch('/api/contas-pagar/categorias-sugeridas'); categoriasSugeridas = ((await res.json()).categorias)||[]; }
+      catch(e){ categoriasSugeridas = []; }
+      return categoriasSugeridas;
+    }
+
+    async function loadContas(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.contas=[]; state.resumo=null; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(state.status !== 'todos') params.set('status', state.status);
+        if(state.search.trim()) params.set('search', state.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.contas = data.contas; state.resumo = data.resumo;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar as contas a pagar.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    function load(){ loadContas(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-payable');
+      if(page && page.classList.contains('active')) loadContas();
+      else render();
+    });
+
+    function kpisHTML(r){
+      const cards = [
+        { label:'Total a pagar', icon:'arrowUpCircle', tint:'copper', valueHtml: money(r.totalAPagar) },
+        { label:'Vencendo hoje', icon:'clock', tint: r.vencendoHoje>0?'warning':'muted', valueHtml: money(r.vencendoHoje) },
+        { label:'Vencidas', icon:'alertCircle', tint: r.vencidas>0?'danger':'muted', valueHtml: money(r.vencidas) },
+        { label:'Pagas no período', icon:'checkCircle', tint:'success', valueHtml: money(r.pagasNoPeriodo) },
+      ];
+      return '<div class="kpi-sec-grid" style="margin-bottom:14px;">' + cards.map(secCardHTML).join('') + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('contasPagarRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de lançar contas a pagar.</p></div>';
+        return;
+      }
+
+      let html = '';
+      if(state.resumo) html += kpisHTML(state.resumo);
+
+      html += '<div class="toolbar">'
+        + '<div class="seg" id="cpSeg">'
+          + [['todos','Todos']].concat(STATUS_OPCOES).map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="cpSearch" placeholder="Buscar por descrição, categoria ou fornecedor" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+      + '</div>';
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando contas a pagar…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="cpRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      } else if(!state.contas.length){
+        const filtrado = !!(state.search || state.status!=='todos');
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('arrowUpCircle')+'</div>'
+          + '<h2>Nenhuma conta a pagar encontrada</h2>'
+          + '<p class="lead">'+(filtrado ? 'Nenhuma conta corresponde ao filtro atual.' : 'Cadastre a primeira conta a pagar desta empresa no período selecionado.')+'</p>'
+          + (filtrado ? '' : '<button class="primary-btn enabled" id="cpEmptyNew" type="button">'+svg('plus')+'<span>Nova conta a pagar</span></button>')
+        + '</div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Vencimento</th><th>Descrição</th><th>Categoria</th><th>Fornecedor</th><th>Valor</th><th>Status</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.contas.map(c => '<tr'+(c.status==='cancelado'?' style="opacity:.6;"':'')+'>'
+            + '<td class="tab-nums">'+fmtDate(c.vencimento)+'</td>'
+            + '<td>'+escapeHtml(c.descricao)+(c.observacao?'<div class="di-sub">'+escapeHtml(c.observacao)+'</div>':'')+'</td>'
+            + '<td>'+escapeHtml(c.categoria||'—')+'</td>'
+            + '<td>'+escapeHtml(c.fornecedorNome||'—')+'</td>'
+            + '<td class="mono">'+money(c.valor)+'</td>'
+            + '<td><span class="status-chip" style="'+statusChipStyle(c.status)+'">'+STATUS_LABEL[c.status]+'</span>'
+              + (c.status==='pago' ? '<div class="di-sub">pago em '+fmtDate(c.dataPagamento)+'</div>' : '')+'</td>'
+            + '<td><div class="row-actions">'
+              + (c.statusBase==='pendente' ? '<button class="row-ic-btn" data-pagar="'+c.id+'" title="Marcar como pago" type="button">'+svg('check')+'</button>' : '')
+              + (c.statusBase==='pendente' ? '<button class="row-ic-btn" data-edit="'+c.id+'" title="Editar" type="button">'+svg('edit')+'</button>' : '')
+              + (c.statusBase==='pendente' ? '<button class="row-ic-btn" data-cancelar="'+c.id+'" title="Cancelar" type="button">'+svg('x')+'</button>' : '')
+              + (c.statusBase!=='pago' ? '<button class="row-ic-btn danger" data-excluir="'+c.id+'" title="Excluir" type="button">'+svg('trash')+'</button>' : '')
+            + '</div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const seg = document.getElementById('cpSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadContas(); }));
+      const search = document.getElementById('cpSearch');
+      if(search) search.addEventListener('input', ()=>{
+        state.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadContas, 300);
+      });
+      const retry = document.getElementById('cpRetry');
+      if(retry) retry.addEventListener('click', loadContas);
+      const emptyNew = document.getElementById('cpEmptyNew');
+      if(emptyNew) emptyNew.addEventListener('click', ()=> openModal());
+
+      root.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=>{
+        const conta = state.contas.find(c=>String(c.id)===b.dataset.edit);
+        if(conta) openModal(conta);
+      }));
+      root.querySelectorAll('[data-pagar]').forEach(b=> b.addEventListener('click', async ()=>{
+        const hoje = new Date().toISOString().slice(0,10);
+        b.disabled = true;
+        try{ await api('/'+b.dataset.pagar+'/pagar', { method:'PATCH', body: JSON.stringify({ dataPagamento: hoje }) }); toast('Conta marcada como paga.'); loadContas(); }
+        catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+      root.querySelectorAll('[data-cancelar]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{ await api('/'+b.dataset.cancelar+'/cancelar', { method:'PATCH' }); toast('Conta cancelada.'); loadContas(); }
+        catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+      root.querySelectorAll('[data-excluir]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{ await api('/'+b.dataset.excluir, { method:'DELETE' }); toast('Conta excluída.'); loadContas(); }
+        catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+    }
+
+    function openModal(conta){
+      const isEdit = !!conta;
+      const modalRoot = document.getElementById('modalRoot');
+      const hoje = new Date().toISOString().slice(0,10);
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card" style="max-width:560px;">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar conta a pagar':'Nova conta a pagar')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+(isEdit?'Atualize os dados da conta a pagar.':'Preencha os dados para lançar uma nova conta a pagar.')+'</div>'
+          + '<form id="cpForm">'
+            + '<div class="field"><label>Descrição</label><input type="text" id="fDescricao" placeholder="Ex: Boleto fornecedor X" value="'+(isEdit?escapeHtml(conta.descricao):'')+'">'
+              + '<div class="field-error" id="eDescricao" style="display:none;"></div></div>'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Categoria <span class="opt">(opcional)</span></label><input type="text" id="fCategoria" list="dlCategoriasPagar" value="'+(isEdit?escapeHtml(conta.categoria||''):'')+'"><datalist id="dlCategoriasPagar"></datalist></div>'
+              + '<div class="field narrow"><label>Fornecedor <span class="opt">(quando houver)</span></label><select id="fFornecedor"><option value="">Carregando…</option></select></div>'
+            + '</div>'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Valor</label><input type="text" inputmode="decimal" id="fValor" value="'+(isEdit?String(conta.valor).replace('.',','):'')+'">'
+                + '<div class="field-error" id="eValor" style="display:none;"></div></div>'
+              + '<div class="field narrow"><label>Vencimento</label><input type="date" id="fVencimento" value="'+(isEdit?conta.vencimento:hoje)+'">'
+                + '<div class="field-error" id="eVencimento" style="display:none;"></div></div>'
+            + '</div>'
+            + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" value="'+(isEdit?escapeHtml(conta.observacao||''):'')+'"></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Criar conta')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+
+      (async function carregarPickers(){
+        const empresaId = window.CerneFiltro.state.empresaId;
+        try{
+          const [fornecedores, categorias] = await Promise.all([apiFornecedoresAtivos(empresaId), apiCategorias()]);
+          const fSel = document.getElementById('fFornecedor');
+          if(fSel){
+            fSel.innerHTML = '<option value="">Nenhum</option>' + fornecedores.map(function(f){ return '<option value="'+f.id+'" '+(isEdit&&conta.fornecedorId===f.id?'selected':'')+'>'+escapeHtml(f.razaoSocial)+'</option>'; }).join('');
+          }
+          const dl = document.getElementById('dlCategoriasPagar');
+          if(dl) dl.innerHTML = categorias.map(function(c){ return '<option value="'+escapeHtml(c)+'"></option>'; }).join('');
+        }catch(e){ toast('Não foi possível carregar fornecedores.', 'error'); }
+      })();
+
+      document.getElementById('cpForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eDescricao','eValor','eVencimento'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+
+        const payload = {
+          empresaId: window.CerneFiltro.state.empresaId,
+          fornecedorId: document.getElementById('fFornecedor').value || null,
+          descricao: document.getElementById('fDescricao').value,
+          categoria: document.getElementById('fCategoria').value,
+          valor: Number(document.getElementById('fValor').value.replace(',','.')),
+          vencimento: document.getElementById('fVencimento').value,
+          observacao: document.getElementById('fObservacao').value,
+        };
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/'+conta.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Conta atualizada.' : 'Conta a pagar criada.');
+          loadContas();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            let mostrou = false;
+            ['descricao','valor','vencimento','fornecedorId'].forEach(function(campo){
+              if(err.errors[campo]){
+                const elId = campo==='fornecedorId' ? null : 'e'+campo.charAt(0).toUpperCase()+campo.slice(1);
+                if(elId && document.getElementById(elId)){ const el=document.getElementById(elId); el.textContent=err.errors[campo]; el.style.display='block'; mostrou = true; }
+              }
+            });
+            if(!mostrou) toast(err.message, 'error');
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    document.getElementById('btnNewContaPagar').addEventListener('click', ()=> openModal());
+
+    window.ContasPagar = { load };
+  })();
+
+  /* ================= CONTAS A RECEBER — lançamento manual, por empresa =================
+     Ativado em 24/08/2026 — simétrico a Contas a Pagar acima (mesmo uso do
+     filtro do header, mesma filosofia de status calculado). */
+  (function(){
+    const STATUS_OPCOES = [
+      ['a_receber','A receber'],
+      ['atrasado','Atrasado'],
+      ['recebido','Recebido'],
+      ['cancelado','Cancelado'],
+    ];
+    const STATUS_LABEL = Object.fromEntries(STATUS_OPCOES);
+    const state = { loading:false, error:null, contas:[], resumo:null, status:'todos', search:'' };
+    let origensSugeridas = null;
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+    function secCardHTML(k){
+      return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
+        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div></div></div>';
+    }
+    function statusChipStyle(status){
+      const cor = status==='recebido' ? 'success' : status==='atrasado' ? 'danger' : status==='cancelado' ? 'text-muted' : 'warning';
+      const bg = status==='cancelado' ? 'var(--surface-2)' : 'var(--'+cor+'-soft)';
+      return 'color:var(--'+cor+');background:'+bg+';';
+    }
+
+    async function api(path, opts){
+      const res = await fetch('/api/contas-receber'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+    async function apiOrigens(){
+      if(origensSugeridas) return origensSugeridas;
+      try{ const res = await fetch('/api/contas-receber/origens-sugeridas'); origensSugeridas = ((await res.json()).origens)||[]; }
+      catch(e){ origensSugeridas = []; }
+      return origensSugeridas;
+    }
+
+    async function loadContas(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.contas=[]; state.resumo=null; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(state.status !== 'todos') params.set('status', state.status);
+        if(state.search.trim()) params.set('search', state.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.contas = data.contas; state.resumo = data.resumo;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar as contas a receber.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    function load(){ loadContas(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-receivable');
+      if(page && page.classList.contains('active')) loadContas();
+      else render();
+    });
+
+    function kpisHTML(r){
+      const cards = [
+        { label:'Total a receber', icon:'arrowDownCircle', tint:'copper', valueHtml: money(r.totalAReceber) },
+        { label:'Previsto para hoje', icon:'clock', tint: r.previstoHoje>0?'warning':'muted', valueHtml: money(r.previstoHoje) },
+        { label:'Atrasado', icon:'alertCircle', tint: r.atrasado>0?'danger':'muted', valueHtml: money(r.atrasado) },
+        { label:'Recebido no período', icon:'checkCircle', tint:'success', valueHtml: money(r.recebidoNoPeriodo) },
+      ];
+      return '<div class="kpi-sec-grid" style="margin-bottom:14px;">' + cards.map(secCardHTML).join('') + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('contasReceberRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de lançar contas a receber.</p></div>';
+        return;
+      }
+
+      let html = '';
+      if(state.resumo) html += kpisHTML(state.resumo);
+
+      html += '<div class="toolbar">'
+        + '<div class="seg" id="crSeg">'
+          + [['todos','Todos']].concat(STATUS_OPCOES).map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="crSearch" placeholder="Buscar por descrição ou origem" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+      + '</div>';
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando contas a receber…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="crRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      } else if(!state.contas.length){
+        const filtrado = !!(state.search || state.status!=='todos');
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('arrowDownCircle')+'</div>'
+          + '<h2>Nenhuma conta a receber encontrada</h2>'
+          + '<p class="lead">'+(filtrado ? 'Nenhuma conta corresponde ao filtro atual.' : 'Cadastre o primeiro lançamento a receber desta empresa no período selecionado.')+'</p>'
+          + (filtrado ? '' : '<button class="primary-btn enabled" id="crEmptyNew" type="button">'+svg('plus')+'<span>Nova conta a receber</span></button>')
+        + '</div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Prevista</th><th>Descrição</th><th>Origem</th><th>Valor</th><th>Status</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.contas.map(c => '<tr'+(c.status==='cancelado'?' style="opacity:.6;"':'')+'>'
+            + '<td class="tab-nums">'+fmtDate(c.dataPrevista)+'</td>'
+            + '<td>'+escapeHtml(c.descricao)+(c.observacao?'<div class="di-sub">'+escapeHtml(c.observacao)+'</div>':'')+'</td>'
+            + '<td>'+escapeHtml(c.origem||'—')+'</td>'
+            + '<td class="mono">'+money(c.valor)+'</td>'
+            + '<td><span class="status-chip" style="'+statusChipStyle(c.status)+'">'+STATUS_LABEL[c.status]+'</span>'
+              + (c.status==='recebido' ? '<div class="di-sub">recebido em '+fmtDate(c.dataRecebida)+'</div>' : '')+'</td>'
+            + '<td><div class="row-actions">'
+              + (c.statusBase==='a_receber' ? '<button class="row-ic-btn" data-receber="'+c.id+'" title="Marcar como recebido" type="button">'+svg('check')+'</button>' : '')
+              + (c.statusBase==='a_receber' ? '<button class="row-ic-btn" data-edit="'+c.id+'" title="Editar" type="button">'+svg('edit')+'</button>' : '')
+              + (c.statusBase==='a_receber' ? '<button class="row-ic-btn" data-cancelar="'+c.id+'" title="Cancelar" type="button">'+svg('x')+'</button>' : '')
+              + (c.statusBase!=='recebido' ? '<button class="row-ic-btn danger" data-excluir="'+c.id+'" title="Excluir" type="button">'+svg('trash')+'</button>' : '')
+            + '</div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const seg = document.getElementById('crSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadContas(); }));
+      const search = document.getElementById('crSearch');
+      if(search) search.addEventListener('input', ()=>{
+        state.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadContas, 300);
+      });
+      const retry = document.getElementById('crRetry');
+      if(retry) retry.addEventListener('click', loadContas);
+      const emptyNew = document.getElementById('crEmptyNew');
+      if(emptyNew) emptyNew.addEventListener('click', ()=> openModal());
+
+      root.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=>{
+        const conta = state.contas.find(c=>String(c.id)===b.dataset.edit);
+        if(conta) openModal(conta);
+      }));
+      root.querySelectorAll('[data-receber]').forEach(b=> b.addEventListener('click', async ()=>{
+        const hoje = new Date().toISOString().slice(0,10);
+        b.disabled = true;
+        try{ await api('/'+b.dataset.receber+'/receber', { method:'PATCH', body: JSON.stringify({ dataRecebida: hoje }) }); toast('Conta marcada como recebida.'); loadContas(); }
+        catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+      root.querySelectorAll('[data-cancelar]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{ await api('/'+b.dataset.cancelar+'/cancelar', { method:'PATCH' }); toast('Conta cancelada.'); loadContas(); }
+        catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+      root.querySelectorAll('[data-excluir]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{ await api('/'+b.dataset.excluir, { method:'DELETE' }); toast('Conta excluída.'); loadContas(); }
+        catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+    }
+
+    function openModal(conta){
+      const isEdit = !!conta;
+      const modalRoot = document.getElementById('modalRoot');
+      const amanha = new Date(Date.now()+24*60*60*1000).toISOString().slice(0,10);
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card" style="max-width:560px;">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar conta a receber':'Nova conta a receber')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+(isEdit?'Atualize os dados da conta a receber.':'Preencha os dados para lançar uma nova conta a receber.')+'</div>'
+          + '<form id="crForm">'
+            + '<div class="field"><label>Descrição</label><input type="text" id="fDescricao" placeholder="Ex: Recebível cliente X" value="'+(isEdit?escapeHtml(conta.descricao):'')+'">'
+              + '<div class="field-error" id="eDescricao" style="display:none;"></div></div>'
+            + '<div class="field"><label>Origem <span class="opt">(opcional)</span></label><input type="text" id="fOrigem" list="dlOrigensReceber" value="'+(isEdit?escapeHtml(conta.origem||''):'')+'"><datalist id="dlOrigensReceber"></datalist></div>'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Valor</label><input type="text" inputmode="decimal" id="fValor" value="'+(isEdit?String(conta.valor).replace('.',','):'')+'">'
+                + '<div class="field-error" id="eValor" style="display:none;"></div></div>'
+              + '<div class="field narrow"><label>Data prevista</label><input type="date" id="fDataPrevista" value="'+(isEdit?conta.dataPrevista:amanha)+'">'
+                + '<div class="field-error" id="eDataPrevista" style="display:none;"></div></div>'
+            + '</div>'
+            + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" value="'+(isEdit?escapeHtml(conta.observacao||''):'')+'"></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Criar conta')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+
+      (async function carregarPickers(){
+        try{
+          const origens = await apiOrigens();
+          const dl = document.getElementById('dlOrigensReceber');
+          if(dl) dl.innerHTML = origens.map(function(o){ return '<option value="'+escapeHtml(o)+'"></option>'; }).join('');
+        }catch(e){}
+      })();
+
+      document.getElementById('crForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eDescricao','eValor','eDataPrevista'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+
+        const payload = {
+          empresaId: window.CerneFiltro.state.empresaId,
+          descricao: document.getElementById('fDescricao').value,
+          origem: document.getElementById('fOrigem').value,
+          valor: Number(document.getElementById('fValor').value.replace(',','.')),
+          dataPrevista: document.getElementById('fDataPrevista').value,
+          observacao: document.getElementById('fObservacao').value,
+        };
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/'+conta.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Conta atualizada.' : 'Conta a receber criada.');
+          loadContas();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            let mostrou = false;
+            ['descricao','valor','dataPrevista'].forEach(function(campo){
+              const elId = 'e'+campo.charAt(0).toUpperCase()+campo.slice(1);
+              if(err.errors[campo] && document.getElementById(elId)){ const el=document.getElementById(elId); el.textContent=err.errors[campo]; el.style.display='block'; mostrou = true; }
+            });
+            if(!mostrou) toast(err.message, 'error');
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    document.getElementById('btnNewContaReceber').addEventListener('click', ()=> openModal());
+
+    window.ContasReceber = { load };
+  })();
+
+  /* ================= RECEBIMENTOS — repasses do Mercado Livre (somente leitura) =================
+     Ativado em 24/08/2026. Diferente de Contas a Receber: aqui os dados vêm
+     REAIS da sincronização do Mercado Livre (ver lib/recebimentosMl.js) —
+     nenhum cadastro manual nesta etapa. Data de liberação, valor e data de
+     recebimento reais ainda não vêm da API — mostrados como "Informação
+     não disponível" (nunca inventados), preparando o terreno para a
+     conciliação futura (valor esperado x valor repassado) pedida pelo
+     usuário. */
+  (function(){
+    const state = { loading:false, error:null, recebimentos:[] };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '<span class="dash">Informação não disponível</span>' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '<span class="dash">Informação não disponível</span>'; try{ return new Date(iso).toLocaleDateString('pt-BR'); }catch(e){ return '<span class="dash">Informação não disponível</span>'; } }
+    const STATUS_LABEL = { a_liberar:'A liberar', disponivel:'Disponível', recebido:'Recebido', divergente:'Divergente' };
+    function statusChipStyle(status){
+      const cor = status==='recebido' ? 'success' : status==='divergente' ? 'danger' : status==='disponivel' ? 'teal' : 'warning';
+      return 'color:var(--'+cor+');background:var(--'+cor+'-soft);';
+    }
+
+    async function api(path){
+      const res = await fetch('/api/recebimentos'+path);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body&&body.error)||'Falha na requisição.');
+      return body;
+    }
+
+    async function loadRecebimentos(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.recebimentos=[]; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        const data = await api('?'+params.toString());
+        state.recebimentos = data.recebimentos;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar os recebimentos.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    function load(){ loadRecebimentos(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-settlements');
+      if(page && page.classList.contains('active')) loadRecebimentos();
+      else render();
+    });
+
+    function render(){
+      const root = document.getElementById('recebimentosRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa, conecte o Mercado Livre em <strong>Marketplaces</strong> e sincronize para ver os recebimentos aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:720px;">Esta tela mostra os pedidos com pagamento aprovado do Mercado Livre no período selecionado. Data de liberação, valor recebido e data de recebimento ainda não são retornados pela API nesta integração — aparecem como "Informação não disponível" (nunca um valor inventado) até que essa fonte real exista. Preparado para, no futuro, comparar o valor que o ERP esperava receber com o valor que o marketplace realmente repassou.</div>';
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando recebimentos…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(!state.recebimentos.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('swap')+'</div>'
+          + '<h2>Nenhum recebimento no período</h2>'
+          + '<p class="lead">Não há pedidos com pagamento aprovado do Mercado Livre no período e empresa selecionados.</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Loja</th><th>Pedido</th><th>Data da venda</th><th>Valor bruto</th><th>Taxas/descontos</th><th>Líquido esperado</th><th>Previsão de liberação</th><th>Recebido</th><th>Data recebimento</th><th>Status</th>'
+          + '</tr></thead><tbody>'
+          + state.recebimentos.map(r => '<tr>'
+            + '<td>'+escapeHtml(r.loja||'—')+'</td>'
+            + '<td class="mono">'+escapeHtml(r.pedidoRef)+'</td>'
+            + '<td class="tab-nums">'+fmtDate(r.dataVenda)+'</td>'
+            + '<td class="mono">'+money(r.valorBruto)+'</td>'
+            + '<td class="mono">'+(r.taxasDescontos!==null?('− '+money(r.taxasDescontos)):money(null))+'</td>'
+            + '<td class="mono">'+money(r.valorLiquidoEsperado)+'</td>'
+            + '<td class="tab-nums">'+fmtDate(r.dataPrevistaLiberacao)+'</td>'
+            + '<td class="mono">'+money(r.valorRecebido)+'</td>'
+            + '<td class="tab-nums">'+fmtDate(r.dataRecebimento)+'</td>'
+            + '<td><span class="status-chip" style="'+statusChipStyle(r.status)+'">'+(STATUS_LABEL[r.status]||r.status)+'</span></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+    }
+
+    window.Recebimentos = { load };
+  })();
+
   // Só navega para a rota inicial depois que TODOS os módulos acima (Empresas,
   // Marketplaces, Pedidos, Custos, Produtos, Fornecedores, Anúncios, Estoque,
-  // Estoque Full, Compras) já estão definidos — chamar isso mais cedo fazia
-  // a tela de destino do OAuth do Mercado Livre (#marketplaces?ml=...) e
-  // outras rotas carregarem em branco no primeiro load/refresh.
+  // Estoque Full, Compras, Contas a Pagar, Contas a Receber, Recebimentos)
+  // já estão definidos — chamar isso mais cedo fazia a tela de destino do
+  // OAuth do Mercado Livre (#marketplaces?ml=...) e outras rotas
+  // carregarem em branco no primeiro load/refresh.
   navigate(location.hash ? location.hash.slice(1) : 'overview');
 
 })();
