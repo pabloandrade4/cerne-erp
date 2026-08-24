@@ -3,6 +3,76 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
+## Ads (Product Ads do Mercado Livre)
+- **Status:** concluído, testado localmente (servidor real + Postgres local
+  + navegador via Playwright, com os pedidos reais da conta
+  "PFEMBALAGEMS" — 12 testes automatizados novos, incluindo a
+  reconciliação item a item). **A chamada real à API de Publicidade
+  (Product Ads) do Mercado Livre não pôde ser testada de ponta a ponta
+  neste ambiente** (sem acesso à internet do Mercado Livre no sandbox) —
+  ver `05-problemas-conhecidos.md`. Ainda não testado ao vivo em
+  produção.
+- **O que é:** visão por anúncio (SKU, loja) do investimento em Ads,
+  vendas atribuídas (quantidade e R$), faturamento atribuído, ROAS, ACOS
+  e TACOS — e, lado a lado, a margem de contribuição REAL das vendas
+  daquele anúncio no período (mesma fonte de Pedidos/DRE/Financeiro),
+  antes e depois de descontar o investimento em Ads. Duas fontes nunca
+  misturadas numa fórmula nova: (1) investimento/ROAS/ACOS/vendas
+  atribuídas vêm sempre da API de Advertising do Mercado Livre — nunca
+  calculados pelo ERP; (2) faturamento real e margem "antes do Ads" vêm
+  da mesma função usada em Pedidos/DRE/Financeiro/Relatórios
+  (`buscarItensDoPeriodo`, decompõe pedido em item/anúncio). TACOS =
+  investimento em Ads ÷ faturamento REAL do anúncio no período (não o
+  "atribuído" pelo Mercado Livre) — só calculado quando os dois números
+  existem. Margem depois do Ads = margem real − investimento em Ads
+  (venda − taxas − frete do vendedor − imposto − custo do produto −
+  Ads). Nunca inventa valor: quando a conta não tem acesso a Product Ads,
+  ou a API de Publicidade não responde, todo campo dependente dela
+  aparece como "Pendente de sincronização" (nunca um número estimado).
+  Filtro de empresa/período do header e de loja (nesta tela) funcionam.
+  Shopee Ads não foi implementado (fora do escopo desta etapa, por
+  instrução explícita do usuário).
+- **Onde está:** `server/lib/mlAds.js` (cliente da API de Advertising),
+  `server/lib/ads.js` (agregação — combina as duas fontes),
+  `server/routes/ads.js`, `server/public/index.html` (módulo
+  `window.Ads`). Sem tabela própria no banco — calculado ao vivo, mesmo
+  padrão de Anúncios/Recebimentos.
+- **O que falta:** confirmar ao vivo, em produção, que a conta
+  "PFEMBALAGEMS" tem (ou não) acesso a Product Ads e que os endpoints/
+  headers assumidos (`/advertising/advertisers`,
+  `/advertising/product_ads/items`, `Api-Version`) batem com a API real —
+  ver `05-problemas-conhecidos.md`.
+
+## Relatórios (categorias, reaproveitando a mesma fonte de sempre)
+- **Status:** concluído, testado localmente (servidor real + Postgres
+  local + navegador via Playwright, com os pedidos reais da conta
+  "PFEMBALAGEMS" — 6 testes automatizados novos, todos comparando o
+  relatório com `resumirPeriodo`/`buscarPedidosDoPeriodo` do mesmo
+  período). Confirmado que os totais batem exatamente com Visão
+  Geral/Pedidos/Financeiro (ver `05-problemas-conhecidos.md` se algum
+  dado aparecer diferente). Ainda não testado ao vivo em produção.
+- **O que é:** relatórios separados por categoria, todos usando as MESMAS
+  regras já usadas em Visão Geral/Pedidos/Financeiro — nenhum cálculo
+  novo. **Vendas e Margem:** faturamento, pedidos, unidades vendidas,
+  taxas/comissões, frete vendedor, imposto, custo dos produtos, Ads
+  (quando disponível — mesma fonte da tela Ads) e margem de contribuição
+  em R$ e %. **Produtos:** por SKU — quantidade vendida, faturamento,
+  custo, imposto e margem gerada (decompõe pedido em item, com o rateio
+  documentado em `lib/relatorioVendas.js` quando o pedido tem mais de 1
+  item). **Marketplaces/Lojas:** o mesmo resumo de Vendas e Margem,
+  agrupado por loja, para comparar contas lado a lado. Filtros de
+  empresa/período (header), loja e SKU (produtos) funcionam. Exportação
+  em XLSX e CSV sempre respeita os filtros atuais e nunca mistura
+  empresa/período diferente do que está selecionado na tela.
+- **Onde está:** `server/lib/relatoriosAgregados.js` (as 3 funções de
+  categoria — só reaproveita `lib/relatorioVendas.js` e `lib/ads.js`,
+  nenhuma fórmula nova), `server/routes/relatorios.js` (rotas
+  `/vendas-margem`, `/produtos`, `/marketplaces`, `/exportar`, somadas às
+  já existentes `/resumo-vendas`), `server/public/index.html` (módulo
+  `window.Relatorios`).
+- **O que falta:** exportação em PDF (o usuário priorizou XLSX/CSV nesta
+  etapa) e relatórios agendados (fora do escopo pedido agora).
+
 ## DRE (Demonstrativo de Resultado do Exercício)
 - **Status:** concluído, testado localmente (servidor real + Postgres
   local + navegador via Playwright, com dados reais da conta

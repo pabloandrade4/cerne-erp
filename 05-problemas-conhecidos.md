@@ -3,6 +3,55 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Ads: API de Advertising (Product Ads) do Mercado Livre ainda não testada contra uma conta real (25/08/2026)
+- Ao ativar Ads (ver `04-alteracoes.md` (18) e `02-decisoes.md` (17)),
+  essa foi a primeira vez que o projeto precisou integrar a API de
+  Publicidade do Mercado Livre — diferente da API de pedidos/anúncios já
+  usada em todo o resto do ERP. A documentação pública consultada em
+  25/08/2026 (`https://developers.mercadolivre.com.br/en_us/product-ads-us-read`
+  e páginas relacionadas) descreve os endpoints, headers e campos de
+  métrica usados em `lib/mlAds.js`, mas **não foi possível confirmar
+  contra uma chamada real** (este ambiente de desenvolvimento não tem
+  acesso à internet do Mercado Livre nem um token válido de uma conta
+  anunciante) três pontos: (1) a URL base exata — assumida
+  `https://api.mercadolibre.com/advertising/...`, seguindo a convenção
+  do resto da API, mas não confirmada literalmente na documentação
+  consultada; (2) o valor exato de `Api-Version` esperado por cada
+  endpoint (`/advertisers` usa `1`, `/product_ads/items` usa `2`,
+  conforme a documentação, mas isso pode ter mudado); (3) os
+  pré-requisitos reais para uma conta ter acesso a Product Ads (a conta
+  vendedora precisa de um anunciante ativo, e o app do ERP precisa ter o
+  produto "Advertising" habilitado no painel de desenvolvedor — nenhum
+  dos dois foi confirmado pra conta de teste "PFEMBALAGEMS").
+- **Não é um bug conhecido, é uma lacuna de teste.** O desenho é
+  defensivo por causa dessa incerteza: toda chamada está em try/catch
+  (`buscarMetricasDaConta`, `lib/mlAds.js`) e qualquer falha — 401/403
+  (sem acesso), 404 (sem anunciante), timeout, ou qualquer outro erro —
+  devolve um motivo estruturado (`sem_acesso_ads`, `sem_anunciante`,
+  `timeout`, `erro_api`) que a tela mostra como "Pendente de
+  sincronização", nunca um número inventado. Testado localmente que a
+  conta de teste "PFEMBALAGEMS" realmente cai nesse caminho (o token
+  descriptografado falha/a API não responde neste ambiente sem internet
+  real) e a tela degrada corretamente — mas isso prova só o caminho de
+  erro, não o caminho de sucesso com dado real.
+- **Precisa de confirmação do usuário ao vivo em produção:** abrir Ads
+  com a conta "PFEMBALAGEMS" (ou outra conta real conectada) depois do
+  deploy e conferir se investimento/ROAS/ACOS aparecem com dado real. Se
+  aparecer "Pendente de sincronização" pra sempre mesmo com a conta tendo
+  campanhas ativas de Product Ads, o próximo passo é inspecionar a
+  mensagem de erro específica (a tela mostra o motivo por loja) — mais
+  provável de ser um dos três pontos não confirmados acima do que um erro
+  de lógica.
+
+## Relatórios: SKU sem custo cadastrado aparece "pendente" nas categorias Vendas e Margem/Produtos (mesma regra de sempre, 25/08/2026)
+- Igual à DRE (ver item abaixo) — como vários pedidos da conta de teste
+  "PFEMBALAGEMS" ainda não têm custo cadastrado em Produtos, "Custo dos
+  produtos" e "Margem de contribuição" aparecem como "pendente" na
+  maioria dos períodos consultados hoje, em Vendas e Margem e em
+  Produtos. **Não é um bug** — mesma regra "nunca inventar valor" de
+  sempre. Resolve sozinho conforme o usuário cadastra o custo de cada
+  SKU em Produtos.
+
 ## DRE: Custo dos Produtos e Margem de Contribuição ficam "Pendente" quando falta custo cadastrado no SKU (24/08/2026)
 - Ao ativar a DRE (ver `04-alteracoes.md` (17) e `02-decisoes.md` (16)),
   confirmado com dado real que vários pedidos da conta de teste

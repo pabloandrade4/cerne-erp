@@ -1,5 +1,31 @@
 # Próximos Passos
 
+- **Concluído em 25/08/2026, testado localmente (servidor real + Postgres
+  local + navegador via Playwright, com os pedidos reais da conta
+  PFEMBALAGEMS, 12 testes automatizados novos — 72 no total, 0 falhas):**
+  ativação de Ads e Relatórios — ver `04-alteracoes.md` (18) e
+  `02-decisoes.md` (17). Falta:
+  - o usuário subir o próximo zip de código pro GitHub (deploy automático
+    no Render cuida do resto);
+  - depois do deploy, testar as duas telas ao vivo em produção: Ads com
+    a conta real "PFEMBALAGEMS" (conferir se investimento/ROAS/ACOS
+    aparecem com dado real ou se continuam "Pendente de sincronização" —
+    ver `05-problemas-conhecidos.md`, a API de Advertising nunca foi
+    testada contra uma conta real), Relatórios nas 3 categorias com
+    filtro de empresa/loja/período/SKU e exportação (baixar o XLSX e o
+    CSV de cada categoria, abrir e conferir que os totais batem com
+    Visão Geral/Pedidos/Financeiro do mesmo período);
+  - cadastrar custo nos SKUs que ainda estão sem, em Produtos, pra
+    "Custo dos Produtos"/"Margem de Contribuição" pararem de aparecer
+    como "pendente" em Ads e Relatórios (mesma pendência já registrada
+    para a DRE);
+  - se a conta de teste não tiver acesso a Product Ads, confirmar com o
+    usuário se vale a pena habilitar (painel de desenvolvedor do
+    Mercado Livre) pra validar o caminho de sucesso da API de Ads, hoje
+    só validado pelo caminho de erro;
+  - **por instrução explícita do usuário, esta etapa parou aqui** — não
+    avançar sozinho para Shopee Ads, exportação em PDF, relatórios
+    agendados ou qualquer outra área sem o usuário pedir.
 - **Concluído em 24/08/2026, testado localmente (servidor real + Postgres
   local + navegador via Playwright, com os 11 pedidos reais da conta
   PFEMBALAGEMS):** ativação de DRE, Faturamento e Notas Fiscais — ver

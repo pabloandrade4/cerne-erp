@@ -3,6 +3,67 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-25 (17) — Ads e Relatórios: fonte única desce a nível de item, Ads nunca mistura API real com cálculo próprio
+- Decidido que a margem por anúncio/SKU (precisa tanto por Ads quanto por
+  Relatórios → Produtos) seria uma **extensão da mesma fonte única**
+  (`lib/relatorioVendas.js`), não uma consulta paralela. Criada
+  `buscarItensDoPeriodo`, que decompõe cada pedido já calculado por
+  `buscarPedidosDoPeriodo` em suas linhas de item, reaproveitando
+  `calcularResultadoVenda` por linha. Motivo: exatamente a mesma razão de
+  sempre — nunca correr o risco de Ads/Relatórios divergirem de Pedidos/
+  Visão Geral/Financeiro se uma regra de cálculo mudar.
+- **Rateio decidido caso a caso, por campo** — nunca um rateio genérico
+  aplicado a tudo. Comissão (`ml_pedido_itens.taxa_venda`) e custo do
+  produto (`produtos.custo × quantidade`) são genuinamente itemizáveis no
+  dado já salvo pelo Mercado Livre/ERP — por isso são **sempre exatos por
+  item, nunca rateados**, mesmo num pedido com vários itens. Frete do
+  vendedor, desconto (cupom) e tarifas de pagamento além da comissão só
+  existem no nível do PEDIDO (a API do Mercado Livre não os itemiza) —
+  esses três são **rateados proporcionalmente ao valor de cada item**
+  somente quando o pedido tem mais de 1 item; um pedido de item único
+  nunca passa por rateio nenhum (ratio=1, resultado idêntico ao valor do
+  pedido). Decisão registrada explicitamente no código
+  (`lib/relatorioVendas.js`) para não ser reconsiderada por engano numa
+  etapa futura sem entender o porquê.
+- **Ads decidido com duas fontes estritamente separadas, nunca combinadas
+  numa fórmula nova.** Investimento, vendas atribuídas, faturamento
+  atribuído, ROAS e ACOS vêm sempre da API de Advertising (Product Ads)
+  real do Mercado Livre (`lib/mlAds.js`) — nunca calculados a partir dos
+  nossos próprios pedidos, porque o modelo de atribuição de venda a um
+  anúncio é proprietário do Mercado Livre e não pode ser reconstruído com
+  certeza a partir dos dados de pedido que o ERP já tem. Faturamento
+  real e margem "antes do Ads" vêm da fonte única de vendas
+  (`buscarItensDoPeriodo`, agrupado por `ml_item_id`) — a mesma margem
+  real já mostrada em Pedidos/DRE/Financeiro/Relatórios, nunca uma
+  segunda forma de calcular margem. **TACOS decidido como investimento em
+  Ads ÷ faturamento REAL do anúncio (fonte 2), não o faturamento
+  "atribuído" pelo Mercado Livre (fonte 1)** — essa é a definição padrão
+  de mercado de TACOS (spend ÷ receita total, não spend ÷ receita
+  atribuída ao anúncio) e é exatamente o que o usuário pediu ao explicar
+  que não queria analisar ROAS isoladamente, e sim saber se o anúncio é
+  realmente lucrativo depois do Ads.
+- **Nenhuma tabela nova no banco para Ads** — mesma decisão já tomada
+  para Anúncios (`lib/mlAnuncios.js`) e Recebimentos: sempre buscado ao
+  vivo na API no momento do carregamento da tela, nunca uma cópia
+  guardada que pode ficar desatualizada. Ao contrário de
+  `routes/anuncios.js` (que hoje só olha a primeira conta do Mercado
+  Livre da empresa — limitação pré-existente, não alterada nesta etapa
+  por instrução de "não altere módulos que já estão funcionando"),
+  `lib/ads.js` percorre **todas** as contas da empresa, porque o usuário
+  pediu explicitamente que o filtro de loja funcionasse em Ads.
+- **API de Advertising do Mercado Livre nunca integrada antes neste
+  projeto** — pesquisada via documentação pública em 25/08/2026. Não foi
+  possível confirmar com 100% de certeza, só pela documentação (sem uma
+  conta real de teste com Product Ads habilitado neste ambiente): a URL
+  base exata, o valor exato de `Api-Version` esperado por cada endpoint,
+  e os pré-requisitos de habilitação da conta anunciante. Decidido tratar
+  isso com desenho defensivo (toda chamada em try/catch, sempre devolve
+  um motivo estruturado) em vez de bloquear a entrega esperando
+  confirmação — consistente com a própria instrução do usuário de usar
+  dado real "quando a integração/API permitir" e mostrar "Pendente de
+  sincronização" caso contrário. Registrado como limitação conhecida em
+  `05-problemas-conhecidos.md`, a confirmar ao vivo em produção.
+
 ## 2026-08-24 (16) — DRE, Faturamento e Notas Fiscais: waterfall sem fórmula nova, situação de faturamento e nota 1:1 com o pedido
 - Ao ativar a DRE, decidido que ela **não teria tabela nem cálculo
   financeiro próprio** — é sempre montada ao vivo, reorganizando em forma

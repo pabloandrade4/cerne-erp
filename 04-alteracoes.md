@@ -2,6 +2,91 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-25 (18) — Ativação de Ads e Relatórios
+- **Pedido do usuário:** ativar mais 2 áreas do ERP que já existiam como
+  placeholder no menu — Ads (dado real de Product Ads do Mercado Livre
+  "quando a integração/API permitir", nunca inventado) e Relatórios
+  (categorias usando só dado real que já existe no ERP, com as MESMAS
+  regras de Visão Geral/Pedidos/Financeiro — "nunca crie cálculos
+  separados"). Regras explícitas: nunca inventar valor (mostrar "Pendente
+  de sincronização"/"Dado não disponível" em vez disso); filtros de
+  empresa/loja/período (e SKU em Relatórios) precisam funcionar; não
+  implementar Shopee Ads ainda; não alterar outras áreas nesta etapa;
+  parar depois dessas duas áreas.
+- **`buscarItensDoPeriodo` (novo, em `lib/relatorioVendas.js`) — a fonte
+  única desce ao nível de item/anúncio.** Até aqui a fonte única
+  (`buscarPedidosDoPeriodo`/`resumirPeriodo`) só decompunha por pedido;
+  Ads e o relatório de Produtos precisam de margem por SKU/anúncio, não só
+  por pedido. A nova função decompõe cada pedido em suas linhas
+  (`ml_pedido_itens`), reaproveitando `calcularResultadoVenda` por item.
+  Comissão (`taxa_venda`, já é sale_fee × quantidade da linha) e custo do
+  produto (`produtos.custo × quantidade`) são **sempre exatos por item,
+  nunca rateados** — são genuinamente itemizáveis no dado já salvo. Frete
+  do vendedor, desconto (cupom) e tarifas de pagamento além da comissão
+  **são rateados proporcionalmente ao valor de cada item** só quando o
+  pedido tem mais de 1 item (Mercado Livre não itemiza esses três campos)
+  — um pedido de item único tem rateio 100% exato (ratio=1). Testado:
+  soma dos itens de cada pedido bate exatamente com o valor/frete do
+  pedido inteiro (reconciliação automatizada, ver `server/test/ads.test.js`).
+- **Ads — duas fontes bem separadas, nunca misturadas numa fórmula
+  nova.** `lib/mlAds.js` é o cliente da API de Advertising (Product Ads)
+  do Mercado Livre — pesquisada na documentação pública em 25/08/2026
+  (endpoints `/advertising/advertisers`,
+  `/advertising/product_ads/items`, headers `Api-Version`) já que o
+  projeto nunca tinha integrado essa API antes (só a API de
+  pedidos/anúncios). Toda chamada é protegida (try/catch): qualquer falha
+  (conta sem acesso a Ads, app sem o produto habilitado, erro de rede)
+  devolve um motivo estruturado, nunca um número estimado. `lib/ads.js`
+  agrega por anúncio: investimento, vendas atribuídas, faturamento
+  atribuído, ROAS e ACOS vêm sempre da API de Ads (nativos quando a API
+  já devolve o campo, calculados a partir dos números brutos da própria
+  API só quando ela omite o campo pronto — nunca de uma fonte externa);
+  faturamento real e margem "antes do Ads" vêm de
+  `buscarItensDoPeriodo`, agrupado por `ml_item_id`. TACOS = investimento
+  em Ads ÷ **faturamento real** do anúncio no período (não o "atribuído"
+  pelo Mercado Livre) — só calculado quando os dois números existem.
+  Margem depois do Ads = margem real de contribuição − investimento em
+  Ads (ou seja, venda − taxas/comissões − frete do vendedor − imposto −
+  custo do produto − Ads), respondendo diretamente ao pedido do usuário
+  de "não analisar só ROAS" e ver se o anúncio é REALMENTE lucrativo
+  depois do Ads. `lib/mercadolivre.js` ganhou um terceiro parâmetro
+  opcional em `apiGet` (`extraHeaders`, aditivo — chamadas existentes não
+  mudam) só pra suportar o header `Api-Version` exigido pela API de
+  Advertising.
+- **Relatórios — 3 categorias, nenhum cálculo novo.**
+  `lib/relatoriosAgregados.js` só filtra/agrupa o que
+  `lib/relatorioVendas.js` e `lib/ads.js` já calculam: **Vendas e
+  Margem** chama `resumirPeriodo` depois de filtrar pedidos por loja
+  (igual ao Relatório de Pedidos já existente) e soma o investimento em
+  Ads (mesma fonte da tela Ads) numa linha própria; **Produtos** agrupa
+  por SKU os itens de `buscarItensDoPeriodo`; **Marketplaces/Lojas**
+  agrupa pedidos por conta e chama `resumirPeriodo` por loja (nenhum
+  rateio aqui — cada pedido pertence inteiro a 1 loja). Testado
+  automaticamente que os totais de cada categoria batem, até o centavo,
+  com o que `resumirPeriodo`/`buscarPedidosDoPeriodo` já mostram em Visão
+  Geral/Pedidos/Financeiro para o mesmo período — a exigência central do
+  usuário. Exportação (XLSX/CSV) acrescentada em `routes/relatorios.js`
+  (`GET /api/relatorios/exportar?categoria=...&formato=xlsx|csv`), no
+  mesmo padrão já usado no Relatório de Pedidos (ExcelJS, cabeçalho em
+  negrito, "pendente" pra dado faltando, nunca um valor calculado à
+  parte) — sempre respeita os filtros da tela (empresa, loja, período,
+  SKU), nunca exporta outra empresa/período.
+- **Arquivos novos:** `server/lib/mlAds.js`, `server/lib/ads.js`,
+  `server/lib/relatoriosAgregados.js` (regra de negócio);
+  `server/routes/ads.js` (API); `server/test/ads.test.js`,
+  `server/test/relatorios.test.js` (12 testes automatizados novos, 0
+  falhas — total do projeto: 72 testes, 0 falhas); 2 módulos novos em
+  `server/public/index.html` (`window.Ads`, `window.Relatorios`).
+- **Arquivos alterados (aditivo, sem regressão):**
+  `server/lib/relatorioVendas.js` (nova função `buscarItensDoPeriodo`,
+  funções existentes intocadas), `server/lib/mercadolivre.js` (parâmetro
+  opcional novo em `apiGet`), `server/routes/relatorios.js` (4 rotas
+  novas somadas à já existente `/resumo-vendas`, que não mudou),
+  `server/server.js` (1 rota nova registrada — `/api/ads`).
+- Nenhuma tabela nova no banco — Ads e Relatórios seguem o mesmo padrão
+  "sem tabela própria, sempre ao vivo" já usado em Anúncios/Recebimentos/
+  DRE.
+
 ## 2026-08-24 (17) — Ativação de DRE, Faturamento e Notas Fiscais
 - **Pedido do usuário:** ativar mais 3 áreas do ERP que já existiam como
   placeholder no menu — DRE (visão por período em R$ e %, usando dado
