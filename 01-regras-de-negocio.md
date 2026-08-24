@@ -171,6 +171,41 @@ _(sem regras registradas ainda)_
   diferenciar visualmente) — a regra de não entrarem no resultado
   financeiro vale só pros números agregados de Visão Geral/Financeiro, não
   pra esta listagem operacional. Ver "Outras regras gerais", abaixo.
+- **Filtros:** além de empresa e período, a tela tem filtro por **loja**
+  (conta do Mercado Livre conectada àquela empresa), **status** do pedido e
+  busca livre por **produto/SKU**. As opções de loja vêm das contas ML
+  cadastradas na empresa; as opções de status vêm dos status **reais**
+  encontrados nos pedidos do período (nunca uma lista fixa adivinhada — se
+  um status novo aparecer na API do Mercado Livre, ele aparece sozinho no
+  filtro). Os filtros de loja/status/busca são aplicados em cima do
+  resultado já calculado (mesmos pedidos, mesmos números) — nunca mudam a
+  forma como o resultado de cada pedido é calculado.
+- **Relatório de Pedidos:** o botão "Gerar relatório" (Excel ou CSV) exporta
+  exatamente os pedidos que batem com os filtros selecionados na tela no
+  momento do clique (empresa, período, loja, status, produto/SKU) — se a
+  tela está mostrando só "Hoje", o relatório traz só os pedidos de hoje. O
+  relatório usa o mesmo cálculo da tela (`lib/relatorioVendas.js`,
+  inalterado) — não existe uma regra financeira separada para a
+  exportação. Cada linha do relatório é um pedido, com: data, número do
+  pedido, loja, produto, SKU, quantidade, valor da venda, descontos,
+  taxas/comissões do Mercado Livre, frete pago pelo comprador, frete do
+  vendedor, imposto, custo do produto, margem de contribuição em R$ e em
+  %, logística e status. No fim do relatório vem um resumo: total
+  faturado, total de pedidos, total de unidades, total de taxas/comissões,
+  total de frete do vendedor, total de imposto, total de custo dos
+  produtos, margem de contribuição total em R$ e margem média em %, além
+  dos pedidos cancelados (contados à parte, fora dos totais acima, seguindo
+  a mesma regra de Visão Geral/Financeiro). Onde faltar informação, o
+  relatório mostra "pendente" (nunca inventa um número) — mas quando o
+  resultado de uma soma é realmente zero (ex: filtro só de pedidos
+  cancelados, então não há pedidos não-cancelados para somar), mostra
+  "R$ 0,00", que é diferente de "pendente" (dado faltando). O nome do
+  arquivo traz a data ou o intervalo de datas do período filtrado (ex:
+  `relatorio-pedidos-2026-08-24.xlsx` ou
+  `relatorio-pedidos-2026-08-01-a-2026-08-24.xlsx`). O **desconto** de cada
+  pedido vem do preço original informado pelo Mercado Livre na API (quando
+  diferente do preço cobrado) — não é um valor calculado por regra própria
+  do relatório.
 
 ## Produtos
 - Cadastro simples, por empresa: **nome, SKU, custo e status**

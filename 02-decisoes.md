@@ -3,6 +3,59 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-24 (13) — Relatório de Pedidos: reaproveitar cálculo existente, nunca duplicar
+- Pedido do usuário: adicionar um botão "Gerar relatório" na tela Pedidos,
+  exportando Excel/CSV com os filtros da tela, usando **exatamente os
+  mesmos cálculos já usados no ERP** — proibido criar uma regra financeira
+  diferente só para o relatório.
+- **Decisão central:** o relatório não recalcula nada por conta própria.
+  Ele chama `buscarPedidosDoPeriodo` (mesma função de sempre, de
+  `lib/relatorioVendas.js`, **não tocada** nesta etapa), filtra o array já
+  calculado em memória (por loja/status/produto) e resume o resultado
+  filtrado pela mesma `resumirPeriodo`. Isso garante, por construção, que
+  o relatório nunca pode divergir da tela — os dois usam o mesmo código.
+- **Novos filtros (Loja/Status/Produto) ficaram só em `routes/pedidos.js`**,
+  como um filtro em memória (`filtrarPedidos`) sobre o array já retornado
+  — nunca uma cláusula nova dentro da query pesada de
+  `buscarPedidosDoPeriodo`. Isso evita mexer numa query já identificada
+  como lenta (ver `05-problemas-conhecidos.md`) e mantém a mesma função
+  compartilhada por Visão Geral/Pedidos/Financeiro intacta.
+- **Trade-off de performance aceito conscientemente:** a listagem da tela
+  (`GET /`) só busca sem limite de 500 quando algum filtro novo
+  (loja/status/busca) está ativo — no caso comum (sem filtro extra),
+  mantém o mesmo `LIMIT 500` de sempre, sem regressão de velocidade. Já o
+  endpoint de relatório (`GET /relatorio`) **sempre** busca tudo, porque
+  "não exportar pedidos fora do filtro escolhido" (pedido explícito do
+  usuário) exige o conjunto completo, não só os 500 mais recentes.
+- **Origem das opções de filtro:** loja vem de uma query simples nas
+  contas ML da empresa; status vem de um `SELECT DISTINCT` real nos
+  pedidos do período — nunca uma lista fixa de status do Mercado Livre
+  digitada de memória, pra não arriscar inventar ou esquecer um status que
+  a API realmente usa.
+- **Origem do "Descontos":** em vez de inventar uma regra nova, usado o
+  campo `preco_unitario_original` (já existente em `ml_pedido_itens`,
+  documentado no schema como "full_unit_price (quando diferente =
+  desconto)") comparado ao `preco_unitario` cobrado — dado real já
+  capturado da API do Mercado Livre, não um cálculo novo.
+- **"Pendente" vs. zero real, revisado nesta etapa:** a função que monta as
+  linhas de resumo do relatório inicialmente usava uma única flag
+  "vazio" pra decidir quando mostrar "pendente" em vez de um número,
+  o que causava um bug (total mostrando "pendente" quando na verdade a
+  soma era zero de forma legítima, ex: filtro só de pedidos cancelados).
+  Corrigido para duas flags independentes (pedidos não-cancelados = 0,
+  pedidos cancelados = 0) — cada grupo de totais decide "pendente" vs
+  "0,00" pela sua própria contagem, nunca por uma flag genérica. Ver
+  detalhe do bug em `04-alteracoes.md` (13).
+- **XLSX via `exceljs`** (biblioteca Node.js, adicionada a
+  `package.json`) — não instalável neste sandbox (mesma limitação de
+  sempre, ver `05-problemas-conhecidos.md`), mas instala normalmente no
+  build do Render. **CSV com `;` como separador e BOM UTF-8** — convenção
+  do Excel em português (vírgula é separador decimal aqui), consistente
+  com como um usuário brasileiro abriria o arquivo.
+- **PDF não foi implementado** — o próprio usuário disse não ser
+  prioridade agora; ficou registrado como possibilidade futura em
+  `06-proximos-passos.md`, não descartado silenciosamente.
+
 ## 2026-08-24 (12) — Supabase como banco principal + sincronização histórica desde 01/07/2026
 - Pedido do usuário: parar de avançar módulos e corrigir a base de dados —
   3 passos, nada além disso: (1) Supabase/PostgreSQL como fonte permanente

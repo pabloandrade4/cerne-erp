@@ -187,29 +187,45 @@ cada uma e o status (em desenvolvimento / concluída).
   desenvolvedor do Mercado Livre (ver `02-decisoes.md` (7) para a URL
   exata) e confirmar, com um pedido real, que ele aparece sozinho no ERP.
 
-## Pedidos — listagem completa com filtro de período
+## Pedidos — listagem completa, filtros e relatório de exportação
 - **Status:** concluído.
 - **O que é:** a tela de Pedidos usa as vendas reais sincronizadas do
   Mercado Livre, filtradas pelo período selecionado (Hoje / Ontem / 7 dias
-  / 30 dias / Este mês), numa tabela compacta (coube priorizar as colunas
-  pra caber na largura normal de uma tela desktop sem rolar pro lado) com:
-  data, número do pedido, produto/SKU (uma coluna, em duas linhas),
-  quantidade, valor da venda, taxas/comissões, frete do vendedor, custo do
-  produto, margem de contribuição (R$ e %), logística e status. Loja e
-  imposto saíram da tabela, mas continuam no detalhe do pedido. Clicar num
-  pedido abre o detalhe completo, com cada parte do cálculo (venda − taxas
-  − frete − imposto − custo = margem de contribuição) explicada linha a
-  linha, incluindo loja e imposto. Quando falta alguma informação (custo
-  de SKU não cadastrado, tarifa que o Mercado Livre não retornou), a
-  coluna mostra "pendente" em vez de um número. Se o período tiver mais de
-  500 pedidos, mostra os 500 mais recentes com um aviso de quantos existem
-  no total.
+  / 30 dias / Este mês) e, agora, também por **loja** (conta do Mercado
+  Livre), **status** do pedido e busca livre por **produto/SKU**, numa
+  tabela compacta (coube priorizar as colunas pra caber na largura normal
+  de uma tela desktop sem rolar pro lado) com: data, número do pedido,
+  produto/SKU (uma coluna, em duas linhas), quantidade, valor da venda,
+  taxas/comissões, frete do vendedor, custo do produto, margem de
+  contribuição (R$ e %), logística e status. Loja e imposto saíram da
+  tabela, mas continuam no detalhe do pedido. Clicar num pedido abre o
+  detalhe completo, com cada parte do cálculo (venda − taxas − frete −
+  imposto − custo = margem de contribuição) explicada linha a linha,
+  incluindo loja e imposto. Quando falta alguma informação (custo de SKU
+  não cadastrado, tarifa que o Mercado Livre não retornou), a coluna
+  mostra "pendente" em vez de um número. Se o período (já filtrado) tiver
+  mais de 500 pedidos, mostra os 500 mais recentes com um aviso de quantos
+  existem no total — o relatório de exportação, abaixo, sempre traz todos.
+- **Relatório de Pedidos:** dois botões, "Gerar relatório (Excel)" e
+  "CSV", exportam exatamente os pedidos que batem com os filtros
+  selecionados na tela (empresa, período, loja, status, produto/SKU),
+  reaproveitando o mesmo cálculo da listagem — nenhuma regra financeira
+  nova. Uma linha por pedido (data, número, loja, produto, SKU,
+  quantidade, valor da venda, descontos, taxas/comissões, frete do
+  comprador, frete do vendedor, imposto, custo do produto, margem de
+  contribuição em R$ e %, logística, status) e um resumo no fim (total
+  faturado, total de pedidos, total de unidades, totais de taxas/frete
+  vendedor/imposto/custo, margem de contribuição total em R$ e média em %,
+  pedidos cancelados à parte). Nome do arquivo com a data ou o intervalo
+  do período filtrado. PDF ainda não foi implementado (não é prioridade
+  agora, por pedido do usuário) — ver `06-proximos-passos.md`.
 - **Onde está:** `server/lib/resultadoVenda.js` (fórmula),
   `server/lib/relatorioVendas.js` (busca + agregação, compartilhado com
-  Visão Geral e Financeiro), `server/lib/periodo.js` (cálculo dos
-  períodos), `server/routes/pedidos.js` (`GET /` e `GET /:id`),
-  `server/public/index.html` (módulo `window.Pedidos`, tabela com a classe
-  CSS `.compact-orders`).
+  Visão Geral e Financeiro, **inalterado**), `server/lib/periodo.js`
+  (cálculo dos períodos), `server/routes/pedidos.js` (`GET /`, `GET /:id`,
+  `GET /relatorio` e os helpers de filtro/exportação), `server/public/
+  index.html` (módulo `window.Pedidos`, tabela com a classe CSS
+  `.compact-orders`, filtros de loja/status/busca, botões de relatório).
 
 ## Visão Geral com dados reais
 - **Status:** concluído.

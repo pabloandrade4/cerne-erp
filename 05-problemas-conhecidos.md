@@ -3,6 +3,31 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Relatório de Pedidos: geração real do .xlsx/.csv ainda não testada em produção (24/08/2026)
+- A lógica de filtro, cálculo e montagem das linhas/resumo do relatório foi
+  testada localmente contra dados sintéticos no Postgres (totais conferem
+  com a soma manual — ver `04-alteracoes.md` (13)). Porém, a geração real
+  do arquivo `.xlsx` (biblioteca `exceljs`) **não pôde ser executada de
+  ponta a ponta neste ambiente**, porque `npm install` não funciona aqui
+  (ver "Este ambiente de desenvolvimento não consegue instalar pacotes
+  npm", abaixo) — a integração com o ExcelJS foi conferida por leitura
+  cuidadosa da API (métodos estáveis e documentados) e por um stub que
+  imita a mesma API, não pela abertura real do arquivo gerado num Excel.
+  **Precisa de confirmação do usuário** depois do próximo deploy: clicar
+  em "Gerar relatório (Excel)" e "CSV" na tela Pedidos com alguns filtros
+  diferentes, abrir os arquivos baixados e conferir que abrem sem erro e
+  que os totais batem com o que a tela mostra.
+- **PDF não foi implementado** nesta etapa — o usuário pediu para deixar
+  isso pra depois, sem prioridade agora. Ver `06-proximos-passos.md`.
+- O relatório sempre busca **todos** os pedidos do filtro (sem o limite de
+  500 usado na listagem da tela), porque a exportação precisa estar
+  completa — para uma empresa com muitos pedidos no período (ex: "30
+  dias"), isso herda a mesma lentidão já conhecida da consulta
+  `buscarPedidosDoPeriodo` (ver "Período '7 dias'/'30 dias' fica muito
+  lento...", abaixo). Não foi otimizado nesta etapa (fora do escopo
+  pedido); se a exportação demorar muito ou expirar num período grande, é
+  o mesmo problema de fundo, não um bug novo do relatório.
+
 ## Estoque Full: testado ao vivo em produção com sucesso (23/08/2026)
 - O Full identifica anúncios pelo campo `shipping.logistic_type ===
   'fulfillment'` e busca a quantidade pelo endpoint `GET

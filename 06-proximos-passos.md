@@ -1,5 +1,24 @@
 # Próximos Passos
 
+- **Concluído em 24/08/2026, testado só localmente:** Relatório de Pedidos
+  (Excel/CSV) e novos filtros de Loja/Status/Produto na tela Pedidos
+  (deploy `ml17`) — ver `04-alteracoes.md` (13) e `03-funcionalidades.md`.
+  Falta:
+  - o usuário subir o próximo zip de código (`ml17`) pro GitHub;
+  - depois do deploy, testar os filtros de loja/status/busca ao vivo com
+    dados reais, e clicar em "Gerar relatório (Excel)"/"CSV" com pelo
+    menos: sem nenhum filtro extra, com um filtro de loja, com um filtro
+    de status, e com um período maior (ex: "30 dias") pra também sentir se
+    a exportação demora muito nessa empresa;
+  - abrir os arquivos baixados e conferir que abrem sem erro (Excel e
+    planilha do Google, se possível) e que os totais no fim do relatório
+    batem com os números mostrados na tela Pedidos com o mesmo filtro;
+  - confirmar visualmente que "Descontos" e os totais fazem sentido com
+    pedidos reais que tiveram desconto do Mercado Livre (não testável com
+    certeza aqui, já que depende de haver pedido real com
+    `preco_unitario_original` diferente do preço cobrado).
+  - PDF não foi implementado (não é prioridade agora, por pedido do
+    usuário) — considerar quando o usuário pedir.
 - **Concluído em 24/08/2026, testado ao vivo em produção:** conceito de
   **produto base + SKU de venda + multiplicador** (deploy `ml15`) — ver
   `04-alteracoes.md` (11) e `03-funcionalidades.md`. Só depois disso, a

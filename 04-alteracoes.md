@@ -2,6 +2,87 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-24 (13) — Relatório de Pedidos (Excel/CSV) + filtros de Loja/Status/Produto na tela Pedidos
+- **Novos filtros na tela Pedidos:** além de empresa e período (já
+  existentes), agora tem filtro por **loja** (conta do Mercado Livre),
+  **status** do pedido e busca livre por **produto/SKU**. As opções de
+  loja vêm das contas ML cadastradas na empresa (`GET` simples, sem custo
+  de performance); as opções de status vêm dos status **reais** achados
+  nos pedidos do período (`SELECT DISTINCT`, nunca uma lista fixa
+  adivinhada). Os três filtros são aplicados em memória sobre o resultado
+  já calculado por `buscarPedidosDoPeriodo`/`resumirPeriodo`
+  (`server/lib/relatorioVendas.js`, **não alterado** nesta tarefa) — a
+  forma de calcular cada pedido continua exatamente a mesma.
+- **Botão "Gerar relatório" (Excel e CSV):** exporta exatamente os pedidos
+  que batem com os filtros selecionados na tela no momento do clique
+  (empresa, período, loja, status, produto/SKU) — nunca mistura empresas,
+  nunca inclui pedido fora do filtro escolhido. Uma linha por pedido:
+  data, número do pedido, loja, produto, SKU, quantidade, valor da venda,
+  descontos, taxas/comissões do Mercado Livre, frete do comprador, frete
+  do vendedor (em colunas separadas, como pedido), imposto, custo do
+  produto, margem de contribuição em R$ e %, logística e status. No fim,
+  um resumo com: total faturado, total de pedidos, total de unidades,
+  total de taxas/comissões, total de frete do vendedor, total de imposto,
+  total de custo dos produtos, margem de contribuição total em R$, margem
+  média em %, e os pedidos cancelados à parte (fora dos totais acima, como
+  em Visão Geral/Financeiro). Nome do arquivo com a data ou o intervalo do
+  período filtrado (ex: `relatorio-pedidos-2026-08-24.xlsx`,
+  `relatorio-pedidos-2026-08-01-a-2026-08-24.xlsx`).
+- O relatório reaproveita **exatamente** os mesmos cálculos já usados no
+  ERP — não existe uma regra financeira separada criada só para a
+  exportação. O **desconto** de cada pedido é derivado do preço original
+  informado pelo Mercado Livre na API (`preco_unitario_original`, coluna
+  já existente e já preenchida com dado real) quando diferente do preço
+  cobrado — não é um número inventado nem uma regra nova.
+- **"Pendente" vs. zero real:** quando falta um dado (ex: tarifa que o
+  Mercado Livre não retornou), o relatório mostra "pendente", nunca um
+  número parcial. Quando a soma de um grupo é legitimamente zero (ex:
+  filtrar só por pedidos cancelados deixa zero pedidos não-cancelados para
+  somar), o relatório mostra "R$ 0,00" — corrigido um bug encontrado no
+  teste local em que esse caso mostrava "pendente" incorretamente (ver
+  `05-problemas-conhecidos.md` se aplicável, e detalhe abaixo em "Testado
+  localmente").
+- **Exportação em Excel (XLSX)** via nova dependência `exceljs` (adicionada
+  em `server/package.json`; não instalável neste sandbox — `npm install`
+  retorna 403 — mas instala normalmente no build do Render) — planilha com
+  2 abas ("Pedidos" com cabeçalho fixo/negrito e formatação de moeda/
+  percentual, "Resumo" com os totais). **Exportação em CSV** com separador
+  `;` e BOM UTF-8 (padrão esperado pelo Excel em português, já que vírgula
+  é separador decimal aqui). **PDF não foi implementado nesta etapa** —
+  pedido explícito do usuário foi deixar isso pra depois, sem ser
+  prioridade agora (ver `06-proximos-passos.md`).
+- **Desempenho preservado:** a listagem da tela Pedidos continua limitada a
+  500 pedidos por página (`LIMIT` no SQL) quando nenhum filtro novo
+  (loja/status/busca) está ativo — sem regressão na consulta já lenta
+  (`buscarPedidosDoPeriodo` roda 4 subqueries correlacionadas por linha,
+  ver `05-problemas-conhecidos.md`). Só quando um filtro novo está em uso a
+  listagem busca sem limite, pra garantir que nenhum pedido que bate o
+  filtro fique de fora dos primeiros 500 por data. O endpoint de relatório
+  (`GET /api/pedidos/relatorio`) **sempre** busca sem limite, porque a
+  exportação precisa estar completa.
+- **Testado localmente** (Postgres local, harness que chama as funções das
+  rotas diretamente, já que `pg`/`express`/`exceljs` não instalam neste
+  sandbox): totais do relatório conferem, um a um, com a soma manual dos
+  dados sintéticos inseridos (faturamento, taxas, frete vendedor, imposto,
+  custo produto, margem R$/%, unidades, cancelados qtd./valor); filtro por
+  loja, por status e por produto/SKU testados isoladamente e combinados;
+  caso `status=pedidos cancelados` testado (confirma "R$ 0,00" nos totais
+  normais, não "pendente"); caso sem nenhum resultado testado (confirma
+  "R$ 0,00"/"pendente" nas linhas certas, nunca um número inventado);
+  `node --check` em todos os arquivos alterados (`server/routes/pedidos.js`,
+  `server/public/index.html`). **Geração real do arquivo `.xlsx`/`.csv`
+  não pôde ser executada de ponta a ponta neste sandbox** (sem `exceljs`
+  instalado) — testado por leitura de código e por um stub que reproduz a
+  API do ExcelJS usada, mas a confirmação final da abertura do arquivo no
+  Excel depende do usuário testar após o próximo deploy.
+- Nenhum outro módulo foi alterado nesta tarefa (só a aba Pedidos).
+- **Onde está:** `server/routes/pedidos.js` (`GET /`, `GET /relatorio`,
+  `filtrarPedidos`, `buscarLojasDaEmpresa`, `buscarStatusDoPeriodo`,
+  `buscarDescontosPorPedido`, `gerarXlsx`, `gerarCsv`), `server/public/
+  index.html` (módulo `window.Pedidos`: novos selects de loja/status,
+  campo de busca, botões "Gerar relatório (Excel)"/"CSV"), `server/
+  package.json` (dependência `exceljs`).
+
 ## 2026-08-24 (12) — Tela Estoque: Galpão + Full juntos, agrupados por produto base
 - Reescrita a tela Estoque, que passa a ser a única tela de estoque físico
   do ERP (a antiga "Estoque Full" separada foi retirada do menu e o
