@@ -221,6 +221,14 @@
   .topbar-right{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
   .topbar-divider{ width:1px; height:22px; background:var(--border); margin:0 4px; flex-shrink:0; }
 
+  /* Indicador discreto de sincronização automática do Mercado Livre (ver
+     window.MlSyncStatus, lib/syncScheduler.js) */
+  .sync-status{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); font-weight:600; white-space:nowrap; }
+  .sync-status-dot{ width:7px; height:7px; border-radius:50%; background:var(--border-strong); flex-shrink:0; }
+  .sync-status.ok .sync-status-dot{ background:#22c55e; }
+  .sync-status.erro .sync-status-dot{ background:#ef4444; }
+  .sync-status.erro{ color:#ef4444; }
+
   .pill-btn{
     display:flex; align-items:center; gap:8px; height:36px;
     background:var(--surface); border:1px solid var(--border);
@@ -478,7 +486,7 @@
   }
   @media (max-width:680px){
     .topbar{ padding:0 14px; gap:8px; }
-    #companyBtn, #periodBtn, .topbar-divider{ display:none; }
+    #companyBtn, #periodBtn, #mlSyncStatus, .topbar-divider{ display:none; }
     .user-meta{ display:none; }
     .user-chip{ padding:0 5px; }
     .page-head{ gap:12px; }
@@ -734,6 +742,11 @@
           <div class="dropdown" id="periodDropdown">
             <div class="dropdown-title">Período (Visão Geral)</div>
           </div>
+        </div>
+
+        <div class="sync-status" id="mlSyncStatus" style="display:none;" title="Sincronização automática com o Mercado Livre">
+          <span class="sync-status-dot" id="mlSyncDot"></span>
+          <span id="mlSyncText">—</span>
         </div>
 
         <div class="topbar-divider"></div>
@@ -1220,6 +1233,77 @@
     carregarEmpresas();
 
     return { state, onChange, refreshEmpresas: carregarEmpresas };
+  })();
+
+  /* ---------- SINCRONIZAÇÃO AUTOMÁTICA DO MERCADO LIVRE (indicador discreto) ----------
+     A sincronização em si acontece 100% no servidor (ver server/lib/syncScheduler.js —
+     um setInterval de 1 minuto rodando no processo Node, nunca no navegador). Este bloco
+     só LÊ o status já calculado pelo servidor (GET /status-automatico) pra mostrar
+     "Sincronizado há Xs" no header — o navegador nunca sincroniza nada, mesmo usando um
+     setInterval aqui: um é só pra reler um status pronto, o outro (proibido) seria pra
+     fazer a sincronização de verdade a partir do front-end. */
+  (function(){
+    let ultimoStatus = null;
+
+    function fmtRelativo(iso){
+      if(!iso) return null;
+      const diffMs = Date.now() - new Date(iso).getTime();
+      const seg = Math.max(0, Math.round(diffMs/1000));
+      if(seg < 60) return 'Sincronizado há ' + seg + (seg===1?' segundo':' segundos');
+      const min = Math.round(seg/60);
+      if(min < 60) return 'Sincronizado há ' + min + (min===1?' minuto':' minutos');
+      try{
+        return 'Última sincronização: ' + new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+      }catch(e){ return null; }
+    }
+
+    function render(){
+      const wrap = document.getElementById('mlSyncStatus');
+      const dot = document.getElementById('mlSyncDot');
+      const txt = document.getElementById('mlSyncText');
+      if(!wrap || !txt || !ultimoStatus) return;
+
+      wrap.style.display = 'flex';
+      wrap.classList.remove('ok','erro');
+
+      if(ultimoStatus.emExecucao){
+        txt.textContent = 'Sincronizando…';
+      } else if(ultimoStatus.ultimoCicloOk === false){
+        wrap.classList.add('erro');
+        txt.textContent = 'Erro na sincronização';
+        const detalhe = (ultimoStatus.contasComErro||[]).map(c=>c.erro).join(' | ') || ultimoStatus.ultimoErroGeral;
+        wrap.title = detalhe ? ('Erro na sincronização automática: ' + detalhe) : 'Erro na sincronização automática.';
+      } else if(ultimoStatus.ultimaExecucaoEm){
+        wrap.classList.add('ok');
+        txt.textContent = fmtRelativo(ultimoStatus.ultimaExecucaoEm) || '—';
+        wrap.title = 'Sincronização automática ativa (a cada ' + (ultimoStatus.intervaloSegundos||60) + 's) — última verificação: ' + new Date(ultimoStatus.ultimaExecucaoEm).toLocaleString('pt-BR');
+      } else {
+        txt.textContent = 'Aguardando 1ª sincronização…';
+      }
+    }
+
+    async function buscarStatus(){
+      try{
+        const res = await fetch('/api/integracoes/mercadolivre/status-automatico');
+        if(!res.ok) return;
+        ultimoStatus = await res.json();
+        render();
+      }catch(e){ /* falha de rede ao buscar o status não deve gerar erro visível — tenta de novo no próximo tick */ }
+    }
+
+    async function iniciar(){
+      try{
+        const res = await fetch('/api/integracoes/mercadolivre/config-status');
+        const body = await res.json();
+        if(!body || !body.configurado) return; // ML não configurado neste ambiente — não mostra o indicador
+      }catch(e){ return; }
+
+      await buscarStatus();
+      setInterval(render, 5000);        // só recalcula o texto relativo ("há Xs") — nenhuma chamada de rede
+      setInterval(buscarStatus, 20000);  // relê o status já pronto do servidor — nunca dispara sincronização
+    }
+
+    iniciar();
   })();
 
   /* ---------- THEME TOGGLE ---------- */

@@ -2,6 +2,7 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const migrate = require('./db/migrate');
+const { iniciarSincronizacaoAutomatica } = require('./lib/syncScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const pedidosRouter = require('./routes/pedidos');
@@ -74,6 +75,9 @@ async function start() {
   }
   app.listen(PORT, () => {
     console.log(`[server] Cerne ERP rodando na porta ${PORT}`);
+    // Sincronização automática do Mercado Livre — sempre no servidor, nunca
+    // depende de ninguém com o ERP aberto no navegador (ver lib/syncScheduler.js).
+    iniciarSincronizacaoAutomatica();
   });
 }
 

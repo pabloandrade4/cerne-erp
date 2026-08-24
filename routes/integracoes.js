@@ -13,6 +13,7 @@ const {
   buscarUltimoSyncHistorico,
   processarSyncHistorico,
 } = require('../lib/mlSync');
+const { obterStatusSincronizacao } = require('../lib/syncScheduler');
 
 const router = express.Router();
 
@@ -54,6 +55,28 @@ router.get('/', async (req, res, next) => {
     const { rows } = await pool.query(`SELECT * FROM ml_contas ${where} ORDER BY created_at DESC`, params);
     res.json({ contas: rows.map(serializeConta) });
   } catch (err) { next(err); }
+});
+
+// GET /api/integracoes/mercadolivre/status-automatico — estado (em memória
+// do servidor) da sincronização automática de 1 em 1 minuto (ver
+// lib/syncScheduler.js) — usado só pelo indicador discreto "Sincronizado há
+// Xs" do header do ERP. Não confundir com o status por conta (ultimo_erro/
+// ultima_sincronizacao_em de ml_contas, já usado na tela Marketplaces): este
+// aqui é o "batimento cardíaco" do job em si, independente de qual empresa
+// está selecionada no filtro.
+router.get('/status-automatico', (req, res) => {
+  const s = obterStatusSincronizacao();
+  res.json({
+    ativo: s.ativo,
+    intervaloSegundos: Math.round(s.intervaloMs / 1000),
+    reconciliacaoDias: s.reconciliacaoDias,
+    emExecucao: s.emExecucao,
+    ultimaExecucaoEm: s.ultimaExecucaoEm,
+    ultimoCicloOk: s.ultimoCicloOk,
+    contasProcessadas: s.contasProcessadas,
+    contasComErro: s.contasComErro,
+    ultimoErroGeral: s.ultimoErroGeral,
+  });
 });
 
 // GET /api/integracoes/mercadolivre/conectar?empresaId=ID — inicia o OAuth (redireciona pro Mercado Livre)
