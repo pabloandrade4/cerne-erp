@@ -2,6 +2,122 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-25 (27) — IA Gestora: catálogo de ferramentas expandido para "conhecer" o ERP inteiro (9 → 19 ferramentas, ainda só leitura)
+- **Pedido do usuário:** transformar a IA Gestora em "inteligência central"
+  do ERP, em 3 passos — dar conhecimento de todo o ERP (sempre via backend
+  seguro, nunca acesso direto ao banco pro modelo), fazer a IA entender e
+  cruzar módulos (usando sempre as mesmas contas do resto do sistema), e
+  permitir relatórios/DRE/fluxo de caixa pela IA. "Antes de alterar
+  qualquer coisa, leia toda a documentação do projeto e preserve o que já
+  está funcionando." "Não implemente ações automáticas nesta tarefa." Ver
+  `02-decisoes.md` (27) para o desenho completo de cada ferramenta e por quê.
+- **10 ferramentas novas** em `server/lib/ia/ferramentas.js`:
+  `produtos_por_caixa_desempenho`, `vendas_com_prejuizo`,
+  `estoque_valor_parado`, `ads_desempenho`, `fluxo_de_caixa`,
+  `dre_completa`, `compras_resumo`, `notas_fiscais_resumo`,
+  `comparacao_periodo_anterior`, `consultar_documentacao` — todas casca
+  fina sobre função já existente, nenhum cálculo financeiro novo.
+- **2 arquivos novos:** `server/lib/compras.js` (agregação de Compras por
+  fornecedor — não existia lib própria pra Compras) e
+  `server/lib/ia/baseConhecimento.js` (base de conhecimento curada das
+  regras de negócio/limitações do ERP, pra ferramenta
+  `consultar_documentacao` — `docs/` não é enviado no deploy, então não dá
+  pra ler os `.md` direto em produção).
+- **`server/lib/contasPagar.js`/`resumoContasPagar` e
+  `server/lib/contasReceber.js`/`resumoContasReceber`** ganharam o campo
+  `vencendoProximos7Dias`/`previstoProximos7Dias` (aditivo — nenhum campo
+  existente mudou de significado; todos os testes antigos continuam
+  passando sem alteração).
+- **`produtos_desempenho`** ganhou `ordenarPor: 'faturamento'` e
+  `ordenarPor: 'quantidade'` (além de `lucro`/`prejuizo`, que continuam
+  iguais).
+- **`server/lib/ia/orchestrator.js`:** `MAX_RODADAS_FERRAMENTAS` de 6 para
+  10 (relatórios/resumos executivos combinam mais ferramentas numa
+  pergunta só); `montarSystemPrompt` ganhou instruções sobre fluxo de
+  caixa/projeções, comparação de período, montagem de relatórios e
+  limitações conhecidas (sem "estoque por caixa", sem Shopee, Ads pode não
+  bater com o painel oficial do Mercado Ads).
+- **Testado localmente (Postgres real + servidor real, 13 testes de
+  integração novos em `test/iaFerramentas.test.js` — 197 testes no total
+  no projeto com Postgres/64 sem, 31 suítes, 0 falhas):** cada ferramenta
+  nova comparada número a número contra a mesma função canônica que a tela
+  correspondente do ERP usa (empresa 900, 11 pedidos reais já seedados,
+  mais uma empresa de teste dedicada com fornecedor/compra/produto/estoque
+  cadastrados). **Não foi possível testar uma conversa real com o modelo de
+  IA** (mesma limitação da entrada (26) — sem `IA_API_KEY` de produção
+  configurada nesta sessão) — ver `02-decisoes.md` (27) sobre a estratégia
+  de verificação usada no lugar disso.
+- **Por instrução explícita do usuário, esta etapa parou nestes 3 passos**
+  — nenhuma ferramenta nova grava dado nenhum (só leitura), nenhum outro
+  módulo do ERP foi alterado além do necessário pra essas ferramentas
+  (contasPagar.js/contasReceber.js ganharam só um campo aditivo cada).
+
+## 2026-08-25 (26) — IA Gestora: provedor configurado corretamente, chat validado (sem dados do ERP), erros categorizados
+- **Pedido do usuário:** ativar SOMENTE a IA Gestora, em 3 passos — ver
+  `02-decisoes.md` entrada 26 pro texto completo e o raciocínio de cada
+  decisão. Não conectar ainda aos dados do ERP, não implementar alertas
+  automáticos, não alterar outras áreas.
+- **`server/lib/ia/providers/anthropic.js`:** adicionada
+  `CATEGORIA_POR_STATUS` (tabela oficial de erros da API de Mensagens da
+  Anthropic — 401/403→`chave_invalida`, 402→`sem_credito`,
+  429→`limite_uso`, 500/502/503/529→`provedor_indisponivel`,
+  504/falha de rede→`erro_conexao`, resto→`erro_desconhecido`), verificada
+  contra `https://platform.claude.com/docs/en/api/errors` e confirmada ao
+  vivo (chamada real com chave inválida devolveu exatamente o formato
+  documentado). Todo erro lançado agora carrega `err.categoria` (e
+  `err.status`/`err.tipoApi` quando vem de uma resposta HTTP real).
+- **`server/lib/ia/orchestrator.js`:** novo dicionário
+  `MENSAGEM_POR_CATEGORIA` (exportado como `mensagemAmigavel`) — traduz
+  cada categoria numa mensagem clara em PT-BR. O `catch` que envolve a
+  chamada ao provedor não interpola mais `err.message` na resposta do
+  chat (antes fazia isso — corrigido); agora usa
+  `mensagemAmigavel(err.categoria)` e loga o detalhe técnico completo
+  (status, tipo de erro da API, mensagem original) só no
+  `console.error`. Resposta ganhou um campo novo, `avisoCategoria`
+  (`aviso` continua `'erro_provedor'` como antes, sem quebrar o frontend
+  existente).
+- **`server/test/iaAnthropicProvider.test.js` (novo arquivo):** 13 testes
+  — categorização de cada status HTTP documentado (fetch mockado, sem
+  rede), parsing da resposta real (`content`/`stop_reason`/`usage`), e um
+  teste de **integração AO VIVO** contra `api.anthropic.com` com uma chave
+  propositalmente inválida (confirma o formato real de erro e que o
+  servidor consegue mesmo alcançar a API — com skip automático se algum
+  dia a rede não estiver disponível nesse ambiente).
+- **`server/test/iaOrchestrator.test.js`:** 7 testes novos — cada uma das
+  5 categorias produz `avisoCategoria` certo e uma mensagem própria (nunca
+  o texto técnico bruto do provedor), e as 5 mensagens são todas
+  diferentes entre si.
+- **Descoberta relevante desta correção, documentada em
+  `05-problemas-conhecidos.md`:** ao contrário do que estava registrado
+  desde a ativação original da IA Gestora (28/08/2026), este servidor
+  CONSEGUE alcançar `api.anthropic.com` pela internet — a limitação real
+  nunca foi falta de rede, é a falta de uma `IA_API_KEY` de produção
+  válida (que só o usuário pode gerar em https://console.anthropic.com).
+- **O que o usuário precisa configurar no Render:** variável `IA_API_KEY`
+  (chave de API válida da conta Anthropic do próprio usuário —
+  https://console.anthropic.com); `IA_PROVEDOR` já é `anthropic` por
+  padrão; modelo padrão `claude-sonnet-4-5-20250929` (sobrescrevível via
+  `IA_MODELO`, opcional). Nenhuma mudança de código necessária além desta
+  correção — só configurar a variável de ambiente.
+- **Verificação de ponta a ponta feita nesta correção:** servidor real
+  rodando contra o Postgres de teste; `POST /api/ia-gestora/perguntar`
+  chamado (1) sem `IA_API_KEY` — mensagem "não configurada" de sempre;
+  (2) com uma chave propositalmente inválida — chamada HTTP real chega
+  em `api.anthropic.com`, recebe 401 real, usuário vê a mensagem
+  categorizada certa ("chave configurada parece inválida..."), log do
+  servidor guarda o detalhe técnico real (`categoria=chave_invalida
+  status=401 tipoApi=authentication_error detalhe=API key is invalid.`).
+  Validação de entrada (pergunta vazia → 400, empresa inexistente → 404)
+  confirmada sem alteração de comportamento. **Não foi possível testar
+  uma resposta real com sucesso (200)** — isso exige uma `IA_API_KEY` de
+  produção válida, que só o usuário pode gerar (ver checklist de "o que
+  falta" em `05-problemas-conhecidos.md`).
+- **Nenhuma conexão nova com dados do ERP foi feita nesta etapa** (o laço
+  de ferramentas já existente, de uma ativação anterior, foi mantido
+  intacto e sem alterações — ver `02-decisoes.md` entrada 26 pro porquê).
+  Suíte completa: 185/185 com Postgres, 64/64 sem Postgres. Nenhum outro
+  módulo alterado.
+
 ## 2026-08-25 (25) — Correção da tela Ads: API real corrigida, cards de topo, gráfico diário, ranking dividido em duas visões
 - **Pedido do usuário:** corrigir e ativar somente a tela Ads, em 3 passos
   (ver `02-decisoes.md` entrada 25 pro texto completo e o raciocínio de

@@ -5,50 +5,66 @@ cada uma e o status (em desenvolvimento / concluída).
 
 ## IA Gestora — chat de consulta e análise com dados reais (2026)
 - **Status:** concluído e testado localmente (Postgres real + servidor
-  real via HTTP — 26 testes automatizados novos (`iaFerramentas.test.js` +
-  `iaOrchestrator.test.js`), 149 no total no projeto, 27 suites, 0
-  falhas; a rota HTTP real (`POST /api/ia-gestora/perguntar`) foi testada
-  de ponta a ponta contra o Postgres de teste — empresa real, validações
-  de `empresaId`/pergunta, e a mensagem de "não configurada" — mas a
-  chamada de rede real ao provedor Anthropic ainda depende de uma
-  `IA_API_KEY` de produção, que não existe neste ambiente de
-  desenvolvimento — ver `05-problemas-conhecidos.md`). Primeira versão só
-  de **consulta e análise** — pedido explícito do usuário, em 3 passos.
+  real via HTTP — 197 testes automatizados no projeto com Postgres/64 sem,
+  31 suítes, 0 falhas, incluindo 13 novos testes de integração comparando
+  cada ferramenta nova número a número contra a função canônica que a tela
+  correspondente do ERP usa). Ainda **só de consulta e análise** — nenhuma
+  ação automática foi implementada. **Ampliação de 25/08/2026** (ver
+  `02-decisoes.md` (27)): catálogo de ferramentas foi de 9 para **19**,
+  cobrindo praticamente todos os módulos do ERP (vendas, produtos por
+  SKU/por caixa, Ads, estoque/dinheiro parado em estoque, contas a
+  pagar/receber, fluxo de caixa, DRE completa, compras por fornecedor,
+  notas fiscais, comparação com período anterior, e uma base de
+  conhecimento pra explicar regras/limitações). Continua faltando só uma
+  `IA_API_KEY` de produção válida do próprio usuário para responder de
+  verdade (ver `05-problemas-conhecidos.md`) — sem chave configurada, a
+  tela abre normalmente e avisa que a IA ainda não está configurada.
 - **O que é:** uma tela de chat (menu **Geral → IA Gestora**) onde o
   usuário conversa em português com uma IA sobre a operação da empresa e
   período selecionados no cabeçalho — mesmo filtro (`window.CerneFiltro`)
-  já usado pela Visão Geral. Responde perguntas como "quanto vendi hoje",
-  "quanto estou lucrando este mês", "qual minha margem de contribuição",
-  "qual produto está dando mais lucro/prejuízo", "quanto gastei com
-  taxas/frete do vendedor", "quanto tenho para receber/pagar", "quais
-  SKUs estão sem custo cadastrado", "como está meu estoque", "qual conta
-  do Mercado Livre está performando melhor", e "quais problemas precisam
-  da minha atenção" (mesma central de Visão Geral > Alertas & IA) — com 5
+  já usado pela Visão Geral. Cobre hoje, entre outras: faturamento/margem
+  de contribuição/resultado do período; SKU mais vendido, modelo de caixa
+  (produto físico) mais vendido em unidades, produto que mais faturou,
+  vendas individuais com prejuízo; gasto com taxas/frete/Ads (hoje e no
+  mês) e quais anúncios têm melhor/pior resultado real depois do Ads;
+  contas a pagar/receber (em aberto, vencendo hoje, vencendo nos próximos
+  7 dias, vencidas/atrasadas) e fluxo de caixa (sempre separando o que já
+  ACONTECEU do que é só PREVISTO — nunca um saldo bancário projetado, que
+  o ERP não tem como calcular); a DRE completa linha a linha; compras do
+  período por fornecedor; quantas notas fiscais estão pendentes/emitidas;
+  comparação com o período anterior de mesma duração; dinheiro parado em
+  estoque; e os mesmos alertas de Visão Geral > Alertas & IA — com 5
   sugestões de pergunta na tela vazia. Todo número que a IA cita vem de
-  uma consulta real ao banco (nunca calculado pelo modelo); quando falta
-  informação para responder com segurança, ela diz claramente o motivo
-  (ex: "N pedidos ainda estão sem custo cadastrado") em vez de estimar.
-  Nesta primeira versão a IA **não altera nada no sistema** — só
-  consulta, calcula com as mesmas contas já existentes, compara, explica
-  e resume. Trocar empresa/período no cabeçalho reinicia a conversa.
+  uma consulta real ao banco (nunca calculado pelo modelo, nunca uma
+  segunda fórmula financeira diferente do resto do ERP); quando falta
+  informação para responder com segurança, ela diz claramente o motivo em
+  vez de estimar. A IA **não altera nada no sistema** — só consulta,
+  calcula com as mesmas contas já existentes, compara, projeta (com dado
+  real, nunca inventado), explica e resume. Trocar empresa/período no
+  cabeçalho reinicia a conversa.
 - **Onde está:** `server/lib/ia/providers/anthropic.js` (tradução HTTP
   com a API de Mensagens da Anthropic — sem SDK novo, `fetch` nativo),
   `server/lib/ia/providers/index.js` (registro de provedor/modelo,
   trocável por variável de ambiente sem mexer no resto), `server/lib/ia/
-  ferramentas.js` (catálogo de 9 ferramentas — cada uma uma casca fina
-  sobre uma função já existente do ERP), `server/lib/ia/orchestrator.js`
-  (laço de pergunta → ferramenta → resposta), `server/routes/iaGestora.js`
+  ferramentas.js` (catálogo de 19 ferramentas — cada uma uma casca fina
+  sobre uma função já existente do ERP), `server/lib/compras.js` e
+  `server/lib/ia/baseConhecimento.js` (novos módulos de apoio — ver
+  `02-decisoes.md` (27)), `server/lib/ia/orchestrator.js` (laço de
+  pergunta → ferramenta → resposta), `server/routes/iaGestora.js`
   (`POST /api/ia-gestora/perguntar`), `server/public/index.html` (módulo
   `window.IAGestora`, item de menu "IA Gestora"). Ver `02-decisoes.md`
-  (22) para o desenho completo.
-- **O que falta:** confirmar ao vivo em produção, com `IA_API_KEY`
-  configurada, que a chamada real ao provedor Anthropic funciona (formato
-  de resposta, `tools`, identificador de modelo — ver
-  `05-problemas-conhecidos.md`); nada mais foi pedido nesta etapa — por
-  instrução explícita do usuário, não avançar sozinho para a IA poder
-  alterar dados (custo, estoque, compras, contas, notas fiscais, anúncios,
-  pedidos) sem o usuário pedir depois de validar que ela entende
-  corretamente os dados da empresa.
+  (22) e (27) para o desenho completo.
+- **O que falta:** só configurar `IA_API_KEY` no Render com uma chave real
+  da conta Anthropic do usuário (https://console.anthropic.com) e testar
+  ao vivo as perguntas reais — a integração em si (formato de erro,
+  categorização, `Api-Version`/headers) já foi confirmada contra a API
+  real numa etapa anterior; o catálogo ampliado desta etapa foi verificado
+  no nível de cada ferramenta (número a número contra a função canônica),
+  não no nível de uma conversa real com o modelo (só possível depois da
+  chave configurada). Por instrução explícita do usuário, não avançar
+  sozinho para a IA poder alterar dados (custo, estoque, compras, contas,
+  notas fiscais, anúncios, pedidos) sem o usuário pedir depois de validar
+  que ela entende corretamente os dados da empresa.
 
 ## Sincronização automática do Mercado Livre (backend, a cada 1 minuto)
 - **Status:** concluído, testado localmente (Postgres real + servidor real

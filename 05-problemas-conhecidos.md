@@ -23,45 +23,79 @@ desenvolvimento, para não serem esquecidas.
   ele aparece à parte, em "SKUs sem produto base identificado", nunca
   entra em nenhum grupo nem no total de caixas físicas.
 
-## IA Gestora: chamada real ao provedor Anthropic ainda não testada contra uma chave/conta real (28/08/2026)
+## IA Gestora: falta só uma IA_API_KEY de produção válida (28/08/2026, revisado em 25/08/2026 duas vezes)
 - Ao ativar a IA Gestora (ver `04-alteracoes.md` (22) e `02-decisoes.md`
   (22)), o laço de ferramentas inteiro (pergunta → executar ferramenta →
   responder) foi testado de ponta a ponta com um **provedor de IA FALSO**
-  (`test/iaOrchestrator.test.js`) — este ambiente de desenvolvimento não
-  tem acesso à internet nem uma `IA_API_KEY` real (mesma limitação já
-  registrada para a API de Advertising/Estoque User Products do Mercado
-  Livre). Além disso, a rota HTTP real (`POST /api/ia-gestora/perguntar`)
-  foi testada com servidor real rodando contra o Postgres de teste
-  (empresa 900): devolve a mensagem de "não configurada" corretamente
-  (sem `IA_API_KEY`), e os erros 404 (empresa inexistente) e 400
-  (pergunta vazia/faltando) na validação de entrada. O que tudo isso
-  prova: o backend nunca deixa passar um número que não veio de uma
-  ferramenta, nunca usa empresa/período diferente do contexto, nunca
-  trava (timeout, limite de rodadas, erro do provedor) e nunca quebra a
-  tela de chat. O que isso NÃO prova: que a chamada HTTP real
-  (`server/lib/ia/providers/anthropic.js`) bate exatamente com o formato
-  de resposta atual da API de Mensagens da Anthropic — o formato foi
-  implementado por conhecimento da API (blocos `text`/`tool_use`,
-  `stop_reason`, `tools`), não confirmado contra uma resposta real.
-- **Não é um bug conhecido, é uma lacuna de teste** — mesmo padrão já
-  registrado para Ads e para User Products (Estoque) abaixo. O desenho é
-  defensivo por causa dessa incerteza: qualquer erro HTTP (401 chave
-  inválida, 404 modelo não encontrado, 429 limite de uso, 5xx fora do ar,
-  timeout) cai no mesmo caminho — uma mensagem de chat normal explicando
-  que não foi possível falar com o provedor agora, nunca uma exceção que
-  quebra a tela.
+  (`test/iaOrchestrator.test.js`). Além disso, a rota HTTP real
+  (`POST /api/ia-gestora/perguntar`) foi testada com servidor real rodando
+  contra o Postgres de teste (empresa 900): devolve a mensagem de "não
+  configurada" corretamente (sem `IA_API_KEY`), e os erros 404 (empresa
+  inexistente) e 400 (pergunta vazia/faltando) na validação de entrada.
+- **Correção de 25/08/2026 — descoberta importante:** a frase "este
+  ambiente de desenvolvimento não tem acesso à internet" (registrada aqui
+  desde a ativação original) **estava errada para este caso.** Testado ao
+  vivo nesta correção (`curl` e `fetch` do Node reais, direto deste
+  servidor): uma chamada para `https://api.anthropic.com/v1/messages` com
+  uma chave propositalmente inválida devolveu um 401 real da API
+  (`{"type":"error","error":{"type":"authentication_error","message":"API
+  key is invalid."}}`) — ou seja, **este servidor CONSEGUE alcançar a API
+  real da Anthropic pela internet.** A limitação real nunca foi rede — é
+  não ter uma `IA_API_KEY` de produção válida (que só o usuário pode gerar
+  em https://console.anthropic.com; este ambiente de desenvolvimento não
+  tem uma). Com essa descoberta, também foi possível confirmar ao vivo,
+  nesta correção, que o formato de request/response implementado em
+  `lib/ia/providers/anthropic.js` bate com a API real: o corpo de erro
+  (`type`/`error.type`/`error.message`) veio exatamente como
+  documentado e como o código espera — só não foi possível confirmar
+  ainda o formato de uma resposta de SUCESSO (200, com blocos
+  `text`/`tool_use`, `stop_reason`, `usage`), porque isso exige uma chave
+  válida de verdade.
+- **Erros do provedor agora são categorizados** (correção de 25/08/2026 —
+  ver `02-decisoes.md` (26)): `chave_invalida` (401/403), `sem_credito`
+  (402), `limite_uso` (429), `provedor_indisponivel` (500/502/503/529),
+  `erro_conexao` (504/falha de rede), `erro_desconhecido` (resto) —
+  tabela verificada contra a documentação oficial de erros
+  (`https://platform.claude.com/docs/en/api/errors`). Cada categoria vira
+  uma mensagem clara e diferente em PT-BR (`lib/ia/orchestrator.js`); o
+  texto técnico real do provedor nunca aparece pro usuário, só no
+  `console.error` do servidor.
+- **Não é mais uma lacuna de rede — é só a falta de uma chave real de
+  produção.** O desenho continua defensivo por precaução (qualquer erro
+  HTTP cai numa mensagem categorizada, nunca uma exceção que quebra a
+  tela), mas a causa raiz documentada aqui até 25/08/2026 (suposta falta
+  de internet) estava incorreta e foi corrigida.
 - **Precisa de confirmação do usuário ao vivo em produção:** depois do
   deploy, configurar `IA_API_KEY` (uma chave de API válida da Anthropic,
   https://console.anthropic.com) no Render, abrir IA Gestora e perguntar
-  algo simples (ex: "Quanto vendi hoje?"). Se a resposta vier normal, com
-  número real, está tudo certo. Se aparecer "Não consegui falar com o
-  provedor de IA agora (...)" mesmo com a chave configurada certa, o
-  próximo passo é olhar o log do servidor (`[ia gestora] erro ao
-  consultar o provedor de IA: ...`) — o mais provável é o identificador de
+  algo simples (ex: "Olá" ou "Quanto vendi hoje?"). Se a resposta vier
+  normal, está tudo certo. Se aparecer uma mensagem categorizada de erro
+  mesmo com a chave configurada certa, o próximo passo é olhar o log do
+  servidor (`[ia gestora] erro ao consultar o provedor de IA:
+  categoria=... status=... tipoApi=... detalhe=...`) — se a categoria for
+  `erro_desconhecido` com status 404, o mais provável é o identificador de
   modelo (`IA_MODELO`, padrão `claude-sonnet-4-5-20250929`) ter mudado ou
   não estar mais disponível; conferir o identificador atual em
   https://docs.claude.com e ajustar a variável de ambiente resolve sem
   precisar de nenhuma alteração de código.
+- **Revisão de 25/08/2026 (catálogo ampliado para 19 ferramentas — ver
+  `02-decisoes.md` (27)):** a mesma limitação acima (falta só a
+  `IA_API_KEY` de produção) continua sendo o único bloqueio — nenhuma
+  ferramenta nova precisa de nenhuma configuração adicional. Como ainda
+  não há chave de produção configurada nesta sessão, **não foi possível
+  testar uma conversa real em português com o modelo** usando as 10
+  ferramentas novas (ex: perguntar de verdade "qual modelo de caixa mais
+  vendeu em unidades físicas" e ver a IA escolher e chamar
+  `produtos_por_caixa_desempenho` sozinha). A verificação disponível nesta
+  sessão foi no nível da FERRAMENTA: cada uma foi chamada diretamente
+  (sem passar pelo modelo) e comparada número a número contra a mesma
+  função canônica que a tela do ERP usa (13 testes de integração novos,
+  `test/iaFerramentas.test.js`, com Postgres real). Isso prova que os
+  DADOS que a IA vai receber estão corretos e batem com o resto do ERP —
+  não prova que o modelo, na prática, sempre escolhe a ferramenta certa
+  pra cada pergunta (isso só é testável com uma chave real, ao vivo). Ver
+  `06-proximos-passos.md` para o checklist das 10 perguntas pedidas pelo
+  usuário, pendente de execução ao vivo.
 - **Sobre "permissões do usuário" (um dos 3 pontos pedidos pelo usuário):**
   o ERP ainda não tem login nem permissão por usuário implementados (só a
   tabela `users`, sem tela/rota — ver `00-visao-geral.md`). Por isso, hoje,

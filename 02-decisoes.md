@@ -3,6 +3,206 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-25 (27) — IA Gestora como "inteligência central": catálogo de ferramentas expandido para conhecer o ERP inteiro (ainda só leitura)
+
+Pedido do usuário, em 3 passos: (1) dar à IA conhecimento de todo o ERP,
+sempre através de um backend seguro (nunca acesso direto ao banco pro
+modelo); (2) fazer a IA entender/analisar o negócio, cruzando módulos,
+usando SEMPRE as mesmas contas já usadas no resto do sistema (nunca uma
+segunda fórmula financeira); (3) permitir relatórios, DRE e fluxo de caixa
+pela IA, sempre distinguindo REALIZADO de PREVISTO/PROJETADO. Constraint
+explícita repetida pelo usuário: "Antes de alterar qualquer coisa, leia toda
+a documentação do projeto e preserve o que já está funcionando" — nenhuma
+das 9 ferramentas da etapa anterior (26) foi removida ou teve seu
+comportamento mudado (só `produtos_desempenho` ganhou dois novos valores de
+`ordenarPor`, aditivos, sem quebrar o existente — ver testes). "Não
+implemente ações automáticas nesta tarefa" — todas as ferramentas
+adicionadas são só de LEITURA, nenhuma delas grava nada no banco.
+
+**O que foi adicionado — 10 ferramentas novas em `lib/ia/ferramentas.js`
+(catálogo foi de 9 para 19), cada uma casca fina sobre uma função já
+existente (nenhum cálculo financeiro novo):**
+- `produtos_por_caixa_desempenho` — casca sobre
+  `relatoriosAgregados.relatorioProdutosPorCaixa` (mesma visão "Por Caixa"
+  de Relatórios, entrada (24)) — cobre "qual modelo de caixa mais vendeu em
+  unidades físicas".
+- `vendas_com_prejuizo` — lista pedidos individuais com margem negativa
+  (mesmo filtro do alerta "margem-negativa" de `visaoGeralPainel.js`),
+  nível de pedido em vez de SKU agregado.
+- `estoque_valor_parado` — quantidade sincronizada (Estoque + Estoque Full)
+  × custo cadastrado em Produtos, por SKU — item sem SKU/custo cadastrado
+  nunca soma como custo zero, fica de fora e é contado à parte.
+- `ads_desempenho` — casca sobre `lib/ads.js#listarAds` (mesma fonte da
+  tela Ads, entrada (25)), consultando todas as contas da empresa de uma
+  vez; devolve os cards de gasto hoje/mês + melhores/piores anúncios pelo
+  resultado REAL depois do Ads (nunca confundido com "vendas atribuídas",
+  que é uma métrica separada da API — texto explicativo incluído na
+  resposta, ver `lib/ads.js` sobre a diferença).
+- `fluxo_de_caixa` — casca sobre `visaoGeralPainel.js#fluxoDeCaixa` (mesmos
+  3 blocos já mostrados em Visão Geral, entrada (21)); "saldo projetado"
+  continua SEMPRE `null` (o ERP não tem saldo bancário cadastrado — mesma
+  regra de sempre, nunca inventado aqui) — resposta sempre separa
+  "realizado" (o que já aconteceu) de "previsto/projetado" (expectativa).
+- `dre_completa` — casca sobre `lib/dre.js#gerarDRE`, expondo TODAS as
+  linhas do demonstrativo (a ferramenta antiga `resultado_periodo` só
+  expunha um resumo de 3 linhas — mantida sem alteração, pra perguntas
+  simples de "quanto estou lucrando").
+- `compras_resumo` — **novo módulo `lib/compras.js`** (não existia lib
+  própria pra Compras — a lógica de CRUD morava só em `routes/compras.js`),
+  agrupando `compras.valor_total` (já calculado pelo servidor na
+  criação/edição da compra) por fornecedor; compras canceladas nunca somam
+  no total, ficam separadas.
+- `notas_fiscais_resumo` — casca sobre `lib/notasFiscais.js#listarNotasFiscais`,
+  contando por status em vez de listar pedido a pedido.
+- `comparacao_periodo_anterior` — compara o período selecionado no
+  cabeçalho com o período imediatamente anterior de MESMA DURAÇÃO (nunca um
+  período escolhido livremente pelo modelo — calculado deterministicamente
+  a partir do período já selecionado, preservando a regra estrutural de que
+  empresa/período nunca vêm do modelo).
+- `consultar_documentacao` — **novo módulo `lib/ia/baseConhecimento.js`**,
+  uma base de conhecimento curada (não lê `docs/*.md` direto, porque a
+  pasta `docs/` não é enviada no pacote de deploy — ver decisão abaixo)
+  com regras de negócio/limitações já documentadas (Ads, Estoque, Fluxo de
+  Caixa, Compras, Notas Fiscais, Contas a Pagar/Receber, DRE, Produto por
+  Caixa, o que a IA pode/não pode fazer, Shopee, permissões de usuário).
+  Nunca devolve um número — só explicação em texto.
+
+**Ferramentas existentes que ganharam campos aditivos (sem quebrar nada já
+testado):**
+- `contas_a_pagar_resumo`/`contas_a_receber_resumo` ganharam
+  `vencendoProximos7Dias`/`previstoProximos7Dias` — `lib/contasPagar.js` e
+  `lib/contasReceber.js` (`resumoContasPagar`/`resumoContasReceber`) foram
+  estendidos com esse novo campo (mesmo saldo em aberto de sempre, só mais
+  um recorte dele), cobrindo "o que vence esta semana".
+- `produtos_desempenho` ganhou `ordenarPor: 'faturamento'` e
+  `ordenarPor: 'quantidade'` (além dos já existentes `lucro`/`prejuizo`) —
+  cobre "produto que mais faturou" e "SKU mais vendido".
+
+**Por que a documentação virou um módulo de código em vez de ler
+`docs/*.md` direto:** a pasta `docs/` é documentação interna do
+desenvolvimento — não é enviada no pacote de deploy (`server` + `node_modules`
+excluído, ver o próprio processo de zip descrito em (6)) — então não existe
+um arquivo em disco pra ler em produção. Em vez de mudar o processo de
+deploy só pra isso, `lib/ia/baseConhecimento.js` extrai um resumo fiel (não
+uma regra nova) do que já está em `docs/00-visao-geral.md` e
+`docs/01-regras-de-negocio.md`, pronto pra IA citar — deve ser mantido em
+sincronia manualmente sempre que a regra de origem mudar, mesma disciplina
+já usada no resto da documentação.
+
+**MAX_RODADAS_FERRAMENTAS aumentado de 6 para 10** (`lib/ia/orchestrator.js`)
+— um "resumo executivo"/relatório completo pode precisar combinar bem mais
+ferramentas numa pergunta só; continua sendo só uma proteção contra laço sem
+fim (cada rodada já permite várias chamadas de ferramenta em paralelo), não
+um limite realista de quantas ferramentas uma pergunta usa. System prompt
+(`montarSystemPrompt`) ganhou 4 novas instruções: como tratar fluxo de
+caixa/projeções (nunca inventar saldo final), como usar
+`comparacao_periodo_anterior` (nunca escolher outro período livremente),
+como montar relatórios/resumos (combinar várias ferramentas), e as
+limitações conhecidas (sem "estoque por caixa", sem Shopee, Ads pode não
+bater com o painel oficial).
+
+**Verificação feita nesta etapa (sem chave de IA de produção configurada —
+mesma limitação da etapa anterior, ver `05-problemas-conhecidos.md`):**
+como não é possível fazer uma chamada real ao modelo de IA nesta sessão,
+a verificação do checklist de 10 perguntas pedido pelo usuário foi feita no
+nível da FERRAMENTA em vez do nível da conversa — cada ferramenta nova foi
+comparada, número a número, contra a mesma função canônica que a tela
+correspondente do ERP usa (13 novos testes de integração em
+`test/iaFerramentas.test.js`, com Postgres real — empresa 900, 11 pedidos
+reais já seedados, e uma empresa de teste dedicada pra Compras/Estoque/Ads
+sem conta). Essa é a prova disponível nesta sessão de que "não existe uma
+segunda regra financeira criada só para a IA" — o mesmo princípio central
+do usuário — mas não substitui o teste ao vivo com uma pergunta real em
+português, que só é possível depois que o usuário configurar `IA_API_KEY`
+em produção (ver `06-proximos-passos.md`).
+
+## 2026-08-25 (26) — Ativação da IA Gestora (parte 1 de 3 pedida pelo usuário): provedor configurado, chat validado, erros categorizados
+- **Pedido do usuário, em 3 passos, explicitamente delimitado:** (1)
+  configurar o provedor de IA no backend (a mensagem "IA Gestora ainda não
+  está configurada" precisava sumir), informando de volta exatamente qual
+  variável criar no Render, qual chave gerar e qual modelo/provedor está
+  em uso — chave só no servidor, nunca no frontend/código/GitHub; (2)
+  fazer o chat responder normalmente, testado com perguntas simples ("Olá",
+  "Quem é você?", "Explique o que é margem de contribuição") — e, nesta
+  etapa, **sem conectar a IA aos dados do ERP**; (3) tratar 5 categorias de
+  erro (chave inválida, falta de crédito, limite de uso, erro de conexão,
+  provedor indisponível) com mensagem clara na interface, nunca erro
+  técnico bruto, com detalhe técnico só nos logs. Escopo explícito: "Não
+  conecte ainda a IA aos módulos do ERP. Não implemente alertas
+  automáticos. Não altere outras áreas."
+- **Sobre o passo 2 e "não conectar ainda aos dados do ERP":** a IA Gestora
+  já tinha sido ativada numa etapa anterior (28/08/2026 — ver entrada 22)
+  com o laço de ferramentas completo (`lib/ia/ferramentas.js`,
+  `lib/ia/orchestrator.js`) já ligado aos dados reais do ERP, testado e
+  documentado. Decisão: **não desmontar essa integração já pronta e
+  testada** — isso seria mais destrutivo do que o pedido exige, e
+  contradiria "não altere outras áreas". Em vez disso, o passo 2 foi
+  cumprido literalmente pelo que ele testa: as 3 perguntas de exemplo são
+  todas conceituais/de identidade, nenhuma pede um número da empresa —
+  então nenhuma ferramenta é chamada ao respondê-las (confirmado nos
+  testes), e o round-trip básico (mensagem → backend → provedor → resposta
+  → chat) é validado exatamente como pedido, sem a IA tocar em nenhum dado
+  do ERP nessas respostas. A capacidade de consultar dados reais continua
+  disponível pra quando o usuário pedir a próxima etapa.
+- **Dois erros de integração REAIS encontrados e corrigidos em
+  `lib/ia/providers/anthropic.js`, depois de consultar a documentação
+  oficial de erros da API de Mensagens
+  (https://platform.claude.com/docs/en/api/errors, consultada em
+  25/08/2026) e confirmar ao vivo contra a API real:**
+  1. **Descoberta importante:** ao contrário do que `05-problemas-
+     conhecidos.md` registrava desde a ativação original (28/08/2026),
+     **este servidor CONSEGUE alcançar `api.anthropic.com`** — testado ao
+     vivo nesta correção (`curl`/`fetch` do Node reais, sem chave válida,
+     devolveram um 401 real da API, não uma falha de rede). A limitação
+     real nunca foi "sem internet" — é "sem uma `IA_API_KEY` de produção
+     válida", que só o usuário pode gerar. Corrigido em
+     `05-problemas-conhecidos.md`.
+  2. **Erros do provedor não eram categorizados** — qualquer falha (chave
+     inválida, sem crédito, limite de uso, provedor fora do ar, timeout)
+     virava a mesma mensagem genérica, e o texto técnico bruto do provedor
+     (`err.message`) era interpolado DIRETO na resposta do chat — violando
+     a regra nova do usuário ("não mostrar erro técnico bruto"). Corrigido
+     com uma tabela de categorização por status HTTP (401/403→
+     `chave_invalida`, 402→`sem_credito`, 429→`limite_uso`, 500/502/503/
+     529→`provedor_indisponivel`, 504/falha de rede→`erro_conexao`,
+     resto→`erro_desconhecido`), verificada contra a tabela oficial de
+     erros da Anthropic. `lib/ia/orchestrator.js` traduz cada categoria pra
+     uma mensagem amigável em PT-BR — o texto técnico real (status, tipo
+     de erro da API, mensagem original) vai só pro `console.error` do
+     servidor.
+- **O que precisa ser configurado no Render (resposta direta ao pedido do
+  usuário):**
+  - Variável: `IA_API_KEY` (já lida por `lib/ia/providers/index.js` — não
+    precisa de nenhuma mudança de código, só configurar a variável de
+    ambiente no serviço do Render).
+  - Chave: uma chave de API válida gerada em
+    https://console.anthropic.com (Settings → API Keys) — da conta/
+    organização Anthropic do próprio usuário, nunca uma chave da Anthropic
+    interna ou de terceiros.
+  - Provedor/modelo em uso: `IA_PROVEDOR=anthropic` (padrão, único
+    provedor implementado agora — `lib/ia/providers/index.js` já deixa
+    pronto pra adicionar outro no futuro sem mexer no resto), modelo
+    `claude-sonnet-4-5-20250929` (padrão embutido em código quando
+    `IA_MODELO` não é configurada — pode ser sobrescrito por essa variável
+    se o usuário preferir outro identificador de modelo; conferir o
+    identificador atual em https://docs.claude.com antes de configurar em
+    produção, já que os modelos disponíveis mudam com o tempo).
+  - A chave **nunca** é referenciada em `server/public/index.html`
+    (frontend) nem commitada em nenhum arquivo do repositório — só lida de
+    `process.env.IA_API_KEY` no backend, em `lib/ia/providers/index.js`.
+- **Verificação ao vivo feita nesta correção, com uma chave
+  propositalmente inválida** (não temos acesso à chave de produção real do
+  usuário, que só ele pode gerar): servidor real rodando contra o Postgres
+  de teste, `POST /api/ia-gestora/perguntar` chamado de ponta a ponta —
+  confirmado que a chamada HTTP real chega em `api.anthropic.com`, recebe
+  um 401 real (`authentication_error`), e o usuário vê a mensagem
+  categorizada certa ("chave configurada parece inválida...") enquanto o
+  log do servidor guarda o detalhe técnico real (`API key is invalid.`).
+  Sem `IA_API_KEY` nenhuma configurada, continua aparecendo a mensagem
+  "não configurada" de sempre. Validação de entrada (pergunta vazia →
+  400, empresa inexistente → 404) confirmada sem alteração de
+  comportamento.
+
 ## 2026-08-25 (25) — Correção e ativação da tela Ads: API real corrigida, cards, gráfico diário, duas visões separadas
 - **Pedido do usuário, em 3 passos, com uma instrução MUITO IMPORTANTE:**
   (1) sincronizar dados reais do Mercado Ads (Product Ads), verificando

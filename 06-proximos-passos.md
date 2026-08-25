@@ -1,5 +1,59 @@
 # Próximos Passos
 
+- **Concluído em 25/08/2026 (catálogo da IA Gestora ampliado para 19
+  ferramentas — "inteligência central", testado localmente: Postgres real
+  + servidor real via HTTP, 13 testes de integração novos comparando cada
+  ferramenta número a número contra a função canônica do ERP — 197 testes
+  no total no projeto com Postgres/64 sem, 31 suítes, 0 falhas):** ver
+  `04-alteracoes.md` e `02-decisoes.md` (27). **Ainda bloqueado pela mesma
+  falta de `IA_API_KEY` de produção válida** (ver `05-problemas-
+  conhecidos.md`) — nenhuma ação nova é necessária além do que já estava
+  pendente. Falta, **nesta ordem, assim que o usuário configurar a
+  chave**:
+  1. o usuário subir o próximo zip de código pro GitHub (deploy automático
+     no Render cuida do resto) e confirmar `IA_API_KEY` configurada;
+  2. testar ao vivo, com dado real, as 10 perguntas do checklist pedido
+     pelo usuário: "Quanto faturei hoje?", "Qual minha margem de
+     contribuição hoje?", "Quanto tenho para pagar?", "Quanto tenho para
+     receber?", "Qual SKU mais vendeu este mês?", "Qual modelo de caixa
+     mais vendeu em unidades físicas?", "Quanto gastei com Ads este mês?",
+     "Quais anúncios tiveram pior resultado?", "Como está meu fluxo de
+     caixa?", "Faça um resumo executivo do meu negócio este mês.";
+  3. comparar cada resposta da IA com a tela correspondente do ERP
+     (Visão Geral/Pedidos/Financeiro/DRE/Relatórios/Ads/Contas a
+     Pagar/Receber) pro mesmo período — número a número; se houver
+     qualquer divergência, corrigir a origem (a ferramenta ou a função
+     canônica que ela usa) antes de considerar concluído, exatamente como
+     pedido pelo usuário;
+  4. confirmar que perguntas fora do que as ferramentas cobrem (ex:
+     Shopee, "estoque por caixa") são respondidas com honestidade em vez
+     de uma resposta inventada;
+  5. informar ao usuário, ao final, quais módulos a IA já consegue
+     consultar com segurança e quais ainda não têm dado suficiente (esta
+     etapa cumpriu essa parte no nível técnico — ver `03-funcionalidades.md`
+     — falta só confirmar com o usuário depois do teste ao vivo);
+  - **por instrução explícita do usuário, esta etapa parou aqui** — nenhuma
+    ação automática foi implementada (todas as 10 ferramentas novas são só
+    leitura); não avançar sozinho para a IA poder alterar dados, nem para
+    alertas automáticos proativos, sem o usuário pedir depois de validar
+    as respostas acima.
+- **Concluído em 25/08/2026 (parte 1 de 3 da ativação da IA Gestora,
+  testado localmente — Postgres real + servidor real via HTTP + chamada
+  ao vivo com chave inválida contra `api.anthropic.com`, 185 testes com
+  Postgres/64 sem, 0 falhas):** provedor de IA corrigido/confirmado
+  contra a API real, erros categorizados em 5 tipos com mensagem clara
+  (nunca erro técnico bruto) — ver `04-alteracoes.md` e `02-decisoes.md`
+  (26). **Único passo restante para o chat responder de verdade:**
+  configurar `IA_API_KEY` no Render com uma chave real da conta Anthropic
+  do usuário. O usuário pediu explicitamente para não avançar mais nesta
+  etapa ("Não conecte ainda a IA aos módulos do ERP. Não implemente
+  alertas automáticos. Não altere outras áreas") — a conexão com dados do
+  ERP e alertas automáticos já existem de uma etapa anterior (28/08/2026)
+  mas não foram tocados aqui; próximos passos possíveis, **não pedidos
+  ainda**: (1) validar ao vivo, com a chave real configurada, que as
+  perguntas que USAM dados do ERP (ex: "quanto vendi hoje") respondem
+  certo; (2) revisitar se o usuário quiser alertas automáticos ou dar à
+  IA permissão para alterar dados do sistema.
 - **Concluído em 25/08/2026, testado localmente (Postgres real + servidor
   real via HTTP, `periodo=hoje` e `periodo=mes` conferidos manualmente —
   166 testes automatizados no total no projeto com Postgres, 51 sem, 0
