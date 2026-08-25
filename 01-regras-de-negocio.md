@@ -778,6 +778,50 @@ _(sem regras registradas ainda)_
   problemas precisam da minha atenção" (mesmos alertas de Visão Geral >
   Alertas & IA).
 
+### Radar da IA — acompanhamento contínuo em segundo plano (25/08/2026)
+- **A IA Gestora deixa de depender só de pergunta.** Além do chat, um
+  processo automático no **backend** (`lib/ia/radarScheduler.js`, nunca um
+  timer no navegador) analisa continuamente cada empresa ativa — a cada
+  **15 minutos** por padrão — e mantém um retrato sempre atualizado do
+  negócio, mesmo sem ninguém com o ERP aberto. Ver `02-decisoes.md` (31).
+- **Sempre regras/cálculos primeiro, IA por último.** Toda detecção
+  (anúncio vendendo pouco/parado/com prejuízo/bom desempenho; custo que
+  mudou e afetou a margem; Ads gastando sem vender ou consumindo grande
+  parte da margem; estoque com cobertura baixa/crítica/em excesso;
+  contas a pagar/receber, fluxo de caixa projetado; compra necessária) é
+  **determinística** — nenhuma chamada ao modelo de IA para decidir se
+  algo é um problema. A IA é usada só para **escrever a recomendação em
+  texto**, e só para situações **novas** ou que **pioraram** desde o
+  último ciclo — nunca a toda hora, nunca pra tudo. Sem `IA_API_KEY`
+  configurada (mesma limitação de sempre, ver
+  `05-problemas-conhecidos.md`), todo alerta continua funcionando com uma
+  recomendação padrão determinística.
+- **"Não quero uma IA que procure somente problemas."** O Radar também
+  identifica oportunidades reais: anúncio que cresceu mantendo margem
+  saudável, produto vendendo bem com margem saudável.
+- **A IA continua sem permissão para executar ações sozinha.** Ela
+  analisa, compara, projeta, alerta e recomenda — **nunca** apaga
+  anúncio, pausa anúncio, altera preço, altera Ads, paga conta, cria
+  compra, altera estoque nem altera custo. Toda ação continua sendo uma
+  decisão do usuário.
+- **Nunca duplica alerta.** Cada situação tem uma chave estável; um
+  problema que já tem alerta aberto é **atualizado**, nunca duplicado dia
+  após dia. Um alerta cujo motivo deixou de existir é resolvido
+  automaticamente no ciclo seguinte.
+- **Sempre dados reais, mesmos cálculos das demais telas.** O Radar não
+  cria nenhuma fórmula financeira nova — reaproveita
+  `lib/relatorioVendas.js`, `lib/resultadoVenda.js`, `lib/ads.js`,
+  `lib/relatoriosAgregados.js`, `lib/contasPagar.js`,
+  `lib/contasReceber.js`, `lib/visaoGeralPainel.js` e `lib/compras.js` —
+  a única exceção é a estimativa de "compra necessária" (cobertura de
+  estoque em dias), uma heurística nova, simples e declarada, porque o
+  ERP ainda não tem nenhum conceito de ponto de reposição/estoque mínimo
+  em nenhuma tela.
+- **Onde aparece:** Visão Geral > Alertas & IA (novo painel "Radar da IA",
+  ao lado do painel de alertas já existente — que continua funcionando
+  exatamente como antes) e um resumo "O que precisa da minha atenção
+  hoje" na tela inicial da própria IA Gestora.
+
 ## Outras regras gerais
 - **Pedido cancelado no Mercado Livre não é venda de verdade.** Ele não
   entra no faturamento, taxas, frete, imposto, custo nem margem de

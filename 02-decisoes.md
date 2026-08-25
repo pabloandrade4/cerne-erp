@@ -3,6 +3,162 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-25 (31) — Radar da IA: a IA Gestora deixa de depender de pergunta e passa a acompanhar o negócio continuamente, em segundo plano
+
+Pedido do usuário, em 3 passos, com as mesmas constraints de sempre repetidas
+explicitamente ("antes de alterar qualquer coisa, leia toda a documentação e
+preserve o que já está funcionando", "faça SOMENTE estes 3 passos", "não
+altere outros módulos nesta tarefa"): (1) **análise automática dos
+anúncios** — por SKU/anúncio, continuamente: vendas, faturamento, evolução,
+dias sem venda, queda/crescimento, margem de contribuição, gasto com Ads,
+resultado depois de Ads, estoque, preço, taxas, frete — identificando
+anúncio vendendo pouco, anúncio praticamente parado (**"a IA NÃO deve
+apagar anúncio automaticamente, ela apenas recomenda"**), anúncio com muito
+faturamento e pouco resultado, anúncio dando prejuízo, e também anúncios
+bons/oportunidades (**"não quero uma IA que procure somente problemas"**);
+(2) **a IA analisando o negócio inteiro** conforme os dados são
+sincronizados — custos (impacto na margem quando o custo muda), Ads
+agregado (ROAS/ACOS, gastando sem vender, Ads consumindo grande parte da
+margem), estoque (cobertura estimada, zerado, baixo, excesso), financeiro
+(contas a pagar/receber, vencidas), fluxo de caixa (saldo projetado,
+cruzando pagar × receber), compras (o que precisa ser comprado, cruzando
+com o caixa disponível); (3) **"Radar da IA"** — processo automático no
+BACKEND, periódico, **nunca um timer só no navegador**, e **"não chame o
+modelo de IA desnecessariamente a cada minuto — use primeiro regras e
+cálculos do ERP para detectar situações relevantes e depois utilize a IA
+para interpretar e gerar recomendações"**, organizado em 🔴 Crítico /
+🟠 Atenção / 🟢 Oportunidades / 🔵 Informativo, aparecendo em Visão Geral >
+Alertas & IA **e** num resumo dentro da própria IA Gestora, com um bloco
+"O que precisa da minha atenção hoje". Constraints permanentes reafirmadas:
+nunca inventar número (sempre os mesmos cálculos das demais telas), a IA
+continua **sem permissão para executar ações sozinha** (analisa, compara,
+projeta, alerta, recomenda — nunca apaga anúncio, pausa anúncio, altera
+preço, altera Ads, paga conta, cria compra, altera estoque, altera custo),
+e nunca duplicar alerta ("se um problema já possui um alerta aberto,
+atualize esse alerta em vez de criar outro igual todos os dias").
+
+**1) Como "vasculhar tudo" sem inventar nenhuma fórmula financeira nova.**
+A tentação óbvia seria escrever um novo cálculo de margem "por anúncio" —
+errado, porque violaria a regra central do projeto (fonte única de
+cálculo). Em vez disso, o Radar é construído como uma camada nova de
+**agregação e detecção** por cima do que já existe: `lib/relatorioVendas.js`
+(`buscarItensDoPeriodo` — a mesma função que já alimenta Pedidos, DRE,
+Financeiro e a própria IA Gestora) fornece os itens vendidos já com
+margem de contribuição calculada por `lib/resultadoVenda.js`; o Radar só
+agrupa esses itens por `ml_item_id`/SKU em janelas de tempo (30d/7d/7d
+anteriores) para enxergar tendência. `lib/ads.js#listarAds` (a mesma fonte
+da tela Ads) fornece ROAS/ACOS/margem depois de Ads. Nenhuma fórmula
+financeira nova foi criada — só regras de comparação/limiar em cima de
+números que o ERP já calculava.
+
+**2) Estrutura em 3 arquivos, espelhando os 3 passos do pedido.**
+`server/lib/ia/radarAnuncios.js` (Passo 1 — por anúncio),
+`server/lib/ia/radarNegocio.js` (Passo 2 — negócio inteiro: custos, Ads
+agregado, estoque, financeiro/fluxo de caixa, compras) e
+`server/lib/ia/radar.js` (Passo 3 — orquestrador: junta os dois, persiste,
+decide quando chamar a IA, gera o resumo "hoje"). Um quarto arquivo,
+`server/lib/ia/radarConfig.js`, guarda só os limiares/constantes
+declarados (ex.: "vendeu ≤5 unidades em 30 dias", "estoque cobre ≤7
+dias") — mesmo padrão já usado por `ESTOQUE_BAIXO_LIMITE` em
+`lib/visaoGeralPainel.js`: um ponto de partida simples e declarado, não
+uma previsão de demanda ou modelo de ML.
+
+**3) Detecção sempre determinística; a IA só escreve a recomendação —
+e só quando algo é NOVO ou PIOROU.** Todo número/comparação/limiar roda em
+JavaScript/SQL puro, sem nenhuma chamada ao modelo. A IA (mesmo provedor
+já configurado em `lib/ia/providers/`) é chamada **só** para transformar
+uma lista de situações NOVAS ou que pioraram de severidade neste ciclo em
+um texto de recomendação melhor — nunca para decidir se algo é um problema
+(isso já foi decidido pelas regras) e nunca a cada ciclo pra tudo (cumprindo
+literalmente "não chame o modelo desnecessariamente a cada minuto"). Cada
+situação já nasce com uma `recomendacaoPadrao` determinística (muitas
+copiadas quase literalmente dos exemplos que o próprio usuário deu no
+pedido) — então o Radar funciona **inteiramente sem IA configurada**
+(relevante porque esta sandbox não tem `IA_API_KEY` válida, mesma
+limitação já documentada em `05-problemas-conhecidos.md`); a IA, quando
+configurada, só enriquece o texto, nunca é uma dependência para o sistema
+funcionar.
+
+**4) Nunca duplicar alerta: upsert por `chave` estável + auto-resolução.**
+Cada situação detectada carrega uma `chave` determinística e estável (ex.:
+`anuncio_parado:ml:123456789`, `custo_alterado:SKU-X`,
+`financeiro_contas_vencidas` — este último e `fluxo_caixa_risco` são
+propositalmente "globais" por empresa, já que só existe uma versão
+agregada dessas situações). Nova tabela `radar_alertas` tem
+`UNIQUE(empresa_id, chave)`: a cada ciclo, uma chave já existente **nunca**
+gera uma nova linha — atualiza a existente; uma severidade que piorou (ou
+um alerta que tinha sido resolvido e voltou a acontecer) reseta a
+recomendação para o texto padrão e entra na lista pra IA reinterpretar;
+uma chave que não foi detectada neste ciclo é automaticamente marcada como
+`resolvido` — nunca precisa de ação manual pra "limpar" um alerta que já
+deixou de ser verdade.
+
+**5) Por que uma tabela nova só pra custo (`radar_snapshot_custos`).**
+O ERP recalcula toda margem histórica sempre com o custo **atual** de
+`produtos` (nunca guarda o custo de quando a venda aconteceu) — então não
+existe, hoje, nenhuma forma de comparar "margem antes/depois de uma
+mudança de custo" sem guardar, em algum lugar, o último custo/margem
+conhecidos. Em vez de inventar um recálculo hipotético, o Radar grava (a
+cada ciclo, upsert por SKU) o último custo e a margem % dos últimos 30
+dias — duas leituras **reais**, tiradas em momentos reais diferentes.
+Comparar essas duas leituras reais nunca inventa nenhum número; só existe
+alerta quando o custo realmente mudou desde o ciclo anterior.
+
+**6) "Compra necessária" é uma estimativa nova e claramente declarada —
+não existe reorder point no ERP hoje.** Não havia, em nenhuma tela do
+sistema, o conceito de "ponto de reposição" ou "estoque mínimo". Foi
+construída uma estimativa simples: `coberturaDias = estoqueAtual /
+(quantidadeVendida30d / 30)`, com limiares nomeados em `radarConfig.js`
+(crítico ≤7 dias, atenção ≤14 dias, excesso ≥120 dias — mesmo espírito
+declarado do `ESTOQUE_BAIXO_LIMITE` já existente). A sugestão de compra
+(quantidade e valor) é sempre cruzada com o fluxo de caixa real dos
+próximos 7 dias (contas a pagar vencidas/vencendo × contas a
+receber/recebimentos do Mercado Livre esperados) antes de avisar se
+"apertaria o caixa" — exatamente como no exemplo do pedido do usuário.
+Nunca inventa saldo bancário (o ERP não tem esse cadastro, ver
+`01-regras-de-negocio.md`) — só valores previstos reais.
+
+**7) Ciclo automático no BACKEND, nunca um timer no navegador — mesmo
+padrão já usado e testado por `lib/syncScheduler.js` (Mercado Livre) e
+`lib/shopeeTokenScheduler.js` (Shopee).** `server/lib/ia/radarScheduler.js`
+usa `setInterval` dentro do próprio processo Node do servidor
+(`.unref()`'d, primeiro ciclo dispara imediatamente ao subir o servidor,
+sem esperar o intervalo inteiro), com `Promise.allSettled` isolando o
+erro de uma empresa das demais. Intervalo padrão de **15 minutos**
+(configurável por `IA_RADAR_INTERVALO_MS`) — bem maior que o 1 minuto da
+sincronização de pedidos, porque cada ciclo chama a API de Ads do Mercado
+Livre (rate limit real) e roda vários cálculos agregados por empresa; os
+alertas em si também não mudam minuto a minuto (são tendências de dias,
+não de segundos). A API de Ads é buscada **uma única vez** por
+empresa/ciclo (30d e 7d) no orquestrador (`radar.js`) e compartilhada
+entre `radarAnuncios.js` e `radarNegocio.js`, pra nunca consultar Ads em
+dobro no mesmo ciclo.
+
+**8) Bug real encontrado pelos testes automatizados deste ciclo, corrigido
+antes de considerar a tarefa concluída.** `lib/ads.js#listarAds` devolve
+uma linha por anúncio mesmo quando não há investimento de Ads no período
+(sem campanha vinculada, ou conta de Ads sem token válido) — com
+`margemDepoisDoAds` vindo `null` nesse caso, mesmo havendo venda real e
+margem de contribuição conhecida. A primeira versão de
+`radarAnuncios.js` confiava cegamente nessa margem sempre que existia uma
+linha de Ads (mesmo com o número vindo `null`), fazendo a detecção de
+"anúncio dando prejuízo" desaparecer silenciosamente em qualquer empresa
+sem Ads conectado — justamente o cenário mais comum. Corrigido para cair
+no fallback (margem pura de vendas, sem Ads) sempre que a margem depois
+do Ads não estiver disponível, não só quando não existe nenhuma linha de
+Ads para aquele anúncio. Coberto por `test/radar.test.js` (ver
+`04-alteracoes.md`).
+
+**9) Escopo do que NÃO foi feito nesta tarefa (respeitando "SOMENTE estes 3
+passos").** Nenhum módulo fora de `lib/ia/radar*.js`,
+`routes/iaGestora.js` (só a rota nova `GET /radar-resumo`),
+`server.js` (só a chamada de boot do scheduler), `db/schema.sql` (só as 3
+tabelas novas) e `lib/visaoGeralPainel.js` (só o campo aditivo `radar` no
+retorno) foi alterado. `lib/visaoGeralPainel.js#gerarAlertas` (o
+mecanismo de alertas simples já existente) continua **inteiramente
+intacto** — o Radar é puramente aditivo, uma segunda fonte de alerta,
+nunca uma substituição.
+
 ## 2026-08-25 (30) — IA Gestora vira "central de análise e relatórios": histórico salvo no banco (com login real, só nesta área), respostas visuais (KPI/tabela/gráfico) e planilha XLSX automática com os MESMOS dados
 
 Pedido do usuário, em 3 passos, com a constraint explícita de ler a

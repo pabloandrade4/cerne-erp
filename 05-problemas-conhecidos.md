@@ -3,6 +3,41 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Radar da IA: intervalo fixo de 15 min, heurística de compra é nova (sem reorder point no ERP), recomendação em texto exige IA_API_KEY (25/08/2026)
+- **Intervalo de 15 minutos é um valor declarado, não configurado pelo
+  usuário na tela.** Ajustável só por variável de ambiente
+  (`IA_RADAR_INTERVALO_MS`, ver `lib/ia/radarScheduler.js`) — não existe
+  (ainda) um campo na interface para o usuário escolher a frequência do
+  ciclo. Escolhido 15 min por causa do rate limit real da API de Ads do
+  Mercado Livre e porque os alertas são tendências de dias, não de
+  segundos — ver `02-decisoes.md` (31), item 7.
+- **"Compra necessária" é uma estimativa nova — o ERP não tem ponto de
+  reposição/estoque mínimo em nenhuma tela.** A cobertura em dias
+  (`estoqueAtual / velocidadeDiária`) e os limiares
+  (`ESTOQUE_COBERTURA_CRITICA_DIAS=7`, `ESTOQUE_COBERTURA_BAIXA_DIAS=14`,
+  `ESTOQUE_COBERTURA_EXCESSO_DIAS=120`, em `lib/ia/radarConfig.js`) são
+  valores simples e declarados, não uma previsão de demanda/modelo de ML
+  — mesma natureza do `ESTOQUE_BAIXO_LIMITE` já existente em
+  `lib/visaoGeralPainel.js`. Útil revisar esses números com o usuário
+  depois de rodar em produção com dados reais por um tempo.
+- **A recomendação em texto (escrita pela IA) só existe com
+  `IA_API_KEY` configurada** — mesma limitação de sempre da IA Gestora
+  (ver a próxima seção abaixo). Sem chave, todo alerta continua
+  funcionando normalmente, só que com a `recomendacaoPadrao`
+  determinística (texto fixo por categoria) em vez de um texto
+  personalizado pela IA para aquela situação específica.
+- **`radar_snapshot_custos` guarda só o último valor conhecido por SKU,
+  não um histórico completo de mudanças de custo.** Suficiente para o
+  alerta "o custo mudou desde o ciclo anterior", mas não dá para consultar
+  "todas as vezes que o custo de X mudou este ano" — se isso vier a ser
+  pedido, precisaria de uma tabela de histórico de verdade (a decisão
+  atual foi deliberadamente o mínimo necessário para o alerta pedido).
+- **`ml_estoque_itens` não tem preço** — o "preço médio de venda" que
+  aparece nos dados de cada anúncio (`precoMedioVenda30d`) é sempre
+  **derivado** de vendas reais (faturamento/quantidade), nunca um preço de
+  catálogo — se um anúncio não vendeu no período, esse campo fica `null`
+  (nunca inventado), mesma regra já usada no resto do ERP.
+
 ## IA Gestora: login não cobre permissão por empresa; primeiro usuário precisa ser criado por script; "Gráficos" da planilha é dado, não gráfico nativo (25/08/2026)
 - **Login não cria permissão por empresa** (ver `02-decisoes.md` (30)): o
   novo login real garante que uma conversa é sempre de um usuário só, mas

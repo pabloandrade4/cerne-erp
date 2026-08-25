@@ -2,6 +2,72 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-25 (31) — Radar da IA: acompanhamento contínuo do negócio em segundo plano (análise automática de anúncios, negócio inteiro, alertas 🔴🟠🟢🔵)
+- **Pedido do usuário, em 3 passos, com o pedido explícito de "não altere
+  outros módulos nesta tarefa":** (1) análise automática de anúncios/SKU
+  (vendas, faturamento, dias sem venda, crescimento/queda, margem, Ads,
+  estoque), identificando anúncio vendendo pouco, praticamente parado (**a
+  IA nunca apaga sozinha, só recomenda**), muito faturamento com pouco
+  resultado, dando prejuízo, e também **oportunidades** (anúncio bom/em
+  crescimento — "não quero uma IA que procure somente problemas"); (2) a
+  IA analisando o negócio inteiro conforme os dados são sincronizados —
+  custos, Ads agregado, estoque (cobertura estimada), financeiro, fluxo
+  de caixa (saldo projetado), compras (cruzando com o caixa); (3) o
+  "**Radar da IA**" — processo automático no **backend**, nunca um timer
+  só no navegador, usando primeiro regras/cálculos determinísticos do ERP
+  e só depois a IA para interpretar/recomendar (nunca chamando o modelo à
+  toa a cada ciclo), organizado em 🔴 Crítico / 🟠 Atenção /
+  🟢 Oportunidades / 🔵 Informativo, visível em Visão Geral > Alertas & IA
+  **e** num resumo "O que precisa da minha atenção hoje" dentro da própria
+  IA Gestora. Ver `02-decisoes.md` (31) para o desenho completo.
+- **Arquivos novos:** `server/lib/ia/radarConfig.js` (limiares
+  declarados), `server/lib/ia/radarAnuncios.js` (Passo 1),
+  `server/lib/ia/radarNegocio.js` (Passo 2: custos, Ads agregado, estoque,
+  financeiro/fluxo de caixa, compras), `server/lib/ia/radar.js`
+  (orquestrador: persiste sem duplicar — upsert por `chave`, decide quando
+  chamar a IA, gera o resumo de hoje), `server/lib/ia/radarScheduler.js`
+  (ciclo automático a cada 15 min, mesmo padrão de `syncScheduler.js`).
+- **Schema novo (aditivo, nenhuma tabela existente alterada):**
+  `radar_alertas` (um alerta aberto por `chave` — `UNIQUE(empresa_id,
+  chave)`; nunca duplica, atualiza a existente; auto-resolve quando a
+  situação deixa de ser detectada), `radar_estado` (última execução,
+  status, resumo "hoje" por empresa — prova que o ciclo roda mesmo sem
+  ninguém com o ERP aberto), `radar_snapshot_custos` (último custo/margem
+  conhecidos por SKU, usado só pra detectar "o custo mudou desde o último
+  ciclo e a margem foi de X para Y" — o ERP não guarda custo histórico).
+- **Rota nova:** `GET /api/ia-gestora/radar-resumo?empresaId=ID`
+  (protegida pelo mesmo login da IA Gestora) — só leitura do que o ciclo
+  já persistiu, nunca dispara uma análise nova.
+- **Front-end (`public/index.html`), puramente aditivo:** Visão Geral
+  ganhou um novo painel "Radar da IA" (função `radarPanelHTML`, ao lado do
+  já existente "Alertas & IA" — este último **não foi alterado**) com os
+  4 chips de severidade e a lista "O que precisa da minha atenção hoje"
+  (clicável, navega para a tela relacionada); a IA Gestora ganhou o mesmo
+  resumo na tela inicial do chat (antes de qualquer pergunta).
+- **Bug real encontrado e corrigido pelos testes automatizados deste
+  ciclo:** `lib/ads.js#listarAds` devolve uma linha por anúncio mesmo sem
+  investimento de Ads no período (`margemDepoisDoAds` vem `null` mesmo com
+  venda real e margem conhecida) — a primeira versão de
+  `radarAnuncios.js` confiava cegamente nessa margem sempre que existia a
+  linha, fazendo "anúncio dando prejuízo" desaparecer silenciosamente em
+  qualquer empresa sem Ads conectado. Corrigido para cair no fallback
+  (margem pura de vendas) sempre que a margem depois do Ads não estiver
+  disponível. Ver `02-decisoes.md` (31), item 8.
+- **Testado (Postgres real, empresa dedicada de teste — nunca compartilhada
+  com outros arquivos):** `test/radar.test.js` (novo) cobre os 4 pontos do
+  checklist do usuário — análise automática de anúncios (vendendo pouco,
+  dando prejuízo, bom desempenho/oportunidade, com os MESMOS formatos de
+  texto dos exemplos que o usuário deu), pelo menos um alerta financeiro
+  (contas a pagar vencidas), pelo menos uma oportunidade, nunca duplica
+  alerta (upsert por chave), resolve automaticamente quando a situação
+  deixa de ser verdade, e funciona sem navegador aberto (chama
+  `executarCicloRadarEmpresa` como função Node comum, nunca via HTTP, e
+  confere que o resultado sobrevive a um "reinício do processo" —
+  descarrega os módulos do `require.cache` e lê de novo só do Postgres).
+  Mais 1 teste novo em `test/iaGestoraRoutes.test.js` (rota
+  `GET /radar-resumo`, exige login). **257 testes automatizados no
+  projeto, 0 falhas** (251 anteriores + 6 novos).
+
 ## 2026-08-25 (30) — IA Gestora vira central de análise e relatórios: histórico no banco (com login real, só nesta área), cards visuais e planilha XLSX com os mesmos dados
 - **Pedido do usuário, em 3 passos:** (1) salvar as conversas no banco —
   nunca só `localStorage` —, com histórico por usuário, abrir conversa

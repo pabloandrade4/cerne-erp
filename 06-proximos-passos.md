@@ -1,5 +1,26 @@
 # Próximos Passos
 
+- **Concluído em 25/08/2026 (Radar da IA — acompanhamento contínuo do
+  negócio em segundo plano, análise automática de anúncios, negócio
+  inteiro e alertas 🔴🟠🟢🔵, testado: Postgres real, 257 testes
+  automatizados, 0 falhas — ver `04-alteracoes.md` (31) e
+  `02-decisoes.md` (31)).** Depois de rodar em produção por um tempo com
+  dados reais, vale revisar com o usuário:
+  1. os limiares declarados em `lib/ia/radarConfig.js` (ex.: "vendeu ≤5
+     unidades em 30 dias" para "venda baixa", "estoque cobre ≤7 dias"
+     para "crítico") — foram escolhidos como ponto de partida razoável,
+     não validados contra o histórico real de nenhuma empresa ainda;
+  2. o intervalo do ciclo (15 min, `IA_RADAR_INTERVALO_MS`) — se 15 min
+     é rápido/devagar demais no uso real;
+  3. considerar expor os limiares numa tela de configuração (hoje só por
+     variável de ambiente/código) se o usuário quiser ajustar sem pedir
+     uma alteração no sistema;
+  4. quando houver uma `IA_API_KEY` de produção válida (mesma pendência
+     de sempre, ver `05-problemas-conhecidos.md`), conferir ao vivo que
+     as recomendações escritas pela IA para situações novas/escaladas
+     saem coerentes e realmente úteis (hoje só testado com a
+     `recomendacaoPadrao` determinística, já que a chave não está
+     configurada nesta sandbox).
 - **Concluído em 25/08/2026 (IA Gestora vira central de análise e
   relatórios — login real só nesta área, histórico de conversas no banco,
   cards visuais e planilha XLSX automática, testado localmente: Postgres

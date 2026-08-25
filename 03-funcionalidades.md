@@ -129,6 +129,45 @@ cada uma e o status (em desenvolvimento / concluída).
   pedidos) sem o usuário pedir depois de validar que ela entende
   corretamente os dados da empresa.
 
+## Radar da IA — acompanhamento contínuo do negócio, em segundo plano (25/08/2026)
+- **Status:** concluído e testado (Postgres real, **257 testes
+  automatizados no projeto, 0 falhas** — 251 anteriores + 6 novos deste
+  ciclo, ver `test/radar.test.js`). Ainda **só análise e recomendação** —
+  nenhuma ação automática, mesma regra da IA Gestora.
+- **O que é:** a IA Gestora deixa de depender só de pergunta — um
+  processo automático no backend (nunca um timer no navegador) analisa
+  continuamente cada empresa ativa, a cada 15 minutos, e mantém um
+  retrato sempre atualizado do negócio, mesmo sem ninguém com o ERP
+  aberto. Pedido do usuário em 3 passos — ver `02-decisoes.md` (31) e
+  `01-regras-de-negocio.md` (seção "Radar da IA").
+- **Passo 1 — anúncios:** por SKU/anúncio, identifica anúncio vendendo
+  pouco, praticamente parado (nunca apaga sozinho, só recomenda), com
+  muito faturamento e pouco resultado, dando prejuízo — e também
+  oportunidades (crescimento com margem saudável, bom desempenho
+  consistente).
+  `server/lib/ia/radarAnuncios.js`.
+- **Passo 2 — negócio inteiro:** custos (impacto na margem quando o custo
+  cadastrado muda), Ads agregado (gastando sem vender, consumindo grande
+  parte da margem), estoque (cobertura estimada em dias, baixa/crítica/
+  excesso), financeiro (contas a pagar/receber vencidas ou vencendo),
+  fluxo de caixa (risco de aperto nos próximos dias, cruzando pagar ×
+  receber), compras (o que precisa ser comprado, cruzando com o caixa
+  disponível). `server/lib/ia/radarNegocio.js`.
+- **Passo 3 — "Radar da IA":** ciclo automático (`server/lib/ia/radar.js`
+  + `radarScheduler.js`) que junta os dois passos acima, persiste sem
+  duplicar (upsert por chave, resolve sozinho quando a situação some), e
+  só chama o modelo de IA para escrever a recomendação de situações
+  **novas ou que pioraram** — nunca para detectar, nunca a cada ciclo pra
+  tudo. Organizado em 🔴 Crítico / 🟠 Atenção / 🟢 Oportunidades /
+  🔵 Informativo, visível em **Visão Geral > Alertas & IA** (novo painel
+  "Radar da IA", aditivo ao alerta já existente) e num resumo
+  "O que precisa da minha atenção hoje" na tela inicial da própria IA
+  Gestora — `GET /api/ia-gestora/radar-resumo`.
+- **Dados sempre reais.** Nenhuma fórmula financeira nova — reaproveita as
+  mesmas funções de cálculo já usadas pelo resto do ERP; a única exceção
+  declarada é a estimativa de cobertura de estoque/compra necessária
+  (heurística simples, o ERP ainda não tem ponto de reposição).
+
 ## Sincronização automática do Mercado Livre (backend, a cada 1 minuto)
 - **Status:** concluído, testado localmente (Postgres real + servidor real
   rodando via HTTP + 8 testes automatizados novos — a mecânica de
