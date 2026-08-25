@@ -3,6 +3,117 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-25 (32) — Ads: diagnóstico real (nunca mais "nenhum anunciante encontrado" genérico), endpoints ATUAIS de Product Ads e sincronização em banco
+
+- **Pedido do usuário, em 3 passos, com uma instrução MUITO IMPORTANTE:**
+  a tela Ads mostrava "Nenhuma conta de anunciante (Product Ads) encontrada
+  para esta conta do Mercado Livre" mesmo numa conta que usa publicidade de
+  verdade. (1) descobrir a causa REAL (não só mostrar a mensagem genérica),
+  usando o token real da conta contra `GET /advertising/advertisers?
+  product_id=PADS`, e registrar status/causa no log/interface se o Mercado
+  Livre devolver erro; (2) sincronizar Product Ads pela API ATUAL (a
+  instrução MUITO IMPORTANTE, verbatim do usuário: **"Os endpoints
+  legados de Product Ads já foram descontinuados pelo Mercado Livre"**),
+  guardando os dados no banco pra não depender de consultar a API toda vez
+  que a página abre; (3) ativar de vez a tela já existente (cards, gráfico,
+  ranking por anúncio ordenável, incluindo "pior ACOS"). Como sempre: ler
+  toda a documentação oficial e atual antes de alterar qualquer coisa, e
+  não misturar vendas atribuídas pelo Ads com venda orgânica.
+- **A correção anterior (entrada 25) só tinha sido validada contra
+  `developers.mercadolivre.com.br/en_us/product-ads-us-read` — a Mercado
+  Livre também documenta Product Ads em
+  `global-selling.mercadolibre.com/devsite/new-product-ads` (e
+  `/devsite/mercado-ads`), que é a MESMA API real (`api.mercadolibre.com`),
+  não uma API separada para conta de venda internacional — "Mercado Ads
+  está disponível apenas no Brasil, México e Chile", sem distinção
+  documentada entre conta doméstica e cross-border. Essa segunda
+  documentação tem um aviso explícito de descontinuação que a primeira não
+  tem: "the previous version's endpoint .../product_ads/campaigns will be
+  deprecated" e "campaign search requests must now include /search" —
+  confirma a instrução do usuário.** Três correções reais feitas em
+  `lib/mlAds.js` a partir dela:
+  1. **Faltava o parâmetro `user_id` na checagem de anunciante.** A
+     documentação atual exige `GET /advertising/advertisers?
+     product_id=PADS&user_id={marketplace_user_id}` — a versão anterior só
+     mandava `product_id=PADS`. Sem `user_id`, essa é a causa mais provável
+     de "nenhum anunciante encontrado" mesmo numa conta que anuncia de
+     verdade. `ml_contas.ml_user_id` (já existente, usado no resto da
+     integração) resolve isso sem precisar de nenhum dado novo.
+  2. **Os endpoints de campanhas e anúncios eram o formato ANTIGO.** Trocado
+     `/{advertiser_id}/product_ads/items` e
+     `/{advertiser_id}/product_ads/campaigns` pelo formato atual:
+     `GET /marketplace/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/ads`
+     e
+     `GET /marketplace/advertising/{site_id}/advertisers/{advertiser_id}/product_ads/campaigns/search`
+     (sufixo `/search` obrigatório pra campanhas, conforme o aviso de
+     descontinuação).
+  3. **A lista de métricas do endpoint de anúncios estava faltando `ctr`,
+     `cvr` e `roas`** — a correção anterior (entrada 25) tinha removido as
+     três achando que só existiam no endpoint de campanhas; o exemplo
+     verbatim da documentação atual as inclui também para anúncios/itens.
+     Adicionadas de volta — ROAS/ACOS calculados aqui em cima de
+     `cost`/`total_amount` continuam existindo como fallback quando a API
+     não devolve o valor.
+  - **Não existe "Ad Group" na API do Mercado Livre** — pesquisado
+    especificamente porque o pedido do usuário citava isso; o fluxo real é
+    anunciante → campanha → anúncio (item), sem camada intermediária.
+- **Diagnóstico real (Passo 1) — `motivoDeErro` (`lib/mlAds.js`) reescrito**
+  pra nunca mais devolver um texto genérico solto: toda falha carrega o
+  status HTTP real, a mensagem/causa exatamente como o Mercado Livre
+  devolveu (campo `message`/`cause` do corpo de erro), e o endpoint e
+  parâmetros usados — gravado em `ads_contas.detalhe_api` (JSONB) e
+  citado dentro da própria mensagem mostrada na tela (nunca só "HTTP 404",
+  sempre com a causa em texto). Continua nunca lançando erro solto — quem
+  chama sempre recebe um motivo estruturado.
+- **Persistência (Passo 2) — 3 tabelas novas** (`db/schema.sql`):
+  `ads_contas` (situação/diagnóstico por conta), `ads_campanhas`
+  (id→nome), `ads_metricas_anuncio` (métricas reais por anúncio, UMA
+  LINHA POR PERÍODO-CHAVE — ver decisão abaixo) e `ads_diario` (série
+  diária pro gráfico e pros cards fixos). A tela (`routes/ads.js` →
+  `lib/ads.js#listarAds`) **NUNCA MAIS chama a API do Mercado Livre** — lê
+  só o que já foi sincronizado. Um novo `lib/adsScheduler.js` (mesmo
+  padrão de `lib/syncScheduler.js`) roda em BACKGROUND, dentro do processo
+  Node do servidor, sincronizando todas as contas ativas a cada 15 minutos
+  (`ADS_SYNC_INTERVALO_MS`) — nunca depende do navegador aberto. Também
+  adicionado `POST /api/ads/sincronizar` (botão "Sincronizar agora" na
+  tela) pra quem acabou de corrigir a integração no painel do Mercado
+  Livre não precisar esperar o próximo ciclo.
+- **Por que "uma linha por período-chave" em vez de granularidade diária
+  por anúncio:** a API de Advertising só devolve um TOTAL agregado pro
+  intervalo de datas pedido (não dá pra "somar dias depois" — quem soma é
+  a própria API). O filtro global do ERP (`lib/periodo.js`) só tem 5
+  janelas possíveis (`hoje`/`ontem`/`7d`/`30d`/`mes`) — a sincronização
+  busca o total de cada anúncio pra essas 5 janelas exatas e grava uma
+  linha por (conta, período-chave, anúncio), assim a tela nunca precisa de
+  uma chamada ao vivo pra nenhum período que o filtro já oferece. A série
+  diária (gráfico + cards "Gasto hoje"/"Gasto no mês") é sincronizada à
+  parte, numa janela larga fixa (40 dias, `ADS_SYNC_DIARIO_DIAS`),
+  independente das 5 chaves. Todos os outros lugares do ERP que já liam
+  Ads (`lib/ia/ferramentas.js`, `lib/ia/radarAnuncios.js`,
+  `lib/relatoriosAgregados.js` → `routes/relatorios.js`) foram ajustados
+  pra passar a `periodoChave` certa — sem isso, um pedido de "últimos 7
+  dias" acabaria lendo silenciosamente o dado de "últimos 30 dias"
+  sincronizado por padrão, o que seria um número real mas da janela
+  errada (a mesma classe de erro que "nunca inventar" existe pra evitar).
+- **Passo 3 — ativação da tela:** cards, gráfico "Investimento Ads x
+  Receita atribuída por dia" e as duas tabelas separadas ("Performance
+  atribuída Mercado Ads" / "Resultado real do SKU após Ads") já existiam
+  da correção anterior (entrada 25) e não precisaram mudar de estrutura —
+  só a fonte dos dados (banco em vez de API ao vivo). Adicionada a opção
+  de ordenação "Pior ACOS" que faltava (só tinha faturamento/lucro/
+  prejuízo/gasto Ads/ROAS), e um botão "Sincronizar agora" com indicação
+  de quando a sincronização automática rodou pela última vez.
+- **O que ainda não foi confirmado contra uma chamada real:** este ambiente
+  de desenvolvimento não tem uma conta Mercado Livre real com Product Ads
+  nem acesso à internet a partir do servidor Node (mesma limitação da
+  entrada 25) — as 3 correções acima vêm diretamente do texto da
+  documentação oficial (com URLs e trechos citados no código e em
+  `05-problemas-conhecidos.md`), não de suposição, mas só uma sincronização
+  real em produção confirma definitivamente a causa do "nenhum anunciante
+  encontrado" original. O diagnóstico rico (`detalhe_api`) foi desenhado
+  exatamente pra essa confirmação ser imediata assim que rodar contra a
+  conta real, sem precisar de mais uma rodada de leitura de documentação.
+
 ## 2026-08-25 (31) — Radar da IA: a IA Gestora deixa de depender de pergunta e passa a acompanhar o negócio continuamente, em segundo plano
 
 Pedido do usuário, em 3 passos, com as mesmas constraints de sempre repetidas

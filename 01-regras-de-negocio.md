@@ -556,7 +556,36 @@ _(sem regras registradas ainda)_
 _(sem regras registradas ainda)_
 
 ## Ads
-_(sem regras registradas ainda)_
+- **Duas fontes bem separadas, nunca misturadas numa fórmula nova:**
+  métricas de publicidade (investimento, vendas/receita atribuída, ROAS,
+  ACOS, cliques, impressões, CPC) vêm SEMPRE da API de Advertising do
+  Mercado Livre, nunca calculadas pelo ERP; margem/lucro "antes do Ads"
+  vem sempre da mesma fonte única de Pedidos/DRE/Financeiro
+  (`buscarItensDoPeriodo`). A API do Mercado Livre não informa quais
+  pedidos pertencem à publicidade — só totais agregados por anúncio/
+  período — por isso a tela mostra duas visões SEPARADAS, nunca uma
+  tabela só: **"Performance atribuída Mercado Ads"** (só o que a API
+  atribui) e **"Resultado real do SKU após Ads"** (margem real de todas
+  as vendas do SKU, que podem incluir venda orgânica, menos o investimento
+  em Ads) — nunca chamado de "lucro gerado pelo Ads".
+- **Nunca inventa valor.** Quando a conta não tem acesso a Product Ads, ou
+  a sincronização ainda não rodou, ou algum campo específico não veio da
+  API, aparece como "Pendente de sincronização" — nunca um número
+  calculado como se fosse real. Quando a sincronização falha, a causa
+  mostrada (na tela e no log) é sempre a causa REAL devolvida pelo
+  Mercado Livre (status HTTP + mensagem/corpo), nunca um texto genérico
+  solto tipo "erro desconhecido".
+- **A IA não tem permissão nenhuma sobre Ads** — só analisa/soma/compara
+  os números reais já sincronizados (via Radar da IA e IA Gestora); nunca
+  pausa anúncio, altera orçamento/lance de campanha, nem qualquer outra
+  ação dentro do Mercado Ads.
+- **Sincronização sempre em BACKGROUND, nunca ao vivo dentro da
+  requisição da tela** — um ciclo automático no servidor (nunca um timer
+  no navegador) sincroniza todas as contas ativas periodicamente; a tela
+  só lê o que já foi sincronizado, e tem um botão "Sincronizar agora" pra
+  forçar um ciclo sem esperar.
+- **Só endpoints ATUAIS da API de Advertising do Mercado Livre** — nunca
+  os endpoints legados/descontinuados, mesmo que ainda respondam.
 
 ## DRE
 - **Ativado em 24/08/2026.** Nenhuma fórmula financeira nova — é a mesma

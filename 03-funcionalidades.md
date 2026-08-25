@@ -215,16 +215,16 @@ cada uma e o status (em desenvolvimento / concluída).
   `06-proximos-passos.md`).
 
 ## Ads (Product Ads do Mercado Livre)
-- **Status:** concluído, testado localmente (servidor real + Postgres local,
-  com os pedidos reais da conta "PFEMBALAGEMS" — 16 testes automatizados,
-  incluindo a reconciliação item a item e a fórmula dos cards de topo).
-  **Corrigido em 25/08/2026** (ver `04-alteracoes.md` entrada 25 e
-  `02-decisoes.md` entrada 25): a versão ativada em 25/08/2026 nunca tinha
-  sido conferida contra a documentação pública real da API de Advertising
-  — nesta correção, cada endpoint/parâmetro foi lido na documentação
-  oficial (https://developers.mercadolivre.com.br/en_us/product-ads-us-read)
-  e dois erros reais foram corrigidos (URL do `advertiser_id` e lista de
-  métricas inválida — ver `05-problemas-conhecidos.md`). **A chamada real
+- **Status:** concluído, testado localmente (servidor real + Postgres local
+  — 26 testes automatizados, incluindo reconciliação item a item, fórmula
+  dos cards de topo, sincronização com a API mockada e diagnóstico real de
+  erro). **Corrigido em 25/08/2026, e de novo em 25/08/2026 — parte 2**
+  (ver `04-alteracoes.md`/`02-decisoes.md` entradas 25 e 32): a segunda
+  correção trocou os endpoints de campanhas/anúncios pelo formato ATUAL da
+  API de Advertising (o formato anterior foi descontinuado pelo Mercado
+  Livre), adicionou o parâmetro `user_id` que faltava na checagem de
+  anunciante, e substituiu o diagnóstico genérico por um real (status,
+  mensagem e corpo exatos devolvidos pelo Mercado Livre). **A chamada real
   à API de Publicidade continua sem poder ser testada de ponta a ponta
   neste ambiente** (o servidor Node aqui não tem acesso à internet nem a
   uma conta Mercado Livre real — ver `05-problemas-conhecidos.md`). Ainda
@@ -257,27 +257,44 @@ cada uma e o status (em desenvolvimento / concluída).
   hoje, Gasto no mês (dia 1 do mês até hoje, sempre a data real —
   independente do período escolhido no filtro da tela), Receita atribuída
   aos Ads, ROAS e ACOS (esses três últimos "no período" escolhido no
-  filtro). Gráfico diário "Investimento Ads x Receita atribuída", vindo da
-  mesma API com `aggregation_type=daily`. Filtros de empresa/período do
+  filtro). Gráfico diário "Investimento Ads x Receita atribuída", vindo de
+  uma série diária sincronizada à parte. Filtros de empresa/período do
   header e de loja (nesta tela) funcionam nos cards, no gráfico e nas duas
   tabelas.
 - **Ordenação da tabela por anúncio:** Mais lucrativos, Maior prejuízo,
-  Maior gasto em Ads, Maior faturamento, Melhor ROAS — aplicada às duas
-  visões ao mesmo tempo (mesma ordem nas duas, pra facilitar comparar).
-  Shopee Ads não foi implementado (fora do escopo desta etapa, por
-  instrução explícita do usuário).
+  Maior gasto em Ads, Maior faturamento, Melhor ROAS, **Pior ACOS**
+  (adicionada em 25/08/2026 — parte 2) — aplicada às duas visões ao mesmo
+  tempo (mesma ordem nas duas, pra facilitar comparar). Shopee Ads não foi
+  implementado (fora do escopo desta etapa, por instrução explícita do
+  usuário).
+- **Sincronização em background (25/08/2026 — parte 2):** a tela nunca
+  mais consulta a API do Mercado Livre ao vivo — `server/lib/adsScheduler.js`
+  roda dentro do processo Node do servidor a cada 15 min
+  (`ADS_SYNC_INTERVALO_MS`), sincronizando todas as contas ativas pras 5
+  janelas do filtro global (`hoje`/`ontem`/`7d`/`30d`/`mes`) mais uma série
+  diária de 40 dias — nunca depende do navegador aberto. Botão
+  "Sincronizar agora" na tela (`POST /api/ads/sincronizar`) força um ciclo
+  imediato sem esperar o próximo.
+- **Diagnóstico real (25/08/2026 — parte 2):** quando uma conta não
+  sincroniza, a tela mostra a causa REAL devolvida pelo Mercado Livre
+  (status HTTP + mensagem, nunca um texto genérico) — guardado também em
+  `ads_contas.detalhe_api` (JSONB) pra investigação.
 - **Onde está:** `server/lib/mlAds.js` (cliente da API de Advertising —
-  advertiser, itens, campanhas, série diária), `server/lib/ads.js`
-  (agregação — combina as duas fontes, cards, série diária),
+  advertiser, anúncios/métricas, campanhas, série diária, endpoints ATUAIS
+  não-legados), `server/lib/ads.js` (sincronização + leitura: combina as
+  duas fontes, cards, série diária — sempre lendo do banco),
+  `server/lib/adsScheduler.js` (ciclo automático em background),
   `server/routes/ads.js`, `server/public/index.html` (módulo
-  `window.Ads`). Sem tabela própria no banco — calculado ao vivo, mesmo
-  padrão de Anúncios/Recebimentos.
+  `window.Ads`). **Tabelas próprias no banco** (25/08/2026 — parte 2):
+  `ads_contas`, `ads_campanhas`, `ads_metricas_anuncio`, `ads_diario` — ver
+  `db/schema.sql`.
 - **O que falta:** confirmar ao vivo, em produção, que a conta
   "PFEMBALAGEMS" tem (ou não) acesso a Product Ads, e que os
-  endpoints/parâmetros agora corrigidos (`/advertising/advertisers`,
-  `/{advertiser_id}/product_ads/items`, `/{advertiser_id}/product_ads/
-  campaigns`, `aggregation_type=daily`, `Api-Version`) batem exatamente
-  com a resposta real da API — ver `05-problemas-conhecidos.md`.
+  endpoints/parâmetros atuais (`/advertising/advertisers?product_id=PADS&
+  user_id=...`, `/marketplace/advertising/{site_id}/advertisers/
+  {advertiser_id}/product_ads/ads`, `.../campaigns/search`,
+  `aggregation_type`, `Api-Version`) batem exatamente com a resposta real
+  da API — ver `05-problemas-conhecidos.md`.
 
 ## Relatórios (categorias, reaproveitando a mesma fonte de sempre)
 - **Status:** concluído, testado localmente (servidor real + Postgres

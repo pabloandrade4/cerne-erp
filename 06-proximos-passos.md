@@ -1,5 +1,30 @@
 # Próximos Passos
 
+- **Concluído em 25/08/2026 — parte 2 (Ads: diagnóstico real, endpoints
+  ATUAIS de Product Ads e sincronização em banco, testado: Postgres real +
+  API mockada, 270 testes automatizados no total no projeto, 0 falhas —
+  ver `04-alteracoes.md` (32) e `02-decisoes.md` (32)).** Os 3 passos
+  pedidos foram implementados e testados na orquestração/persistência; **o
+  único item que falta é a confirmação ao vivo em produção**, porque este
+  ambiente de desenvolvimento não tem acesso à internet nem a uma conta
+  Mercado Livre real (mesma limitação de sempre, ver
+  `05-problemas-conhecidos.md`):
+  1. depois do deploy, abrir a tela Ads com a conta real conectada (ou
+     clicar em "Sincronizar agora") e conferir se o motivo/mensagem que
+     aparecem agora mudaram de "Nenhuma conta de anunciante encontrada"
+     para algo mais específico — isso já confirma se a causa era o
+     `user_id` faltando ou não;
+  2. se ainda aparecer erro, olhar `ads_contas.detalhe_api` (ou a mensagem
+     já traduzida na tela, que agora cita a causa real devolvida pelo
+     Mercado Livre) — o próximo ajuste de endpoint/parâmetro, se precisar,
+     parte desse dado real, não de mais leitura de documentação;
+  3. se sincronizar com sucesso, comparar investimento/cliques/impressões/
+     ROAS/ACOS mostrados na tela com o painel real de Product Ads do
+     Mercado Livre, pra confirmar que os campos foram lidos certo;
+  4. considerar se o intervalo de sincronização (15 min,
+     `ADS_SYNC_INTERVALO_MS`) e a janela da série diária (40 dias,
+     `ADS_SYNC_DIARIO_DIAS`) fazem sentido no uso real, ou se o usuário
+     quer ajustar.
 - **Concluído em 25/08/2026 (Radar da IA — acompanhamento contínuo do
   negócio em segundo plano, análise automática de anúncios, negócio
   inteiro e alertas 🔴🟠🟢🔵, testado: Postgres real, 257 testes

@@ -2,6 +2,66 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-25 (32) — Ads: diagnóstico real, endpoints ATUAIS de Product Ads (fim dos legados) e sincronização em banco
+- **Pedido do usuário, em 3 passos:** a tela Ads mostrava "Nenhuma conta de
+  anunciante encontrada" numa conta que usa publicidade de verdade. (1)
+  descobrir a causa real, com log/interface mostrando status e causa reais;
+  (2) sincronizar pela API ATUAL de Product Ads ("os endpoints legados já
+  foram descontinuados pelo Mercado Livre", verbatim do usuário), guardando
+  os dados no banco; (3) ativar de vez a tela já existente. Ver
+  `02-decisoes.md` (32) para o desenho completo, incluindo os trechos da
+  documentação oficial citados.
+- **`server/lib/mlAds.js` reescrito:** checagem de anunciante agora manda
+  `user_id` (faltava — causa mais provável do "nenhum anunciante
+  encontrado"); endpoints de campanhas/anúncios trocados do formato antigo
+  (`/{advertiser_id}/product_ads/items|campaigns`) para o atual
+  (`/marketplace/advertising/{site_id}/advertisers/{advertiser_id}/
+  product_ads/ads` e `.../campaigns/search`); métricas `ctr`/`cvr`/`roas`
+  devolvidas ao endpoint de anúncios (tinham sido removidas por engano
+  numa correção anterior); `motivoDeErro` reescrito pra sempre citar a
+  mensagem/causa REAL devolvida pelo Mercado Livre (nunca mais um texto
+  genérico), com status/corpo/endpoint completos em `detalheApi`.
+- **Schema novo (aditivo):** `ads_contas` (situação/diagnóstico real por
+  conta, incluindo `detalhe_api` JSONB), `ads_campanhas` (id→nome),
+  `ads_metricas_anuncio` (métricas reais por anúncio, uma linha por
+  período-chave do filtro global — `hoje`/`ontem`/`7d`/`30d`/`mes`) e
+  `ads_diario` (série diária pro gráfico/cards, janela larga fixa de 40
+  dias). `server/lib/ads.js` ganhou `sincronizarContaAds`/
+  `sincronizarTodasAsContasAds` (grava tudo isso) e `listarAds` foi
+  reescrito pra ler SEMPRE dessas tabelas — nunca mais chama a API do
+  Mercado Livre dentro da requisição HTTP da tela.
+- **Arquivo novo `server/lib/adsScheduler.js`** — ciclo automático em
+  background (mesmo padrão de `syncScheduler.js`/`radarScheduler.js`), a
+  cada 15 min (`ADS_SYNC_INTERVALO_MS`), sincronizando todas as contas
+  ativas; nunca depende do navegador aberto. Wiring de uma linha em
+  `server.js` (`iniciarSincronizacaoAutomaticaAds()`), nenhum outro módulo
+  alterado nesse arquivo.
+- **`server/routes/ads.js`:** GET passou a incluir `sincronizacaoAutomatica`
+  (status do ciclo em background) na resposta; nova rota
+  `POST /api/ads/sincronizar` (sincronização manual imediata).
+- **Consumidores existentes de `lib/ads.js#listarAds` ajustados pra passar
+  a `periodoChave` certa** (senão liam silenciosamente o padrão `30d` pra
+  qualquer período pedido): `lib/ia/ferramentas.js` (ferramentas "ads
+  desempenho" e "projeção do mês"), `lib/ia/radarAnuncios.js`
+  (`listarAdsSeguro`, usado pelo Radar da IA pros períodos 7d/30d),
+  `lib/relatoriosAgregados.js` → `routes/relatorios.js` (categoria "Vendas
+  e Margem"). Nenhuma fórmula financeira mudou nesses arquivos, só o
+  parâmetro novo repassado.
+- **Front-end (`public/index.html`), aditivo:** opção de ordenação "Pior
+  ACOS" (faltava — só tinha faturamento/lucro/prejuízo/gasto Ads/ROAS);
+  botão "Sincronizar agora" + indicação de quando o ciclo automático rodou
+  pela última vez. Cards/gráfico/tabelas não mudaram de estrutura, só a
+  fonte dos dados.
+- **Testes novos:** `server/test/mlAds.test.js` (10 casos — diagnóstico
+  real do `motivoDeErro` com erros simulados de status/corpo variados;
+  sincronização de conta sem anunciante grava a causa real; sincronização
+  de conta com anunciante usa os endpoints atuais e nunca sobra chamada ao
+  formato legado; `listarAds` nunca chama a API ao vivo; `listarAds` nunca
+  mistura o investimento de uma janela de período na outra) e
+  `server/test/adsScheduler.test.js` (3 casos — orquestração do ciclo,
+  isolamento de erro, trava contra ciclos sobrepostos). Suíte completa:
+  270/270 passando.
+
 ## 2026-08-25 (31) — Radar da IA: acompanhamento contínuo do negócio em segundo plano (análise automática de anúncios, negócio inteiro, alertas 🔴🟠🟢🔵)
 - **Pedido do usuário, em 3 passos, com o pedido explícito de "não altere
   outros módulos nesta tarefa":** (1) análise automática de anúncios/SKU
