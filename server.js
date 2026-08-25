@@ -3,8 +3,10 @@ const path = require('path');
 const express = require('express');
 const migrate = require('./db/migrate');
 const { iniciarSincronizacaoAutomatica } = require('./lib/syncScheduler');
+const { iniciarRenovacaoAutomatica: iniciarRenovacaoAutomaticaShopee } = require('./lib/shopeeTokenScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
+const shopeeRouter = require('./routes/shopee');
 const pedidosRouter = require('./routes/pedidos');
 const custosRouter = require('./routes/custos');
 const relatoriosRouter = require('./routes/relatorios');
@@ -36,6 +38,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 app.use('/api/empresas', empresasRouter);
 app.use('/api/integracoes/mercadolivre', integracoesRouter);
+app.use('/api/integracoes/shopee', shopeeRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api', custosRouter);
 app.use('/api/relatorios', relatoriosRouter);
@@ -82,6 +85,9 @@ async function start() {
     // Sincronização automática do Mercado Livre — sempre no servidor, nunca
     // depende de ninguém com o ERP aberto no navegador (ver lib/syncScheduler.js).
     iniciarSincronizacaoAutomatica();
+    // Renovação automática do token das lojas Shopee conectadas — mesma
+    // ideia (sempre no servidor), ver lib/shopeeTokenScheduler.js.
+    iniciarRenovacaoAutomaticaShopee();
   });
 }
 

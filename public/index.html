@@ -675,8 +675,76 @@
   .bd-side-note{ font-size:11px; color:var(--text-faint); margin-top:8px; }
 
   /* ---- IA Gestora (chat) — ativada em 2026, mesmo padrão visual do resto
-     do ERP (tokens, painel, botões), nenhum componente novo de fora. ---- */
-  .ia-shell{ display:flex; flex-direction:column; height:calc(100vh - 190px); min-height:460px; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+     do ERP (tokens, painel, botões), nenhum componente novo de fora.
+     Ampliada em 25/08/2026 ("IA Gestora — central de análise"): histórico
+     de conversas (sidebar própria da página) + card visual (resumo/KPIs/
+     tabela/gráfico/insights/atenção) + tela de login (login real, escopado
+     só a esta página — ver routes/iaGestora.js). ---- */
+  .ia-page{ display:flex; gap:16px; height:calc(100vh - 190px); min-height:460px; }
+  .ia-convos{ width:260px; flex-shrink:0; display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+  .ia-convos-head{ padding:13px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .ia-convos-head h3{ font-size:12px; font-weight:800; font-family:"Archivo",sans-serif; }
+  .ia-new-btn{ display:flex; align-items:center; gap:5px; background:var(--copper-soft); color:var(--copper); border:none; border-radius:8px; padding:6px 10px; font-size:11.5px; font-weight:700; cursor:pointer; flex-shrink:0; }
+  .ia-new-btn:hover{ background:var(--copper-wash); }
+  .ia-new-btn svg{ width:12px; height:12px; }
+  .ia-convos-list{ flex:1; overflow-y:auto; padding:7px; display:flex; flex-direction:column; gap:2px; }
+  .ia-convo-item{ display:flex; align-items:center; gap:6px; padding:9px 9px; border-radius:10px; cursor:pointer; }
+  .ia-convo-item:hover{ background:var(--surface-2); }
+  .ia-convo-item.active{ background:var(--copper-soft); }
+  .ia-convo-info{ flex:1; min-width:0; }
+  .ia-convo-title{ font-size:12px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ia-convo-meta{ font-size:10px; color:var(--text-faint); margin-top:2px; }
+  .ia-convo-del{ opacity:0; flex-shrink:0; width:22px; height:22px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:var(--text-faint); background:none; border:none; cursor:pointer; }
+  .ia-convo-item:hover .ia-convo-del{ opacity:1; }
+  .ia-convo-del:hover{ background:var(--danger-soft); color:var(--danger); }
+  .ia-convo-del svg{ width:12px; height:12px; }
+  .ia-convos-empty{ padding:22px 14px; text-align:center; font-size:11px; color:var(--text-faint); }
+  .ia-convos-foot{ border-top:1px solid var(--border); padding:9px 14px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .ia-convos-user{ font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ia-logout-btn{ display:flex; align-items:center; gap:4px; background:none; border:none; color:var(--text-faint); font-size:10.5px; cursor:pointer; flex-shrink:0; }
+  .ia-logout-btn:hover{ color:var(--danger); }
+  .ia-logout-btn svg{ width:12px; height:12px; }
+  .ia-login-panel{ flex:1; display:flex; align-items:center; justify-content:center; background:var(--surface); border:1px solid var(--border); border-radius:16px; }
+  .ia-login-box{ width:100%; max-width:300px; padding:30px; display:flex; flex-direction:column; gap:13px; }
+  .ia-login-box h2{ font-size:15px; font-weight:800; font-family:"Archivo",sans-serif; text-align:center; }
+  .ia-login-box p.lead-sm{ font-size:11.5px; color:var(--text-muted); text-align:center; margin-top:-6px; }
+  .ia-login-field{ display:flex; flex-direction:column; gap:5px; }
+  .ia-login-field label{ font-size:10.5px; font-weight:700; color:var(--text-muted); }
+  .ia-login-field input{ background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:9px 12px; font-size:13px; color:var(--text); outline:none; font:inherit; }
+  .ia-login-field input:focus{ border-color:var(--copper); }
+  .ia-login-error{ font-size:11.5px; color:var(--danger); text-align:center; }
+  .ia-login-submit{ background:var(--copper); color:#fff; border:none; border-radius:10px; padding:10px; font-size:13px; font-weight:700; cursor:pointer; }
+  .ia-login-submit:hover{ background:var(--copper-strong); }
+  .ia-login-submit:disabled{ opacity:.5; cursor:not-allowed; }
+  .ia-card{ background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:13px 14px; margin-top:8px; display:flex; flex-direction:column; gap:12px; max-width:640px; }
+  .ia-card-resumo{ font-size:12px; color:var(--text-muted); display:flex; flex-wrap:wrap; gap:5px 14px; }
+  .ia-kpis{ display:flex; flex-wrap:wrap; gap:9px; }
+  .ia-kpi{ background:var(--surface); border:1px solid var(--border); border-radius:11px; padding:9px 11px; min-width:124px; flex:1; }
+  .ia-kpi-label{ font-size:9.5px; color:var(--text-faint); font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
+  .ia-kpi-value{ font-size:14.5px; font-weight:800; font-family:"Archivo",sans-serif; margin-top:3px; color:var(--text); }
+  .ia-kpi-sub{ font-size:10px; color:var(--text-muted); margin-top:2px; }
+  .ia-table-wrap{ overflow-x:auto; border-radius:10px; border:1px solid var(--border); }
+  .ia-table{ width:100%; border-collapse:collapse; font-size:11.5px; background:var(--surface); }
+  .ia-table th{ text-align:left; font-size:9.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-faint); padding:7px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .ia-table td{ padding:7px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .ia-table tr:last-child td{ border-bottom:none; }
+  .ia-chart-title{ font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:6px; }
+  .ia-chart-row{ display:flex; align-items:center; gap:8px; font-size:10.5px; margin-bottom:5px; }
+  .ia-chart-label{ width:100px; flex-shrink:0; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ia-chart-bars{ flex:1; display:flex; flex-direction:column; gap:3px; }
+  .ia-chart-bar-track{ background:var(--surface); border:1px solid var(--border); border-radius:5px; overflow:hidden; height:14px; position:relative; }
+  .ia-chart-bar-fill{ height:100%; border-radius:4px 0 0 4px; }
+  .ia-chart-bar-fill.s0{ background:var(--copper); }
+  .ia-chart-bar-fill.s1{ background:var(--text-faint); }
+  .ia-chart-value{ font-size:9.5px; color:var(--text-faint); margin-top:1px; }
+  .ia-insights h4, .ia-atencao h4{ font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.03em; color:var(--text-faint); margin-bottom:6px; }
+  .ia-insights ul{ margin:0; padding-left:17px; display:flex; flex-direction:column; gap:4px; font-size:12px; }
+  .ia-atencao{ background:var(--danger-soft); color:var(--danger); border-radius:10px; padding:10px 12px; font-size:12px; }
+  .ia-card-actions{ display:flex; justify-content:flex-end; }
+  .ia-download-btn{ display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:7px 12px; font-size:11px; font-weight:700; color:var(--text); cursor:pointer; text-decoration:none; }
+  .ia-download-btn:hover{ border-color:var(--copper); color:var(--copper); }
+  .ia-download-btn svg{ width:13px; height:13px; }
+  .ia-shell{ flex:1; min-width:0; display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
   .ia-msgs{ flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:14px; }
   .ia-msg{ display:flex; gap:10px; max-width:min(680px,88%); }
   .ia-msg.user{ align-self:flex-end; flex-direction:row-reverse; }
@@ -709,7 +777,7 @@
   .ia-send-btn:disabled{ opacity:.4; cursor:not-allowed; }
   .ia-send-btn svg{ width:16px; height:16px; }
   .ia-disclaimer{ font-size:10.5px; color:var(--text-faint); text-align:center; margin-top:9px; }
-  @media (max-width:680px){ .ia-msg{ max-width:96%; } }
+  @media (max-width:680px){ .ia-msg{ max-width:96%; } .ia-page{ flex-direction:column; height:auto; } .ia-convos{ width:100%; max-height:220px; } .ia-shell{ height:calc(100vh - 420px); min-height:360px; } }
 </style>
 </head>
 <body>
@@ -865,6 +933,8 @@
     tag:'<path d="M11 3H4v7l10 10 7-7Z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/>',
     eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
     trash:'<path d="M5 7h14"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6.5 7 7.3 19a2 2 0 0 0 2 1.8h5.4a2 2 0 0 0 2-1.8L17.5 7"/><path d="M10 11v6M14 11v6"/>',
+    download:'<path d="M12 3v12M7 10.5 12 15.5 17 10.5"/><path d="M4.5 19h15"/>',
+    logOut:'<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M15 16l4-4-4-4"/><path d="M19 12H9"/>',
   };
   function svg(name, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" '+(extra||'')+'>'+(ICON[name]||'')+'</svg>'; }
 
@@ -1542,9 +1612,18 @@
     window.Empresas = { load };
   })();
 
-  /* ================= MARKETPLACES — Mercado Livre (OAuth real) ================= */
+  /* ================= MARKETPLACES — Mercado Livre e Shopee (OAuth real) =================
+     Shopee (25/08/2026): mesmo desenho do Mercado Livre acima — botão "Conectar
+     Shopee" -> autorização oficial da Shopee Open Platform -> volta conectado.
+     Nesta etapa só autorização/status/renovação de token — sem importar
+     pedidos ainda (pedido explícito do usuário), por isso não existe botão
+     de sincronizar aqui, só "Renovar token" (a renovação já acontece sozinha
+     no servidor — ver lib/shopeeTokenScheduler.js). */
   (function(){
-    const state = { empresas:[], empresaId:null, loadingEmpresas:false, conta:null, loadingConta:false, syncing:false, configurado:null, syncResult:null };
+    const state = {
+      empresas:[], empresaId:null, loadingEmpresas:false, conta:null, loadingConta:false, syncing:false, configurado:null, syncResult:null,
+      contaShopee:null, loadingContaShopee:false, configuradoShopee:null, renovandoShopee:false,
+    };
 
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
@@ -1569,6 +1648,12 @@
       if(!res.ok){ throw new Error((body && body.error) || 'Falha na requisição.'); }
       return body;
     }
+    async function apiShopee(path, opts){
+      const res = await fetch('/api/integracoes/shopee'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ throw new Error((body && body.error) || 'Falha na requisição.'); }
+      return body;
+    }
 
     async function loadContaDaEmpresa(){
       state.loadingConta = true; render();
@@ -1578,12 +1663,22 @@
       }catch(e){ state.conta = null; }
       state.loadingConta = false; render();
     }
+    async function loadContaShopeeDaEmpresa(){
+      state.loadingContaShopee = true; render();
+      try{
+        const data = await apiShopee('?empresaId='+state.empresaId);
+        state.contaShopee = (data.contas && data.contas[0]) || null;
+      }catch(e){ state.contaShopee = null; }
+      state.loadingContaShopee = false; render();
+    }
 
     async function load(queryStr){
       if(queryStr){
         const params = new URLSearchParams(queryStr);
         if(params.get('ml') === 'success') toast('Mercado Livre conectado com sucesso.');
         else if(params.get('ml') === 'error') toast(params.get('msg') || 'Não foi possível conectar o Mercado Livre.', 'error');
+        if(params.get('shopee') === 'success') toast('Shopee conectada com sucesso.');
+        else if(params.get('shopee') === 'error') toast(params.get('msg') || 'Não foi possível conectar a Shopee.', 'error');
       }
       state.loadingEmpresas = true; render();
       try{
@@ -1595,7 +1690,9 @@
       state.loadingEmpresas = false;
       try{ state.configurado = (await fetch('/api/integracoes/mercadolivre/config-status').then(r=>r.json())).configurado; }
       catch(e){ state.configurado = null; }
-      if(state.empresaId) await loadContaDaEmpresa(); else render();
+      try{ state.configuradoShopee = (await fetch('/api/integracoes/shopee/config-status').then(r=>r.json())).configurado; }
+      catch(e){ state.configuradoShopee = null; }
+      if(state.empresaId){ await Promise.all([loadContaDaEmpresa(), loadContaShopeeDaEmpresa()]); } else render();
     }
 
     function statusBadge(status){
@@ -1654,10 +1751,48 @@
           + '<button class="primary-btn enabled" id="mlConnectBtn" type="button">'+svg('link')+'<span>Conectar Mercado Livre</span></button></div>';
       }
 
+      // ---- Shopee (25/08/2026) — mesmo padrão do bloco do Mercado Livre acima ----
+      html += '<div style="height:24px;"></div>';
+
+      if(state.configuradoShopee === false){
+        html += '<div class="empty-panel" style="margin-bottom:16px;"><div class="empty-icon" style="color:var(--warning); background:var(--warning-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--warning);">Integração com a Shopee ainda não configurada</h2>'
+          + '<p class="lead">O aplicativo da Shopee Open Platform (Partner ID/Partner Key) ainda não foi configurado neste ambiente.</p></div>';
+      }
+
+      if(state.loadingContaShopee){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando conexão…</span></div></div>';
+      } else if(state.contaShopee){
+        const cs = state.contaShopee;
+        html += '<div class="conn-card-real">'
+          + '<div class="cc-left"><div class="cc-ic">'+svg('store')+'</div><div>'
+            + '<div class="cc-nick">'+escapeHtml(cs.shopName || ('Loja '+cs.shopId))+'</div>'
+            + '<div class="cc-sub">Shopee'+(cs.region?(' · '+cs.region):'')+' · Shop ID '+cs.shopId+'</div>'
+          + '</div></div>'
+          + '<div class="conn-actions">'+statusBadge(cs.status)+'</div>'
+          + '<div class="conn-meta">'
+            + '<div class="conn-meta-item"><div class="cm-label">Empresa vinculada</div><div class="cm-value">'+escapeHtml((state.empresas.find(e=>e.id===cs.empresaId)||{}).nomeFantasia || (state.empresas.find(e=>e.id===cs.empresaId)||{}).razaoSocial || '—')+'</div></div>'
+            + '<div class="conn-meta-item"><div class="cm-label">Token de acesso expira em</div><div class="cm-value">'+(fmtDateTime(cs.tokenExpiraEm) || '—')+'</div></div>'
+            + '<div class="conn-meta-item"><div class="cm-label">Última atualização</div><div class="cm-value">'+(fmtDateTime(cs.atualizadoEm) || '—')+'</div></div>'
+          + '</div>'
+          + (cs.status==='erro' && cs.ultimoErro ? '<div class="bd-note">'+svg('alertCircle')+'<span>'+escapeHtml(cs.ultimoErro)+'</span></div>' : '')
+          + '<div style="margin-top:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; width:100%;">'
+            + '<button class="btn-primary" id="shopeeRenovarBtn" type="button" '+(state.renovandoShopee?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.renovandoShopee?'Renovando…':'Renovar token')+'</span></button>'
+            + '<button class="btn-secondary" id="shopeeReconnectBtn" type="button">'+svg('link')+'<span>Reconectar</span></button>'
+            + '<span class="field-hint" style="margin:0;">O token é renovado automaticamente pelo servidor antes de vencer. Sincronização de pedidos da Shopee ainda não foi implementada nesta etapa.</span>'
+          + '</div>'
+        + '</div>';
+      } else {
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma loja da Shopee conectada</h2>'
+          + '<p class="lead">Conecte uma loja da Shopee desta empresa. Você será redirecionado à Shopee para autorizar o acesso — os tokens ficam criptografados no servidor, nunca no navegador. Pedidos da Shopee ainda não são importados nesta etapa.</p>'
+          + '<button class="primary-btn enabled" id="shopeeConnectBtn" type="button">'+svg('link')+'<span>Conectar Shopee</span></button></div>';
+      }
+
       root.innerHTML = html;
 
       const sel = document.getElementById('mlEmpresaSelect');
-      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); state.syncResult = null; loadContaDaEmpresa(); });
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); state.syncResult = null; loadContaDaEmpresa(); loadContaShopeeDaEmpresa(); });
       const connectBtn = document.getElementById('mlConnectBtn');
       if(connectBtn) connectBtn.addEventListener('click', ()=>{ window.location.href = '/api/integracoes/mercadolivre/conectar?empresaId='+state.empresaId; });
       const reconnectBtn = document.getElementById('mlReconnectBtn');
@@ -1672,6 +1807,21 @@
           await loadContaDaEmpresa();
         }catch(err){ toast(err.message, 'error'); }
         state.syncing = false; render();
+      });
+
+      const shopeeConnectBtn = document.getElementById('shopeeConnectBtn');
+      if(shopeeConnectBtn) shopeeConnectBtn.addEventListener('click', ()=>{ window.location.href = '/api/integracoes/shopee/conectar?empresaId='+state.empresaId; });
+      const shopeeReconnectBtn = document.getElementById('shopeeReconnectBtn');
+      if(shopeeReconnectBtn) shopeeReconnectBtn.addEventListener('click', ()=>{ window.location.href = '/api/integracoes/shopee/conectar?empresaId='+state.empresaId; });
+      const shopeeRenovarBtn = document.getElementById('shopeeRenovarBtn');
+      if(shopeeRenovarBtn) shopeeRenovarBtn.addEventListener('click', async ()=>{
+        state.renovandoShopee = true; render();
+        try{
+          await apiShopee('/'+state.contaShopee.id+'/renovar-token', { method:'POST' });
+          toast('Token da Shopee renovado com sucesso.');
+          await loadContaShopeeDaEmpresa();
+        }catch(err){ toast(err.message, 'error'); }
+        state.renovandoShopee = false; render();
       });
     }
 
@@ -1970,7 +2120,17 @@
         : 'Desconectada';
       const mlDotStyle = ml.status==='ativa' ? ' style="background:var(--success)"' : ml.status==='erro' ? ' style="background:var(--danger)"' : '';
       const ultimaSinc = fmtDateTime(ml.ultimaSincronizacao);
-      const conectados = (c.empresas.total>0?1:0) + (ml.contasConectadas>0?1:0) + (c.shopee.contasConectadas>0?1:0);
+      // Shopee (25/08/2026) — mesmo padrão do Mercado Livre acima, agora
+      // com dado real (c.shopee deixou de ser hardcoded em 0/desconectado).
+      // "última sinc." não se aplica ainda: esta etapa só conecta a loja,
+      // pedidos da Shopee ainda não são importados (nunca inventamos essa data).
+      const shopee = c.shopee;
+      const shopeeStatusLabel = shopee.contasConectadas===0 ? 'Nenhuma conta conectada'
+        : shopee.status==='ativa' ? 'Conectada'
+        : shopee.status==='erro' ? 'Erro na conexão'
+        : 'Desconectada';
+      const shopeeDotStyle = shopee.status==='ativa' ? ' style="background:var(--success)"' : shopee.status==='erro' ? ' style="background:var(--danger)"' : '';
+      const conectados = (c.empresas.total>0?1:0) + (ml.contasConectadas>0?1:0) + (shopee.contasConectadas>0?1:0);
       const pct = Math.round((conectados/3)*100);
 
       return '<div class="panel">'
@@ -1980,8 +2140,8 @@
           + '<span class="conn-status"><span class="dot"'+(c.empresas.total>0?' style="background:var(--success)"':'')+'></span>'+c.empresas.total+' empresa'+(c.empresas.total===1?'':'s')+'</span></div>'
         + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div><div class="conn-name">Mercado Livre</div><div class="conn-sub">'+(ml.contasConectadas>0 ? (mlStatusLabel+(ultimaSinc?(' · última sinc. '+ultimaSinc):'')) : 'Conecte para sincronizar pedidos')+'</div></div></div>'
           + '<span class="conn-status"><span class="dot"'+mlDotStyle+'></span>'+ml.contasConectadas+' conta'+(ml.contasConectadas===1?'':'s')+'</span></div>'
-        + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div><div class="conn-name">Shopee</div><div class="conn-sub">Nenhuma conta conectada</div></div></div>'
-          + '<span class="conn-status"><span class="dot"></span>0 lojas</span></div>'
+        + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div><div class="conn-name">Shopee</div><div class="conn-sub">'+(shopee.contasConectadas>0 ? shopeeStatusLabel : 'Conecte em Marketplaces')+'</div></div></div>'
+          + '<span class="conn-status"><span class="dot"'+shopeeDotStyle+'></span>'+shopee.contasConectadas+' loja'+(shopee.contasConectadas===1?'':'s')+'</span></div>'
       + '</div>';
     }
 
@@ -2059,15 +2219,19 @@
     window.Overview = { load };
   })();
 
-  /* ================= IA GESTORA — chat de consulta e análise =================
-     Ativada em 2026, 3 passos pedidos pelo usuário (ver docs/02-decisoes.md).
-     Primeira versão só de CONSULTA E ANÁLISE — nunca altera nada no sistema.
+  /* ================= IA GESTORA — central de análise =================
+     Ativada em 2026 (3 passos — ver docs/02-decisoes.md). Reescrita em
+     25/08/2026 ("IA Gestora — central de análise", 3 novos passos):
+       1) Histórico de conversas salvo no banco (login real — ver
+          routes/iaGestora.js/lib/auth — escopado só a esta página).
+       2) Respostas visuais (resumo/KPIs/tabela/gráfico/insights/atenção) —
+          o "card" é montado no backend (lib/ia/estrutura.js) a partir de
+          dados reais; aqui é só desenho, nenhum número é calculado no
+          front-end.
+       3) Botão "Baixar planilha" quando a mensagem tem card visual — a
+          planilha vem pronta do backend (mesmos dados, nunca gerada aqui).
      Sempre usa a empresa e o período do HEADER (window.CerneFiltro), igual
-     Visão Geral — nenhum seletor próprio nesta tela. A pergunta e o
-     histórico curto da conversa vão pro backend (POST /api/ia-gestora/
-     perguntar), que consulta os mesmos dados/regras já usados em Visão
-     Geral/Pedidos/Financeiro/Relatórios (lib/ia/ferramentas.js) — a chave
-     do provedor de IA nunca passa pelo navegador. */
+     antes — nenhum seletor próprio nesta tela. */
   (function(){
     const SUGESTOES = [
       'Como estão minhas vendas hoje?',
@@ -2076,59 +2240,166 @@
       'Quanto vou receber?',
       'Quais problemas precisam da minha atenção?',
     ];
-    const HISTORICO_MAX_ENVIADO = 12;
 
-    const state = { messages: [], loading: false, contextKey: null };
+    const state = {
+      checkingAuth: true, usuario: null,
+      loginEmail: '', loginSenha: '', loginErro: null, loginLoading: false,
+      conversas: [], loadingConversas: false, contextEmpresaId: null,
+      conversaId: null, messages: [], loading: false,
+    };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      if(!wrap) return;
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
 
-    async function apiPerguntar(empresaId, periodo, pergunta, historico){
-      const res = await fetch('/api/ia-gestora/perguntar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId, periodo, pergunta, historico }),
-      });
+    async function apiIa(path, opts){
+      const res = await fetch('/api/ia-gestora'+path, { credentials: 'same-origin', ...opts, headers: { 'Content-Type': 'application/json', ...(opts&&opts.headers) } });
       let body = null; try{ body = await res.json(); }catch(e){}
-      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível falar com a IA Gestora agora.');
+      if(!res.ok){ const err = new Error((body && body.error) || 'Não foi possível falar com a IA Gestora agora.'); err.status = res.status; err.codigo = body && body.codigo; throw err; }
       return body;
     }
+    const apiMe = () => apiIa('/me');
+    const apiLogin = (email, senha) => apiIa('/login', { method:'POST', body: JSON.stringify({ email, senha }) });
+    const apiLogout = () => apiIa('/logout', { method:'POST' });
+    const apiListarConversas = (empresaId) => apiIa('/conversas?empresaId='+empresaId);
+    const apiAbrirConversa = (id) => apiIa('/conversas/'+id);
+    const apiExcluirConversa = (id) => apiIa('/conversas/'+id, { method:'DELETE' });
+    const apiPerguntar = (empresaId, periodo, pergunta, conversaId) => apiIa('/perguntar', { method:'POST', body: JSON.stringify({ empresaId, periodo, pergunta, conversaId: conversaId||undefined }) });
 
     function empresaAtualNome(){
       const filtro = window.CerneFiltro.state;
       const emp = filtro.empresas.find(e => e.id === filtro.empresaId);
       return emp ? (emp.nomeFantasia || emp.razaoSocial) : null;
     }
-
     function periodoAtualLabel(){
       const chave = window.CerneFiltro.state.periodo;
       const def = HEADER_PERIODOS.find(p => p.chave === chave);
       return def ? def.label : chave;
     }
 
-    // Empresa ou período mudou desde a última mensagem: reinicia a conversa
-    // (pedido implícito do usuário — "respeitar SEMPRE a empresa/período do
-    // header" — nunca deixar uma pergunta nova ser respondida misturada com
-    // histórico de uma empresa/período diferente).
-    function sincronizarContexto(){
+    async function carregarConversas(){
       const filtro = window.CerneFiltro.state;
-      const chave = filtro.empresaId + '|' + filtro.periodo;
-      if(state.contextKey !== null && state.contextKey !== chave) state.messages = [];
-      state.contextKey = chave;
+      if(!filtro.empresaId){ state.conversas = []; return; }
+      state.loadingConversas = true; render();
+      try{
+        const body = await apiListarConversas(filtro.empresaId);
+        state.conversas = body.conversas || [];
+      }catch(e){ /* lista de histórico é auxiliar — uma falha aqui não impede conversar */ }
+      state.loadingConversas = false; render();
     }
 
-    function load(){
-      sincronizarContexto();
+    // Empresa mudou desde a última vez: uma conversa é sempre de UMA
+    // empresa (db/schema.sql#ia_conversas) — trocar de empresa fecha a
+    // conversa aberta (nunca mistura pergunta nova com histórico de outra
+    // empresa) e recarrega a lista de conversas daquela empresa.
+    function sincronizarContexto(){
+      const filtro = window.CerneFiltro.state;
+      if(state.contextEmpresaId !== null && state.contextEmpresaId !== filtro.empresaId){
+        state.conversaId = null; state.messages = [];
+      }
+      if(state.contextEmpresaId !== filtro.empresaId){
+        state.contextEmpresaId = filtro.empresaId;
+        carregarConversas();
+      }
+    }
+
+    async function load(){
+      if(state.checkingAuth || !state.usuario){
+        try{
+          const body = await apiMe();
+          state.usuario = body.usuario;
+        }catch(e){ state.usuario = null; }
+        state.checkingAuth = false;
+      }
+      if(state.usuario) sincronizarContexto();
       render();
     }
 
     window.CerneFiltro.onChange(()=>{
       const page = document.getElementById('page-iaGestora');
-      if(page && page.classList.contains('active')){ sincronizarContexto(); render(); }
+      if(page && page.classList.contains('active') && state.usuario){ sincronizarContexto(); render(); }
     });
 
     function scrollParaFinal(){
       const msgsEl = document.getElementById('iaMsgs');
       if(msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+
+    // ---------------- Card visual (resumo/KPIs/tabela/gráfico/insights/atenção) ----------------
+    // Só desenha o que veio de `estrutura` — nenhum valor é calculado aqui;
+    // ver lib/ia/estrutura.js no backend.
+
+    function fmtCelula(v, tipo){
+      if(v === null || v === undefined) return 'pendente';
+      if(tipo === 'money') return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+      if(tipo === 'percent') return Number(v).toLocaleString('pt-BR', { maximumFractionDigits:1 }) + '%';
+      if(tipo === 'int') return Number(v).toLocaleString('pt-BR');
+      return escapeHtml(String(v));
+    }
+
+    function kpisHTML(kpis){
+      if(!kpis || !kpis.length) return '';
+      return '<div class="ia-kpis">' + kpis.map(k =>
+        '<div class="ia-kpi"><div class="ia-kpi-label">'+escapeHtml(k.label)+(k.grupo?' · '+escapeHtml(k.grupo):'')+'</div>'
+        + '<div class="ia-kpi-value">'+escapeHtml(k.valorFormatado || (k.valor===null?'pendente':String(k.valor)))+'</div>'
+        + (k.destaque ? '<div class="ia-kpi-sub">'+escapeHtml(k.destaque)+'</div>' : '')
+        + (k.variacaoPercentual!==undefined && k.variacaoPercentual!==null ? '<div class="ia-kpi-sub">'+(k.variacaoPercentual>=0?'+':'')+k.variacaoPercentual.toLocaleString('pt-BR',{maximumFractionDigits:1})+'% vs. período anterior</div>' : '')
+        + '</div>'
+      ).join('') + '</div>';
+    }
+
+    function tabelaHTML(tabela){
+      if(!tabela || !tabela.linhas || !tabela.linhas.length) return '';
+      const head = '<tr>' + tabela.colunas.map(c => '<th>'+escapeHtml(c.header)+'</th>').join('') + '</tr>';
+      const rows = tabela.linhas.map(linha => '<tr>' + tabela.colunas.map(c => '<td>'+fmtCelula(linha[c.key], c.tipo)+'</td>').join('') + '</tr>').join('');
+      return '<div class="ia-table-wrap"><table class="ia-table"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
+    }
+
+    function graficosHTML(graficos){
+      if(!graficos || !graficos.length) return '';
+      return graficos.map(g => {
+        const maiorValor = Math.max(1, ...g.series.flatMap(s => s.valores.map(v => Math.abs(v||0))));
+        const linhas = g.categorias.map((cat, i) => {
+          const barras = g.series.map((s, si) => {
+            const v = s.valores[i] || 0;
+            const pct = Math.max(2, Math.round((Math.abs(v) / maiorValor) * 100));
+            return '<div class="ia-chart-bar-track"><div class="ia-chart-bar-fill s'+(si%2)+'" style="width:'+pct+'%"></div></div>'
+              + '<div class="ia-chart-value">'+escapeHtml(g.series.length>1?s.nome+': ':'')+fmtCelula(v, s.tipo)+'</div>';
+          }).join('');
+          return '<div class="ia-chart-row"><div class="ia-chart-label">'+escapeHtml(cat)+'</div><div class="ia-chart-bars">'+barras+'</div></div>';
+        }).join('');
+        return '<div class="ia-chart"><div class="ia-chart-title">'+escapeHtml(g.titulo)+'</div>'+linhas+'</div>';
+      }).join('');
+    }
+
+    function cardHTML(msg){
+      const e = msg.estrutura;
+      if(!e) return '';
+      const resumoLinha = e.resumo ? '<div class="ia-card-resumo">'
+        + '<span>'+svg('clock')+' '+escapeHtml(e.resumo.periodo||'')+'</span>'
+        + (e.resumo.empresa ? '<span>'+svg('building')+' '+escapeHtml(e.resumo.empresa)+'</span>' : '')
+        + '</div>' : '';
+      const insightsHtml = (e.insights && e.insights.length)
+        ? '<div class="ia-insights"><h4>Principais conclusões</h4><ul>'+e.insights.map(i=>'<li>'+escapeHtml(i)+'</li>').join('')+'</ul></div>' : '';
+      const atencaoHtml = e.atencao ? '<div class="ia-atencao"><h4>Atenção</h4>'+escapeHtml(e.atencao)+'</div>' : '';
+      const temPlanilha = (e.tabela && e.tabela.linhas && e.tabela.linhas.length) || (e.graficos && e.graficos.length);
+      const downloadHtml = (temPlanilha && msg.id) ? '<div class="ia-card-actions"><a class="ia-download-btn" href="/api/ia-gestora/conversas/'+state.conversaId+'/mensagens/'+msg.id+'/xlsx" target="_blank" rel="noopener">'+svg('download')+'<span>Baixar planilha (XLSX)</span></a></div>' : '';
+      return '<div class="ia-card">'
+        + resumoLinha
+        + kpisHTML(e.kpis)
+        + tabelaHTML(e.tabela)
+        + graficosHTML(e.graficos)
+        + insightsHtml
+        + atencaoHtml
+        + downloadHtml
+        + '</div>';
     }
 
     function msgHTML(msg){
@@ -2140,7 +2411,7 @@
       }
       return '<div class="ia-msg '+(isUser?'user':'assistant')+'">'
         + '<div class="ia-msg-ic">'+svg(isUser ? 'users' : 'messageCircle')+'</div>'
-        + '<div><div class="'+bubbleClass+'">'+escapeHtml(msg.texto)+'</div>'+toolsHtml+'</div>'
+        + '<div><div class="'+bubbleClass+'">'+escapeHtml(msg.texto)+'</div>'+(isUser?'':cardHTML(msg))+toolsHtml+'</div>'
         + '</div>';
     }
 
@@ -2158,11 +2429,70 @@
         + '</div>';
     }
 
+    // ---------------- Login (login real, escopado a esta página) ----------------
+
+    function renderLogin(){
+      const root = document.getElementById('iaGestoraRoot');
+      if(!root) return;
+      root.innerHTML = '<div class="ia-page"><div class="ia-login-panel"><form class="ia-login-box" id="iaLoginForm">'
+        + '<div class="empty-icon" style="align-self:center;">'+svg('messageCircle')+'</div>'
+        + '<h2>Entrar na IA Gestora</h2>'
+        + '<p class="lead-sm">Login necessário só para conversar e ver seu histórico — suas conversas nunca aparecem para outro usuário.</p>'
+        + (state.loginErro ? '<div class="ia-login-error">'+escapeHtml(state.loginErro)+'</div>' : '')
+        + '<div class="ia-login-field"><label>E-mail</label><input type="email" id="iaLoginEmail" autocomplete="username" required value="'+escapeHtml(state.loginEmail)+'"></div>'
+        + '<div class="ia-login-field"><label>Senha</label><input type="password" id="iaLoginSenha" autocomplete="current-password" required></div>'
+        + '<button type="submit" class="ia-login-submit" id="iaLoginSubmit" '+(state.loginLoading?'disabled':'')+'>'+(state.loginLoading?'Entrando…':'Entrar')+'</button>'
+        + '</form></div></div>';
+
+      const form = document.getElementById('iaLoginForm');
+      if(form) form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        state.loginEmail = document.getElementById('iaLoginEmail').value.trim();
+        const senha = document.getElementById('iaLoginSenha').value;
+        state.loginErro = null; state.loginLoading = true; render();
+        try{
+          const body = await apiLogin(state.loginEmail, senha);
+          state.usuario = body.usuario;
+          state.loginLoading = false;
+          sincronizarContexto();
+          render();
+        }catch(err){
+          state.loginErro = err.message || 'Não foi possível entrar.';
+          state.loginLoading = false;
+          render();
+        }
+      });
+    }
+
+    // ---------------- Sidebar de conversas ----------------
+
+    function convosSidebarHTML(){
+      const lista = state.conversas.length
+        ? state.conversas.map(c => {
+            const dt = new Date(c.atualizadoEm);
+            const dataFmt = isNaN(dt) ? '' : dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+            return '<div class="ia-convo-item'+(c.id===state.conversaId?' active':'')+'" data-id="'+c.id+'">'
+              + '<div class="ia-convo-info"><div class="ia-convo-title">'+escapeHtml(c.titulo)+'</div><div class="ia-convo-meta">'+dataFmt+'</div></div>'
+              + '<button type="button" class="ia-convo-del" data-del-id="'+c.id+'" title="Excluir conversa" aria-label="Excluir conversa">'+svg('trash')+'</button>'
+              + '</div>';
+          }).join('')
+        : ('<div class="ia-convos-empty">'+(state.loadingConversas ? 'Carregando…' : 'Nenhuma conversa ainda. Pergunte algo para começar.')+'</div>');
+
+      return '<div class="ia-convos">'
+        + '<div class="ia-convos-head"><h3>Conversas</h3><button type="button" class="ia-new-btn" id="iaNovaConversaBtn">'+svg('plus')+'<span>Nova</span></button></div>'
+        + '<div class="ia-convos-list" id="iaConvosList">' + lista + '</div>'
+        + '<div class="ia-convos-foot"><span class="ia-convos-user">'+escapeHtml((state.usuario&&(state.usuario.nome||state.usuario.email))||'')+'</span><button type="button" class="ia-logout-btn" id="iaLogoutBtn">'+svg('logOut')+'<span>Sair</span></button></div>'
+        + '</div>';
+    }
+
     function render(){
       const root = document.getElementById('iaGestoraRoot');
       if(!root) return;
-      const filtro = window.CerneFiltro.state;
 
+      if(state.checkingAuth){ root.innerHTML = '<div class="ia-page"><div class="ia-login-panel"><span class="spin"></span></div></div>'; return; }
+      if(!state.usuario){ renderLogin(); return; }
+
+      const filtro = window.CerneFiltro.state;
       if(!filtro.loadingEmpresas && !filtro.empresas.length){
         root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
           + '<h2>Nenhuma empresa ativa</h2>'
@@ -2182,15 +2512,18 @@
         ? state.messages.map(msgHTML).join('') + (state.loading ? typingHTML() : '')
         : (state.loading ? typingHTML() : emptyStateHTML());
 
-      root.innerHTML = '<div class="ia-shell">'
-        + '<div class="ia-msgs" id="iaMsgs">' + msgsHtml + '</div>'
-        + '<div class="ia-inputbar">'
-          + contextoHtml
-          + '<div class="ia-input-row">'
-            + '<textarea class="ia-textarea" id="iaInput" rows="1" placeholder="Pergunte sobre vendas, margem, custos, contas a pagar/receber, estoque…" '+(filtro.empresaId?'':'disabled')+'></textarea>'
-            + '<button class="ia-send-btn" id="iaSendBtn" type="button" '+(filtro.empresaId?'':'disabled')+'>'+svg('send')+'</button>'
+      root.innerHTML = '<div class="ia-page">'
+        + convosSidebarHTML()
+        + '<div class="ia-shell">'
+          + '<div class="ia-msgs" id="iaMsgs">' + msgsHtml + '</div>'
+          + '<div class="ia-inputbar">'
+            + contextoHtml
+            + '<div class="ia-input-row">'
+              + '<textarea class="ia-textarea" id="iaInput" rows="1" placeholder="Pergunte sobre vendas, margem, custos, contas a pagar/receber, estoque…" '+(filtro.empresaId?'':'disabled')+'></textarea>'
+              + '<button class="ia-send-btn" id="iaSendBtn" type="button" '+(filtro.empresaId?'':'disabled')+'>'+svg('send')+'</button>'
+            + '</div>'
+            + '<div class="ia-disclaimer">A IA Gestora só consulta e analisa dados reais desta empresa e período — ainda não altera nada no sistema.</div>'
           + '</div>'
-          + '<div class="ia-disclaimer">A IA Gestora só consulta e analisa dados reais desta empresa e período — ainda não altera nada no sistema.</div>'
         + '</div>'
       + '</div>';
 
@@ -2211,6 +2544,50 @@
       root.querySelectorAll('.ia-chip').forEach(el=>{
         el.addEventListener('click', ()=> enviar(el.dataset.pergunta));
       });
+
+      const novaBtn = document.getElementById('iaNovaConversaBtn');
+      if(novaBtn) novaBtn.addEventListener('click', ()=>{
+        state.conversaId = null; state.messages = []; render();
+      });
+      const logoutBtn = document.getElementById('iaLogoutBtn');
+      if(logoutBtn) logoutBtn.addEventListener('click', async ()=>{
+        try{ await apiLogout(); }catch(e){ /* mesmo se falhar, limpa o estado local — o cookie expira sozinho */ }
+        state.usuario = null; state.conversaId = null; state.messages = []; state.conversas = []; state.contextEmpresaId = null;
+        render();
+      });
+      root.querySelectorAll('.ia-convo-item').forEach(el=>{
+        el.addEventListener('click', (e)=>{
+          if(e.target.closest('.ia-convo-del')) return;
+          abrirConversa(Number(el.dataset.id));
+        });
+      });
+      root.querySelectorAll('.ia-convo-del').forEach(el=>{
+        el.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          excluirConversa(Number(el.dataset.delId));
+        });
+      });
+    }
+
+    async function abrirConversa(id){
+      if(state.loading || id === state.conversaId) return;
+      try{
+        const conversa = await apiAbrirConversa(id);
+        state.conversaId = conversa.id;
+        state.messages = conversa.mensagens.map(m => ({ id: m.id, papel: m.papel, texto: m.texto, estrutura: m.estrutura, ferramentasUsadas: m.ferramentasUsadas, aviso: m.aviso }));
+        render();
+      }catch(err){ toast(err.message || 'Não foi possível abrir esta conversa.', 'error'); }
+    }
+
+    async function excluirConversa(id){
+      if(!window.confirm('Excluir esta conversa? Essa ação não pode ser desfeita.')) return;
+      try{
+        await apiExcluirConversa(id);
+        state.conversas = state.conversas.filter(c => c.id !== id);
+        if(state.conversaId === id){ state.conversaId = null; state.messages = []; }
+        toast('Conversa excluída.', 'success');
+        render();
+      }catch(err){ toast(err.message || 'Não foi possível excluir esta conversa.', 'error'); }
     }
 
     async function enviar(textoBruto){
@@ -2218,17 +2595,23 @@
       const filtro = window.CerneFiltro.state;
       if(!texto || state.loading || !filtro.empresaId) return;
 
-      const historico = state.messages.slice(-HISTORICO_MAX_ENVIADO).map(m => ({ papel: m.papel, texto: m.texto }));
       state.messages.push({ papel: 'usuario', texto });
       state.loading = true;
       render();
 
       try{
-        const resp = await apiPerguntar(filtro.empresaId, filtro.periodo, texto, historico);
+        const resp = await apiPerguntar(filtro.empresaId, filtro.periodo, texto, state.conversaId);
         const ehErro = resp.aviso === 'nao_configurada' || resp.aviso === 'erro_provedor' || resp.aviso === 'limite_rodadas';
-        state.messages.push({ papel: 'assistente', texto: resp.resposta, ferramentasUsadas: resp.ferramentasUsadas, erro: ehErro });
+        state.conversaId = resp.conversaId;
+        state.messages.push({ id: resp.mensagemId, papel: 'assistente', texto: resp.resposta, estrutura: resp.estrutura, ferramentasUsadas: resp.ferramentasUsadas, aviso: resp.aviso, erro: ehErro });
+        carregarConversas();
       }catch(err){
-        state.messages.push({ papel: 'assistente', texto: err.message || 'Não consegui falar com a IA Gestora agora. Tente novamente.', erro: true });
+        if(err.status === 401){
+          state.usuario = null; state.messages.pop();
+          toast('Sua sessão expirou — faça login de novo.', 'error');
+        } else {
+          state.messages.push({ papel: 'assistente', texto: err.message || 'Não consegui falar com a IA Gestora agora. Tente novamente.', erro: true });
+        }
       }
       state.loading = false;
       render();

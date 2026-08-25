@@ -631,4 +631,107 @@ CREATE INDEX IF NOT EXISTS ml_estoque_itens_empresa_tipo_idx ON ml_estoque_itens
 -- ser alimentadas: a tela Estoque não oferece mais ajuste manual (pedido
 -- explícito do usuário), e as rotas antigas de ajuste (PUT em
 -- routes/estoque.js e routes/estoqueProdutoBase.js) foram desativadas. Ver
+
+-- ============================================================
+-- Etapa: Integração real com a Shopee (Open Platform v2 — só autorização)
+-- ============================================================
+
+-- Lojas da Shopee conectadas via OAuth, uma por empresa/CNPJ (mesmo desenho
+-- de ml_contas). access_token e refresh_token ficam sempre criptografados
+-- (nunca em texto puro) — ver server/lib/shopeeCrypto.js (chave própria,
+-- SHOPEE_TOKEN_KEY, nunca a mesma do Mercado Livre). O front-end nunca
+-- recebe esses valores. Pedidos, estoque, Ads e financeiro da Shopee NÃO
+-- fazem parte desta etapa — por isso não existe (ainda) nenhuma tabela de
+-- pedido/estoque da Shopee; `ultima_sincronizacao_em` fica reservada para
+-- quando a importação de pedidos for pedida (sempre NULL até lá).
+CREATE TABLE IF NOT EXISTS shopee_contas (
+  id                       SERIAL PRIMARY KEY,
+  empresa_id               INTEGER NOT NULL REFERENCES empresas(id),
+  shopee_shop_id           BIGINT NOT NULL UNIQUE,   -- id da loja na Shopee
+  shop_name                VARCHAR(200),              -- nome da loja, quando a API retorna
+  region                   VARCHAR(10),               -- ex: BR
+  access_token_enc         TEXT NOT NULL,
+  refresh_token_enc        TEXT NOT NULL,
+  token_expires_at         TIMESTAMPTZ NOT NULL,
+  status                   VARCHAR(20) NOT NULL DEFAULT 'ativa', -- ativa | erro | desconectada
+  ultimo_erro              TEXT,
+  ultima_sincronizacao_em  TIMESTAMPTZ,               -- reservado; sem pedidos nesta etapa, sempre NULL
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Estado temporário do fluxo OAuth (proteção CSRF). Diferente de
+-- ml_oauth_states, não guarda code_verifier — a Shopee Open Platform v2 não
+-- usa PKCE, só assinatura HMAC por chamada (ver lib/shopee.js). Cada linha é
+-- consumida (apagada) no callback; sobras antigas (>1h) podem ser limpas.
+CREATE TABLE IF NOT EXISTS shopee_oauth_states (
+  state          VARCHAR(64) PRIMARY KEY,
+  empresa_id     INTEGER NOT NULL REFERENCES empresas(id),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- docs/02-decisoes.md.
+
+-- ============================================================
+-- Etapa: IA Gestora — central de análise (histórico de conversas + login
+-- real, 25/08/2026 — ver docs/02-decisoes.md)
+-- ============================================================
+-- Login real, escopado a este momento só pra IA Gestora (ver comentário em
+-- routes/iaGestora.js e docs/02-decisoes.md para o porquê desse recorte):
+-- a tabela "users" já existia no schema (criada na etapa "Empresas", nunca
+-- usada) — reaproveitada aqui como a fonte de verdade de login, sem
+-- recriá-la. Senha nunca fica em texto puro: password_hash guarda
+-- "salt:hash" (scrypt, ver lib/auth/senha.js) — nunca um hash reversível,
+-- nunca a senha original em lugar nenhum (nem log).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Sessões de login (cookie httpOnly opaco — nunca JWT/token auto-contido,
+-- pra sempre dar pra revogar uma sessão de verdade deletando a linha, ex: um
+-- logout ou uma senha trocada). O valor que vai no cookie do navegador NUNCA
+-- é gravado aqui — só o hash SHA-256 dele (mesma filosofia de nunca guardar
+-- segredo em texto puro já usada no resto do projeto), pra um dump do banco
+-- nunca ser suficiente pra personificar um usuário logado.
+CREATE TABLE IF NOT EXISTS sessoes_usuario (
+  id             SERIAL PRIMARY KEY,
+  usuario_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash     CHAR(64) NOT NULL UNIQUE,
+  criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expira_em      TIMESTAMPTZ NOT NULL,
+  ultimo_uso_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sessoes_usuario_usuario ON sessoes_usuario(usuario_id);
+
+-- Conversas da IA Gestora — cada uma pertence a UM usuário logado E a UMA
+-- empresa (a empresa selecionada no cabeçalho no momento em que a conversa
+-- foi criada). Nunca aparece na listagem de outro usuário — toda consulta a
+-- esta tabela, em qualquer rota, sempre filtra por usuario_id = quem está
+-- logado (ver routes/iaGestora.js) — nunca só por empresa_id.
+CREATE TABLE IF NOT EXISTS ia_conversas (
+  id             SERIAL PRIMARY KEY,
+  empresa_id     INTEGER NOT NULL REFERENCES empresas(id),
+  usuario_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  titulo         VARCHAR(200) NOT NULL,
+  criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_conversas_usuario_empresa ON ia_conversas(usuario_id, empresa_id, atualizado_em DESC);
+
+-- Mensagens de uma conversa. `estruturado` guarda o payload visual (resumo,
+-- KPIs, tabela, gráficos, insights, atenção) exatamente como foi mostrado na
+-- conversa — a mesma estrutura é reaproveitada depois pra gerar a planilha
+-- XLSX (nunca uma nova consulta ao banco: ver lib/ia/planilhaAnalise.js),
+-- pra nunca existir a chance de a conversa mostrar um total e a planilha
+-- mostrar outro. `ferramentas_usadas` guarda só os NOMES das ferramentas
+-- consultadas (mesmo valor já mostrado no rodapé da mensagem) — nunca o
+-- resultado bruto (esse já está dentro de `estruturado`/embutido no texto).
+CREATE TABLE IF NOT EXISTS ia_mensagens (
+  id                 SERIAL PRIMARY KEY,
+  conversa_id        INTEGER NOT NULL REFERENCES ia_conversas(id) ON DELETE CASCADE,
+  papel              VARCHAR(20) NOT NULL CHECK (papel IN ('usuario', 'assistente')),
+  texto              TEXT NOT NULL,
+  estruturado        JSONB,
+  ferramentas_usadas JSONB,
+  aviso              VARCHAR(40),
+  criado_em          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_mensagens_conversa ON ia_mensagens(conversa_id, criado_em);
 -- docs/02-decisoes.md.

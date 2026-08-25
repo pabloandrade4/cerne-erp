@@ -133,11 +133,21 @@ describe(
            ($1,$2,'proprio','MLB903',NULL,'Item pendente (nunca conta)','SKU-PENDENTE','LOJA ALERTAS TESTE','active',NULL,TRUE,'sem_dado_na_api',NULL)`,
         [CONTA_ALERTAS_ID, EMPRESA_ALERTAS_ID]
       );
+      // Shopee (25/08/2026) — conta conectada só pra provar que
+      // conexoesEEmpresas() passou a ler shopee_contas de verdade (deixou
+      // de ser hardcoded em 0/"nao_conectado").
+      await pool.query(
+        `INSERT INTO shopee_contas (id, empresa_id, shopee_shop_id, shop_name, region, access_token_enc, refresh_token_enc, token_expires_at, status)
+         VALUES ($1,$2,961000001,'LOJA SHOPEE ALERTAS TESTE','BR','x','x', now() + interval '4 hours', 'ativa')
+         ON CONFLICT (id) DO UPDATE SET status='ativa'`,
+        [CONTA_ALERTAS_ID, EMPRESA_ALERTAS_ID]
+      );
     });
 
     after(async () => {
       await pool.query('DELETE FROM ml_estoque_itens WHERE empresa_id = $1', [EMPRESA_ALERTAS_ID]);
       await pool.query('DELETE FROM ml_contas WHERE id = $1', [CONTA_ALERTAS_ID]);
+      await pool.query('DELETE FROM shopee_contas WHERE id = $1', [CONTA_ALERTAS_ID]);
       await pool.query('DELETE FROM empresas WHERE id = ANY($1)', [[EMPRESA_ALERTAS_ID, EMPRESA_VAZIA_ID]]);
       await pool.end();
     });
@@ -207,20 +217,25 @@ describe(
       assert.deepEqual(alertas, []);
     });
 
-    test('conexoesEEmpresas: empresa sem conta do Mercado Livre -> status "sem_conta", 0 contas', async () => {
+    test('conexoesEEmpresas: empresa sem conta do Mercado Livre nem da Shopee -> status "sem_conta", 0 contas nos dois', async () => {
       const resultado = await conexoesEEmpresas(EMPRESA_VAZIA_ID);
       assert.equal(resultado.mercadoLivre.contasConectadas, 0);
       assert.equal(resultado.mercadoLivre.status, 'sem_conta');
       assert.equal(resultado.mercadoLivre.ultimaSincronizacao, null);
       assert.equal(resultado.shopee.contasConectadas, 0);
-      assert.equal(resultado.shopee.status, 'nao_conectado');
+      assert.equal(resultado.shopee.status, 'sem_conta');
       assert.ok(resultado.empresas.total >= 2, 'deveria contar pelo menos as empresas cadastradas por este arquivo de teste');
     });
 
-    test('conexoesEEmpresas: empresa com conta ativa reflete o status real', async () => {
+    test('conexoesEEmpresas: empresa com conta ML e conta Shopee ativas reflete o status real dos dois (25/08/2026 — Shopee deixou de ser hardcoded)', async () => {
       const resultado = await conexoesEEmpresas(EMPRESA_ALERTAS_ID);
       assert.equal(resultado.mercadoLivre.contasConectadas, 1);
       assert.equal(resultado.mercadoLivre.status, 'ativa');
+      assert.equal(resultado.shopee.contasConectadas, 1);
+      assert.equal(resultado.shopee.status, 'ativa');
+      assert.equal(resultado.shopee.contas[0].shopName, 'LOJA SHOPEE ALERTAS TESTE');
+      assert.equal(resultado.shopee.contas[0].shopId, '961000001');
+      assert.equal(resultado.shopee.contas[0].ultimaSincronizacao, null, 'Shopee ainda não importa pedidos nesta etapa — nunca inventa uma data');
     });
 
     test('painelVisaoGeral: empresa real (900) com pedidos já sincronizados — por canal bate 100% com o total geral', async () => {
