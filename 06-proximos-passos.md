@@ -1,5 +1,31 @@
 # Próximos Passos
 
+- **Concluído em 25/08/2026, testado localmente (Postgres real + servidor
+  real via HTTP, com os multiplicadores 25/50/75/100/200 pedidos pelo
+  usuário — 8 testes automatizados novos, 160 no total no projeto, 28
+  suítes, 0 falhas):** Relatórios → Produtos ganhou a visão "Por Caixa" —
+  ver `04-alteracoes.md` e `02-decisoes.md` (24). Candidatos a próximo
+  passo, **nenhum pedido ainda**:
+  1. Uma tela de gestão dos vínculos SKU → produto base (cadastrar/
+     corrigir manualmente quando o padrão automático do SKU erra ou não
+     se aplica) — a API já existe (`routes/produtosBase.js`), só falta
+     interface no menu (ver `05-problemas-conhecidos.md`).
+  2. Estender a exportação (XLSX/CSV) pra visão Por Caixa — hoje só existe
+     para Por SKU.
+  3. Considerar reaproveitar a mesma visão "Por Caixa" (produto base +
+     multiplicador) em outras telas que hoje mostram só SKU, se fizer
+     sentido pro usuário (ex: Estoque, se ele voltar a precisar dessa
+     visão agrupada).
+- **Candidato a correção futura, NÃO feito agora (escopo explicitamente
+  limitado a Contas a Pagar em 25/08/2026 — ver `04-alteracoes.md` e
+  `02-decisoes.md` (23)):** o mesmo bug corrigido em Contas a Pagar
+  (lista escondendo registros com data futura por causa do filtro de
+  período do header, e `new Date().toISOString().slice(0,10)` calculando
+  "hoje" em UTC em vez de America/Sao_Paulo) muito provavelmente também
+  afeta **Contas a Receber** (`lib/contasReceber.js`/`listarContasReceber`
+  tem a mesma estrutura, filtrando por `dataPrevista` dentro do período) e
+  o campo "Data da compra" de **Compras** (mesmo cálculo de "hoje" em
+  UTC). Vale confirmar e corrigir do mesmo jeito quando o usuário pedir.
 - **Concluído em 28/08/2026, testado localmente (Postgres real + servidor
   real via HTTP — rota `POST /api/ia-gestora/perguntar` testada de ponta
   a ponta contra o Postgres de teste; laço de ferramentas testado com um

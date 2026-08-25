@@ -2,6 +2,85 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-25 (24) — Relatórios → Produtos: nova visão "Por Caixa" (agrupada por produto físico)
+- **Pedido do usuário, em 3 passos:** (1) manter a visão "Por SKU" já
+  existente; (2) criar a visão "Por Caixa", juntando todos os SKUs/kit
+  que representam a mesma medida física, com quantidade de caixas físicas
+  vendidas, faturamento total (nunca dividido), quantidade de pedidos e
+  quantidade de kits vendidos; (3) identificação de produto base
+  centralizada no backend, reaproveitando a estrutura já existente no
+  banco. Ver causa/decisões completas em `02-decisoes.md` (24).
+- **`server/lib/relatoriosAgregados.js`:** nova função
+  `resolverProdutosBasePorSku` (resolve produto base + multiplicador de
+  um conjunto de SKUs, priorizando vínculo salvo em `produto_base_skus`
+  e caindo pro padrão automático do SKU quando não há vínculo) e nova
+  função `relatorioProdutosPorCaixa` (agrupa os mesmos itens de
+  `buscarItensDoPeriodo` usados por `relatorioProdutos`, pelo produto
+  base em vez do SKU).
+- **`server/routes/relatorios.js`:** nova rota
+  `GET /api/relatorios/produtos-por-caixa?empresaId=&periodo=&contaId=`.
+- **`server/public/index.html` (módulo `Relatorios`):** novo alternador
+  "Por SKU" / "Por Caixa" dentro da categoria Produtos; nova função
+  `renderProdutosPorCaixa` (tabela por produto base + detalhamento dos
+  SKUs que compõem cada linha + seção separada "SKUs sem produto base
+  identificado"); busca por SKU e botões de exportar ficam ocultos na
+  visão Por Caixa (busca não faz sentido pra esse agrupamento; exportação
+  não foi estendida pra esta visão nesta etapa).
+- **Nenhuma tabela nova no banco** — reaproveitadas `produtos_base` e
+  `produto_base_skus` (já existiam, criadas na etapa `ml15`/`ml16` e sem
+  uso desde que Estoque passou a ler direto do Mercado Livre).
+- **Testes:** 8 testes novos em `server/test/relatorios.test.js` — o
+  agrupamento batendo número a número com os SKUs reais do fixture
+  (empresa 900: `25CX-19X12X12`/`50CX-19X12X12` → `CX-19X12X12`,
+  `100CX-16X11X8`/`50CX-16X11X8` → `CX-16X11X8`, etc., calculados à mão e
+  conferidos contra o resultado da função); soma de faturamento batendo
+  com `resumirPeriodo`; detalhamento por SKU; SKU fora do padrão nunca
+  chutado (aparece em "sem produto base identificado"); vínculo salvo
+  vencendo sobre o padrão automático; período "hoje" calculando só vendas
+  de hoje; filtro de loja; isolamento entre empresas. Suíte completa do
+  projeto: 160 testes, 28 suítes, 0 falhas.
+- **Testado também de ponta a ponta com servidor real + Postgres real via
+  HTTP**, com os multiplicadores pedidos pelo usuário (25/50/75/100/200):
+  5 pedidos de teste, 1 kit cada, resultaram em 450 caixas físicas
+  (25+50+75+100+200), 5 kits vendidos, 5 pedidos, R$ 50,00 de faturamento
+  — conferido via `GET /api/relatorios/produtos-por-caixa`. Período
+  "hoje" corretamente vazio (pedidos de teste datados de outro dia);
+  filtro de loja (`contaId`) restringindo corretamente.
+
+## 2026-08-25 (23) — Correção de bug: Contas a Pagar não listava contas com vencimento futuro
+- **Bug relatado pelo usuário:** ao lançar uma conta a pagar, ela não
+  aparecia corretamente na lista — nem em Pendente, nem em Vencido. Ver
+  causa raiz completa em `02-decisoes.md` (23).
+- **`server/lib/contasPagar.js`:** `listarContasPagar` não filtra mais
+  TODA a lista por vencimento dentro do período do header — só contas já
+  PAGAS respeitam o período agora (pela `data_pagamento`). Pendentes/
+  vencidas/canceladas aparecem sempre, qualquer que seja o período
+  selecionado.
+- **`server/routes/contasPagar.js`:** comentário do endpoint
+  `GET /api/contas-pagar` atualizado pra refletir a regra nova.
+- **`server/public/index.html` (módulo `ContasPagar`):** nova função
+  `hojeBRT()` local ao módulo (fuso fixo America/Sao_Paulo, UTC-3) —
+  substitui `new Date().toISOString().slice(0,10)` (data em UTC) nos 2
+  pontos que calculavam "hoje" nesta tela: a data padrão sugerida ao
+  abrir "Nova conta a pagar" e a data enviada ao marcar uma conta como
+  paga. Sem a correção, entre 21h e 23h59 (horário de Brasília) essas
+  datas ficavam adiantadas em 1 dia.
+- **Testes:** 3 testes novos em `server/test/financeiro.test.js` —
+  conta com vencimento futuro aparece na lista mesmo com o período mais
+  estreito do header ("hoje"); conta paga só aparece na lista quando a
+  data de pagamento está dentro do período selecionado; e uma regressão
+  direta do cenário relatado (futura/hoje/vencida/paga, todas juntas,
+  cada uma na categoria certa, sob o período padrão da tela). Suíte
+  completa do projeto: 152 testes, 27 suítes, 0 falhas. Testado também
+  de ponta a ponta com servidor real + Postgres real via HTTP (as 4
+  contas criadas de verdade via `POST /api/contas-pagar`, conferidas via
+  `GET /api/contas-pagar` com o período padrão e com o período "hoje", e
+  os filtros `status=pendente|vencido|pago`).
+- Nenhum outro módulo foi alterado (pedido explícito do usuário). Contas
+  a Receber e Compras têm o mesmo padrão de cálculo de "hoje" em UTC —
+  registrado como candidato a correção futura em `06-proximos-passos.md`,
+  não corrigido agora.
+
 ## 2026-08-28 (22) — IA Gestora: ativação do chat de consulta e análise, conectado a dados reais
 - **Pedido do usuário, em 3 passos:** (1) ativar a aba/chat "IA Gestora" no
   ERP, com o mesmo padrão visual do resto do sistema, respondendo perguntas

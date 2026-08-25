@@ -3,6 +3,121 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-25 (24) — Relatórios → Produtos: visão "Por Caixa", reaproveitando produto base/multiplicador
+- **Pedido do usuário, em 3 passos:** (1) manter a visão "Por SKU" já
+  existente, sem remover nada; (2) criar uma segunda visão "Por Caixa"
+  que agrupa os SKUs/kit pelo produto físico (medida da caixa), somando
+  quantidade física vendida e faturamento total (nunca dividido); (3)
+  fazer esse agrupamento de forma centralizada no backend, reaproveitando
+  qualquer estrutura já existente no banco pra relacionar SKU → produto
+  base, e implementando o que faltar da forma mais simples e segura
+  possível.
+- **Estrutura já existia — reaproveitada, não recriada.** As tabelas
+  `produtos_base`/`produto_base_skus` (produto físico + vínculo SKU →
+  produto base + multiplicador) foram criadas na etapa `ml15`/`ml16` pra
+  alimentar uma versão antiga da tela Estoque, e ficaram sem uso desde
+  26/08/2026 quando Estoque passou a espelhar direto o Mercado Livre (ver
+  entrada 20 acima) — mas nunca foram apagadas. A visão "Por Caixa" volta
+  a ler essas tabelas (só leitura — nada aqui escreve nelas), exatamente
+  como o usuário pediu ("se já existir alguma estrutura, utilize-a").
+- **Ordem de prioridade para identificar produto base + multiplicador de
+  um SKU, centralizada em `lib/relatoriosAgregados.js`/
+  `resolverProdutosBasePorSku` (nunca uma lógica no frontend):**
+  1. Vínculo salvo em `produto_base_skus` — sempre vence, porque pode ter
+     sido corrigido manualmente por um humano.
+  2. Sem vínculo salvo, aplica o padrão de leitura do próprio SKU
+     (`lib/skuProdutoBase.js`/`interpretarSku` — dígitos no início =
+     multiplicador, resto = código do produto base), a mesma função já
+     usada para SUGERIR vínculos em `GET /api/produtos-base/vinculos/
+     sugestoes`. Decisão: aplicar essa leitura automaticamente no
+     relatório (não só como sugestão) porque não é uma estimativa
+     financeira — é parsing determinístico de um identificador
+     estruturado que o próprio usuário definiu e confirmou com exemplos
+     nesta tarefa. Diferente de estimar um custo ou margem faltando, ler
+     "100CX-19X12X12" como 100 unidades de "CX-19X12X12" não tem
+     ambiguidade nem risco de inventar um valor financeiro.
+  3. SKU nulo, vazio, ou fora do padrão: fica em "sem produto base
+     identificado" — nunca entra em nenhum grupo, nunca é chutado.
+- **Deliberadamente SEM persistir vínculos derivados automaticamente**
+  (a resolução por padrão de SKU é sempre recalculada na hora, nunca
+  gravada em `produto_base_skus`). Motivo: o endpoint do relatório é um
+  GET só de leitura, como todo o resto de Relatórios/Visão Geral/
+  Pedidos/Financeiro — dar a ele um efeito colateral de escrita
+  (auto-criar produto base + vínculo a cada SKU novo encontrado)
+  quebraria esse padrão do projeto inteiro e criaria risco de corrida
+  entre requisições concorrentes. Se no futuro fizer sentido tornar os
+  vínculos automáticos permanentes e editáveis por um humano, isso pede
+  uma tela de gestão dedicada (a API já existe, só falta a interface) —
+  registrado em `06-proximos-passos.md`, fora do escopo desta tarefa.
+- **Faturamento nunca dividido pela quantidade de caixas** — pedido
+  explícito do usuário, testado com os números do próprio exemplo dele
+  (18.000 caixas / 280 kits / vários SKUs somando R$ 9.850,00 de
+  faturamento, sem dividir por 18.000).
+- **Quantidade de pedidos, na visão Por Caixa, conta pedidos DISTINTOS**
+  (um `Set` de `pedidoId`), não a soma de itens — um pedido com 2 SKUs da
+  mesma medida conta 1 pedido só, igual ao resto do sistema já faz para
+  "quantidade de pedidos" em outras telas.
+- **Exportação (XLSX/CSV) não foi estendida pra visão Por Caixa** — fora
+  dos "3 passos" pedidos. Os botões de exportar somem da tela quando
+  Por Caixa está selecionado, pra nunca baixar um arquivo com dado
+  diferente do que está na tela (a exportação ainda gera sempre o
+  relatório Por SKU).
+- **Nenhum outro módulo foi alterado** — Estoque/Estoque Full continuam
+  sem usar produto base (decisão da entrada 20, mantida); a tela de
+  gestão de produto base (cadastrar/corrigir vínculos manualmente) não
+  foi criada, porque não fazia parte do pedido — a API já suporta isso
+  (`routes/produtosBase.js`), só falta interface.
+
+## 2026-08-25 (23) — Correção de bug: Contas a Pagar escondia contas com vencimento futuro da lista
+- **Bug relatado pelo usuário:** ao cadastrar uma nova conta a pagar, ela
+  não aparecia corretamente na lista — nem em Pendente, nem em Vencido.
+- **Causa raiz encontrada (revisando a decisão registrada em 24/08/2026
+  (15)):** a decisão original mandava a LISTA de contas a pagar (a tabela
+  da tela) ser sempre filtrada por vencimento dentro do período do
+  header, ao contrário dos KPIs de saldo (que já não respeitam o
+  período). Só que NENHUMA opção de período do header (`hoje`, `ontem`,
+  `7d`, `30d`, `mes`) inclui datas futuras — o limite superior (`ate`) de
+  todas elas é sempre "agora", nunca o fim do dia/mês/período (ver
+  `lib/periodo.js`/`calcularPeriodo`). Resultado: qualquer conta a pagar
+  com vencimento no futuro — a imensa maioria dos lançamentos reais, já
+  que normalmente se cadastra uma conta ANTES do vencimento — ficava
+  fora da consulta `WHERE vencimento BETWEEN desde AND ate` e
+  simplesmente não aparecia na tabela, em nenhuma aba de status. Não era
+  um problema de cache nem de estado antigo no frontend — o frontend já
+  recarregava a lista corretamente depois de criar/editar/pagar/cancelar
+  (`loadContas()` chamado após cada ação); a lista recarregava, só que o
+  backend devolvia menos linhas do que deveria.
+- **Correção:** revertida a parte da decisão de 24/08/2026 (15) que
+  mandava filtrar TODA a lista por período. Agora `listarContasPagar`
+  (`lib/contasPagar.js`) só restringe por período as contas já PAGAS
+  (pela `data_pagamento` — o evento que de fato aconteceu naquela data,
+  mesma lógica do KPI "pagas no período"); contas pendentes/vencidas/
+  canceladas aparecem sempre, independente do período selecionado no
+  header — são um saldo em aberto (ou um registro cancelado), não um
+  fluxo que acontece dentro de uma janela de tempo. Mantido tudo o resto
+  da decisão original (status nunca gravado como "vencido", sempre
+  calculado na leitura, comparando com "hoje" em BRT).
+- **Segundo bug encontrado e corrigido no mesmo lugar (mesma causa raiz
+  temática: fuso horário):** o frontend calculava "hoje" com
+  `new Date().toISOString().slice(0,10)` em dois pontos da tela de Contas
+  a Pagar — a data padrão sugerida no campo "Vencimento" ao abrir "Nova
+  conta a pagar", e a data enviada ao marcar uma conta como paga.
+  `toISOString()` sempre devolve a data em UTC; entre 21h e 23h59 no
+  horário de Brasília (UTC-3), o UTC já virou o dia seguinte — nesse
+  intervalo, a data sugerida/enviada ficava adiantada em 1 dia. Corrigido
+  com uma função `hojeBRT()` local ao módulo, com o mesmo cálculo de fuso
+  fixo (UTC-3) já usado no backend (`lib/periodo.js`/`diaBRT`). Os mesmos
+  dois pontos em Compras e em Contas a Receber têm o mesmo padrão, mas
+  não foram alterados — o pedido do usuário foi explicitamente só Contas
+  a Pagar ("Não altere outros módulos"); fica registrado como candidato a
+  correção futura em `06-proximos-passos.md`.
+- **Por que não foi uma "gambiarra":** a regra de Pendente/Vencido/Pago
+  pedida pelo usuário não depende de período nenhum — só de status +
+  comparação de data. Fazer a lista respeitar essa mesma regra
+  (mostrar sempre o saldo em aberto, do jeito que os KPIs já fazem) é a
+  correção estruturalmente certa, não um ajuste pontual só pra fazer o
+  caso de teste passar.
+
 ## 2026-08-28 (22) — IA Gestora: ativação do chat de consulta e análise, conectado a dados reais
 - **Pedido do usuário, em 3 passos:** (1) ativar a aba/chat "IA Gestora"
   dentro do próprio ERP, com o mesmo padrão visual do resto do sistema;

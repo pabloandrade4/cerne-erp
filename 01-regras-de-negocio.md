@@ -338,14 +338,21 @@ _(sem regras registradas ainda)_
   Livre** — pedido explícito do usuário para primeiro visualizar
   corretamente os anúncios, antes de qualquer edição.
 
-## Produto base / SKU de venda / Multiplicador (DEPRECIADO para fins de estoque desde 26/08/2026)
+## Produto base / SKU de venda / Multiplicador (DEPRECIADO para fins de estoque desde 26/08/2026; REATIVADO em 25/08/2026 para Relatórios)
 - Este conceito (produto físico real por trás de vários SKUs/kits do
   Mercado Livre, com um multiplicador de conversão) foi criado só pra
   alimentar a tela Estoque de uma etapa anterior. Desde 26/08/2026 a tela
   Estoque não usa mais produto base/multiplicador — ver seção "Estoque"
   abaixo. As tabelas (`produtos_base`, `produto_base_skus`) e as rotas de
   API (`routes/produtosBase.js`) continuam existindo (nada foi apagado),
-  mas não são mais lidas por nenhuma tela do menu.
+  e voltaram a ser lidas (só leitura, nunca escritas por esta tela) pela
+  visão "Por Caixa" de Relatórios → Produtos, ativada em 25/08/2026 — ver
+  seção "Relatórios" acima. Um vínculo salvo aqui (`produto_base_skus`)
+  continua sendo a fonte que vale quando existe; sem ele, o relatório usa
+  o mesmo padrão de leitura de SKU já usado nas sugestões desta tela
+  (`lib/skuProdutoBase.js`). Ainda não existe uma tela de gestão desses
+  vínculos no menu — a API (`routes/produtosBase.js`) já permite
+  cadastrar/corrigir, mas sem interface (ver `06-proximos-passos.md`).
 - **O SKU original recebido do Mercado Livre nunca é alterado** — nem no
   pedido, nem em lugar nenhum, então nada nesta descontinuação afeta
   cálculo de venda/margem/DRE (que nunca dependeram de produto base).
@@ -578,7 +585,49 @@ _(sem regras registradas ainda)_
   por status da nota.
 
 ## Relatórios
-_(sem regras registradas ainda)_
+- **Categoria "Produtos" tem duas visões, alternáveis, sem remover
+  nenhuma (25/08/2026):** **Por SKU** (comportamento original — cada
+  SKU/kit do Mercado Livre é uma linha, com quantidade vendida,
+  faturamento, custo, imposto e margem) e **Por Caixa** (nova — agrupa
+  todos os SKUs/kit que representam a mesma medida/produto físico,
+  somando tudo). As duas leem os mesmos itens de pedido do período
+  (`buscarItensDoPeriodo`) — nenhum cálculo financeiro novo, nenhuma
+  segunda fonte de dado.
+- **Por Caixa — regras de cálculo:**
+  - **Caixas físicas vendidas** = kits vendidos × unidades por kit do
+    SKU, somado por produto base. Ex: `50CX-20X20X20` com 200 kits
+    vendidos = 10.000 caixas.
+  - **Faturamento** é a SOMA do faturamento de TODOS os SKUs/kit daquela
+    medida — nunca dividido pela quantidade de caixas.
+  - **Pedidos** = quantidade de pedidos distintos que tiveram algum item
+    daquela medida (não soma pedido repetido).
+  - **Kits vendidos** = soma da quantidade vendida de todos os SKUs/kit
+    daquela medida, sem multiplicar.
+- **Identificação de produto base é centralizada no backend** (nunca uma
+  lógica no frontend), com uma ordem de prioridade fixa:
+  1. Vínculo **salvo** em `produto_base_skus` (estrutura que já existia
+     no banco, criada quando a tela Estoque ainda usava "produto base +
+     multiplicador" — desativada para Estoque em 26/08/2026, mas nunca
+     apagada, ver seção "Produto base" abaixo). Um vínculo salvo sempre
+     vence, porque pode ter sido corrigido manualmente por um humano.
+  2. Sem vínculo salvo, o texto do próprio SKU é interpretado pelo
+     padrão "dígitos no início = unidades por kit, resto = código do
+     produto base" (ex: `100CX-19X12X12` → produto base `CX-19X12X12`,
+     100 unidades por kit). Isso NÃO é uma estimativa financeira — é
+     leitura determinística de um identificador estruturado — por isso
+     pode ser aplicado automaticamente no relatório, sem exigir
+     cadastro manual prévio.
+  3. SKU nulo, vazio, ou que não segue o padrão: **nunca é chutado**.
+     Aparece à parte, em "SKUs sem produto base identificado" — some do
+     agrupamento e do total de caixas físicas, de forma transparente.
+- **Filtros de empresa, loja e período continuam valendo nas duas
+  visões**, exatamente como no resto de Relatórios — selecionar "Hoje"
+  no cabeçalho calcula só as vendas de hoje também na visão Por Caixa.
+- **Exportação (XLSX/CSV) só existe hoje para a visão Por SKU** — não foi
+  estendida para Por Caixa nesta etapa (fora do escopo do pedido). Os
+  botões de exportar ficam ocultos quando a visão Por Caixa está
+  selecionada, para nunca baixar um arquivo com dado diferente do que a
+  tela está mostrando.
 
 ## Inteligência Artificial (gestão) — IA Gestora
 - **Ativada em 2026** (pedido do usuário, em 3 passos: ativar a aba/chat,

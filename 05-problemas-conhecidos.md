@@ -3,6 +3,26 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Relatórios → Produtos "Por Caixa": sem tela de gestão dos vínculos SKU → produto base (25/08/2026)
+- A visão "Por Caixa" prioriza um vínculo SALVO em `produto_base_skus`
+  quando existe, e cai pro padrão automático do SKU quando não existe
+  (ver `01-regras-de-negocio.md` e `02-decisoes.md` (24)). A API pra
+  cadastrar/corrigir esses vínculos manualmente já existe
+  (`routes/produtosBase.js` — `GET/POST /api/produtos-base`,
+  `GET/POST/PUT/DELETE /api/produtos-base/vinculos`, incluindo
+  `.../vinculos/sugestoes`), mas **não há nenhuma tela no menu** que a
+  use — ela ficou sem interface desde que a tela Estoque parou de usar
+  esse modelo (26/08/2026). Na prática, hoje, o único jeito de um usuário
+  corrigir um caso em que o padrão automático erra (SKU que não segue
+  "dígitos no início" ou que deveria apontar pra um produto base
+  diferente do sugerido) é via chamada direta à API — não é um problema
+  visível para SKUs que já seguem o padrão descrito pelo usuário, mas é
+  uma lacuna real. Não fazia parte dos "3 passos" desta tarefa; registrado
+  como próximo passo em `06-proximos-passos.md`.
+- Reforçando: nenhum SKU sem vínculo salvo e fora do padrão é "chutado" —
+  ele aparece à parte, em "SKUs sem produto base identificado", nunca
+  entra em nenhum grupo nem no total de caixas físicas.
+
 ## IA Gestora: chamada real ao provedor Anthropic ainda não testada contra uma chave/conta real (28/08/2026)
 - Ao ativar a IA Gestora (ver `04-alteracoes.md` (22) e `02-decisoes.md`
   (22)), o laço de ferramentas inteiro (pergunta → executar ferramenta →

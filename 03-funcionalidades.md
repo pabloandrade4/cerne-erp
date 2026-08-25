@@ -144,27 +144,47 @@ cada uma e o status (em desenvolvimento / concluída).
   período). Confirmado que os totais batem exatamente com Visão
   Geral/Pedidos/Financeiro (ver `05-problemas-conhecidos.md` se algum
   dado aparecer diferente). Ainda não testado ao vivo em produção.
+  **Atualizado em 25/08/2026:** categoria Produtos ganhou uma segunda
+  visão, "Por Caixa" — ver abaixo.
 - **O que é:** relatórios separados por categoria, todos usando as MESMAS
   regras já usadas em Visão Geral/Pedidos/Financeiro — nenhum cálculo
   novo. **Vendas e Margem:** faturamento, pedidos, unidades vendidas,
   taxas/comissões, frete vendedor, imposto, custo dos produtos, Ads
   (quando disponível — mesma fonte da tela Ads) e margem de contribuição
-  em R$ e %. **Produtos:** por SKU — quantidade vendida, faturamento,
+  em R$ e %. **Produtos — Por SKU:** quantidade vendida, faturamento,
   custo, imposto e margem gerada (decompõe pedido em item, com o rateio
   documentado em `lib/relatorioVendas.js` quando o pedido tem mais de 1
-  item). **Marketplaces/Lojas:** o mesmo resumo de Vendas e Margem,
-  agrupado por loja, para comparar contas lado a lado. Filtros de
-  empresa/período (header), loja e SKU (produtos) funcionam. Exportação
-  em XLSX e CSV sempre respeita os filtros atuais e nunca mistura
-  empresa/período diferente do que está selecionado na tela.
-- **Onde está:** `server/lib/relatoriosAgregados.js` (as 3 funções de
-  categoria — só reaproveita `lib/relatorioVendas.js` e `lib/ads.js`,
-  nenhuma fórmula nova), `server/routes/relatorios.js` (rotas
-  `/vendas-margem`, `/produtos`, `/marketplaces`, `/exportar`, somadas às
-  já existentes `/resumo-vendas`), `server/public/index.html` (módulo
-  `window.Relatorios`).
+  item). **Produtos — Por Caixa** (novo, 25/08/2026): agrupa todos os
+  SKUs/kit que representam a mesma medida/produto físico (ex:
+  `25CX-20X20X20`, `50CX-20X20X20`, `100CX-20X20X20` → `CX-20X20X20`),
+  mostrando caixas físicas vendidas (kits × unidades por kit, somado),
+  kits vendidos, quantidade de pedidos e faturamento total — nunca
+  dividido pela quantidade de caixas. Identificação de produto base
+  reaproveita `produtos_base`/`produto_base_skus` (vínculo salvo) e cai
+  para o padrão automático do SKU (`lib/skuProdutoBase.js`) quando não há
+  vínculo; SKU fora do padrão nunca é chutado — aparece à parte, em "sem
+  produto base identificado". **Marketplaces/Lojas:** o mesmo resumo de
+  Vendas e Margem, agrupado por loja, para comparar contas lado a lado.
+  Filtros de empresa/período (header) e loja funcionam nas duas visões de
+  Produtos; busca por SKU só existe em Por SKU. Exportação em XLSX e CSV
+  sempre respeita os filtros atuais e nunca mistura empresa/período
+  diferente do que está selecionado na tela — disponível hoje só para
+  Vendas e Margem, Produtos (Por SKU) e Marketplaces (Por Caixa ainda não
+  tem exportação; os botões ficam ocultos nessa visão).
+- **Onde está:** `server/lib/relatoriosAgregados.js` (`relatorioVendasMargem`,
+  `relatorioProdutos`, `relatorioProdutosPorCaixa`,
+  `resolverProdutosBasePorSku`, `relatorioMarketplaces` — reaproveita
+  `lib/relatorioVendas.js`, `lib/ads.js` e, pra Por Caixa,
+  `lib/skuProdutoBase.js`/`produtos_base`/`produto_base_skus`; nenhuma
+  fórmula financeira nova), `server/routes/relatorios.js` (rotas
+  `/vendas-margem`, `/produtos`, `/produtos-por-caixa`, `/marketplaces`,
+  `/exportar`, somadas às já existentes `/resumo-vendas`),
+  `server/public/index.html` (módulo `window.Relatorios`).
 - **O que falta:** exportação em PDF (o usuário priorizou XLSX/CSV nesta
-  etapa) e relatórios agendados (fora do escopo pedido agora).
+  etapa), relatórios agendados, exportação da visão Por Caixa, e uma tela
+  de gestão dos vínculos SKU → produto base (hoje só existe a API, sem
+  interface — ver `06-proximos-passos.md`) — tudo fora do escopo pedido
+  até agora.
 
 ## DRE (Demonstrativo de Resultado do Exercício)
 - **Status:** concluído, testado localmente (servidor real + Postgres
