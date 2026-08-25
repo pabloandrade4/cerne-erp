@@ -19,14 +19,17 @@ const assert = require('node:assert/strict');
 const { FERRAMENTAS_SCHEMA, criarContexto, executarFerramenta } = require('../lib/ia/ferramentas');
 const { buscarPedidosDoPeriodo, resumirPeriodo, buscarItensDoPeriodo } = require('../lib/relatorioVendas');
 const { gerarDRE } = require('../lib/dre');
-const { relatorioProdutos, relatorioMarketplaces } = require('../lib/relatoriosAgregados');
+const { relatorioProdutos, relatorioProdutosPorCaixa, relatorioMarketplaces } = require('../lib/relatoriosAgregados');
 const { resumoContasPagar } = require('../lib/contasPagar');
 const { resumoContasReceber } = require('../lib/contasReceber');
-const { gerarAlertas, conexoesEEmpresas } = require('../lib/visaoGeralPainel');
+const { gerarAlertas, conexoesEEmpresas, fluxoDeCaixa } = require('../lib/visaoGeralPainel');
+const { resumoComprasPorFornecedor } = require('../lib/compras');
+const { listarNotasFiscais } = require('../lib/notasFiscais');
+const { TEMAS } = require('../lib/ia/baseConhecimento');
 
 describe('ia/ferramentas — catálogo (sem banco)', () => {
   test('FERRAMENTAS_SCHEMA nunca vaza o handler (só name/description/input_schema)', () => {
-    assert.ok(FERRAMENTAS_SCHEMA.length >= 9, 'as 9 ferramentas pedidas para cobrir as 12 perguntas de exemplo do usuário');
+    assert.ok(FERRAMENTAS_SCHEMA.length >= 19, 'catálogo expandido na tarefa "IA Gestora como inteligência central" (docs/02-decisoes.md)');
     FERRAMENTAS_SCHEMA.forEach((f) => {
       assert.equal(Object.keys(f).sort().join(','), 'description,input_schema,name');
       assert.equal(typeof f.name, 'string');
@@ -63,6 +66,7 @@ describe('ia/ferramentas — catálogo (sem banco)', () => {
 const TEM_BANCO = !!process.env.DATABASE_URL;
 const EMPRESA_REAL_ID = 900; // já seedada por outros testes (11 pedidos reais)
 const EMPRESA_IA_ID = 970;
+const EMPRESA_SEM_CONTA_ID = 971; // só pra testar o caminho "sem nenhuma conta ML conectada" de ads_desempenho, sem interferir com ml_contas de EMPRESA_IA_ID
 
 describe(
   'ia/ferramentas — integração (Postgres real)',
@@ -77,10 +81,19 @@ describe(
          ON CONFLICT (id) DO NOTHING`,
         [EMPRESA_IA_ID]
       );
+      await pool.query(
+        `INSERT INTO empresas (id, cnpj, razao_social, ativo) VALUES ($1,'44444444000192','EMPRESA TESTE IA SEM CONTA ML',TRUE)
+         ON CONFLICT (id) DO NOTHING`,
+        [EMPRESA_SEM_CONTA_ID]
+      );
+      await pool.query('DELETE FROM compra_itens WHERE compra_id IN (SELECT id FROM compras WHERE empresa_id = $1)', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM compras WHERE empresa_id = $1', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM fornecedores WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM contas_pagar WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM contas_receber WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM ml_estoque_itens WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM ml_contas WHERE empresa_id = $1', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM produtos WHERE empresa_id = $1', [EMPRESA_IA_ID]);
 
       // Conta a pagar VENCIDA (saldo em aberto — não depende do período).
       await pool.query(
@@ -110,14 +123,50 @@ describe(
            ($1,$1,'full','MLB970-3',NULL,'Item Full','SKU-IA-FULL','LOJA IA TESTE','active',50,FALSE,NULL,'inventory_id')`,
         [EMPRESA_IA_ID]
       );
+
+      // Produto com custo cadastrado pro SKU "SKU-IA-NORMAL" (300 unidades em
+      // estoque acima) — usado por estoque_valor_parado (300 × 10 = 3000) e
+      // como item de uma compra (compras_resumo).
+      const { rows: produtoRows } = await pool.query(
+        `INSERT INTO produtos (empresa_id, nome, sku, custo, ativo) VALUES ($1,'Produto teste IA','SKU-IA-NORMAL',10.00,TRUE) RETURNING id`,
+        [EMPRESA_IA_ID]
+      );
+      const produtoId = produtoRows[0].id;
+
+      const { rows: fornecedorRows } = await pool.query(
+        `INSERT INTO fornecedores (empresa_id, razao_social, documento, ativo) VALUES ($1,'Fornecedor Teste IA','12345678000195',TRUE) RETURNING id`,
+        [EMPRESA_IA_ID]
+      );
+      const fornecedorId = fornecedorRows[0].id;
+
+      const hoje = require('../lib/periodo').diaBRT(new Date());
+      const { rows: compraRows } = await pool.query(
+        `INSERT INTO compras (empresa_id, fornecedor_id, data_compra, status, valor_total) VALUES ($1,$2,$3,'em_aberto',500.00) RETURNING id`,
+        [EMPRESA_IA_ID, fornecedorId, hoje]
+      );
+      await pool.query(
+        `INSERT INTO compra_itens (compra_id, produto_id, quantidade, custo_unitario, valor_total_item) VALUES ($1,$2,50,10.00,500.00)`,
+        [compraRows[0].id, produtoId]
+      );
+      // Uma segunda compra CANCELADA — nunca deve entrar no total de
+      // compras_resumo (ver lib/compras.js).
+      await pool.query(
+        `INSERT INTO compras (empresa_id, fornecedor_id, data_compra, status, valor_total) VALUES ($1,$2,$3,'cancelado',999.00)`,
+        [EMPRESA_IA_ID, fornecedorId, hoje]
+      );
     });
 
     after(async () => {
+      await pool.query('DELETE FROM compra_itens WHERE compra_id IN (SELECT id FROM compras WHERE empresa_id = $1)', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM compras WHERE empresa_id = $1', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM fornecedores WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM contas_pagar WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM contas_receber WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM ml_estoque_itens WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM ml_contas WHERE empresa_id = $1', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM produtos WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_SEM_CONTA_ID]);
       await pool.end();
     });
 
@@ -232,6 +281,165 @@ describe(
       assert.equal(resultado.temPedidoNoPeriodo, false);
       assert.equal(resultado.faturamento.valor, null);
       assert.equal(resultado.faturamento.pedidosSemEssaInformacao, 0, 'período vazio não é a mesma coisa que dado pendente');
+    });
+
+    // ---- Ferramentas novas da tarefa "IA Gestora como inteligência central" ----
+
+    test('produtos_desempenho (faturamento) ordena por faturamento e inclui SKUs sem custo (não filtra como lucro/prejuizo)', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'mes' });
+      const resultado = await executarFerramenta('produtos_desempenho', { ordenarPor: 'faturamento', limite: 5 }, ctx);
+      const esperado = await relatorioProdutos({ empresaId: EMPRESA_REAL_ID, desde: ctx.periodoCalc.desde, ate: ctx.periodoCalc.ate });
+      const ordenadoEsperado = [...esperado.linhas].sort((a, b) => (b.faturamento || 0) - (a.faturamento || 0));
+      if (ordenadoEsperado.length) {
+        assert.equal(resultado.produtos[0].sku, ordenadoEsperado[0].sku);
+        assert.equal(resultado.produtos[0].faturamento, ordenadoEsperado[0].faturamento);
+      }
+      for (let i = 1; i < resultado.produtos.length; i++) {
+        assert.ok((resultado.produtos[i - 1].faturamento || 0) >= (resultado.produtos[i].faturamento || 0));
+      }
+    });
+
+    test('produtos_desempenho (quantidade) ordena por quantidade vendida ("SKU mais vendido")', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'mes' });
+      const resultado = await executarFerramenta('produtos_desempenho', { ordenarPor: 'quantidade', limite: 5 }, ctx);
+      const esperado = await relatorioProdutos({ empresaId: EMPRESA_REAL_ID, desde: ctx.periodoCalc.desde, ate: ctx.periodoCalc.ate });
+      const ordenadoEsperado = [...esperado.linhas].sort((a, b) => (b.quantidade || 0) - (a.quantidade || 0));
+      if (ordenadoEsperado.length) {
+        assert.equal(resultado.produtos[0].sku, ordenadoEsperado[0].sku);
+        assert.equal(resultado.produtos[0].quantidadeVendida, ordenadoEsperado[0].quantidade);
+      }
+    });
+
+    test('produtos_por_caixa_desempenho bate com relatorioProdutosPorCaixa (mesma visão "Por Caixa" de Relatórios)', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'mes' });
+      const resultado = await executarFerramenta('produtos_por_caixa_desempenho', { ordenarPor: 'caixas' }, ctx);
+      const esperado = await relatorioProdutosPorCaixa({ empresaId: EMPRESA_REAL_ID, desde: ctx.periodoCalc.desde, ate: ctx.periodoCalc.ate });
+      assert.equal(resultado.totalProdutosBaseNoPeriodo, esperado.linhas.length);
+      assert.equal(resultado.skusSemProdutoBaseIdentificado, esperado.semProdutoBase.length);
+      const ordenadoEsperado = [...esperado.linhas].sort((a, b) => (b.quantidadeCaixas || 0) - (a.quantidadeCaixas || 0));
+      if (ordenadoEsperado.length) {
+        assert.equal(resultado.produtosBase[0].produtoBase, ordenadoEsperado[0].produtoBase);
+        assert.equal(resultado.produtosBase[0].caixasFisicasVendidas, ordenadoEsperado[0].quantidadeCaixas);
+      }
+    });
+
+    test('vendas_com_prejuizo só lista pedidos com margem negativa e cálculo completo, ordenado do pior pro menos pior', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'mes' });
+      const resultado = await executarFerramenta('vendas_com_prejuizo', {}, ctx);
+      const { pedidos } = await buscarPedidosDoPeriodo({ empresaId: EMPRESA_REAL_ID, desde: ctx.periodoCalc.desde, ate: ctx.periodoCalc.ate });
+      const esperado = pedidos.filter((p) => !p.cancelado && p.calculoCompleto && p.margemContribuicao < 0);
+      assert.equal(resultado.quantidadeVendasComPrejuizo, esperado.length);
+      resultado.vendas.forEach((v) => assert.ok(v.margemContribuicao < 0));
+      for (let i = 1; i < resultado.vendas.length; i++) {
+        assert.ok(resultado.vendas[i - 1].margemContribuicao <= resultado.vendas[i].margemContribuicao);
+      }
+    });
+
+    test('estoque_valor_parado: só soma quantidade × custo dos SKUs com produto cadastrado (300 × 10 = 3000), resto fica de fora', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_IA_ID, periodoChave: 'hoje' });
+      const resultado = await executarFerramenta('estoque_valor_parado', {}, ctx);
+      assert.equal(resultado.valorParadoEmEstoque.valor, 3000);
+      assert.equal(resultado.itensConsiderados, 1);
+      assert.equal(resultado.itensSemSkuOuCustoCadastrado, 3); // zerado, baixo e full não têm produto cadastrado
+    });
+
+    test('ads_desempenho: empresa sem nenhuma conta do Mercado Livre conectada devolve disponivel=false/motivo=sem_conta (sem tentar rede)', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_SEM_CONTA_ID, periodoChave: 'hoje' });
+      const resultado = await executarFerramenta('ads_desempenho', {}, ctx);
+      assert.equal(resultado.disponivel, false);
+      assert.equal(resultado.motivo, 'sem_conta');
+    });
+
+    test('fluxo_de_caixa bate com visaoGeralPainel.fluxoDeCaixa e nunca inventa saldo projetado', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_IA_ID, periodoChave: 'hoje' });
+      const { pedidos } = await buscarPedidosDoPeriodo({ empresaId: EMPRESA_IA_ID, desde: ctx.periodoCalc.desde, ate: ctx.periodoCalc.ate });
+      const esperado = await fluxoDeCaixa({ empresaId: EMPRESA_IA_ID, desdeStr: ctx.desdeStr, ateStr: ctx.ateStr, pedidos });
+      const resultado = await executarFerramenta('fluxo_de_caixa', {}, ctx);
+
+      assert.equal(resultado.previstoOuProjetado.contasAPagarEmAberto.valor, esperado.contasAPagar.totalAPagar);
+      assert.equal(resultado.previstoOuProjetado.contasAPagarVencidas.valor, esperado.contasAPagar.vencidas);
+      assert.equal(resultado.previstoOuProjetado.contasAReceberEmAberto.valor, esperado.contasAReceber.totalAReceber);
+      assert.equal(resultado.previstoOuProjetado.contasAReceberAtrasadas.valor, esperado.contasAReceber.atrasado);
+      assert.equal(resultado.saldoProjetado.valor, null, 'sem saldo bancário cadastrado — nunca inventado');
+      assert.equal(resultado.saldoProjetado.motivo, 'sem_saldo_bancario_cadastrado');
+    });
+
+    test('dre_completa bate linha a linha com gerarDRE (todas as linhas do demonstrativo, não só o resumo de 3 linhas)', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'mes' });
+      const resultado = await executarFerramenta('dre_completa', {}, ctx);
+      const esperado = await gerarDRE({ empresaId: EMPRESA_REAL_ID, desde: ctx.periodoCalc.desde, ate: ctx.periodoCalc.ate, desdeBRT: ctx.desdeStr, ateBRT: ctx.ateStr });
+
+      assert.equal(resultado.linhas.receitaBruta.valor, esperado.linhas.receitaBruta.valor);
+      assert.equal(resultado.linhas.receitaLiquida.valor, esperado.linhas.receitaLiquida.valor);
+      assert.equal(resultado.linhas.custoDosProdutos.valor, esperado.linhas.custoProdutos.valor);
+      assert.equal(resultado.linhas.taxasEComissoes.valor, esperado.linhas.taxasComissoes.valor);
+      assert.equal(resultado.linhas.freteDoVendedor.valor, esperado.linhas.freteVendedor.valor);
+      assert.equal(resultado.linhas.impostos.valor, esperado.linhas.impostos.valor);
+      assert.equal(resultado.linhas.margemDeContribuicao.valor, esperado.linhas.margemContribuicao.valor);
+      assert.equal(resultado.linhas.resultadoFinal.valor, esperado.linhas.resultadoFinal.valor);
+    });
+
+    test('compras_resumo bate com resumoComprasPorFornecedor e nunca soma compra cancelada', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_IA_ID, periodoChave: 'hoje' });
+      const resultado = await executarFerramenta('compras_resumo', {}, ctx);
+      const esperado = await resumoComprasPorFornecedor({ empresaId: EMPRESA_IA_ID, desde: ctx.desdeStr, ate: ctx.ateStr });
+
+      assert.equal(resultado.totalCompradoNoPeriodo.valor, esperado.valorTotal);
+      assert.equal(resultado.totalCompradoNoPeriodo.valor, 500, 'só a compra em_aberto — a cancelada de 999 nunca entra no total');
+      assert.equal(resultado.quantidadeDeCompras, 1);
+      assert.equal(resultado.comprasCanceladasNoPeriodo.quantidade, 1);
+      assert.equal(resultado.comprasCanceladasNoPeriodo.valor, 999);
+      assert.equal(resultado.porFornecedor[0].fornecedor, 'Fornecedor Teste IA');
+      assert.equal(resultado.porFornecedor[0].valorTotal, 500);
+    });
+
+    test('notas_fiscais_resumo bate com listarNotasFiscais (contagem por status)', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'mes' });
+      const resultado = await executarFerramenta('notas_fiscais_resumo', {}, ctx);
+      const { itens, totalNoPeriodo } = await listarNotasFiscais({ empresaId: EMPRESA_REAL_ID, desde: ctx.periodoCalc.desde, ate: ctx.periodoCalc.ate });
+      const contagem = { pendente: 0, emitida: 0, cancelada: 0, rejeitada: 0 };
+      itens.forEach((i) => { contagem[i.status] = (contagem[i.status] || 0) + 1; });
+
+      assert.equal(resultado.totalDePedidosNoPeriodo, totalNoPeriodo);
+      assert.equal(resultado.notasPendentes, contagem.pendente);
+      assert.equal(resultado.notasEmitidas, contagem.emitida);
+      assert.equal(resultado.notasCanceladas, contagem.cancelada);
+      assert.equal(resultado.notasRejeitadas, contagem.rejeitada);
+    });
+
+    test('comparacao_periodo_anterior: período anterior é a mesma duração, terminando onde o período atual começa', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: '7d' });
+      const resultado = await executarFerramenta('comparacao_periodo_anterior', {}, ctx);
+
+      const duracaoMs = ctx.periodoCalc.ate.getTime() - ctx.periodoCalc.desde.getTime();
+      const anteriorAte = ctx.periodoCalc.desde;
+      const anteriorDesde = new Date(anteriorAte.getTime() - duracaoMs);
+      const { diaBRT } = require('../lib/periodo');
+      assert.equal(resultado.periodoAnterior.ate, diaBRT(new Date(anteriorAte.getTime() - 1)));
+      assert.equal(resultado.periodoAnterior.desde, diaBRT(anteriorDesde));
+
+      const [{ pedidos: pedidosAtual }, { pedidos: pedidosAnterior }] = await Promise.all([
+        buscarPedidosDoPeriodo({ empresaId: EMPRESA_REAL_ID, desde: ctx.periodoCalc.desde, ate: ctx.periodoCalc.ate }),
+        buscarPedidosDoPeriodo({ empresaId: EMPRESA_REAL_ID, desde: anteriorDesde, ate: anteriorAte }),
+      ]);
+      const esperadoAtual = resumirPeriodo(pedidosAtual);
+      const esperadoAnterior = resumirPeriodo(pedidosAnterior);
+      assert.equal(resultado.faturamento.atual.valor, esperadoAtual.faturamento.valor);
+      assert.equal(resultado.faturamento.anterior.valor, esperadoAnterior.faturamento.valor);
+      assert.equal(resultado.quantidadePedidos.atual, esperadoAtual.qtdPedidos);
+      assert.equal(resultado.quantidadePedidos.anterior, esperadoAnterior.qtdPedidos);
+    });
+
+    test('consultar_documentacao: tema conhecido devolve texto; tema desconhecido devolve a lista de temas disponíveis (nunca inventa explicação)', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'hoje' });
+      const conhecido = await executarFerramenta('consultar_documentacao', { tema: 'ads' }, ctx);
+      assert.equal(conhecido.encontrado, true);
+      assert.equal(typeof conhecido.texto, 'string');
+      assert.ok(conhecido.texto.length > 20);
+
+      const desconhecido = await executarFerramenta('consultar_documentacao', { tema: 'tema_que_nao_existe' }, ctx);
+      assert.equal(desconhecido.encontrado, false);
+      assert.deepEqual(desconhecido.temasDisponiveis.sort(), Object.keys(TEMAS).sort());
     });
   }
 );

@@ -1,11 +1,12 @@
 // Testes do orquestrador da IA Gestora (lib/ia/orchestrator.js) — o laço de
-// ferramentas em si, testado com um provedor FALSO (nenhuma chamada de rede
-// real — este ambiente de desenvolvimento não tem acesso à internet do
-// provedor de IA, mesma limitação já registrada em
-// docs/05-problemas-conhecidos.md para Mercado Livre/Advertising). O
-// provedor real (lib/ia/providers/anthropic.js) é só tradução HTTP —
-// testado manualmente/pelo usuário em produção, como toda integração
-// externa deste projeto.
+// ferramentas em si, testado com um provedor FALSO (sem depender de uma
+// IA_API_KEY real de produção). A tradução HTTP real
+// (lib/ia/providers/anthropic.js) tem sua própria suíte,
+// test/iaAnthropicProvider.test.js — incluindo um teste de integração AO
+// VIVO contra api.anthropic.com (confirmado na correção de 25/08/2026 que
+// este servidor CONSEGUE alcançar a API real; só falta uma chave de
+// produção válida, que só o usuário pode gerar — ver
+// docs/05-problemas-conhecidos.md).
 //
 // O que importa testar aqui não é "a IA respondeu certo" (isso depende do
 // modelo de verdade, fora do nosso controle) — é que o ORQUESTRADOR nunca
@@ -129,11 +130,45 @@ describe(
       assert.equal(resultado.ferramentasUsadas.length, MAX_RODADAS_FERRAMENTAS);
     });
 
-    test('provedor falha (erro de rede/timeout simulado): nunca lança exceção pro chamador, devolve mensagem de chat normal', async () => {
-      const provider = criarProvedorFalso([new Error('Tempo limite (45s) excedido ao chamar o provedor de IA.')]);
+    test('provedor falha sem categoria (erro genérico simulado): nunca lança exceção pro chamador, devolve mensagem amigável genérica — NUNCA o texto técnico bruto', async () => {
+      const erroTecnicoBruto = 'Tempo limite (45s) excedido ao chamar o provedor de IA — detalhe interno que o usuário nunca deveria ver.';
+      const provider = criarProvedorFalso([new Error(erroTecnicoBruto)]);
       const resultado = await responderPergunta({ empresaId: EMPRESA_REAL_ID, periodoChave: '30d', pergunta: 'Quanto vendi?' }, { provider });
       assert.equal(resultado.aviso, 'erro_provedor');
+      assert.equal(resultado.avisoCategoria, 'erro_desconhecido');
       assert.ok(resultado.resposta.toLowerCase().includes('não consegui'));
+      assert.ok(!resultado.resposta.includes(erroTecnicoBruto), 'a mensagem crua do erro NUNCA pode aparecer pro usuário — só nos logs');
+    });
+
+    // Uma pra cada categoria pedida explicitamente pelo usuário (chave
+    // inválida, falta de crédito, limite de uso, erro de conexão, provedor
+    // indisponível) — confere que cada uma vira uma mensagem clara e
+    // DIFERENTE das outras, e que o texto técnico bruto nunca vaza.
+    [
+      { categoria: 'chave_invalida', tecnico: 'invalid x-api-key' },
+      { categoria: 'sem_credito', tecnico: 'your account has insufficient credit balance' },
+      { categoria: 'limite_uso', tecnico: 'rate limit exceeded, retry after 30s' },
+      { categoria: 'erro_conexao', tecnico: 'fetch failed: ECONNRESET' },
+      { categoria: 'provedor_indisponivel', tecnico: 'internal server error, upstream connect error' },
+    ].forEach(({ categoria, tecnico }) => {
+      test(`provedor falha com categoria "${categoria}": mensagem clara e específica, nunca o texto técnico ("${tecnico}")`, async () => {
+        const erro = new Error(tecnico);
+        erro.categoria = categoria;
+        erro.status = 500;
+        const provider = criarProvedorFalso([erro]);
+        const resultado = await responderPergunta({ empresaId: EMPRESA_REAL_ID, periodoChave: '30d', pergunta: 'Quanto vendi?' }, { provider });
+        assert.equal(resultado.aviso, 'erro_provedor');
+        assert.equal(resultado.avisoCategoria, categoria);
+        assert.ok(!resultado.resposta.includes(tecnico), 'texto técnico bruto nunca pode aparecer pro usuário');
+        assert.ok(resultado.resposta.length > 10);
+      });
+    });
+
+    test('as 5 categorias de erro pedidas pelo usuário produzem 5 mensagens de usuário DIFERENTES entre si', () => {
+      const { mensagemAmigavel } = require('../lib/ia/orchestrator');
+      const categorias = ['chave_invalida', 'sem_credito', 'limite_uso', 'erro_conexao', 'provedor_indisponivel'];
+      const mensagens = categorias.map(mensagemAmigavel);
+      assert.equal(new Set(mensagens).size, mensagens.length, 'cada categoria deveria ter uma mensagem própria, não um texto genérico repetido');
     });
 
     test('sem IA_API_KEY configurada (provedor padrão real, sem injeção): avisa claramente, nunca quebra', async () => {
