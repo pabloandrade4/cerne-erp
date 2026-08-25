@@ -5,6 +5,7 @@ const migrate = require('./db/migrate');
 const { iniciarSincronizacaoAutomatica } = require('./lib/syncScheduler');
 const { iniciarRenovacaoAutomatica: iniciarRenovacaoAutomaticaShopee } = require('./lib/shopeeTokenScheduler');
 const { iniciarRadarDaIA } = require('./lib/ia/radarScheduler');
+const { iniciarSincronizacaoAutomaticaAds } = require('./lib/adsScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
@@ -93,6 +94,10 @@ async function start() {
     // sempre no servidor, nunca dependendo do navegador aberto (ver
     // lib/ia/radarScheduler.js).
     iniciarRadarDaIA();
+    // Product Ads (Mercado Livre) — sincronização em background, sempre no
+    // servidor, nunca dependendo da tela Ads estar aberta (ver
+    // lib/adsScheduler.js).
+    iniciarSincronizacaoAutomaticaAds();
   });
 }
 
