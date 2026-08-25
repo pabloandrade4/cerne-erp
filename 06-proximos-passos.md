@@ -1,5 +1,34 @@
 # Próximos Passos
 
+- **Concluído em 25/08/2026 (IA Gestora ganha raciocínio/projeção —
+  ferramenta `projecao_mes`, catálogo de 19 para 20, testado localmente:
+  Postgres real, 6 testes de integração novos + verificação manual das 3
+  perguntas do checklist do usuário contra `executarFerramenta` — 203
+  testes no total no projeto com Postgres, 0 falhas):** ver
+  `04-alteracoes.md` e `02-decisoes.md` (28). **Ainda bloqueado pela mesma
+  falta de `IA_API_KEY` de produção válida** (ver `05-problemas-
+  conhecidos.md`) — nenhuma ação nova é necessária além do que já estava
+  pendente. Falta, **nesta ordem, assim que o usuário configurar a
+  chave**:
+  1. o usuário subir o próximo zip de código pro GitHub (deploy automático
+     no Render cuida do resto) e confirmar `IA_API_KEY` configurada;
+  2. testar ao vivo, com dado real, as 3 perguntas específicas deste
+     pedido: "Faça uma projeção do meu faturamento até o final deste
+     mês.", "Se continuar neste ritmo, qual será meu lucro no final do
+     mês?", "Compare o ritmo dos últimos 7 dias com a média do mês." —
+     confirmando que o modelo escolhe `projecao_mes` sozinho (sem precisar
+     de dica) e que a resposta separa claramente REALIZADO de PROJETADO,
+     no formato pedido pelo usuário;
+  3. testar também perguntas que antes eram recusadas indevidamente (o bug
+     original relatado) e confirmar que a IA agora tenta combinar
+     ferramentas antes de dizer que "não tem essa funcionalidade";
+  4. comparar cada resposta da IA com a tela correspondente do ERP —
+     número a número; se houver qualquer divergência, corrigir a origem
+     antes de considerar concluído;
+  - **por instrução explícita do usuário, esta etapa parou aqui** — nenhum
+    acesso de escrita foi dado à IA; não avançar sozinho para a IA poder
+    alterar dados nem para ações automáticas, sem o usuário pedir depois
+    de validar as respostas acima.
 - **Concluído em 25/08/2026 (catálogo da IA Gestora ampliado para 19
   ferramentas — "inteligência central", testado localmente: Postgres real
   + servidor real via HTTP, 13 testes de integração novos comparando cada

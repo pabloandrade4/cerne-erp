@@ -3,6 +3,103 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-25 (28) — IA Gestora ganha capacidade de RACIOCÍNIO e PROJEÇÃO (raciocínio matemático sobre dado real, nunca "não tenho essa funcionalidade")
+
+Pedido do usuário: corrigir um comportamento observado — ao perguntar "Pode
+fazer uma projeção de vendas até o último dia do mês?", a IA respondeu que o
+ERP não tem funcionalidade de projeção, quando na verdade tinha todo o dado
+necessário pra calcular a resposta com matemática simples. Pedido em 3
+passos, com a constraint explícita repetida no fim: **"Não altere outros
+módulos."**
+
+**1) Nova ferramenta `projecao_mes`** (`lib/ia/ferramentas.js`, catálogo foi
+de 19 para 20) — projeta faturamento, margem/lucro, quantidade de pedidos ou
+gasto de Ads até o ÚLTIMO DIA DO MÊS CORRENTE (mês sempre fixo em "agora",
+igual ao padrão já usado pelos cards `gastoMes`/`gastoHoje` de Ads — nunca
+o período selecionado no cabeçalho, preservando a regra estrutural de que
+empresa/período nunca vêm do modelo). Casca fina sobre funções já existentes
+(`buscarPedidosDoPeriodo`/`resumirPeriodo` de `relatorioVendas.js`,
+`listarAds` de `ads.js`) — nenhuma fórmula financeira nova, só aritmética de
+dias sobre números que o resto do ERP já confia:
+- **Projeção simples** = (faturamento realizado no mês ÷ dias já
+  transcorridos) × dias no mês.
+- **Projeção ajustada pela tendência** = realizado + (média diária dos
+  últimos 7 dias × dias restantes) — só calculada quando há venda real nos
+  últimos 7 dias; quando não há, a resposta deixa isso explícito
+  (`tendenciaDisponivel: false`) em vez de inventar uma tendência.
+- **"Faixa provável"** = intervalo entre as duas projeções acima (nunca um
+  modelo estatístico/probabilístico à parte — é sempre o mínimo e o máximo
+  entre dois cálculos determinísticos, pra nunca parecer um número
+  inventado).
+- `metrica` aceita `faturamento` | `margem_e_lucro` | `pedidos` | `ads`, cada
+  uma buscando só o dado que precisa (ex.: `buscarItensDoPeriodo`, usado só
+  pra listar SKU sem custo, é chamado só dentro do branch `margem_e_lucro` e
+  só quando a margem do mês está mesmo pendente — mesma disciplina de custo
+  já usada nas ferramentas da etapa (27)).
+- `margem_e_lucro`: quando a margem de contribuição do mês tem pedido com
+  SKU sem custo cadastrado, a ferramenta NÃO inventa um lucro projetado —
+  devolve `margemEProjecaoDisponivel: false` junto com a projeção de
+  faturamento (que continua disponível) e uma mensagem explicando
+  exatamente quantos SKUs/pedidos faltam custo, no formato pedido pelo
+  usuário ("Consigo projetar o faturamento, mas ainda não consigo projetar
+  a margem/lucro com precisão porque N SKU(s) ainda estão sem custo
+  cadastrado").
+- `ads`: uma única chamada a `listarAds()` (período dos últimos 7 dias pra
+  tendência + card `gastoMes` do mês corrente) — evita duplicar a chamada
+  externa à API do Ads; sem conta ML conectada devolve
+  `disponivel: false, motivo: 'sem_conta'`, nunca projeta com dado
+  inexistente.
+- Toda entrada vem exclusivamente do ERP (contagem real de dias em BRT via
+  `diaBRT`, pedidos e Ads reais) — nenhum número é calculado "de cabeça"
+  pelo modelo; o modelo só recebe o resultado já pronto desta ferramenta.
+
+**2) Resposta sempre separa REALIZADO de PROJETADO** — a ferramenta devolve
+`faturamentoRealizadoNoMesAteHoje` (real) separado de `projecaoFaturamento`
+(estimativa), com `mediaDiariaMes`/`mediaDiariaUltimos7Dias`/tendência
+(subindo/caindo/estável) e a faixa provável, no mesmo espírito do formato de
+exemplo dado pelo usuário ("Realizado até 25/08... Projeção para 31/08...
+Faixa provável..."). O system prompt (`orchestrator.js`) ganhou a regra 5-B,
+instruindo o modelo a sempre usar essa framing (nunca apresentar a projeção
+como se fosse um fato já realizado) e deixando explícito que valores já
+agendados de verdade (contas a pagar/receber previstas) continuam vindo das
+ferramentas antigas (`contas_a_pagar_resumo`/`contas_a_receber_resumo`) —
+`projecao_mes` é só pra métricas sem um "previsto" real no banco
+(faturamento, margem, pedidos, ritmo de Ads).
+
+**3) Correção do comportamento de recusa indevida** — a causa raiz do bug
+relatado era a regra 5 antiga do system prompt ("se nenhuma ferramenta
+cobrir o que foi perguntado, diga isso com honestidade"), interpretada de
+forma estreita demais pelo modelo. Dividida em duas regras: **5-A** — nunca
+recusar só porque "não existe uma tela pra isso"; tentar primeiro combinar
+ferramentas existentes via consulta/matemática/comparação/agregação/
+projeção/tendência; só recusar quando falta mesmo um dado essencial, e
+nesse caso explicar exatamente o que falta (formato "Consigo te dizer X,
+mas ainda não consigo Y porque [motivo]"); **5-B** — quando usar
+`projecao_mes`. Regra 3 do prompt renomeada de "CONSULTA E ANÁLISE" pra
+"CONSULTA, ANÁLISE E PROJEÇÃO". Nesta etapa a IA continua só consultando,
+calculando, comparando, projetando e explicando — **nenhum acesso de
+escrita foi dado a ela** (constraint repetida pelo usuário, preservada).
+
+**Verificação feita nesta etapa** (mesma limitação de sempre — sem
+`IA_API_KEY` configurada nesta sessão, não é possível uma chamada real ao
+modelo): 6 novos testes de integração em `test/iaFerramentas.test.js`
+(catálogo passou a exigir `>= 20` ferramentas), com Postgres real e
+empresa 900. Além dos testes automatizados, as 3 perguntas do checklist do
+usuário foram exercitadas diretamente contra `executarFerramenta` (com os
+dados reais da empresa 900 em 25/08/2026) e o resultado foi recomputado à
+mão, fora da ferramenta, usando exatamente as mesmas funções canônicas —
+`mediaDiariaMes` e `projecaoSimples` bateram número a número com o cálculo
+manual. A pergunta 2 ("qual meu lucro no final do mês") confirmou que a
+ferramenta se recusa corretamente a projetar margem quando há SKU sem
+custo, sem inventar um valor. Isso prova que a matemática está correta;
+continua não substituindo o teste ao vivo com uma pergunta real em
+português (só possível depois que `IA_API_KEY` for configurada em
+produção, ver `06-proximos-passos.md`).
+
+**Arquivos alterados nesta etapa** (só estes 3, por pedido explícito do
+usuário — "não altere outros módulos"): `lib/ia/ferramentas.js`,
+`lib/ia/orchestrator.js`, `test/iaFerramentas.test.js`.
+
 ## 2026-08-25 (27) — IA Gestora como "inteligência central": catálogo de ferramentas expandido para conhecer o ERP inteiro (ainda só leitura)
 
 Pedido do usuário, em 3 passos: (1) dar à IA conhecimento de todo o ERP,

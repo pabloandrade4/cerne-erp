@@ -2,6 +2,45 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-25 (28) — IA Gestora: nova ferramenta `projecao_mes` (raciocínio/projeção) + correção da recusa indevida ("não existe essa funcionalidade")
+- **Pedido do usuário:** corrigir o comportamento — a IA respondia "o ERP
+  não tem funcionalidade de projeção" a perguntas de faturamento/lucro
+  projetado, mesmo já tendo o dado necessário pra calcular. "A IA Gestora
+  deve conseguir RACIOCINAR e fazer cálculos/projeções usando os dados
+  reais que já existem no ERP." "Não altere outros módulos." Ver
+  `02-decisoes.md` (28) para o desenho completo.
+- **1 ferramenta nova** em `server/lib/ia/ferramentas.js` (catálogo de 19
+  para 20): `projecao_mes` (`metrica`: `faturamento` | `margem_e_lucro` |
+  `pedidos` | `ads`) — projeta até o último dia do MÊS CORRENTE (fixo,
+  igual ao padrão do card `gastoMes` de Ads) usando só aritmética simples
+  (média diária × dias do mês; ajuste pela tendência dos últimos 7 dias
+  quando há venda real nesse período) sobre dado 100% real
+  (`buscarPedidosDoPeriodo`/`resumirPeriodo`, `listarAds`) — nenhuma
+  fórmula financeira nova.
+- **`margem_e_lucro`** nunca inventa lucro projetado quando há SKU sem
+  custo cadastrado no mês — devolve `margemEProjecaoDisponivel: false` com
+  a contagem exata de SKUs/pedidos pendentes, mas ainda assim entrega a
+  projeção de faturamento (que não depende de custo).
+- **`server/lib/ia/orchestrator.js`:** regra 5 antiga (raiz do bug relatado)
+  dividida em 5-A (nunca recusar só por "não existe tela pra isso" — tentar
+  combinar ferramentas via matemática/comparação/agregação/projeção
+  primeiro) e 5-B (quando/como usar `projecao_mes`, sempre separando
+  REALIZADO de PROJETADO na resposta). Regra 3 renomeada pra "CONSULTA,
+  ANÁLISE E PROJEÇÃO".
+- **Testado localmente (Postgres real, 6 testes de integração novos em
+  `test/iaFerramentas.test.js` — 203 testes no total com Postgres, 0
+  falhas):** além dos testes automatizados, as 3 perguntas do checklist do
+  usuário foram chamadas diretamente contra `executarFerramenta` (empresa
+  900, dado real de 25/08/2026) e comparadas número a número contra
+  recálculo manual fora da ferramenta — bateram exatamente. Mesma
+  limitação de sempre pra teste ao vivo com o modelo (sem `IA_API_KEY`
+  configurada nesta sessão) — ver `02-decisoes.md` (28).
+- **Por instrução explícita do usuário, só estes 3 arquivos foram
+  alterados** — `server/lib/ia/ferramentas.js`,
+  `server/lib/ia/orchestrator.js`, `server/test/iaFerramentas.test.js`.
+  Nenhum acesso de escrita foi dado à IA; continua só
+  consultando/calculando/comparando/projetando/explicando.
+
 ## 2026-08-25 (27) — IA Gestora: catálogo de ferramentas expandido para "conhecer" o ERP inteiro (9 → 19 ferramentas, ainda só leitura)
 - **Pedido do usuário:** transformar a IA Gestora em "inteligência central"
   do ERP, em 3 passos — dar conhecimento de todo o ERP (sempre via backend

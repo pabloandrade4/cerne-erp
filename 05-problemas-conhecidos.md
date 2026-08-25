@@ -107,6 +107,19 @@ desenvolvimento, para não serem esquecidas.
   há necessidade de ação agora; quando login/permissão por usuário
   existir, o ponto certo de aplicar a checagem por usuário já está
   isolado (comentado em `lib/ia/ferramentas.js`).
+- **Revisão de 25/08/2026 (nova ferramenta `projecao_mes` — ver
+  `02-decisoes.md` (28)):** mesmo bloqueio de sempre, sem novidade — falta
+  só a `IA_API_KEY` de produção. A projeção de faturamento/margem/pedidos/
+  Ads foi verificada no nível da FERRAMENTA (6 testes de integração novos
+  em `test/iaFerramentas.test.js`, 203 testes no total com Postgres, 0
+  falhas) e, adicionalmente, as 3 perguntas do checklist pedido pelo
+  usuário nesta etapa foram chamadas diretamente contra
+  `executarFerramenta` (empresa 900, dado real) e o resultado recomputado
+  à mão fora da ferramenta — bateu número a número. Isso prova que a
+  matemática da projeção está correta; não prova ainda que o modelo, numa
+  conversa real, sempre escolhe `projecao_mes` pra esse tipo de pergunta
+  em vez de tentar responder "de cabeça" ou recusar — só testável ao vivo,
+  depois da chave configurada (ver `06-proximos-passos.md`).
 
 ## Visão Geral: "Por marketplace" só valida com 1 canal (Mercado Livre); "Saldo projetado" nunca aparece até existir cadastro de saldo bancário (26/08/2026)
 - Ao ativar a parte inferior da Visão Geral (ver `04-alteracoes.md` (21) e

@@ -3,15 +3,23 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
-## IA Gestora — chat de consulta e análise com dados reais (2026)
+## IA Gestora — chat de consulta, análise e projeção com dados reais (2026)
 - **Status:** concluído e testado localmente (Postgres real + servidor
-  real via HTTP — 197 testes automatizados no projeto com Postgres/64 sem,
-  31 suítes, 0 falhas, incluindo 13 novos testes de integração comparando
-  cada ferramenta nova número a número contra a função canônica que a tela
-  correspondente do ERP usa). Ainda **só de consulta e análise** — nenhuma
-  ação automática foi implementada. **Ampliação de 25/08/2026** (ver
-  `02-decisoes.md` (27)): catálogo de ferramentas foi de 9 para **19**,
-  cobrindo praticamente todos os módulos do ERP (vendas, produtos por
+  real via HTTP — 203 testes automatizados no projeto com Postgres, 0
+  falhas, incluindo 19 testes de integração comparando cada ferramenta
+  nova número a número contra a função canônica que a tela correspondente
+  do ERP usa). Ainda **só de consulta, análise e projeção** — nenhuma ação
+  automática foi implementada, nenhum acesso de escrita foi dado à IA.
+  **Ampliação de 25/08/2026 (28)** (ver `02-decisoes.md` (28)): a IA ganhou
+  capacidade de RACIOCÍNIO/PROJEÇÃO — nova ferramenta `projecao_mes`
+  (catálogo foi de 19 para **20**) para perguntas de "quanto devo
+  faturar/lucrar/vender/gastar de Ads até o fim do mês" ou "se continuar
+  nesse ritmo…", sempre separando REALIZADO de PROJETADO na resposta; o
+  system prompt também foi corrigido para nunca mais recusar uma pergunta
+  só por "o ERP não tem essa tela" quando já existe dado suficiente para
+  calcular a resposta combinando ferramentas. **Ampliação de 25/08/2026
+  (27)** (ver `02-decisoes.md` (27)): catálogo de ferramentas foi de 9 para
+  19, cobrindo praticamente todos os módulos do ERP (vendas, produtos por
   SKU/por caixa, Ads, estoque/dinheiro parado em estoque, contas a
   pagar/receber, fluxo de caixa, DRE completa, compras por fornecedor,
   notas fiscais, comparação com período anterior, e uma base de
@@ -33,38 +41,47 @@ cada uma e o status (em desenvolvimento / concluída).
   o ERP não tem como calcular); a DRE completa linha a linha; compras do
   período por fornecedor; quantas notas fiscais estão pendentes/emitidas;
   comparação com o período anterior de mesma duração; dinheiro parado em
-  estoque; e os mesmos alertas de Visão Geral > Alertas & IA — com 5
-  sugestões de pergunta na tela vazia. Todo número que a IA cita vem de
-  uma consulta real ao banco (nunca calculado pelo modelo, nunca uma
-  segunda fórmula financeira diferente do resto do ERP); quando falta
-  informação para responder com segurança, ela diz claramente o motivo em
-  vez de estimar. A IA **não altera nada no sistema** — só consulta,
-  calcula com as mesmas contas já existentes, compara, projeta (com dado
-  real, nunca inventado), explica e resume. Trocar empresa/período no
-  cabeçalho reinicia a conversa.
+  estoque; **projeção de faturamento, margem/lucro, quantidade de pedidos
+  e gasto de Ads até o último dia do mês corrente** — média diária × dias
+  do mês, ajustada pela tendência dos últimos 7 dias quando há venda real
+  nesse período, sempre com "faixa provável" e sempre nomeando o que é
+  REALIZADO e o que é PROJETADO; e os mesmos alertas de Visão Geral >
+  Alertas & IA — com 5 sugestões de pergunta na tela vazia. Todo número
+  que a IA cita vem de uma consulta real ao banco (nunca calculado pelo
+  modelo, nunca uma segunda fórmula financeira diferente do resto do ERP);
+  quando falta informação para responder com segurança (ex.: SKU sem custo
+  cadastrado impedindo projetar margem), ela diz claramente o motivo em
+  vez de estimar — mas nunca recusa uma pergunta só porque não existe uma
+  tela dedicada pra ela: tenta combinar ferramentas existentes via
+  consulta/matemática/comparação/agregação/projeção primeiro. A IA **não
+  altera nada no sistema** — só consulta, calcula com as mesmas contas já
+  existentes, compara, projeta (com dado real, nunca inventado), explica e
+  resume. Trocar empresa/período no cabeçalho reinicia a conversa.
 - **Onde está:** `server/lib/ia/providers/anthropic.js` (tradução HTTP
   com a API de Mensagens da Anthropic — sem SDK novo, `fetch` nativo),
   `server/lib/ia/providers/index.js` (registro de provedor/modelo,
   trocável por variável de ambiente sem mexer no resto), `server/lib/ia/
-  ferramentas.js` (catálogo de 19 ferramentas — cada uma uma casca fina
-  sobre uma função já existente do ERP), `server/lib/compras.js` e
-  `server/lib/ia/baseConhecimento.js` (novos módulos de apoio — ver
-  `02-decisoes.md` (27)), `server/lib/ia/orchestrator.js` (laço de
-  pergunta → ferramenta → resposta), `server/routes/iaGestora.js`
+  ferramentas.js` (catálogo de 20 ferramentas, incluindo `projecao_mes` —
+  cada uma uma casca fina sobre uma função já existente do ERP),
+  `server/lib/compras.js` e `server/lib/ia/baseConhecimento.js` (módulos
+  de apoio — ver `02-decisoes.md` (27)), `server/lib/ia/orchestrator.js`
+  (laço de pergunta → ferramenta → resposta; regras 5-A/5-B de quando
+  projetar e nunca recusar por falta de tela), `server/routes/iaGestora.js`
   (`POST /api/ia-gestora/perguntar`), `server/public/index.html` (módulo
   `window.IAGestora`, item de menu "IA Gestora"). Ver `02-decisoes.md`
-  (22) e (27) para o desenho completo.
+  (22), (27) e (28) para o desenho completo.
 - **O que falta:** só configurar `IA_API_KEY` no Render com uma chave real
   da conta Anthropic do usuário (https://console.anthropic.com) e testar
   ao vivo as perguntas reais — a integração em si (formato de erro,
   categorização, `Api-Version`/headers) já foi confirmada contra a API
-  real numa etapa anterior; o catálogo ampliado desta etapa foi verificado
-  no nível de cada ferramenta (número a número contra a função canônica),
-  não no nível de uma conversa real com o modelo (só possível depois da
-  chave configurada). Por instrução explícita do usuário, não avançar
-  sozinho para a IA poder alterar dados (custo, estoque, compras, contas,
-  notas fiscais, anúncios, pedidos) sem o usuário pedir depois de validar
-  que ela entende corretamente os dados da empresa.
+  real numa etapa anterior; o catálogo ampliado (incluindo `projecao_mes`)
+  foi verificado no nível de cada ferramenta (número a número contra
+  recálculo manual e contra a função canônica), não no nível de uma
+  conversa real com o modelo (só possível depois da chave configurada).
+  Por instrução explícita do usuário, não avançar sozinho para a IA poder
+  alterar dados (custo, estoque, compras, contas, notas fiscais, anúncios,
+  pedidos) sem o usuário pedir depois de validar que ela entende
+  corretamente os dados da empresa.
 
 ## Sincronização automática do Mercado Livre (backend, a cada 1 minuto)
 - **Status:** concluído, testado localmente (Postgres real + servidor real
