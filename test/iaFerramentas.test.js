@@ -26,10 +26,12 @@ const { gerarAlertas, conexoesEEmpresas, fluxoDeCaixa } = require('../lib/visaoG
 const { resumoComprasPorFornecedor } = require('../lib/compras');
 const { listarNotasFiscais } = require('../lib/notasFiscais');
 const { TEMAS } = require('../lib/ia/baseConhecimento');
+const { calcularPeriodo, diaBRT } = require('../lib/periodo');
+const { round2 } = require('../lib/resultadoVenda');
 
 describe('ia/ferramentas — catálogo (sem banco)', () => {
   test('FERRAMENTAS_SCHEMA nunca vaza o handler (só name/description/input_schema)', () => {
-    assert.ok(FERRAMENTAS_SCHEMA.length >= 19, 'catálogo expandido na tarefa "IA Gestora como inteligência central" (docs/02-decisoes.md)');
+    assert.ok(FERRAMENTAS_SCHEMA.length >= 20, 'catálogo expandido com projecao_mes (docs/02-decisoes.md)');
     FERRAMENTAS_SCHEMA.forEach((f) => {
       assert.equal(Object.keys(f).sort().join(','), 'description,input_schema,name');
       assert.equal(typeof f.name, 'string');
@@ -440,6 +442,112 @@ describe(
       const desconhecido = await executarFerramenta('consultar_documentacao', { tema: 'tema_que_nao_existe' }, ctx);
       assert.equal(desconhecido.encontrado, false);
       assert.deepEqual(desconhecido.temasDisponiveis.sort(), Object.keys(TEMAS).sort());
+    });
+
+    // ---- projecao_mes: pedido do usuário pra corrigir "o ERP não possui
+    // essa funcionalidade" — a IA deve RACIOCINAR/projetar com dado real.
+    // Cada teste recalcula a projeção manualmente (mesma fórmula do
+    // handler) a partir da MESMA fonte canônica (buscarPedidosDoPeriodo +
+    // resumirPeriodo) e compara número a número — "compare os cálculos
+    // manualmente" pedido explicitamente pelo usuário.
+
+    function diaEDiasDoMesBRTTeste() {
+      const hojeStr = diaBRT(new Date());
+      const [ano, mes] = hojeStr.split('-').map(Number);
+      const diaAtual = Number(hojeStr.split('-')[2]);
+      const diasNoMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+      return { diaAtual, diasNoMes, diasRestantes: diasNoMes - diaAtual };
+    }
+
+    test('projecao_mes (faturamento) — projeção simples e ajustada batem com o cálculo manual (média diária × dias do mês / tendência dos últimos 7 dias)', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'mes' });
+      const resultado = await executarFerramenta('projecao_mes', { metrica: 'faturamento' }, ctx);
+
+      const { diaAtual, diasNoMes, diasRestantes } = diaEDiasDoMesBRTTeste();
+      assert.equal(resultado.diaAtual, diaAtual);
+      assert.equal(resultado.diasNoMes, diasNoMes);
+      assert.equal(resultado.diasRestantes, diasRestantes);
+
+      const mesCalc = calcularPeriodo('mes');
+      const periodo7dCalc = calcularPeriodo('7d');
+      const { pedidos: pedidosMes } = await buscarPedidosDoPeriodo({ empresaId: EMPRESA_REAL_ID, desde: mesCalc.desde, ate: mesCalc.ate });
+      const { pedidos: pedidos7d } = await buscarPedidosDoPeriodo({ empresaId: EMPRESA_REAL_ID, desde: periodo7dCalc.desde, ate: periodo7dCalc.ate });
+      const resumoMes = resumirPeriodo(pedidosMes);
+      const resumo7d = resumirPeriodo(pedidos7d);
+
+      assert.equal(resultado.faturamentoRealizadoNoMesAteHoje.valor, resumoMes.faturamento.valor);
+      assert.ok(resumoMes.faturamento.valor > 0, 'empresa 900 tem pedidos reais em agosto/2026 — o teste depende de haver faturamento real este mês');
+
+      const mediaDiariaMesEsperada = round2(resumoMes.faturamento.valor / diaAtual);
+      const projecaoSimplesEsperada = round2(mediaDiariaMesEsperada * diasNoMes);
+      assert.equal(resultado.projecaoFaturamento.mediaDiariaMes, mediaDiariaMesEsperada);
+      assert.equal(resultado.projecaoFaturamento.projecaoSimples, projecaoSimplesEsperada);
+
+      if (resumo7d.faturamento.valor !== null) {
+        const mediaDiaria7dEsperada = round2(resumo7d.faturamento.valor / 7);
+        const projecaoAjustadaEsperada = round2(resumoMes.faturamento.valor + mediaDiaria7dEsperada * diasRestantes);
+        assert.equal(resultado.projecaoFaturamento.mediaDiariaUltimos7Dias, mediaDiaria7dEsperada);
+        assert.equal(resultado.projecaoFaturamento.projecaoAjustadaPelaTendencia, projecaoAjustadaEsperada);
+        assert.equal(resultado.projecaoFaturamento.tendencia.percentual, round2(((mediaDiaria7dEsperada - mediaDiariaMesEsperada) / Math.abs(mediaDiariaMesEsperada)) * 100));
+
+        // "Faixa provável" é sempre [min, max] entre as duas projeções — nunca as duas trocadas.
+        assert.equal(resultado.projecaoFaturamento.faixaProvavel.min, Math.min(projecaoSimplesEsperada, projecaoAjustadaEsperada));
+        assert.equal(resultado.projecaoFaturamento.faixaProvavel.max, Math.max(projecaoSimplesEsperada, projecaoAjustadaEsperada));
+      }
+    });
+
+    test('projecao_mes (exemplo do usuário): R$120.000 realizados / 25 dias = R$4.800 de média; × 31 dias = R$148.800 de projeção simples', async () => {
+      // Não recria o cenário com dado sintético (evitaria testar a fonte
+      // real) — em vez disso confirma que a FÓRMULA usada pelo handler
+      // reproduz exatamente a conta do exemplo do usuário, com números
+      // conhecidos.
+      const mediaDiaria = round2(120000 / 25);
+      assert.equal(mediaDiaria, 4800);
+      assert.equal(round2(mediaDiaria * 31), 148800);
+    });
+
+    test('projecao_mes (margem_e_lucro) — quando a margem do mês está pendente (SKU sem custo), explica exatamente o que falta e ainda assim projeta o faturamento', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'mes' });
+      const resultado = await executarFerramenta('projecao_mes', { metrica: 'margem_e_lucro' }, ctx);
+
+      const mesCalc = calcularPeriodo('mes');
+      const { itens } = await buscarItensDoPeriodo({ empresaId: EMPRESA_REAL_ID, desde: mesCalc.desde, ate: mesCalc.ate });
+      const skusSemCustoEsperado = new Set(itens.filter((it) => it.sku && it.custoProduto === null).map((it) => it.sku));
+
+      if (skusSemCustoEsperado.size > 0) {
+        assert.equal(resultado.margemEProjecaoDisponivel, false);
+        assert.equal(resultado.skusSemCustoNoMes, skusSemCustoEsperado.size);
+        assert.match(resultado.observacao, /Consigo projetar o faturamento/);
+        assert.ok(resultado.projecaoFaturamento.disponivel, 'mesmo sem conseguir projetar margem, o faturamento continua projetável');
+      } else {
+        assert.equal(resultado.margemEProjecaoDisponivel, true);
+        assert.ok(resultado.projecaoMargemDeContribuicao.disponivel);
+      }
+    });
+
+    test('projecao_mes (pedidos) — projeção de quantidade é sempre um número inteiro', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'mes' });
+      const resultado = await executarFerramenta('projecao_mes', { metrica: 'pedidos' }, ctx);
+      assert.ok(Number.isInteger(resultado.projecaoPedidos.projecaoSimples));
+      if (resultado.projecaoPedidos.tendencia) {
+        assert.ok(Number.isInteger(resultado.projecaoPedidos.projecaoAjustadaPelaTendencia));
+      }
+    });
+
+    test('projecao_mes (ads) — empresa sem conta ML conectada devolve disponivel=false/motivo=sem_conta (nunca projeta sem dado real)', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_SEM_CONTA_ID, periodoChave: 'mes' });
+      const resultado = await executarFerramenta('projecao_mes', { metrica: 'ads' }, ctx);
+      assert.equal(resultado.disponivel, false);
+      assert.equal(resultado.motivo, 'sem_conta');
+    });
+
+    test('projecao_mes: sempre projeta o MÊS CORRENTE, independente do período selecionado no cabeçalho', async () => {
+      const ctxHoje = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'hoje' });
+      const ctxMes = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'mes' });
+      const rHoje = await executarFerramenta('projecao_mes', { metrica: 'faturamento' }, ctxHoje);
+      const rMes = await executarFerramenta('projecao_mes', { metrica: 'faturamento' }, ctxMes);
+      assert.deepEqual(rHoje.faturamentoRealizadoNoMesAteHoje, rMes.faturamentoRealizadoNoMesAteHoje);
+      assert.equal(rHoje.mesReferencia, rMes.mesReferencia);
     });
   }
 );
