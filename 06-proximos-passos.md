@@ -1,5 +1,41 @@
 # Próximos Passos
 
+- **Concluído em 28/08/2026, testado localmente (Postgres real + servidor
+  real via HTTP — rota `POST /api/ia-gestora/perguntar` testada de ponta
+  a ponta contra o Postgres de teste; laço de ferramentas testado com um
+  provedor de IA FALSO — 26 testes automatizados novos, 149 no total no
+  projeto, 27 suítes, 0 falhas):** ativação da IA Gestora — chat de
+  consulta e análise conectado a dados reais — ver `04-alteracoes.md`
+  (22) e `02-decisoes.md` (22). Falta, **nesta ordem**:
+  1. o usuário subir o próximo zip de código pro GitHub (deploy automático
+     no Render cuida do resto);
+  2. **configurar `IA_API_KEY` no Render** (Settings → Environment do
+     serviço `cerne-erp`) com uma chave de API válida da Anthropic
+     (https://console.anthropic.com) — sem isso, a tela abre normalmente
+     mas avisa que a IA ainda não está configurada;
+  3. depois do deploy e da chave configurada, testar a IA Gestora ao vivo
+     com perguntas reais (as 12 do pedido original + as 5 sugeridas na
+     tela), com a conta/empresa real conectada;
+  4. comparar pelo menos 3-4 respostas da IA com o que Visão Geral/
+     Pedidos/Financeiro/DRE mostram pro mesmo período, número a número
+     (ex: perguntar "quanto vendi este mês" e conferir contra o
+     faturamento mostrado em Visão Geral) — confirmando que não existe
+     divergência entre a IA e o resto do ERP;
+  5. confirmar que a IA nunca inventa dado: perguntar algo que dependa de
+     custo não cadastrado (ex: margem de um SKU sem custo) e conferir que
+     ela explica a pendência em vez de estimar um número;
+  6. testar a troca de empresa e de período no header durante uma
+     conversa, confirmando que a conversa reinicia e a resposta seguinte
+     reflete a nova seleção;
+  7. se o identificador de modelo padrão (`claude-sonnet-4-5-20250929`)
+     não funcionar (ver `05-problemas-conhecidos.md`), conferir o
+     identificador atual em https://docs.claude.com e ajustar `IA_MODELO`
+     no Render — sem precisar de nenhum novo deploy de código;
+  - **por instrução explícita do usuário, esta etapa parou nestes 3
+    passos** — não avançar sozinho para a IA poder alterar dados (custo,
+    estoque, compras, contas, notas fiscais, anúncios, pedidos), nem para
+    nenhuma outra área, sem o usuário pedir depois de validar que ela
+    entende corretamente os dados da empresa.
 - **Concluído em 26/08/2026, testado localmente (Postgres real + servidor
   real via HTTP + navegador real via Playwright, trocando empresa e
   período de verdade — 13 testes automatizados novos, 123 no total, 0

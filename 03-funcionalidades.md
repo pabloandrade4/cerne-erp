@@ -3,6 +3,53 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
+## IA Gestora — chat de consulta e análise com dados reais (2026)
+- **Status:** concluído e testado localmente (Postgres real + servidor
+  real via HTTP — 26 testes automatizados novos (`iaFerramentas.test.js` +
+  `iaOrchestrator.test.js`), 149 no total no projeto, 27 suites, 0
+  falhas; a rota HTTP real (`POST /api/ia-gestora/perguntar`) foi testada
+  de ponta a ponta contra o Postgres de teste — empresa real, validações
+  de `empresaId`/pergunta, e a mensagem de "não configurada" — mas a
+  chamada de rede real ao provedor Anthropic ainda depende de uma
+  `IA_API_KEY` de produção, que não existe neste ambiente de
+  desenvolvimento — ver `05-problemas-conhecidos.md`). Primeira versão só
+  de **consulta e análise** — pedido explícito do usuário, em 3 passos.
+- **O que é:** uma tela de chat (menu **Geral → IA Gestora**) onde o
+  usuário conversa em português com uma IA sobre a operação da empresa e
+  período selecionados no cabeçalho — mesmo filtro (`window.CerneFiltro`)
+  já usado pela Visão Geral. Responde perguntas como "quanto vendi hoje",
+  "quanto estou lucrando este mês", "qual minha margem de contribuição",
+  "qual produto está dando mais lucro/prejuízo", "quanto gastei com
+  taxas/frete do vendedor", "quanto tenho para receber/pagar", "quais
+  SKUs estão sem custo cadastrado", "como está meu estoque", "qual conta
+  do Mercado Livre está performando melhor", e "quais problemas precisam
+  da minha atenção" (mesma central de Visão Geral > Alertas & IA) — com 5
+  sugestões de pergunta na tela vazia. Todo número que a IA cita vem de
+  uma consulta real ao banco (nunca calculado pelo modelo); quando falta
+  informação para responder com segurança, ela diz claramente o motivo
+  (ex: "N pedidos ainda estão sem custo cadastrado") em vez de estimar.
+  Nesta primeira versão a IA **não altera nada no sistema** — só
+  consulta, calcula com as mesmas contas já existentes, compara, explica
+  e resume. Trocar empresa/período no cabeçalho reinicia a conversa.
+- **Onde está:** `server/lib/ia/providers/anthropic.js` (tradução HTTP
+  com a API de Mensagens da Anthropic — sem SDK novo, `fetch` nativo),
+  `server/lib/ia/providers/index.js` (registro de provedor/modelo,
+  trocável por variável de ambiente sem mexer no resto), `server/lib/ia/
+  ferramentas.js` (catálogo de 9 ferramentas — cada uma uma casca fina
+  sobre uma função já existente do ERP), `server/lib/ia/orchestrator.js`
+  (laço de pergunta → ferramenta → resposta), `server/routes/iaGestora.js`
+  (`POST /api/ia-gestora/perguntar`), `server/public/index.html` (módulo
+  `window.IAGestora`, item de menu "IA Gestora"). Ver `02-decisoes.md`
+  (22) para o desenho completo.
+- **O que falta:** confirmar ao vivo em produção, com `IA_API_KEY`
+  configurada, que a chamada real ao provedor Anthropic funciona (formato
+  de resposta, `tools`, identificador de modelo — ver
+  `05-problemas-conhecidos.md`); nada mais foi pedido nesta etapa — por
+  instrução explícita do usuário, não avançar sozinho para a IA poder
+  alterar dados (custo, estoque, compras, contas, notas fiscais, anúncios,
+  pedidos) sem o usuário pedir depois de validar que ela entende
+  corretamente os dados da empresa.
+
 ## Sincronização automática do Mercado Livre (backend, a cada 1 minuto)
 - **Status:** concluído, testado localmente (Postgres real + servidor real
   rodando via HTTP + 8 testes automatizados novos — a mecânica de

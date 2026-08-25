@@ -3,6 +3,57 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## IA Gestora: chamada real ao provedor Anthropic ainda não testada contra uma chave/conta real (28/08/2026)
+- Ao ativar a IA Gestora (ver `04-alteracoes.md` (22) e `02-decisoes.md`
+  (22)), o laço de ferramentas inteiro (pergunta → executar ferramenta →
+  responder) foi testado de ponta a ponta com um **provedor de IA FALSO**
+  (`test/iaOrchestrator.test.js`) — este ambiente de desenvolvimento não
+  tem acesso à internet nem uma `IA_API_KEY` real (mesma limitação já
+  registrada para a API de Advertising/Estoque User Products do Mercado
+  Livre). Além disso, a rota HTTP real (`POST /api/ia-gestora/perguntar`)
+  foi testada com servidor real rodando contra o Postgres de teste
+  (empresa 900): devolve a mensagem de "não configurada" corretamente
+  (sem `IA_API_KEY`), e os erros 404 (empresa inexistente) e 400
+  (pergunta vazia/faltando) na validação de entrada. O que tudo isso
+  prova: o backend nunca deixa passar um número que não veio de uma
+  ferramenta, nunca usa empresa/período diferente do contexto, nunca
+  trava (timeout, limite de rodadas, erro do provedor) e nunca quebra a
+  tela de chat. O que isso NÃO prova: que a chamada HTTP real
+  (`server/lib/ia/providers/anthropic.js`) bate exatamente com o formato
+  de resposta atual da API de Mensagens da Anthropic — o formato foi
+  implementado por conhecimento da API (blocos `text`/`tool_use`,
+  `stop_reason`, `tools`), não confirmado contra uma resposta real.
+- **Não é um bug conhecido, é uma lacuna de teste** — mesmo padrão já
+  registrado para Ads e para User Products (Estoque) abaixo. O desenho é
+  defensivo por causa dessa incerteza: qualquer erro HTTP (401 chave
+  inválida, 404 modelo não encontrado, 429 limite de uso, 5xx fora do ar,
+  timeout) cai no mesmo caminho — uma mensagem de chat normal explicando
+  que não foi possível falar com o provedor agora, nunca uma exceção que
+  quebra a tela.
+- **Precisa de confirmação do usuário ao vivo em produção:** depois do
+  deploy, configurar `IA_API_KEY` (uma chave de API válida da Anthropic,
+  https://console.anthropic.com) no Render, abrir IA Gestora e perguntar
+  algo simples (ex: "Quanto vendi hoje?"). Se a resposta vier normal, com
+  número real, está tudo certo. Se aparecer "Não consegui falar com o
+  provedor de IA agora (...)" mesmo com a chave configurada certa, o
+  próximo passo é olhar o log do servidor (`[ia gestora] erro ao
+  consultar o provedor de IA: ...`) — o mais provável é o identificador de
+  modelo (`IA_MODELO`, padrão `claude-sonnet-4-5-20250929`) ter mudado ou
+  não estar mais disponível; conferir o identificador atual em
+  https://docs.claude.com e ajustar a variável de ambiente resolve sem
+  precisar de nenhuma alteração de código.
+- **Sobre "permissões do usuário" (um dos 3 pontos pedidos pelo usuário):**
+  o ERP ainda não tem login nem permissão por usuário implementados (só a
+  tabela `users`, sem tela/rota — ver `00-visao-geral.md`). Por isso, hoje,
+  o único controle de acesso que a IA Gestora aplica — igual a toda outra
+  rota do sistema — é "a empresa consultada existe de verdade" (validado
+  em `lib/ia/orchestrator.js` antes de qualquer pergunta). **Não é uma
+  lacuna desta etapa especificamente** — é uma limitação do ERP inteiro,
+  já registrada como pendência aberta (ver `06-proximos-passos.md`). Não
+  há necessidade de ação agora; quando login/permissão por usuário
+  existir, o ponto certo de aplicar a checagem por usuário já está
+  isolado (comentado em `lib/ia/ferramentas.js`).
+
 ## Visão Geral: "Por marketplace" só valida com 1 canal (Mercado Livre); "Saldo projetado" nunca aparece até existir cadastro de saldo bancário (26/08/2026)
 - Ao ativar a parte inferior da Visão Geral (ver `04-alteracoes.md` (21) e
   `02-decisoes.md` (21)), dois pontos ficam registrados aqui — nenhum dos

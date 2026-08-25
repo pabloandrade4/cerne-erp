@@ -580,8 +580,64 @@ _(sem regras registradas ainda)_
 ## Relatórios
 _(sem regras registradas ainda)_
 
-## Inteligência Artificial (gestão)
-_(sem regras registradas ainda)_
+## Inteligência Artificial (gestão) — IA Gestora
+- **Ativada em 2026** (pedido do usuário, em 3 passos: ativar a aba/chat,
+  conectar a dados reais, primeira versão só de consulta e análise). Fica
+  no menu **Geral → IA Gestora**, mesmo padrão visual do resto do ERP
+  (painel, botões, tipografia — nenhum componente novo de fora).
+- **É um chat de CONSULTA E ANÁLISE.** Nesta primeira versão a IA pode
+  consultar, calcular (usando as contas que já existem no ERP, nunca uma
+  fórmula nova), comparar, explicar, identificar problemas, destacar
+  oportunidades e gerar resumos. Ela **não pode**: alterar custo, criar
+  compra, pagar conta, alterar estoque, alterar anúncio, emitir nota
+  fiscal, cancelar pedido nem modificar qualquer outro dado importante —
+  se o usuário pedir uma dessas ações, ela explica que ainda não faz isso.
+- **Sempre usa a empresa e o período do cabeçalho** (`window.CerneFiltro`,
+  o mesmo filtro já usado pela Visão Geral) — não existe (e não pode
+  existir) um seletor de empresa/período próprio dentro da tela de chat.
+  Trocar empresa ou período no cabeçalho durante uma conversa reinicia o
+  chat (nunca mistura resposta de uma empresa/período com outra).
+- **Nunca responde um número inventado.** Toda pergunta que envolva um
+  valor (faturamento, margem, custo, taxa, saldo etc.) passa por uma
+  "ferramenta" que consulta o banco de verdade — a IA nunca calcula de
+  cabeça. Quando falta informação para responder com segurança (ex: custo
+  de SKU não cadastrado), ela diz isso com todas as letras (ex: "Não
+  consigo calcular isso com segurança porque 14 pedidos ainda estão sem
+  custo cadastrado"), nunca estima nem arredonda um valor aproximado.
+- **Não existe uma segunda regra financeira só para a IA.** As respostas
+  usam exatamente as mesmas funções/tabelas já usadas em Visão Geral,
+  Pedidos, Financeiro, DRE, Relatórios, Contas a Pagar/Receber e Estoque
+  (`lib/relatorioVendas.js`, `lib/dre.js`, `lib/relatoriosAgregados.js`,
+  `lib/contasPagar.js`, `lib/contasReceber.js`, `lib/visaoGeralPainel.js`,
+  `ml_estoque_itens`) — o mesmo período, na mesma tela, nunca tem um
+  faturamento diferente entre a IA Gestora e o resto do ERP.
+- **Permissões do usuário:** o ERP ainda não tem login/permissão por
+  usuário implementados (a tabela `users` existe, mas sem tela nem rota —
+  ver `00-visao-geral.md`). Por isso, hoje, o único controle de acesso que
+  existe em qualquer parte do sistema — inclusive na IA Gestora — é "a
+  empresa consultada precisa existir de verdade" (o backend valida isso
+  antes de responder qualquer pergunta). Quando login/permissão por
+  usuário existir, o ponto certo de aplicar essa checagem já está isolado
+  em `lib/ia/ferramentas.js`/`lib/ia/orchestrator.js`, documentado no
+  próprio código.
+- **A chave do provedor de IA nunca fica no front-end.** Toda a
+  comunicação com o provedor (hoje: Anthropic/Claude, via chamada HTTP
+  direta no backend) acontece só no servidor — o navegador só fala com
+  `POST /api/ia-gestora/perguntar`, do próprio ERP. Provedor e modelo são
+  configuráveis por variável de ambiente (`IA_PROVEDOR`, `IA_API_KEY`,
+  `IA_MODELO`), preparados para trocar de provedor no futuro sem
+  reconstruir a integração — ver `02-decisoes.md`.
+- **Sem IA_API_KEY configurada, a tela abre normalmente** (nunca quebra o
+  resto do ERP) e avisa, na própria conversa, que a IA Gestora ainda não
+  está configurada no servidor.
+- Perguntas de exemplo que a IA já responde com dado real: quanto vendi
+  hoje, quanto estou lucrando este mês, qual minha margem de contribuição,
+  qual produto está dando mais lucro/prejuízo, quanto gastei com
+  taxas/frete do vendedor, quanto tenho para receber/pagar, quais SKUs
+  estão sem custo cadastrado, como está meu estoque, qual conta do
+  Mercado Livre está performando melhor — e uma central de "quais
+  problemas precisam da minha atenção" (mesmos alertas de Visão Geral >
+  Alertas & IA).
 
 ## Outras regras gerais
 - **Pedido cancelado no Mercado Livre não é venda de verdade.** Ele não

@@ -3,6 +3,138 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-28 (22) — IA Gestora: ativação do chat de consulta e análise, conectado a dados reais
+- **Pedido do usuário, em 3 passos:** (1) ativar a aba/chat "IA Gestora"
+  dentro do próprio ERP, com o mesmo padrão visual do resto do sistema;
+  (2) conectar a IA aos dados reais (nunca número inventado, respeitando
+  SEMPRE empresa/período do header e, quando existir, permissão do
+  usuário), reaproveitando as mesmas regras já usadas em Visão Geral/
+  Pedidos/Financeiro/Relatórios; (3) primeira versão só de CONSULTA E
+  ANÁLISE — a IA ainda não pode alterar custo, criar compra, pagar conta,
+  alterar estoque, alterar anúncio, emitir nota fiscal, cancelar pedido
+  nem modificar nenhum dado importante. O usuário listou 12 perguntas de
+  exemplo e pediu sugestões de pergunta na tela — ver `01-regras-de-negocio.md`
+  para a lista completa.
+- **Decisão — arquitetura em 3 camadas, cada uma testável isoladamente:**
+  `lib/ia/providers/*` (tradução HTTP com o provedor de IA — só isso, sem
+  regra de negócio nenhuma), `lib/ia/ferramentas.js` (o catálogo de
+  "function calling" — cada ferramenta é uma casca fina sobre uma função
+  já existente do ERP) e `lib/ia/orchestrator.js` (o laço de
+  pergunta → ferramenta → resposta). `routes/iaGestora.js` é só o router
+  fino de sempre. Motivo: permitir testar o laço de ferramentas inteiro
+  (`test/iaOrchestrator.test.js`) com um provedor FALSO, sem precisar de
+  rede/chave real neste ambiente de desenvolvimento (mesma limitação já
+  registrada em `05-problemas-conhecidos.md` para Mercado Livre/Ads), e
+  testar cada ferramenta (`test/iaFerramentas.test.js`) comparando
+  número a número com a função de origem — a prova de "nenhuma regra
+  financeira nova".
+- **Decisão — "function calling"/ferramentas em vez de deixar o modelo
+  calcular.** A IA nunca recebe a lista de pedidos nem faz conta sozinha
+  — ela só pode pedir para o backend executar uma das 9 ferramentas
+  cadastradas (`resumo_vendas`, `resultado_periodo`, `produtos_desempenho`,
+  `skus_sem_custo`, `contas_a_receber_resumo`, `contas_a_pagar_resumo`,
+  `estoque_resumo`, `desempenho_por_loja`, `alertas_operacionais`), cada
+  uma delas rodando a MESMA função já usada por outra tela do ERP
+  (`resumirPeriodo`, `gerarDRE`, `relatorioProdutos`,
+  `relatorioMarketplaces`, `resumoContasPagar`, `resumoContasReceber`,
+  `gerarAlertas`/`conexoesEEmpresas` de `lib/visaoGeralPainel.js`, e a
+  mesma tabela `ml_estoque_itens` de Estoque/Estoque Full). O texto final
+  é gerado pelo modelo, mas todo número que aparece nesse texto só pode
+  ter vindo de um resultado de ferramenta que o backend calculou de
+  verdade — impossível a IA "inventar" um valor sem que ele já exista no
+  JSON que o backend devolveu pra ela.
+- **Decisão — empresa e período NUNCA são parâmetro de ferramenta.** Cada
+  pergunta cria um `contexto` (`criarContexto`, em `lib/ia/ferramentas.js`)
+  fixado a partir do que o front-end mandou do header — as 9 ferramentas
+  só enxergam esse `contexto`, nunca um `empresaId`/período vindo do texto
+  da pergunta ou de uma decisão do modelo. Mesmo que o modelo tente
+  embutir um `empresaId` diferente no input de uma ferramenta (testado
+  explicitamente em `test/iaOrchestrator.test.js` — "ignora qualquer
+  empresaId que o modelo tente embutir"), o handler da ferramenta ignora
+  esse campo porque nunca o lê. Isso torna estruturalmente impossível a
+  IA responder com dado de uma empresa diferente da selecionada — a forma
+  mais forte de "respeitar a empresa selecionada" que dava pra construir
+  sem ainda existir login/permissão por usuário no ERP (ver
+  `01-regras-de-negocio.md`, seção Inteligência Artificial, sobre por que
+  "permissões do usuário" hoje só significa "a empresa existe").
+- **Decisão — trocar empresa/período no header REINICIA a conversa** (só
+  no front-end, `window.IAGestora`). Continuar a mesma conversa depois de
+  trocar de empresa misturaria, no histórico enviado pro modelo, respostas
+  sobre uma empresa/período diferente do atual — mais simples e mais
+  seguro reiniciar do que tentar "avisar" o modelo que o contexto mudou no
+  meio do histórico.
+- **Decisão — provedor de IA: Anthropic (Claude), chamada HTTP direta
+  (fetch nativo do Node, sem SDK novo no `package.json`)** — este ambiente
+  de desenvolvimento não consegue instalar pacotes npm (ver
+  `05-problemas-conhecidos.md`), então uma dependência nova só seria
+  testável em produção, nunca aqui. A chamada usa a API de Mensagens
+  (`POST https://api.anthropic.com/v1/messages`) com `tools` (function
+  calling nativo da Anthropic) — mesmo padrão defensivo de timeout (45s)
+  já usado em `lib/mercadolivre.js` (20s). Chave e modelo vêm de variável
+  de ambiente (`IA_API_KEY`, `IA_MODELO`) — nunca hardcoded, nunca no
+  front-end.
+- **Decisão — provedor/modelo trocável sem reconstruir a IA** (pedido
+  explícito do usuário). `lib/ia/providers/index.js` é um registro:
+  adicionar um provedor novo (ex: OpenAI) é só criar
+  `lib/ia/providers/<nome>.js` exportando a mesma forma
+  `{ nome, enviarMensagem({apiKey, modelo, system, mensagens, ferramentas, maxTokens}) }`
+  e trocar a variável de ambiente `IA_PROVEDOR` — nenhuma linha do
+  orquestrador, das ferramentas ou do router muda. O formato interno de
+  mensagens (blocos de texto/tool_use/tool_result) foi escolhido por já
+  ser bem próximo de um padrão comum entre provedores com function
+  calling hoje.
+- **Decisão — identificador de modelo configurável, com um padrão
+  documentado como "confira antes de usar em produção".** Modelos
+  disponíveis mudam com o tempo; `IA_MODELO` vazio cai no padrão de
+  `lib/ia/providers/index.js` (`claude-sonnet-4-5-20250929`), mas o
+  `.env.example` já avisa o usuário para conferir o identificador atual
+  em `docs.claude.com` antes do deploy — mesmo espírito de honestidade
+  sobre incerteza externa já usado para a API de Ads/Estoque User
+  Products (ver `05-problemas-conhecidos.md`).
+- **Decisão — "não enviar mais dado que o necessário pro modelo".** Cada
+  ferramenta devolve só um resumo já agregado (nunca a lista de pedidos/
+  itens brutos) — a busca de pedidos/itens do período é feita no máximo
+  1 vez por pergunta (`cache` dentro de `contexto`, mesmo que o modelo
+  peça várias ferramentas na mesma pergunta), mas o resultado bruto nunca
+  sai do backend. O histórico de conversa enviado pro modelo é limitado a
+  8 mensagens (`HISTORICO_MAX_MENSAGENS`), e o laço de ferramentas tem um
+  teto de 6 rodadas (`MAX_RODADAS_FERRAMENTAS`) — proteção contra um laço
+  sem fim, nunca travando a tela de chat.
+- **Decisão — "nunca estimar silenciosamente" é reforçado em 2 lugares:**
+  no `system prompt` (regra explícita, incluindo o exemplo literal do
+  usuário — "Não consigo calcular isso com segurança porque 14 pedidos
+  ainda estão sem custo cadastrado") e no FORMATO de cada ferramenta
+  (todo campo de valor vem com `disponivel`/`valor` e, quando aplicável,
+  `pedidosSemEssaInformacao` — nunca só um número, sempre o motivo junto
+  quando o número não existe). Dois lugares de propósito: mesmo que o
+  modelo "esqueça" a regra do prompt (comportamento de IA não é 100%
+  determinístico), o dado que ele recebe já vem estruturado pra deixar
+  claro quando algo está faltando.
+- **Decisão — `resultado_periodo` reaproveita a DRE (`lib/dre.js`), não
+  `resumirPeriodo` sozinho, para responder "quanto estou lucrando".** O
+  usuário listou "quanto estou lucrando este mês" e "qual minha margem de
+  contribuição" como DUAS perguntas separadas — margem de contribuição já
+  é `resumo_vendas.margemContribuicao`; "lucrando"/resultado passou a
+  mapear pro **Resultado Final** da DRE (margem de contribuição menos as
+  despesas/contas pagas no período), o conceito mais completo de lucro já
+  calculado no ERP, sem criar um terceiro número novo.
+- **Decisão — "SKU sem custo cadastrado" e "produtos com mais lucro/
+  prejuízo" reaproveitam os mesmos dados de Relatórios/Alertas** (LEFT
+  JOIN de `buscarItensDoPeriodo`/`relatorioProdutos` contra `produtos`,
+  mesma lógica já usada em `lib/visaoGeralPainel.js` e
+  `lib/relatoriosAgregados.js`) — nenhuma consulta nova escrita do zero
+  para a IA.
+- **Decisão — "estoque" não depende do período do header** (mesma regra
+  já usada nas telas Estoque/Estoque Full: o espelho é sempre o estado
+  atual do Mercado Livre, não um fluxo de um período). A ferramenta
+  `estoque_resumo` só depende da empresa selecionada.
+- **Decisão — logs em `console.log`/`console.error` com prefixo
+  `[ia gestora]`** (mesmo padrão de `[sync automático]` já usado em
+  `lib/syncScheduler.js`), registrando empresa, período, quais ferramentas
+  foram usadas e o tempo de resposta em toda pergunta respondida, e o
+  motivo em toda falha (sem IA_API_KEY, erro do provedor, limite de
+  rodadas) — nunca a chave de API em texto no log.
+
 ## 2026-08-26 (21) — Visão Geral: ativação da parte inferior (Evolução diária/Por marketplace, Fluxo de Caixa/Conexões & Empresas, Alertas & IA)
 - **Pedido do usuário, em 3 passos:** (1) ativar os gráficos "Evolução
   diária" (faturamento + margem de contribuição por dia, respeitando o

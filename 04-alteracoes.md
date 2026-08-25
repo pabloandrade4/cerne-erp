@@ -2,6 +2,82 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-28 (22) — IA Gestora: ativação do chat de consulta e análise, conectado a dados reais
+- **Pedido do usuário, em 3 passos:** (1) ativar a aba/chat "IA Gestora" no
+  ERP, com o mesmo padrão visual do resto do sistema, respondendo perguntas
+  em linguagem natural; (2) conectar a IA aos dados reais do ERP,
+  respeitando SEMPRE empresa/período do header (nunca um filtro próprio) e
+  nunca criando uma segunda regra financeira só para ela — se faltar dado,
+  ela diz claramente o que falta, nunca estima; (3) primeira versão só de
+  CONSULTA E ANÁLISE — ainda não altera custo, estoque, compras, contas,
+  notas fiscais, anúncios nem pedidos. Ver `01-regras-de-negocio.md` e
+  `02-decisoes.md` (22) para as regras e decisões completas.
+- **`server/lib/ia/providers/anthropic.js` (novo):** tradução HTTP com a
+  API de Mensagens da Anthropic (`fetch` nativo do Node — sem SDK/
+  dependência nova, este ambiente não instala pacotes npm), com o mesmo
+  padrão defensivo de timeout já usado em `lib/mercadolivre.js` (aqui,
+  45s). Nunca é importado fora de `lib/ia/`.
+- **`server/lib/ia/providers/index.js` (novo):** registro de provedor —
+  `obterProvedorConfigurado()` lê `IA_PROVEDOR`/`IA_API_KEY`/`IA_MODELO`
+  do ambiente e devolve o provedor certo já com a chave presa (o chamador
+  nunca lida com ela diretamente), ou `{erro}` quando não configurado
+  (nunca quebra, só avisa). Ponto único de troca de provedor/modelo no
+  futuro.
+- **`server/lib/ia/ferramentas.js` (novo):** o catálogo de 9 ferramentas
+  (`resumo_vendas`, `resultado_periodo`, `produtos_desempenho`,
+  `skus_sem_custo`, `contas_a_receber_resumo`, `contas_a_pagar_resumo`,
+  `estoque_resumo`, `desempenho_por_loja`, `alertas_operacionais`), cada
+  uma uma casca fina sobre uma função já existente
+  (`lib/relatorioVendas.js`, `lib/dre.js`, `lib/relatoriosAgregados.js`,
+  `lib/contasPagar.js`, `lib/contasReceber.js`, `lib/visaoGeralPainel.js`,
+  `ml_estoque_itens`) — nenhum cálculo financeiro novo. `criarContexto`
+  fixa empresa/período (do header) e faz cache de pedidos/itens do
+  período por pergunta, pra nunca buscar duas vezes nem mandar mais dado
+  que o necessário pro modelo.
+- **`server/lib/ia/orchestrator.js` (novo):** `responderPergunta` — o laço
+  de ferramentas (pergunta → provedor → `tool_use`? executa a ferramenta
+  de verdade : responde com texto), com teto de 6 rodadas e histórico
+  limitado a 8 mensagens. Nunca lança um número: sem `IA_API_KEY`, com
+  erro do provedor, ou excedendo o limite de rodadas, devolve uma
+  resposta de chat normal explicando o que houve (nunca uma exceção que
+  quebra a tela), sempre registrado em log (`[ia gestora]`, nunca a
+  chave).
+- **`server/routes/iaGestora.js` (novo):** `POST /api/ia-gestora/perguntar`
+  — router fino, valida `empresaId`/`pergunta` e delega pro orquestrador.
+- **`server/server.js`:** monta o novo router
+  (`app.use('/api/ia-gestora', iaGestoraRouter)`) — só isso, aditivo.
+- **`server/public/index.html`:** novo item de menu "IA Gestora" (grupo
+  Geral, entre Visão Geral e Alertas & IA, ícone novo `messageCircle`);
+  novo módulo `window.IAGestora` — chat com bolhas de mensagem, indicador
+  "consultando os dados…", legenda de quais ferramentas foram usadas em
+  cada resposta, 5 chips de pergunta sugerida na tela vazia, caixa de
+  texto com auto-resize e Enter para enviar, sempre mostrando a
+  empresa/período atual acima do campo de digitar. Reaproveita só CSS
+  nova (`.ia-*`, com os mesmos tokens de cor/tipografia do resto do
+  ERP — nenhuma biblioteca externa) e o `window.CerneFiltro` já
+  existente; trocar empresa/período reinicia a conversa. Nenhuma outra
+  tela foi alterada.
+- **`.env.example`:** acrescentadas `IA_PROVEDOR`, `IA_API_KEY`,
+  `IA_MODELO` (todas opcionais/documentadas — sem elas, a IA Gestora só
+  avisa que não está configurada).
+- **Testes:** `server/test/iaFerramentas.test.js` (catálogo de
+  ferramentas — forma do schema, `criarContexto`/`executarFerramenta`, e
+  cada ferramenta comparada número a número com a função de origem contra
+  a empresa 900, já seedada por outros testes, e uma empresa nova de
+  teste para Contas a Pagar/Receber/Estoque) e
+  `server/test/iaOrchestrator.test.js` (o laço de ferramentas com um
+  PROVEDOR FALSO — nunca chama rede real; cobre: empresa inexistente,
+  pergunta vazia/longa demais, resposta direta, pede 1 ferramenta e
+  conclui, ignora `empresaId` que o "modelo" tenta embutir no input,
+  excede o limite de rodadas, provedor falha, sem `IA_API_KEY`
+  configurada, histórico limitado). Total: 26 testes novos, 149 no total
+  no projeto (27 suítes), 0 falhas. Testado também de ponta a ponta com
+  servidor real + Postgres real: `POST /api/ia-gestora/perguntar` contra
+  a empresa 900 devolve a mensagem de "não configurada" (sem
+  `IA_API_KEY`), e os erros 404 (empresa inexistente)/400 (pergunta
+  vazia/faltando) na rota — a chamada de rede real ao provedor Anthropic
+  segue sem confirmação neste ambiente, ver `05-problemas-conhecidos.md`.
+
 ## 2026-08-26 (21) — Visão Geral: ativação da parte inferior da tela (Evolução diária/Por marketplace, Fluxo de Caixa/Conexões & Empresas, Alertas & IA)
 - **Pedido do usuário, em 3 passos:** (1) ativar os gráficos "Evolução
   diária" (faturamento + margem de contribuição por dia, respeitando o
