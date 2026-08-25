@@ -2,6 +2,72 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-25 (25) — Correção da tela Ads: API real corrigida, cards de topo, gráfico diário, ranking dividido em duas visões
+- **Pedido do usuário:** corrigir e ativar somente a tela Ads, em 3 passos
+  (ver `02-decisoes.md` entrada 25 pro texto completo e o raciocínio de
+  cada decisão) — sincronizar dado real do Product Ads (com checagem de
+  permissão), mostrar cards de gasto hoje/mês + gráfico diário, e um
+  ranking por anúncio dividido em duas visões separadas (nunca inventar
+  atribuição de pedido ao Ads). Não alterar outros módulos.
+- **`server/lib/mlAds.js` — dois erros de integração corrigidos após ler a
+  documentação oficial da API de Advertising** (a versão anterior nunca
+  tinha sido conferida contra ela): (1) `advertiser_id` agora vai no PATH
+  da URL (`/{advertiser_id}/product_ads/items`), não em query string; (2)
+  `ctr`/`cvr`/`roas` removidos da lista de métricas pedidas ao endpoint de
+  itens (só existem no endpoint de campanhas — pedi-las junto
+  provavelmente rejeitaria a chamada inteira). Adicionadas: busca de
+  campanhas (`/{advertiser_id}/product_ads/campaigns`, resolve o nome da
+  campanha por `campaign_id`, best-effort — uma falha aqui não derruba o
+  resto) e busca de série diária (`aggregation_type=daily`, mesmo
+  endpoint de itens). Novo ponto de entrada único,
+  `buscarDadosAdsDaConta`, resolve o `advertiser_id` uma vez só e busca
+  itens + campanhas + série diária do período + série diária mês-atual
+  (reaproveitando a mesma chamada quando as janelas são iguais).
+- **`server/lib/ads.js` — reescrito para consumir o novo `mlAds.js` e
+  adicionar:** campo `campanha` por anúncio; `cliques`/`impressoes`/`cpc`
+  por anúncio (dado real da API); `cards` (gastoHoje, gastoMes,
+  investimentoPeriodo, receitaAtribuidaPeriodo, roasPeriodo, acosPeriodo,
+  disponivel, parcial) — Gasto hoje/mês vêm de uma janela diária FIXA
+  (dia 1 do mês até hoje, BRT), o resto vem "no período" e é a MESMA soma
+  das linhas da tabela (nunca um segundo cálculo); `diario` (série
+  investimento×receita atribuída do período, somada entre as contas/lojas
+  em escopo) pro gráfico; `status`/`margemDepoisDoAdsPct` por anúncio.
+  Nova função pura exportada `calcularCards` (testável sem API real).
+- **`server/routes/ads.js`:** calcula e passa as janelas de "hoje" e "mês
+  atual" (BRT, `lib/periodo.js`) além do período do filtro, pros cards.
+- **`server/public/index.html` (`window.Ads`) — tela reconstruída:** 5
+  cards de topo; gráfico diário "Investimento Ads x Receita atribuída"
+  (mesmo desenho SVG do gráfico de Visão Geral, dados diferentes); seletor
+  de ordenação (Mais lucrativos / Maior prejuízo / Maior gasto em Ads /
+  Maior faturamento / Melhor ROAS), aplicado às duas tabelas ao mesmo
+  tempo; e a tabela por anúncio dividida em duas visões separadas —
+  **"Performance atribuída Mercado Ads"** (investimento, cliques,
+  impressões, CPC, vendas/receita atribuída, ROAS, ACOS — só o que a API
+  atribui) e **"Resultado real do SKU após Ads"** (faturamento real de
+  todas as vendas do SKU, gasto Ads, TACOS, margem antes/depois do Ads,
+  status — com aviso explícito na tela de que pode incluir venda
+  orgânica, nunca chamado de "lucro gerado pelo Ads").
+- **`server/test/ads.test.js`:** 6 testes novos — cards/diário/campanha
+  nunca inventam valor quando a API está indisponível (o normal neste
+  sandbox), e uma suíte unitária nova (sem banco) travando a fórmula de
+  `calcularCards` com dados sintéticos (soma da série diária, soma das
+  linhas, `disponivel`/`parcial`). Suíte completa: 166/166 com Postgres,
+  51/51 sem Postgres.
+- **Verificação de ponta a ponta feita nesta correção:** servidor real
+  rodando contra o Postgres de teste, `GET /api/ads` chamado com
+  `periodo=hoje`, `periodo=mes`, com e sem `contaId`, e com uma empresa
+  sem conta conectada — todas as respostas conferidas manualmente: nenhum
+  campo dependente da API de Ads aparece com valor (tudo `null`, porque a
+  conta de teste está com `status='erro'`), e os campos vindos do ERP
+  (`faturamentoReal`, `quantidadeVendidaReal`, título, SKU) batem com os
+  pedidos reais da conta "PFEMBALAGEMS". **Não foi possível comparar o
+  gasto exibido no ERP com o painel real do Mercado Livre nem confirmar
+  as duas correções de URL/métricas contra uma chamada real** — este
+  sandbox não tem acesso a uma conta Mercado Livre real com Product Ads
+  nem à internet a partir do servidor Node (ver
+  `05-problemas-conhecidos.md`).
+- **Nenhuma tabela nova no banco.** Nenhum outro módulo alterado.
+
 ## 2026-08-25 (24) — Relatórios → Produtos: nova visão "Por Caixa" (agrupada por produto físico)
 - **Pedido do usuário, em 3 passos:** (1) manter a visão "Por SKU" já
   existente; (2) criar a visão "Por Caixa", juntando todos os SKUs/kit

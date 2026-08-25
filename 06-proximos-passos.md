@@ -1,6 +1,22 @@
 # Próximos Passos
 
 - **Concluído em 25/08/2026, testado localmente (Postgres real + servidor
+  real via HTTP, `periodo=hoje` e `periodo=mes` conferidos manualmente —
+  166 testes automatizados no total no projeto com Postgres, 51 sem, 0
+  falhas):** correção e ativação da tela Ads — API de Advertising
+  corrigida contra a documentação oficial, cards de topo, gráfico diário e
+  ranking por anúncio dividido em duas visões separadas — ver
+  `04-alteracoes.md` e `02-decisoes.md` (25). **O usuário pediu
+  explicitamente para parar depois desta correção** ("Pare depois dessa
+  correção") — nenhuma expansão adicional foi feita. Candidato a próximo
+  passo, **não pedido ainda**, só possível com acesso a uma conta
+  Mercado Livre real com Product Ads habilitado (ver
+  `05-problemas-conhecidos.md`): confirmar ao vivo em produção que os
+  endpoints/parâmetros corrigidos (`advertiser_id` no path, métricas do
+  endpoint de itens, `aggregation_type=daily`, endpoint de campanhas)
+  batem exatamente com a resposta real da API, e comparar o gasto exibido
+  nos cards com o painel real do Mercado Livre.
+- **Concluído em 25/08/2026, testado localmente (Postgres real + servidor
   real via HTTP, com os multiplicadores 25/50/75/100/200 pedidos pelo
   usuário — 8 testes automatizados novos, 160 no total no projeto, 28
   suítes, 0 falhas):** Relatórios → Produtos ganhou a visão "Por Caixa" —

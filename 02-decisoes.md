@@ -3,6 +3,94 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-25 (25) — Correção e ativação da tela Ads: API real corrigida, cards, gráfico diário, duas visões separadas
+- **Pedido do usuário, em 3 passos, com uma instrução MUITO IMPORTANTE:**
+  (1) sincronizar dados reais do Mercado Ads (Product Ads), verificando
+  antes se a conta/aplicação tem permissão pra Advertising; (2) mostrar
+  gasto hoje/no mês, receita atribuída, ROAS, ACOS e um gráfico diário de
+  investimento x receita, com filtros de empresa/loja/período (BRT); (3)
+  ranking de lucro/prejuízo por anúncio, ordenável de 5 formas, calculado
+  a partir da margem de contribuição real já usada no resto do ERP. A
+  instrução MUITO IMPORTANTE: nunca inventar atribuição de pedido ao Ads —
+  se a API não permitir identificar exatamente quais pedidos vieram da
+  publicidade (e ela não permite: só devolve totais agregados por
+  anúncio/dia), mostrar duas visões SEPARADAS em vez de uma tabela só.
+  Antes de alterar qualquer coisa, o pedido explícito foi ler a
+  documentação e analisar a integração atual — feito abaixo.
+- **A implementação anterior (ativada em 25/08/2026, ver entrada 17) nunca
+  tinha sido conferida contra a documentação pública real da API de
+  Advertising — só escrita por analogia ao resto da API do Mercado Livre.**
+  Nesta correção, cada endpoint e parâmetro foi lido na documentação
+  oficial (https://developers.mercadolivre.com.br/en_us/product-ads-us-read,
+  consultada em 25/08/2026) antes de qualquer mudança, e dois erros reais
+  de integração foram encontrados e corrigidos em `lib/mlAds.js`:
+  1. **URL errada:** o `advertiser_id` estava sendo mandado como query
+     string (`/advertising/product_ads/items?advertiser_id=...`), mas a
+     API real exige ele no PATH da URL
+     (`/{advertiser_id}/product_ads/items?...`). Uma chamada real teria
+     falhado sempre, mesmo com a conta tendo acesso total a Product Ads.
+  2. **Métricas inválidas pedidas ao endpoint de itens:** `ctr`, `cvr` e
+     `roas` foram removidas da lista de métricas pedidas — segundo a
+     documentação, essas três métricas só existem no endpoint de
+     CAMPANHAS, não no de itens; pedi-las junto no endpoint de itens
+     provavelmente faria a API real rejeitar a chamada inteira (erro de
+     parâmetro inválido). ROAS/ACOS por anúncio continuam mostrados na
+     tela, calculados aqui em cima de `cost`/`total_amount` (dois números
+     reais) — isso não é uma estimativa.
+  Essas duas correções não foram confirmadas contra uma chamada real (ver
+  "o que falta" abaixo e `05-problemas-conhecidos.md`), mas vêm
+  diretamente do texto da documentação oficial, não de suposição.
+- **Documentação pública consultada nesta correção também revelou dois
+  recursos que a versão anterior não usava, e que os passos 2 e 3 do
+  pedido do usuário precisavam:**
+  - `aggregation_type=daily` no MESMO endpoint de itens devolve
+    investimento/receita por DIA pro anunciante inteiro (sem quebra por
+    anúncio) — é exatamente o dado do gráfico "Investimento Ads x Receita
+    atribuída" e dos cards "Gasto hoje"/"Gasto no mês", sem precisar
+    inventar nenhuma agregação própria.
+  - Cada item da resposta já vem com `campaign_id` — e existe um endpoint
+    separado (`/{advertiser_id}/product_ads/campaigns`) que devolve o
+    `name` de cada campanha. Usado só pra resolver o campo "campanha"
+    pedido pelo usuário; se essa chamada falhar, não derruba
+    investimento/ROAS/ACOS (que já vêm da chamada de itens) — o nome da
+    campanha simplesmente fica ausente pra aquele anúncio.
+- **Cards "Gasto hoje" e "Gasto no mês" são uma janela FIXA (dia 1 do mês
+  atual até hoje, fuso BRT), independente do período escolhido no filtro
+  da tela** — decisão deliberada: são um "termômetro" que o usuário volta
+  a olhar todo dia, então precisam sempre representar a data real, mesmo
+  se o filtro da tela estiver em "Últimos 7 dias" ou "Ontem". Já "Receita
+  atribuída aos Ads", ROAS e ACOS nos cards são "no período" (o período
+  escolhido no filtro), porque o pedido do usuário foi explícito nisso.
+  Pra evitar uma segunda chamada redundante à API quando o período
+  escolhido já é "Este mês" (caso comum), `lib/mlAds.js` reaproveita a
+  mesma série diária nos dois lugares quando as janelas são idênticas.
+- **Cards de investimento/receita/ROAS/ACOS do período somam as MESMAS
+  linhas mostradas na tabela por anúncio** (nunca um segundo cálculo
+  paralelo que possa divergir) — mesmo princípio já usado em
+  `investimentoAdsDoPeriodo` (`lib/relatoriosAgregados.js`, categoria
+  "Vendas e Margem" de Relatórios).
+- **Ranking por anúncio dividido em duas visões separadas na tela
+  (`window.Ads`), nunca uma tabela só misturando as duas fontes** — decisão
+  direta da instrução MUITO IMPORTANTE do usuário. "Performance atribuída
+  Mercado Ads" mostra só o que a API atribui (investimento, cliques,
+  impressões, CPC, vendas/receita atribuída, ROAS, ACOS). "Resultado real
+  do SKU após Ads" mostra a margem de contribuição real de TODAS as
+  vendas daquele SKU/anúncio no período (pode incluir venda orgânica,
+  texto explícito na tela) menos o investimento em Ads — nunca chamado de
+  "lucro gerado pelo Ads" em nenhum lugar da UI. As duas tabelas
+  compartilham a mesma ordenação (5 opções: mais lucrativos, maior
+  prejuízo, maior gasto em Ads, maior faturamento, melhor ROAS), pra
+  facilitar comparar o mesmo anúncio nas duas visões.
+- **O que falta (ver `05-problemas-conhecidos.md`):** nenhuma das
+  correções acima pôde ser confirmada contra uma chamada real à API,
+  porque este ambiente de desenvolvimento não tem acesso a uma conta
+  Mercado Livre real com Product Ads habilitado nem à internet a partir do
+  servidor Node — só a documentação pública pôde ser consultada. Também
+  não ficou documentado publicamente se o aplicativo do ERP precisa de
+  algum produto/escopo adicional habilitado no painel de desenvolvedores
+  do Mercado Livre além de ter uma conta de anunciante ativa — só será
+  possível confirmar isso testando com uma conta real em produção.
+
 ## 2026-08-25 (24) — Relatórios → Produtos: visão "Por Caixa", reaproveitando produto base/multiplicador
 - **Pedido do usuário, em 3 passos:** (1) manter a visão "Por SKU" já
   existente, sem remover nada; (2) criar uma segunda visão "Por Caixa"

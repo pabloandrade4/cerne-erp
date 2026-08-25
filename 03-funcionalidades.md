@@ -97,44 +97,69 @@ cada uma e o status (em desenvolvimento / concluída).
   `06-proximos-passos.md`).
 
 ## Ads (Product Ads do Mercado Livre)
-- **Status:** concluído, testado localmente (servidor real + Postgres local
-  + navegador via Playwright, com os pedidos reais da conta
-  "PFEMBALAGEMS" — 12 testes automatizados novos, incluindo a
-  reconciliação item a item). **A chamada real à API de Publicidade
-  (Product Ads) do Mercado Livre não pôde ser testada de ponta a ponta
-  neste ambiente** (sem acesso à internet do Mercado Livre no sandbox) —
-  ver `05-problemas-conhecidos.md`. Ainda não testado ao vivo em
-  produção.
-- **O que é:** visão por anúncio (SKU, loja) do investimento em Ads,
-  vendas atribuídas (quantidade e R$), faturamento atribuído, ROAS, ACOS
-  e TACOS — e, lado a lado, a margem de contribuição REAL das vendas
-  daquele anúncio no período (mesma fonte de Pedidos/DRE/Financeiro),
-  antes e depois de descontar o investimento em Ads. Duas fontes nunca
-  misturadas numa fórmula nova: (1) investimento/ROAS/ACOS/vendas
-  atribuídas vêm sempre da API de Advertising do Mercado Livre — nunca
-  calculados pelo ERP; (2) faturamento real e margem "antes do Ads" vêm
-  da mesma função usada em Pedidos/DRE/Financeiro/Relatórios
-  (`buscarItensDoPeriodo`, decompõe pedido em item/anúncio). TACOS =
-  investimento em Ads ÷ faturamento REAL do anúncio no período (não o
-  "atribuído" pelo Mercado Livre) — só calculado quando os dois números
-  existem. Margem depois do Ads = margem real − investimento em Ads
-  (venda − taxas − frete do vendedor − imposto − custo do produto −
-  Ads). Nunca inventa valor: quando a conta não tem acesso a Product Ads,
-  ou a API de Publicidade não responde, todo campo dependente dela
-  aparece como "Pendente de sincronização" (nunca um número estimado).
-  Filtro de empresa/período do header e de loja (nesta tela) funcionam.
+- **Status:** concluído, testado localmente (servidor real + Postgres local,
+  com os pedidos reais da conta "PFEMBALAGEMS" — 16 testes automatizados,
+  incluindo a reconciliação item a item e a fórmula dos cards de topo).
+  **Corrigido em 25/08/2026** (ver `04-alteracoes.md` entrada 25 e
+  `02-decisoes.md` entrada 25): a versão ativada em 25/08/2026 nunca tinha
+  sido conferida contra a documentação pública real da API de Advertising
+  — nesta correção, cada endpoint/parâmetro foi lido na documentação
+  oficial (https://developers.mercadolivre.com.br/en_us/product-ads-us-read)
+  e dois erros reais foram corrigidos (URL do `advertiser_id` e lista de
+  métricas inválida — ver `05-problemas-conhecidos.md`). **A chamada real
+  à API de Publicidade continua sem poder ser testada de ponta a ponta
+  neste ambiente** (o servidor Node aqui não tem acesso à internet nem a
+  uma conta Mercado Livre real — ver `05-problemas-conhecidos.md`). Ainda
+  não testado ao vivo em produção.
+- **O que é:** visão por anúncio (SKU, loja, campanha) do investimento em
+  Ads, cliques, impressões, CPC, vendas atribuídas (quantidade e R$),
+  receita atribuída, ROAS e ACOS — dividida em DUAS visões separadas na
+  tela (nunca misturadas numa tabela só, por instrução explícita do
+  usuário, porque a API do Mercado Livre não informa quais pedidos
+  pertencem à publicidade, só totais agregados por anúncio/dia):
+  - **"Performance atribuída Mercado Ads"** — só o que a API de
+    Advertising atribui diretamente (investimento, cliques, impressões,
+    CPC, vendas/receita atribuída, ROAS, ACOS).
+  - **"Resultado real do SKU após Ads"** — a margem de contribuição REAL
+    de TODAS as vendas daquele anúncio/SKU no período (mesma fonte de
+    Pedidos/DRE/Financeiro, `buscarItensDoPeriodo`), menos o investimento
+    real em Ads — deixado explícito na tela que pode incluir venda
+    orgânica, e nunca chamado de "lucro gerado pelo Ads".
+  TACOS = investimento em Ads ÷ faturamento REAL do anúncio no período
+  (não o "atribuído" pelo Mercado Livre) — só calculado quando os dois
+  números existem. Margem depois do Ads = margem real − investimento em
+  Ads (venda − taxas − frete do vendedor − imposto − custo do produto −
+  Ads). ROAS/ACOS por anúncio são aritmética sobre dois números reais
+  (receita atribuída ÷ investimento), nunca uma estimativa — o endpoint de
+  itens da API não devolve ROAS pronto (só existe no endpoint de
+  campanhas). Nunca inventa valor: quando a conta não tem acesso a
+  Product Ads, ou a API de Publicidade não responde, todo campo
+  dependente dela aparece como "Pendente de sincronização".
+- **Cards de topo e gráfico diário (adicionados em 25/08/2026):** Gasto
+  hoje, Gasto no mês (dia 1 do mês até hoje, sempre a data real —
+  independente do período escolhido no filtro da tela), Receita atribuída
+  aos Ads, ROAS e ACOS (esses três últimos "no período" escolhido no
+  filtro). Gráfico diário "Investimento Ads x Receita atribuída", vindo da
+  mesma API com `aggregation_type=daily`. Filtros de empresa/período do
+  header e de loja (nesta tela) funcionam nos cards, no gráfico e nas duas
+  tabelas.
+- **Ordenação da tabela por anúncio:** Mais lucrativos, Maior prejuízo,
+  Maior gasto em Ads, Maior faturamento, Melhor ROAS — aplicada às duas
+  visões ao mesmo tempo (mesma ordem nas duas, pra facilitar comparar).
   Shopee Ads não foi implementado (fora do escopo desta etapa, por
   instrução explícita do usuário).
-- **Onde está:** `server/lib/mlAds.js` (cliente da API de Advertising),
-  `server/lib/ads.js` (agregação — combina as duas fontes),
+- **Onde está:** `server/lib/mlAds.js` (cliente da API de Advertising —
+  advertiser, itens, campanhas, série diária), `server/lib/ads.js`
+  (agregação — combina as duas fontes, cards, série diária),
   `server/routes/ads.js`, `server/public/index.html` (módulo
   `window.Ads`). Sem tabela própria no banco — calculado ao vivo, mesmo
   padrão de Anúncios/Recebimentos.
 - **O que falta:** confirmar ao vivo, em produção, que a conta
-  "PFEMBALAGEMS" tem (ou não) acesso a Product Ads e que os endpoints/
-  headers assumidos (`/advertising/advertisers`,
-  `/advertising/product_ads/items`, `Api-Version`) batem com a API real —
-  ver `05-problemas-conhecidos.md`.
+  "PFEMBALAGEMS" tem (ou não) acesso a Product Ads, e que os
+  endpoints/parâmetros agora corrigidos (`/advertising/advertisers`,
+  `/{advertiser_id}/product_ads/items`, `/{advertiser_id}/product_ads/
+  campaigns`, `aggregation_type=daily`, `Api-Version`) batem exatamente
+  com a resposta real da API — ver `05-problemas-conhecidos.md`.
 
 ## Relatórios (categorias, reaproveitando a mesma fonte de sempre)
 - **Status:** concluído, testado localmente (servidor real + Postgres

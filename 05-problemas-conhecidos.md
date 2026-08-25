@@ -138,45 +138,65 @@ desenvolvimento, para não serem esquecidas.
   o próximo passo é inspecionar a resposta real da API (log do servidor)
   e ajustar `buscarQuantidadeUserProduct` pro formato real observado.
 
-## Ads: API de Advertising (Product Ads) do Mercado Livre ainda não testada contra uma conta real (25/08/2026)
-- Ao ativar Ads (ver `04-alteracoes.md` (18) e `02-decisoes.md` (17)),
-  essa foi a primeira vez que o projeto precisou integrar a API de
-  Publicidade do Mercado Livre — diferente da API de pedidos/anúncios já
-  usada em todo o resto do ERP. A documentação pública consultada em
-  25/08/2026 (`https://developers.mercadolivre.com.br/en_us/product-ads-us-read`
-  e páginas relacionadas) descreve os endpoints, headers e campos de
-  métrica usados em `lib/mlAds.js`, mas **não foi possível confirmar
-  contra uma chamada real** (este ambiente de desenvolvimento não tem
-  acesso à internet do Mercado Livre nem um token válido de uma conta
-  anunciante) três pontos: (1) a URL base exata — assumida
-  `https://api.mercadolibre.com/advertising/...`, seguindo a convenção
-  do resto da API, mas não confirmada literalmente na documentação
-  consultada; (2) o valor exato de `Api-Version` esperado por cada
-  endpoint (`/advertisers` usa `1`, `/product_ads/items` usa `2`,
-  conforme a documentação, mas isso pode ter mudado); (3) os
-  pré-requisitos reais para uma conta ter acesso a Product Ads (a conta
-  vendedora precisa de um anunciante ativo, e o app do ERP precisa ter o
-  produto "Advertising" habilitado no painel de desenvolvedor — nenhum
-  dos dois foi confirmado pra conta de teste "PFEMBALAGEMS").
+## Ads: API de Advertising (Product Ads) do Mercado Livre ainda não testada contra uma conta real (25/08/2026, revisado em 25/08/2026)
+- Ao ativar Ads (ver `04-alteracoes.md` (18) e `02-decisoes.md` (17)), essa
+  foi a primeira vez que o projeto precisou integrar a API de Publicidade
+  do Mercado Livre — diferente da API de pedidos/anúncios já usada em todo
+  o resto do ERP. **Na correção de 25/08/2026** (`04-alteracoes.md` (25),
+  `02-decisoes.md` (25)) a documentação pública oficial foi lida de novo,
+  desta vez com acesso real à internet (não pelo servidor Node deste
+  sandbox, que continua sem internet — pelo ambiente onde o código foi
+  escrito), e dois erros REAIS de integração foram encontrados e
+  corrigidos, com trecho da documentação citado como fonte:
+  1. `advertiser_id` estava sendo mandado em query string; a API real usa
+     ele no PATH (`/{advertiser_id}/product_ads/items`,
+     `/{advertiser_id}/product_ads/campaigns`) — corrigido.
+  2. As métricas `ctr`, `cvr` e `roas` estavam sendo pedidas ao endpoint de
+     ITENS; a documentação só lista essas três para o endpoint de
+     CAMPANHAS — removidas do endpoint de itens (ROAS/ACOS por anúncio
+     continuam calculados no ERP em cima de `cost`/`total_amount` reais).
+  Também confirmado (e agora usado): o parâmetro `aggregation_type=daily`
+  no endpoint de itens (série diária pro gráfico/cards) e o `campaign_id`
+  já presente em cada item da resposta (resolvido pra nome via
+  `/{advertiser_id}/product_ads/campaigns`).
+- **O que continua sem confirmação — porque não é possível confirmar sem
+  uma chamada autenticada real, que este ambiente não consegue fazer**
+  (o servidor Node do sandbox não tem acesso à internet nem um token
+  válido de conta anunciante): (1) o valor exato de `Api-Version` esperado
+  por cada endpoint continua o mesmo assumido antes (`/advertisers` usa
+  `1`, `/product_ads/items` e `/product_ads/campaigns` usam `2`, conforme
+  a documentação — mas isso pode ter mudado); (2) os pré-requisitos reais
+  pra uma conta ter acesso a Product Ads (conta vendedora com anunciante
+  ativo, e possivelmente o app do ERP precisando de algum produto/escopo
+  adicional habilitado no painel de desenvolvedor — a documentação
+  consultada não deixa isso explícito, nenhum dos dois foi confirmado pra
+  conta de teste "PFEMBALAGEMS"); (3) o formato exato da resposta com
+  `aggregation_type=daily` e do endpoint de campanhas (a documentação
+  mostra um exemplo, mas sem confirmação contra uma resposta real).
 - **Não é um bug conhecido, é uma lacuna de teste.** O desenho é
   defensivo por causa dessa incerteza: toda chamada está em try/catch
-  (`buscarMetricasDaConta`, `lib/mlAds.js`) e qualquer falha — 401/403
+  (`buscarDadosAdsDaConta`, `lib/mlAds.js`) e qualquer falha — 401/403
   (sem acesso), 404 (sem anunciante), timeout, ou qualquer outro erro —
   devolve um motivo estruturado (`sem_acesso_ads`, `sem_anunciante`,
   `timeout`, `erro_api`) que a tela mostra como "Pendente de
-  sincronização", nunca um número inventado. Testado localmente que a
-  conta de teste "PFEMBALAGEMS" realmente cai nesse caminho (o token
-  descriptografado falha/a API não responde neste ambiente sem internet
-  real) e a tela degrada corretamente — mas isso prova só o caminho de
-  erro, não o caminho de sucesso com dado real.
-- **Precisa de confirmação do usuário ao vivo em produção:** abrir Ads
-  com a conta "PFEMBALAGEMS" (ou outra conta real conectada) depois do
-  deploy e conferir se investimento/ROAS/ACOS aparecem com dado real. Se
-  aparecer "Pendente de sincronização" pra sempre mesmo com a conta tendo
-  campanhas ativas de Product Ads, o próximo passo é inspecionar a
-  mensagem de erro específica (a tela mostra o motivo por loja) — mais
-  provável de ser um dos três pontos não confirmados acima do que um erro
-  de lógica.
+  sincronização", nunca um número inventado; uma falha só na busca de
+  campanhas ou só numa das duas séries diárias não derruba o resto (cada
+  pedaço degrada isoladamente). Testado localmente (servidor real + curl,
+  `periodo=hoje` e `periodo=mes`) que a conta de teste "PFEMBALAGEMS"
+  (status `erro` no banco de teste) realmente cai no caminho de
+  indisponibilidade e a tela degrada corretamente em todos os campos
+  (cards, gráfico, as duas tabelas) — mas isso prova só o caminho de erro,
+  não o caminho de sucesso com dado real.
+- **Precisa de confirmação do usuário ao vivo em produção:** abrir Ads com
+  a conta "PFEMBALAGEMS" (ou outra conta real conectada, com Product Ads
+  habilitado) depois do deploy e conferir se investimento/cliques/
+  impressões/CPC/ROAS/ACOS/campanha aparecem com dado real, e comparar o
+  gasto mostrado nos cards "Gasto hoje"/"Gasto no mês" com o painel real
+  de Product Ads do Mercado Livre. Se aparecer "Pendente de sincronização"
+  pra sempre mesmo com a conta tendo campanhas ativas, o próximo passo é
+  inspecionar a mensagem de erro específica (a tela mostra o motivo por
+  loja) — mais provável de ser um dos pontos não confirmados acima do que
+  um erro de lógica.
 
 ## Relatórios: SKU sem custo cadastrado aparece "pendente" nas categorias Vendas e Margem/Produtos (mesma regra de sempre, 25/08/2026)
 - Igual à DRE (ver item abaixo) — como vários pedidos da conta de teste
