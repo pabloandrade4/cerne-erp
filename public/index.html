@@ -4966,16 +4966,25 @@
   })();
 
   /* ================= ADS — Product Ads real do Mercado Livre =================
-     Ativado em 25/08/2026. Duas fontes bem separadas (ver lib/ads.js):
-     investimento/vendas atribuídas/ROAS/ACOS vêm SEMPRE da API de Advertising
-     do Mercado Livre (nunca calculados aqui); faturamento real/margem "antes
+     Ativado em 25/08/2026, corrigido em 25/08/2026 (ver docs/04-alteracoes.md).
+     Duas fontes bem separadas (ver lib/ads.js): investimento/vendas
+     atribuídas/receita atribuída vêm SEMPRE da API de Advertising do
+     Mercado Livre (nunca calculados aqui); faturamento real/margem "antes
      do Ads" vêm da MESMA fonte única de Pedidos/DRE/Financeiro
      (lib/relatorioVendas.js). Nunca inventa valor: quando a API de Ads não
      está disponível pra uma conta, os campos aparecem como "Pendente de
      sincronização" — nunca um número estimado. Empresa e período vêm do
-     filtro do header (window.CerneFiltro); loja é um filtro só desta tela. */
+     filtro do header (window.CerneFiltro); loja é um filtro só desta tela.
+
+     IMPORTANTE: a API de Advertising do Mercado Livre não identifica quais
+     PEDIDOS pertencem à publicidade — só devolve totais agregados por
+     anúncio/dia. Por isso a tabela por anúncio é dividida em DUAS visões
+     separadas, nunca misturadas numa só: "Performance atribuída Mercado
+     Ads" (só o que o Mercado Livre atribui) e "Resultado real do SKU após
+     Ads" (todas as vendas reais daquele SKU, que podem incluir venda
+     orgânica, menos o investimento em Ads). */
   (function(){
-    const state = { loading:false, error:null, data:null, contaId:'' };
+    const state = { loading:false, error:null, data:null, contaId:'', sort:'faturamento' };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? null : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -4984,6 +4993,8 @@
     function moneyOrPend(v){ return v===null||v===undefined ? pendenteSync() : money(v); }
     function roasFmt(v){ return v===null||v===undefined ? pendenteSync() : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})+'x'; }
     function pctFmt(v){ return v===null||v===undefined ? pendenteSync() : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    function intFmt(v){ return v===null||v===undefined ? pendenteSync() : Number(v).toLocaleString('pt-BR'); }
+    function fmtDiaCurto(diaISO){ const [, m, d] = diaISO.split('-'); return d+'/'+m; }
 
     async function apiAds(empresaId, periodo, contaId){
       const params = new URLSearchParams({ empresaId, periodo });
@@ -5011,6 +5022,161 @@
       else render();
     });
 
+    // ---- Cards de topo (Gasto hoje / Gasto no mês / Receita atribuída / ROAS / ACOS) ----
+    function tintVars(tint){
+      return tint === 'muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);';
+    }
+    function cardHTML(k){
+      return '<div class="kpi-hero" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
+        + '<div class="kpi-hero-label">'+escapeHtml(k.label)+'</div>'
+        + '<div class="kpi-hero-value">'+k.valueHtml+'</div>'
+        + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
+      + '</div>';
+    }
+    function cardsHTML(cards){
+      const items = [
+        { label:'Gasto hoje', icon:'clock', tint:'copper', valueHtml: moneyOrPend(cards.gastoHoje), note:'Investimento real em Ads hoje (horário de Brasília)' },
+        { label:'Gasto no mês', icon:'wallet', tint:'copper', valueHtml: moneyOrPend(cards.gastoMes), note:'Acumulado do dia 1 do mês até hoje' },
+        { label:'Receita atribuída aos Ads', icon:'barChart', tint:'teal', valueHtml: moneyOrPend(cards.receitaAtribuidaPeriodo), note:'Vendas atribuídas pelo Mercado Livre no período selecionado' },
+        { label:'ROAS', icon:'activity', tint: cards.roasPeriodo===null||cards.roasPeriodo===undefined ? 'muted' : (cards.roasPeriodo>=1?'success':'danger'), valueHtml: roasFmt(cards.roasPeriodo), note:'Receita atribuída ÷ investimento, no período' },
+        { label:'ACOS', icon:'percent', tint:'muted', valueHtml: pctFmt(cards.acosPeriodo), note:'Investimento ÷ receita atribuída, no período' },
+      ];
+      return '<div class="kpi-hero-grid">' + items.map(cardHTML).join('') + '</div>'
+        + (cards.parcial ? '<div class="field-hint" style="margin-top:8px;">Um ou mais desses números está somando só as lojas com sincronização de Ads disponível no momento — ver aviso acima.</div>' : '');
+    }
+
+    // ---- Gráfico diário: Investimento Ads x Receita atribuída (SVG simples, mesmo desenho de Visão Geral) ----
+    function chartAdsHTML(diario){
+      if(!diario || !diario.length){
+        return '<div class="chart-canvas h-lg">' + chartGridLines(4)
+          + chartEmptyState('lineChart', 'Sem série diária de Ads disponível para este período (a API de Publicidade pode não ter retornado dado, ou nenhuma conta tem acesso a Product Ads).')
+        + '</div>';
+      }
+      const n = diario.length;
+      const W = Math.max(n*10, 10), H = 100, topPad = 8, botPad = 10;
+      const usable = H - topPad - botPad;
+      const vals = diario.flatMap(d => [d.investimento||0, d.receitaAtribuida||0]);
+      const maxV = Math.max(0, ...vals);
+      const minV = Math.min(0, ...vals);
+      const range = (maxV - minV) || 1;
+      const yFor = v => topPad + usable * (1 - (v - minV) / range);
+      const baseY = yFor(0);
+
+      const barW = 6;
+      let bars = '';
+      let points = [];
+      diario.forEach((d, i) => {
+        const cx = i*10 + 5;
+        const invest = d.investimento || 0;
+        const y1 = yFor(invest);
+        const barY = Math.min(y1, baseY), barH = Math.max(Math.abs(y1-baseY), 0.6);
+        const dataLabel = fmtDiaCurto(d.data)+' — Investimento: '+(d.investimento===null?'pendente':money(d.investimento))+' · Receita atribuída: '+(d.receitaAtribuida===null?'pendente':money(d.receitaAtribuida));
+        bars += '<rect x="'+(cx-barW/2)+'" y="'+barY+'" width="'+barW+'" height="'+barH+'" rx="1" fill="var(--copper)" fill-opacity="0.85"><title>'+escapeHtml(dataLabel)+'</title></rect>';
+        points.push(cx+','+yFor(d.receitaAtribuida||0));
+      });
+      const line = '<polyline points="'+points.join(' ')+'" fill="none" stroke="var(--teal)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>';
+      const dots = diario.map((d,i) => {
+        const cx = i*10+5, cy = yFor(d.receitaAtribuida||0);
+        const dataLabel = fmtDiaCurto(d.data)+' — Receita atribuída: '+(d.receitaAtribuida===null?'pendente':money(d.receitaAtribuida));
+        return '<circle cx="'+cx+'" cy="'+cy+'" r="1.6" fill="var(--teal)" vector-effect="non-scaling-stroke"><title>'+escapeHtml(dataLabel)+'</title></circle>';
+      }).join('');
+      const baseline = '<line x1="0" y1="'+baseY+'" x2="'+W+'" y2="'+baseY+'" stroke="var(--border-strong)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+
+      const labelStep = Math.max(1, Math.ceil(n/9));
+      const labels = diario.map((d,i) => '<span>'+((i%labelStep===0 || i===n-1) ? escapeHtml(fmtDiaCurto(d.data)) : '')+'</span>').join('');
+
+      return '<div class="chart-canvas" style="position:relative;height:200px;padding:0;">'
+        + '<svg class="simple-chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:100%;">'
+          + baseline + bars + line + dots
+        + '</svg>'
+      + '</div>'
+      + '<div class="simple-chart-xlabels" style="grid-template-columns:repeat('+n+',1fr);">' + labels + '</div>';
+    }
+    function chartAdsCardHTML(data){
+      return '<div class="chart-card" style="margin-bottom:14px;">'
+        + '<div class="chart-card-head">'
+          + '<div class="panel-title"><span class="panel-title-ic">'+svg('lineChart')+'</span>Investimento Ads x Receita atribuída</div>'
+          + '<div class="chart-legend">'
+            + '<span class="legend-item"><span class="legend-dot" style="background:var(--copper)"></span>Investimento</span>'
+            + '<span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>Receita atribuída</span>'
+            + '<span class="panel-note">'+(data.periodo?escapeHtml(data.periodo.label):'')+'</span>'
+          + '</div>'
+        + '</div>'
+        + chartAdsHTML(data.diario)
+      + '</div>';
+    }
+
+    // ---- Ordenação da tabela por anúncio (aplicada às duas visões, pra manter a mesma ordem nas duas) ----
+    function valOr(l, campo, seAusente){ const v = l[campo]; return v===null||v===undefined ? seAusente : v; }
+    function comparadorDe(sort){
+      if(sort==='lucro') return (a,b)=> valOr(b,'margemDepoisDoAds',-Infinity) - valOr(a,'margemDepoisDoAds',-Infinity);
+      if(sort==='prejuizo') return (a,b)=> valOr(a,'margemDepoisDoAds',Infinity) - valOr(b,'margemDepoisDoAds',Infinity);
+      if(sort==='gastoAds') return (a,b)=> valOr(b,'investimento',-Infinity) - valOr(a,'investimento',-Infinity);
+      if(sort==='roas') return (a,b)=> valOr(b,'roas',-Infinity) - valOr(a,'roas',-Infinity);
+      return (a,b)=> (b.faturamentoReal||0) - (a.faturamentoReal||0); // 'faturamento' (padrão)
+    }
+    const OPCOES_ORDENACAO = [
+      { valor:'faturamento', label:'Maior faturamento' },
+      { valor:'lucro', label:'Mais lucrativos' },
+      { valor:'prejuizo', label:'Maior prejuízo' },
+      { valor:'gastoAds', label:'Maior gasto em Ads' },
+      { valor:'roas', label:'Melhor ROAS' },
+    ];
+
+    function anuncioCellHTML(l){
+      return '<td class="produto-cell"><div class="cell-stack"><span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+        + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span></div></td>';
+    }
+
+    // ---- Visão 1: Performance atribuída Mercado Ads — só o que a API atribui diretamente ----
+    function tabelaAtribuidaHTML(linhas){
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Loja</th><th>Campanha</th><th>Investimento</th><th>Cliques</th><th>Impressões</th><th>CPC</th>'
+        + '<th>Vendas atrib. (qtd)</th><th>Receita atribuída</th><th>ROAS</th><th>ACOS</th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td>'+(l.campanha ? escapeHtml(l.campanha) : '<span style="color:var(--text-faint);">—</span>')+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.investimento)+'</td>'
+          + '<td class="mono">'+intFmt(l.cliques)+'</td>'
+          + '<td class="mono">'+intFmt(l.impressoes)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.cpc)+'</td>'
+          + '<td class="mono">'+intFmt(l.qtdVendasAtribuidas)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.faturamentoAtribuido)+'</td>'
+          + '<td class="mono">'+roasFmt(l.roas)+'</td>'
+          + '<td class="mono">'+pctFmt(l.acos)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    // ---- Visão 2: Resultado real do SKU após Ads — todas as vendas reais do SKU (pode incluir orgânica) menos o investimento em Ads ----
+    function statusBadge(l){
+      if(l.status==='lucrativo') return '<span style="color:var(--success);font-weight:600;">Lucrativo</span>';
+      if(l.status==='prejuizo') return '<span style="color:var(--danger);font-weight:600;">Prejuízo</span>';
+      if(l.status==='sem_dado_ads') return '<span style="color:var(--text-faint);font-style:italic;">Sem dado de Ads</span>';
+      return pendenteCusto();
+    }
+    function tabelaResultadoRealHTML(linhas){
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Loja</th><th>Faturamento real (todas as vendas)</th><th>Gasto Ads</th><th>TACOS</th>'
+        + '<th>Margem antes do Ads</th><th>Resultado após Ads</th><th>Margem após Ads (%)</th><th>Status</th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td class="mono">'+(l.semVendaReal ? '<span style="color:var(--text-faint);">sem venda no período</span>' : money(l.faturamentoReal))+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.custoAds)+'</td>'
+          + '<td class="mono">'+pctFmt(l.tacos)+'</td>'
+          + '<td class="mono">'+(l.semVendaReal ? '<span style="color:var(--text-faint);">—</span>' : (l.margemAntesDoAds===null ? pendenteCusto() : money(l.margemAntesDoAds)))+'</td>'
+          + '<td class="mono" style="'+(l.margemDepoisDoAds!==null && l.margemDepoisDoAds!==undefined?(l.margemDepoisDoAds>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.margemDepoisDoAds===null||l.margemDepoisDoAds===undefined ? (l.semMetricasAds ? pendenteSync() : pendenteCusto()) : money(l.margemDepoisDoAds))+'</td>'
+          + '<td class="mono">'+pctFmt(l.margemDepoisDoAdsPct)+'</td>'
+          + '<td>'+statusBadge(l)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
     function render(){
       const root = document.getElementById('adsRoot');
       if(!root) return;
@@ -5023,14 +5189,17 @@
         return;
       }
 
-      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:820px;">Investimento, ROAS e ACOS vêm direto da API de Publicidade (Product Ads) do Mercado Livre — nunca um valor estimado pelo ERP. Faturamento real e margem "antes do Ads" vêm da mesma fonte de Pedidos/DRE/Financeiro. TACOS = investimento em Ads ÷ faturamento REAL do anúncio no período (não o "atribuído" pelo Mercado Livre). Margem depois do Ads = margem real de contribuição − investimento em Ads: venda − taxas − frete do vendedor − imposto − custo do produto − Ads.</div>';
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:900px;">Investimento, cliques, impressões, CPC, vendas/receita atribuída, ROAS e ACOS vêm direto da API de Publicidade (Product Ads) do Mercado Livre — nunca um valor estimado pelo ERP. A API do Mercado Livre não informa quais pedidos pertencem à publicidade, só totais agregados — por isso as tabelas abaixo mostram duas visões SEPARADAS, nunca misturadas: <strong>Performance atribuída Mercado Ads</strong> (só o que a API atribui) e <strong>Resultado real do SKU após Ads</strong> (todas as vendas reais daquele SKU/anúncio, que podem incluir venda orgânica, menos o investimento em Ads).</div>';
 
       if(state.data){
         html += '<div class="toolbar">'
-          + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
             + '<div class="empresa-picker" style="margin-bottom:0;"><select id="adsLojaSelect">'
               + '<option value="">Todas as lojas</option>'
               + state.data.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+            + '</select></div>'
+            + '<div class="empresa-picker" style="margin-bottom:0;"><select id="adsSortSelect">'
+              + OPCOES_ORDENACAO.map(o=>'<option value="'+o.valor+'" '+(o.valor===state.sort?'selected':'')+'>Ordenar por: '+escapeHtml(o.label)+'</option>').join('')
             + '</select></div>'
           + '</div>'
         + '</div>';
@@ -5045,6 +5214,9 @@
             ).join('')
           + '</div>';
         }
+
+        if(state.data.cards) html += cardsHTML(state.data.cards);
+        html += chartAdsCardHTML(state.data);
       }
 
       if(state.loading || filtro.loadingEmpresas){
@@ -5061,25 +5233,13 @@
           + '<h2>Nenhum anúncio com venda ou dado de Ads no período</h2>'
           + '<p class="lead">Não há vendas nem métricas de publicidade para "'+escapeHtml((state.data.periodo&&state.data.periodo.label)||'')+'". Escolha outro período ou verifique a sincronização de pedidos.</p></div>';
       } else if(state.data){
-        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Anúncio / SKU</th><th>Loja</th><th>Investimento</th><th>Vendas atrib. (qtd)</th><th>Faturamento atrib.</th>'
-          + '<th>ROAS</th><th>ACOS</th><th>TACOS</th><th>Margem antes do Ads</th><th>Custo Ads</th><th>Margem depois do Ads</th>'
-          + '</tr></thead><tbody>'
-          + state.data.linhas.map(l => '<tr>'
-            + '<td class="produto-cell"><div class="cell-stack"><span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
-              + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span></div></td>'
-            + '<td>'+escapeHtml(l.loja||'—')+'</td>'
-            + '<td class="mono">'+moneyOrPend(l.investimento)+'</td>'
-            + '<td class="mono">'+(l.qtdVendasAtribuidas===null||l.qtdVendasAtribuidas===undefined ? pendenteSync() : l.qtdVendasAtribuidas)+'</td>'
-            + '<td class="mono">'+moneyOrPend(l.faturamentoAtribuido)+'</td>'
-            + '<td class="mono">'+roasFmt(l.roas)+'</td>'
-            + '<td class="mono">'+pctFmt(l.acos)+'</td>'
-            + '<td class="mono">'+pctFmt(l.tacos)+'</td>'
-            + '<td class="mono">'+(l.semVendaReal ? '<span style="color:var(--text-faint);">sem venda no período</span>' : (l.margemAntesDoAds===null ? pendenteCusto() : money(l.margemAntesDoAds)))+'</td>'
-            + '<td class="mono">'+moneyOrPend(l.custoAds)+'</td>'
-            + '<td class="mono" style="'+(l.margemDepoisDoAds!==null && l.margemDepoisDoAds!==undefined?(l.margemDepoisDoAds>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.margemDepoisDoAds===null||l.margemDepoisDoAds===undefined ? (l.semMetricasAds ? pendenteSync() : pendenteCusto()) : money(l.margemDepoisDoAds))+'</td>'
-          + '</tr>').join('')
-          + '</tbody></table></div></div>'
+        const linhasOrdenadas = state.data.linhas.slice().sort(comparadorDe(state.sort));
+        html += '<div class="panel-title" style="margin:18px 0 8px;"><span class="panel-title-ic">'+svg('megaphone')+'</span>Performance atribuída Mercado Ads</div>'
+          + '<div class="field-hint" style="margin-bottom:8px;">Investimento, vendas e receita que o Mercado Livre atribui diretamente à publicidade — dado real da API, nunca estimado.</div>'
+          + tabelaAtribuidaHTML(linhasOrdenadas)
+          + '<div class="panel-title" style="margin:22px 0 8px;"><span class="panel-title-ic">'+svg('wallet')+'</span>Resultado real do SKU após Ads</div>'
+          + '<div class="field-hint" style="margin-bottom:8px;">Margem de contribuição real de <strong>todas</strong> as vendas daquele SKU/anúncio no período (venda − taxas/comissões − frete do vendedor − imposto − custo do produto), menos o investimento em Ads. <strong>Pode incluir vendas orgânicas</strong> (não geradas pela publicidade) — isso NÃO é "lucro gerado pelo Ads", é o resultado financeiro real do SKU já descontando o investimento em Ads.</div>'
+          + tabelaResultadoRealHTML(linhasOrdenadas)
           + '<div class="field-hint" style="margin-top:6px;">"Pendente de sincronização" = a API de Publicidade do Mercado Livre ainda não retornou esse dado (ou a conta não tem Product Ads habilitado) — nunca um valor estimado. "pendente" = falta cadastrar o custo de algum SKU deste anúncio em <strong>Produtos</strong>.</div>';
       }
 
@@ -5087,6 +5247,8 @@
 
       const selLoja = document.getElementById('adsLojaSelect');
       if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadAds(); });
+      const selSort = document.getElementById('adsSortSelect');
+      if(selSort) selSort.addEventListener('change', ()=>{ state.sort = selSort.value; render(); });
     }
 
     window.Ads = { load };

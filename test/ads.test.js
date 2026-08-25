@@ -27,7 +27,7 @@ function round2(n) { return Math.round(n * 100) / 100; }
 
 describe('Ads — itens por pedido e agregação (25/08/2026)', { skip: !TEM_BANCO && 'defina DATABASE_URL apontando pra um Postgres de teste já seedado' }, () => {
   let relatorioVendas, adsLib, periodo;
-  let desde, ate, desdeStr, ateStr;
+  let desde, ate, desdeStr, ateStr, mesDesdeStr, mesAteStr, hojeStr;
   let pedidos, itens;
 
   before(async () => {
@@ -38,6 +38,12 @@ describe('Ads — itens por pedido e agregação (25/08/2026)', { skip: !TEM_BAN
     desde = periodo.inicioDoDiaBRTDeString('2026-08-01');
     ate = new Date();
     ({ desde: desdeStr, ate: ateStr } = periodo.periodoParaDatasBRT({ desde, ate }));
+
+    // Mesmas janelas que routes/ads.js calcula pros cards "Gasto hoje"/
+    // "Gasto no mês" — sempre a data real, independente do período
+    // escolhido no filtro (ver routes/ads.js).
+    ({ desde: hojeStr } = periodo.periodoParaDatasBRT(periodo.calcularPeriodo('hoje')));
+    ({ desde: mesDesdeStr, ate: mesAteStr } = periodo.periodoParaDatasBRT(periodo.calcularPeriodo('mes')));
 
     const resultadoPedidos = await relatorioVendas.buscarPedidosDoPeriodo({ empresaId: EMPRESA_ID, desde, ate });
     pedidos = resultadoPedidos.pedidos;
@@ -97,7 +103,7 @@ describe('Ads — itens por pedido e agregação (25/08/2026)', { skip: !TEM_BAN
   });
 
   test('listarAds: nunca inventa investimento/ROAS/ACOS/TACOS quando a API de Ads está indisponível', async () => {
-    const resultado = await adsLib.listarAds({ empresaId: EMPRESA_ID, contaId: null, desde, ate, desdeStr, ateStr });
+    const resultado = await adsLib.listarAds({ empresaId: EMPRESA_ID, contaId: null, desde, ate, desdeStr, ateStr, mesDesdeStr, mesAteStr, hojeStr });
     assert.equal(resultado.semConta, false);
     assert.ok(resultado.situacaoPorConta.length >= 1);
 
@@ -124,7 +130,7 @@ describe('Ads — itens por pedido e agregação (25/08/2026)', { skip: !TEM_BAN
   });
 
   test('listarAds: faturamentoReal de cada anúncio bate com a soma dos itens reais daquele ml_item_id', async () => {
-    const resultado = await adsLib.listarAds({ empresaId: EMPRESA_ID, contaId: null, desde, ate, desdeStr, ateStr });
+    const resultado = await adsLib.listarAds({ empresaId: EMPRESA_ID, contaId: null, desde, ate, desdeStr, ateStr, mesDesdeStr, mesAteStr, hojeStr });
     const porItemId = new Map();
     itens.forEach((it) => {
       const chave = it.mlItemId || `sem-id:${it.sku || 's-sku'}:${it.contaMlId}`;
@@ -146,8 +152,109 @@ describe('Ads — itens por pedido e agregação (25/08/2026)', { skip: !TEM_BAN
   });
 
   test('Isolamento: empresa sem conta Mercado Livre conectada nunca retorna dado de outra empresa', async () => {
-    const resultado = await adsLib.listarAds({ empresaId: 999999, contaId: null, desde, ate, desdeStr, ateStr });
+    const resultado = await adsLib.listarAds({ empresaId: 999999, contaId: null, desde, ate, desdeStr, ateStr, mesDesdeStr, mesAteStr, hojeStr });
     assert.equal(resultado.semConta, true);
     assert.deepEqual(resultado.linhas, []);
+    assert.equal(resultado.cards.disponivel, false);
+    assert.deepEqual(resultado.diario, []);
+  });
+
+  // Cards de topo (Gasto hoje/Gasto no mês/Receita atribuída/ROAS/ACOS) e o
+  // gráfico diário, adicionados na correção de 25/08/2026 — mesma regra
+  // "nunca inventa": sem acesso real à API de Advertising (o normal neste
+  // sandbox), tudo isso tem que vir null/indisponível, nunca um número
+  // calculado como se fosse real.
+  test('listarAds: cards de topo nunca inventam gasto/receita/ROAS/ACOS quando a API de Ads está indisponível', async () => {
+    const resultado = await adsLib.listarAds({ empresaId: EMPRESA_ID, contaId: null, desde, ate, desdeStr, ateStr, mesDesdeStr, mesAteStr, hojeStr });
+    const nenhumaContaDisponivel = !resultado.situacaoPorConta.some((s) => s.disponivel);
+    if (nenhumaContaDisponivel) {
+      assert.equal(resultado.cards.disponivel, false);
+      assert.equal(resultado.cards.gastoHoje, null);
+      assert.equal(resultado.cards.gastoMes, null);
+      assert.equal(resultado.cards.receitaAtribuidaPeriodo, null, 'sem investimento real, receita atribuída não pode ser derivada de nenhuma linha');
+      assert.equal(resultado.cards.roasPeriodo, null);
+      assert.equal(resultado.cards.acosPeriodo, null);
+      assert.deepEqual(resultado.diario, [], 'sem conta com dado diário disponível, o gráfico não pode ter série nenhuma');
+    }
+  });
+
+  test('listarAds: campanha nunca aparece inventada — null quando não há dado real de Ads pro anúncio', async () => {
+    const resultado = await adsLib.listarAds({ empresaId: EMPRESA_ID, contaId: null, desde, ate, desdeStr, ateStr, mesDesdeStr, mesAteStr, hojeStr });
+    resultado.linhas.forEach((linha) => {
+      if (linha.semMetricasAds) assert.equal(linha.campanha, null);
+    });
+  });
+
+});
+
+// Testes UNITÁRIOS (sem Postgres) da fórmula dos cards de topo
+// (calcularCards, lib/ads.js) — não dependem de dado real da API de Ads,
+// só de dados sintéticos, pra travar a fórmula: Gasto hoje/Gasto no mês
+// somam a série diarioMes (janela mês-atual-até-hoje); Receita
+// atribuída/ROAS/ACOS do período somam as MESMAS linhas mostradas na
+// tabela (nunca um segundo cálculo que possa divergir).
+describe('Ads — calcularCards (função pura, sem banco)', () => {
+  const { calcularCards } = require('../lib/ads');
+
+  test('soma investimento da série diarioMes pra Gasto hoje/Gasto no mês', () => {
+    const cards = calcularCards({
+      diarioMes: [
+        { data: '2026-08-23', investimento: 10, receitaAtribuida: 40 },
+        { data: '2026-08-24', investimento: 15, receitaAtribuida: 60 },
+        { data: '2026-08-25', investimento: 7.5, receitaAtribuida: 30 },
+      ],
+      hojeStr: '2026-08-25',
+      linhas: [],
+      situacaoPorConta: [{ contaId: 1, disponivel: true }],
+    });
+    assert.equal(cards.gastoHoje, 7.5, 'Gasto hoje deveria ser só o dia de hoje (2026-08-25)');
+    assert.equal(cards.gastoMes, 32.5, 'Gasto no mês deveria somar os 3 dias (10+15+7.5)');
+  });
+
+  test('Receita atribuída/ROAS/ACOS do período vêm da soma das linhas (mesma fonte da tabela)', () => {
+    const cards = calcularCards({
+      diarioMes: [],
+      hojeStr: '2026-08-25',
+      linhas: [
+        { investimento: 100, faturamentoAtribuido: 400 },
+        { investimento: 50, faturamentoAtribuido: 100 },
+        { investimento: null, faturamentoAtribuido: null }, // anúncio sem dado de Ads — não pode contaminar a soma
+      ],
+      situacaoPorConta: [{ contaId: 1, disponivel: true }],
+    });
+    assert.equal(cards.investimentoPeriodo, 150);
+    assert.equal(cards.receitaAtribuidaPeriodo, 500);
+    assert.equal(cards.roasPeriodo, round2(500 / 150));
+    assert.equal(cards.acosPeriodo, round2((150 / 500) * 100));
+  });
+
+  test('nenhuma conta disponível -> cards.disponivel = false, tudo null (nunca inventa)', () => {
+    const cards = calcularCards({
+      diarioMes: null,
+      hojeStr: '2026-08-25',
+      linhas: [],
+      situacaoPorConta: [{ contaId: 1, disponivel: false, motivo: 'sem_acesso_ads' }],
+    });
+    assert.equal(cards.disponivel, false);
+    assert.equal(cards.gastoHoje, null);
+    assert.equal(cards.gastoMes, null);
+    assert.equal(cards.receitaAtribuidaPeriodo, null);
+    assert.equal(cards.roasPeriodo, null);
+    assert.equal(cards.acosPeriodo, null);
+  });
+
+  test('algumas contas disponíveis e outras não -> parcial = true, mas soma o que existir (nunca tudo-ou-nada)', () => {
+    const cards = calcularCards({
+      diarioMes: [{ data: '2026-08-25', investimento: 20, receitaAtribuida: 80 }],
+      hojeStr: '2026-08-25',
+      linhas: [{ investimento: 20, faturamentoAtribuido: 80 }],
+      situacaoPorConta: [
+        { contaId: 1, disponivel: true },
+        { contaId: 2, disponivel: false, motivo: 'sem_acesso_ads' },
+      ],
+    });
+    assert.equal(cards.disponivel, true);
+    assert.equal(cards.parcial, true);
+    assert.equal(cards.gastoHoje, 20);
   });
 });
