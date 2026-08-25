@@ -127,6 +127,62 @@ describe('Contas a Pagar / Contas a Receber / Recebimentos — 24/08/2026', { sk
       const busca = await contasPagar.listarContasPagar({ empresaId: EMPRESA_ID, ...periodoMes, search: 'vencida' });
       assert.ok(busca.some(c => c.descricao === PREFIXO_TESTE + ' vencida'));
     });
+
+    test('BUG CORRIGIDO: conta com vencimento futuro aparece na lista mesmo com o período mais estreito do header', async () => {
+      // Antes da correção, a lista era sempre filtrada por vencimento dentro
+      // do período do header — e nenhuma opção de período (hoje/ontem/7d/
+      // 30d/mes) inclui datas futuras (o limite superior é sempre "agora",
+      // nunca o fim do mês/período). Uma conta recém-criada com vencimento
+      // futuro ficava invisível na tela, sem aparecer nem em Pendente nem em
+      // Vencido, até o vencimento "entrar" na janela do período.
+      const futuro = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const r = await contasPagar.criarContaPagar({ empresaId: EMPRESA_ID, descricao: PREFIXO_TESTE + ' futura', valor: 321, vencimento: futuro });
+      criados.pagar.push(r.conta.id);
+      assert.equal(r.conta.status, 'pendente');
+
+      const periodoHoje = periodo.periodoParaDatasBRT(periodo.calcularPeriodo('hoje'));
+      const lista = await contasPagar.listarContasPagar({ empresaId: EMPRESA_ID, ...periodoHoje });
+      const encontrada = lista.find(c => c.descricao === PREFIXO_TESTE + ' futura');
+      assert.ok(encontrada, 'conta com vencimento futuro deveria aparecer na lista mesmo com período "hoje"');
+      assert.equal(encontrada.status, 'pendente');
+    });
+
+    test('conta paga só aparece na lista quando a data de pagamento está dentro do período selecionado (pendentes/vencidas nunca dependem disso)', async () => {
+      const criada = await contasPagar.criarContaPagar({ empresaId: EMPRESA_ID, descricao: PREFIXO_TESTE + ' paga fora do periodo', valor: 88, vencimento: ontem });
+      criados.pagar.push(criada.conta.id);
+      const dataPagamentoAntiga = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      await contasPagar.marcarComoPago(criada.conta.id, dataPagamentoAntiga);
+
+      const periodoHoje = periodo.periodoParaDatasBRT(periodo.calcularPeriodo('hoje'));
+      const listaHoje = await contasPagar.listarContasPagar({ empresaId: EMPRESA_ID, ...periodoHoje });
+      assert.ok(!listaHoje.some(c => c.descricao === PREFIXO_TESTE + ' paga fora do periodo'), 'conta paga há 60 dias não deveria aparecer no período "hoje"');
+
+      const listaAmpla = await contasPagar.listarContasPagar({ empresaId: EMPRESA_ID, desde: dataPagamentoAntiga, ate: hoje });
+      const encontrada = listaAmpla.find(c => c.descricao === PREFIXO_TESTE + ' paga fora do periodo');
+      assert.ok(encontrada, 'conta paga deveria aparecer quando a data de pagamento está dentro do período');
+      assert.equal(encontrada.status, 'pago');
+    });
+
+    test('regressão do bug relatado pelo usuário: futura/hoje/vencida/paga aparecem todas na categoria certa, juntas, sob o período padrão do header (30d)', async () => {
+      const futuro = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const passado = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+      const cFutura = await contasPagar.criarContaPagar({ empresaId: EMPRESA_ID, descricao: PREFIXO_TESTE + ' regressao futura', valor: 10, vencimento: futuro });
+      const cHoje = await contasPagar.criarContaPagar({ empresaId: EMPRESA_ID, descricao: PREFIXO_TESTE + ' regressao hoje', valor: 20, vencimento: hoje });
+      const cVencida = await contasPagar.criarContaPagar({ empresaId: EMPRESA_ID, descricao: PREFIXO_TESTE + ' regressao vencida', valor: 30, vencimento: passado });
+      const cPagaBase = await contasPagar.criarContaPagar({ empresaId: EMPRESA_ID, descricao: PREFIXO_TESTE + ' regressao paga', valor: 40, vencimento: passado });
+      criados.pagar.push(cFutura.conta.id, cHoje.conta.id, cVencida.conta.id, cPagaBase.conta.id);
+      await contasPagar.marcarComoPago(cPagaBase.conta.id, hoje);
+
+      const periodo30d = periodo.periodoParaDatasBRT(periodo.calcularPeriodo('30d'));
+      const lista = await contasPagar.listarContasPagar({ empresaId: EMPRESA_ID, ...periodo30d });
+      const porDescricao = (desc) => lista.find(c => c.descricao === PREFIXO_TESTE + desc);
+
+      assert.equal(porDescricao(' regressao futura').status, 'pendente');
+      assert.equal(porDescricao(' regressao hoje').status, 'pendente');
+      assert.equal(porDescricao(' regressao vencida').status, 'vencido');
+      assert.equal(porDescricao(' regressao paga').status, 'pago');
+    });
   });
 
   describe('Contas a Receber', () => {

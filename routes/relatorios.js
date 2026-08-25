@@ -15,7 +15,7 @@ const ExcelJS = require('exceljs');
 const pool = require('../db/pool');
 const { calcularPeriodo, periodoParaDatasBRT, diaBRT } = require('../lib/periodo');
 const { buscarPedidosDoPeriodo, resumirPeriodo, serieDiaria } = require('../lib/relatorioVendas');
-const { relatorioVendasMargem, relatorioProdutos, relatorioMarketplaces } = require('../lib/relatoriosAgregados');
+const { relatorioVendasMargem, relatorioProdutos, relatorioProdutosPorCaixa, relatorioMarketplaces } = require('../lib/relatoriosAgregados');
 
 const router = express.Router();
 
@@ -70,6 +70,23 @@ router.get('/produtos', async (req, res, next) => {
     const periodoCalc = calcularPeriodo(periodo);
     const resultado = await relatorioProdutos({
       empresaId, contaId: contaId || null, desde: periodoCalc.desde, ate: periodoCalc.ate, sku: sku || null,
+    });
+    res.json({ periodo: periodoInfo(periodoCalc), ...resultado });
+  } catch (err) { next(err); }
+});
+
+// GET /api/relatorios/produtos-por-caixa?empresaId=&periodo=&contaId=
+// Segunda visão da categoria "Produtos" (ver /produtos acima): agrupa pelo
+// produto base físico (medida da caixa), juntando todos os SKUs/kit que
+// representam a mesma caixa — ver lib/relatoriosAgregados.js/
+// relatorioProdutosPorCaixa e docs/02-decisoes.md.
+router.get('/produtos-por-caixa', async (req, res, next) => {
+  try {
+    const { empresaId, periodo, contaId } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const periodoCalc = calcularPeriodo(periodo);
+    const resultado = await relatorioProdutosPorCaixa({
+      empresaId, contaId: contaId || null, desde: periodoCalc.desde, ate: periodoCalc.ate,
     });
     res.json({ periodo: periodoInfo(periodoCalc), ...resultado });
   } catch (err) { next(err); }

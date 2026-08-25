@@ -9,9 +9,11 @@ const contasPagar = require('../lib/contasPagar');
 const router = express.Router();
 
 // GET /api/contas-pagar?empresaId=ID&periodo=30d&status=pendente|pago|vencido|cancelado&search=texto
-// A LISTA é filtrada por vencimento dentro do período selecionado no
-// header. O RESUMO (topo da tela) não é — ver comentário em
-// lib/contasPagar.js/resumoContasPagar.
+// A LISTA só filtra por período as contas já PAGAS (pela data de
+// pagamento) — pendentes/vencidas/canceladas aparecem sempre, o período
+// do header não as esconde. O RESUMO (topo da tela) segue a mesma lógica
+// pros KPIs de saldo — ver comentário em lib/contasPagar.js/
+// listarContasPagar e resumoContasPagar.
 router.get('/', async (req, res, next) => {
   try {
     const { empresaId, periodo, status, search } = req.query;

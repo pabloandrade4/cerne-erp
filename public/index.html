@@ -3826,6 +3826,18 @@
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+    // "Hoje" em America/Sao_Paulo (fuso fixo, UTC-3 — Brasil não usa mais
+    // horário de verão desde 2019), mesmo cálculo do backend (lib/periodo.js/
+    // diaBRT). NUNCA usar new Date().toISOString().slice(0,10) puro aqui: isso
+    // pega o dia em UTC, que já virou o dia seguinte entre 21h e 23h59 no
+    // horário de Brasília — a data de vencimento/pagamento sugerida ficaria
+    // adiantada em 1 dia bem no fim do dia.
+    function hojeBRT(){
+      const BRT_OFFSET_MS = 3*60*60*1000;
+      const brt = new Date(Date.now() - BRT_OFFSET_MS);
+      const p = n => String(n).padStart(2,'0');
+      return brt.getUTCFullYear()+'-'+p(brt.getUTCMonth()+1)+'-'+p(brt.getUTCDate());
+    }
     function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
     function secCardHTML(k){
       return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
@@ -3964,7 +3976,7 @@
         if(conta) openModal(conta);
       }));
       root.querySelectorAll('[data-pagar]').forEach(b=> b.addEventListener('click', async ()=>{
-        const hoje = new Date().toISOString().slice(0,10);
+        const hoje = hojeBRT();
         b.disabled = true;
         try{ await api('/'+b.dataset.pagar+'/pagar', { method:'PATCH', body: JSON.stringify({ dataPagamento: hoje }) }); toast('Conta marcada como paga.'); loadContas(); }
         catch(err){ toast(err.message,'error'); b.disabled = false; }
@@ -3984,7 +3996,7 @@
     function openModal(conta){
       const isEdit = !!conta;
       const modalRoot = document.getElementById('modalRoot');
-      const hoje = new Date().toISOString().slice(0,10);
+      const hoje = hojeBRT();
       modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
         + '<div class="modal-card" style="max-width:560px;">'
           + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar conta a pagar':'Nova conta a pagar')+'</div>'
@@ -5092,7 +5104,7 @@
       ['produtos','Produtos'],
       ['marketplaces','Marketplaces / Lojas'],
     ];
-    const state = { loading:false, error:null, categoria:'vendas-margem', contaId:'', sku:'', lojas:[], data:null };
+    const state = { loading:false, error:null, categoria:'vendas-margem', contaId:'', sku:'', lojas:[], data:null, visaoProdutos:'sku' };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? null : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -5109,12 +5121,12 @@
       }catch(e){ return []; }
     }
 
-    async function apiCategoria(categoria, empresaId, periodo, contaId, sku){
+    async function apiCategoria(categoria, empresaId, periodo, contaId, sku, visaoProdutos){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
-      if(categoria === 'produtos' && sku.trim()) params.set('sku', sku.trim());
+      if(categoria === 'produtos' && visaoProdutos !== 'caixa' && sku.trim()) params.set('sku', sku.trim());
       const path = categoria === 'vendas-margem' ? '/api/relatorios/vendas-margem'
-        : categoria === 'produtos' ? '/api/relatorios/produtos'
+        : categoria === 'produtos' ? (visaoProdutos === 'caixa' ? '/api/relatorios/produtos-por-caixa' : '/api/relatorios/produtos')
         : '/api/relatorios/marketplaces';
       const res = await fetch(path+'?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
@@ -5128,7 +5140,7 @@
       state.loading = true; state.error = null; render();
       try{
         const [dados, lojas] = await Promise.all([
-          apiCategoria(state.categoria, filtro.empresaId, filtro.periodo, state.contaId, state.sku),
+          apiCategoria(state.categoria, filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.visaoProdutos),
           apiLojas(filtro.empresaId),
         ]);
         state.data = dados;
@@ -5204,6 +5216,50 @@
         + '<div class="field-hint" style="margin-top:6px;">"pendente" = falta cadastrar o custo do SKU em <strong>Produtos</strong> e/ou o Mercado Livre não retornou alguma tarifa — nunca um valor estimado.</div>';
     }
 
+    // Visão "Por Caixa": agrupa pelo produto base físico (medida da caixa),
+    // juntando todos os SKUs/kit que representam a mesma caixa — ver
+    // GET /api/relatorios/produtos-por-caixa e lib/relatoriosAgregados.js.
+    function renderProdutosPorCaixa(d){
+      if(!d.linhas.length && !d.semProdutoBase.length){
+        return '<div class="empty-panel"><div class="empty-icon">'+svg('box')+'</div>'
+          + '<h2>Nenhum produto vendido no período</h2>'
+          + '<p class="lead">Não há itens de pedido para os filtros selecionados.</p></div>';
+      }
+      let html = '';
+      if(d.linhas.length){
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto base (medida)</th><th>Caixas físicas vendidas</th><th>Kits vendidos</th><th>Pedidos</th><th>Faturamento</th>'
+          + '</tr></thead><tbody>'
+          + d.linhas.map(l => '<tr>'
+            + '<td class="mono">'+escapeHtml(l.produtoBase)
+              + (l.origemHeuristica ? ' <span title="Produto base identificado automaticamente pelo padrão do SKU (dígitos no início = quantidade por kit) — sem vínculo cadastrado manualmente." style="color:var(--text-faint);font-size:11px;">(padrão do SKU)</span>' : '')
+              + '<div class="di-sub">'+l.skus.map(s=>escapeHtml(s.sku)+' ('+s.multiplicador+'x)').join(', ')+'</div>'
+            + '</td>'
+            + '<td class="tab-nums">'+l.quantidadeCaixas.toLocaleString('pt-BR')+'</td>'
+            + '<td class="tab-nums">'+l.kitsVendidos.toLocaleString('pt-BR')+'</td>'
+            + '<td class="tab-nums">'+l.quantidadePedidos+'</td>'
+            + '<td class="mono">'+moneyOrPend(l.faturamento)+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+      html += '<div class="field-hint" style="margin-top:6px;">Caixas físicas vendidas = kits vendidos × unidades por kit de cada SKU, somado por produto base. Faturamento é a soma total gerada pelos SKUs daquela medida — nunca dividido pela quantidade de caixas.</div>';
+      if(d.semProdutoBase.length){
+        html += '<div class="panel" style="margin-top:14px;">'
+          + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('alertCircle')+'</span>SKUs sem produto base identificado</div><span class="panel-note">'+d.semProdutoBase.length+'</span></div>'
+          + '<div class="table-wrap"><table class="data-table"><thead><tr><th>SKU</th><th>Kits vendidos</th><th>Pedidos</th><th>Faturamento</th></tr></thead><tbody>'
+          + d.semProdutoBase.map(l => '<tr>'
+            + '<td class="mono">'+escapeHtml(l.sku)+'</td>'
+            + '<td class="tab-nums">'+l.kitsVendidos.toLocaleString('pt-BR')+'</td>'
+            + '<td class="tab-nums">'+l.quantidadePedidos+'</td>'
+            + '<td class="mono">'+moneyOrPend(l.faturamento)+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div>'
+          + '<div class="bd-side-note">Esses SKUs não seguem o padrão "dígitos no início = quantidade por kit" e não têm vínculo cadastrado em Produto Base — nunca agrupados por chute. Não entram no total de caixas físicas acima.</div>'
+        + '</div>';
+      }
+      return html;
+    }
+
     function renderMarketplaces(d){
       const linhas = state.contaId ? d.linhas.filter(l=>String(l.contaMlId)===String(state.contaId)) : d.linhas;
       if(!linhas.length){
@@ -5239,21 +5295,26 @@
         return;
       }
 
+      const podeExportar = state.categoria !== 'produtos' || state.visaoProdutos !== 'caixa';
       let html = '<div class="toolbar">'
         + '<div class="seg" id="relCategoriaSeg">'
           + CATEGORIAS.map(([chave,label])=>'<button data-categoria="'+chave+'" class="'+(state.categoria===chave?'active':'')+'">'+label+'</button>').join('')
         + '</div>'
+        + (state.categoria==='produtos' ? '<div class="seg" id="relVisaoProdutosSeg">'
+          + '<button data-visao="sku" class="'+(state.visaoProdutos==='sku'?'active':'')+'">Por SKU</button>'
+          + '<button data-visao="caixa" class="'+(state.visaoProdutos==='caixa'?'active':'')+'">Por Caixa</button>'
+        + '</div>' : '')
         + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="relLojaSelect">'
             + '<option value="">Todas as lojas</option>'
             + state.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
           + '</select></div>'
-          + (state.categoria==='produtos' ? '<div class="search-box" style="margin-bottom:0;">'+svg('search')+'<input type="text" id="relSkuInput" placeholder="Buscar SKU" value="'+escapeHtml(state.sku)+'"></div>' : '')
+          + (state.categoria==='produtos' && state.visaoProdutos==='sku' ? '<div class="search-box" style="margin-bottom:0;">'+svg('search')+'<input type="text" id="relSkuInput" placeholder="Buscar SKU" value="'+escapeHtml(state.sku)+'"></div>' : '')
         + '</div>'
-        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+        + (podeExportar ? '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
           + '<button class="ghost-btn" id="relXlsxBtn" type="button" style="cursor:pointer; opacity:1;" title="Exportar este relatório em Excel com os filtros atuais">'+svg('fileText')+'<span>Exportar (Excel)</span></button>'
           + '<button class="ghost-btn" id="relCsvBtn" type="button" style="cursor:pointer; opacity:1;" title="Exportar este relatório em CSV com os filtros atuais">'+svg('fileText')+'<span>CSV</span></button>'
-        + '</div>'
+        + '</div>' : '')
       + '</div>';
 
       if(state.loading || filtro.loadingEmpresas){
@@ -5263,7 +5324,7 @@
           + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
       } else if(state.data){
         if(state.categoria === 'vendas-margem') html += renderVendasMargem(state.data);
-        else if(state.categoria === 'produtos') html += renderProdutos(state.data);
+        else if(state.categoria === 'produtos') html += (state.visaoProdutos === 'caixa' ? renderProdutosPorCaixa(state.data) : renderProdutos(state.data));
         else html += renderMarketplaces(state.data);
       }
 
@@ -5273,6 +5334,12 @@
       if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{
         if(state.categoria === b.dataset.categoria) return;
         state.categoria = b.dataset.categoria;
+        loadRelatorio();
+      }));
+      const visaoSeg = document.getElementById('relVisaoProdutosSeg');
+      if(visaoSeg) visaoSeg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{
+        if(state.visaoProdutos === b.dataset.visao) return;
+        state.visaoProdutos = b.dataset.visao;
         loadRelatorio();
       }));
       const selLoja = document.getElementById('relLojaSelect');
