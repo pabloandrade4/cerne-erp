@@ -5491,8 +5491,17 @@
      Ads" (todas as vendas reais daquele SKU, que podem incluir venda
      orgânica, menos o investimento em Ads). */
   (function(){
-    const state = { loading:false, error:null, data:null, contaId:'', sort:'faturamento' };
+    const state = { loading:false, error:null, data:null, contaId:'', sort:'faturamento', sincronizando:false };
 
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? null : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function pendenteSync(){ return '<span style="color:var(--text-faint);font-style:italic;" title="Este dado depende da API de Publicidade do Mercado Livre, que ainda não retornou (ou a conta não tem acesso a Product Ads).">Pendente de sincronização</span>'; }
@@ -5510,6 +5519,26 @@
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os dados de Ads.');
       return body;
+    }
+
+    async function apiSincronizarAds(){
+      const res = await fetch('/api/ads/sincronizar', { method:'POST' });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Falha ao sincronizar Ads.');
+      return body;
+    }
+
+    async function sincronizarAgora(){
+      state.sincronizando = true; render();
+      try{
+        await apiSincronizarAds();
+        toast('Sincronização de Ads concluída.');
+        await loadAds();
+      }catch(err){
+        toast(err.message || 'Falha ao sincronizar Ads.', 'error');
+      }finally{
+        state.sincronizando = false; render();
+      }
     }
 
     async function loadAds(){
@@ -5621,6 +5650,7 @@
       if(sort==='prejuizo') return (a,b)=> valOr(a,'margemDepoisDoAds',Infinity) - valOr(b,'margemDepoisDoAds',Infinity);
       if(sort==='gastoAds') return (a,b)=> valOr(b,'investimento',-Infinity) - valOr(a,'investimento',-Infinity);
       if(sort==='roas') return (a,b)=> valOr(b,'roas',-Infinity) - valOr(a,'roas',-Infinity);
+      if(sort==='acos') return (a,b)=> valOr(b,'acos',-Infinity) - valOr(a,'acos',-Infinity); // maior ACOS = pior
       return (a,b)=> (b.faturamentoReal||0) - (a.faturamentoReal||0); // 'faturamento' (padrão)
     }
     const OPCOES_ORDENACAO = [
@@ -5629,6 +5659,7 @@
       { valor:'prejuizo', label:'Maior prejuízo' },
       { valor:'gastoAds', label:'Maior gasto em Ads' },
       { valor:'roas', label:'Melhor ROAS' },
+      { valor:'acos', label:'Pior ACOS' },
     ];
 
     function anuncioCellHTML(l){
@@ -5708,7 +5739,9 @@
             + '<div class="empresa-picker" style="margin-bottom:0;"><select id="adsSortSelect">'
               + OPCOES_ORDENACAO.map(o=>'<option value="'+o.valor+'" '+(o.valor===state.sort?'selected':'')+'>Ordenar por: '+escapeHtml(o.label)+'</option>').join('')
             + '</select></div>'
+            + '<button class="primary-btn enabled" id="btnSincronizarAds" type="button" '+(state.sincronizando?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.sincronizando?'Sincronizando…':'Sincronizar agora')+'</span></button>'
           + '</div>'
+          + (state.data.sincronizacaoAutomatica ? '<span class="panel-note" style="font-size:12px;">Sincronização automática em segundo plano'+(state.data.sincronizacaoAutomatica.ultimaExecucaoEm ? (' — última execução: '+escapeHtml(fmtDateTime(state.data.sincronizacaoAutomatica.ultimaExecucaoEm))) : ' ainda não rodou um ciclo completo')+'.</span>' : '')
         + '</div>';
 
         if(state.data.situacaoPorConta && state.data.situacaoPorConta.some(s=>!s.disponivel)){
@@ -5756,6 +5789,8 @@
       if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadAds(); });
       const selSort = document.getElementById('adsSortSelect');
       if(selSort) selSort.addEventListener('change', ()=>{ state.sort = selSort.value; render(); });
+      const btnSync = document.getElementById('btnSincronizarAds');
+      if(btnSync) btnSync.addEventListener('click', sincronizarAgora);
     }
 
     window.Ads = { load };

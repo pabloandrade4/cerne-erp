@@ -56,7 +56,7 @@ router.get('/vendas-margem', async (req, res, next) => {
     const periodoCalc = calcularPeriodo(periodo);
     const { desde: desdeStr, ate: ateStr } = periodoParaDatasBRT(periodoCalc);
     const resultado = await relatorioVendasMargem({
-      empresaId, contaId: contaId || null, desde: periodoCalc.desde, ate: periodoCalc.ate, desdeStr, ateStr,
+      empresaId, contaId: contaId || null, periodoChave: periodoCalc.chave, desde: periodoCalc.desde, ate: periodoCalc.ate, desdeStr, ateStr,
     });
     res.json({ periodo: periodoInfo(periodoCalc), ...resultado });
   } catch (err) { next(err); }
@@ -261,7 +261,7 @@ router.get('/exportar', async (req, res, next) => {
     if (categoria === 'vendas-margem') {
       const { desde: desdeStr, ate: ateStr } = periodoParaDatasBRT(periodoCalc);
       const resultado = await relatorioVendasMargem({
-        empresaId, contaId: contaId || null, desde: periodoCalc.desde, ate: periodoCalc.ate, desdeStr, ateStr,
+        empresaId, contaId: contaId || null, periodoChave: periodoCalc.chave, desde: periodoCalc.desde, ate: periodoCalc.ate, desdeStr, ateStr,
       });
       colunas = [
         { header: 'Métrica', key: 'label', width: 40, tipo: 'texto' },

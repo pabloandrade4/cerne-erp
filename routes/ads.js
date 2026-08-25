@@ -1,9 +1,12 @@
-// Ads (Product Ads do Mercado Livre) — ativado em 25/08/2026, corrigido em
+// Ads (Product Ads do Mercado Livre) — ativado em 25/08/2026, CORRIGIDO EM
 // 25/08/2026. Ver lib/ads.js e lib/mlAds.js para o desenho completo (dado
-// real quando a API permitir, nunca inventado).
+// real quando a API permitir, nunca inventado). A partir desta correção o
+// GET abaixo NUNCA mais consulta a API do Mercado Livre ao vivo — lê
+// sempre do que lib/adsScheduler.js já sincronizou em background.
 const express = require('express');
 const { calcularPeriodo, periodoParaDatasBRT } = require('../lib/periodo');
-const { listarAds } = require('../lib/ads');
+const { listarAds, sincronizarTodasAsContasAds } = require('../lib/ads');
+const { obterStatusSincronizacaoAds } = require('../lib/adsScheduler');
 
 const router = express.Router();
 
@@ -27,6 +30,7 @@ router.get('/', async (req, res, next) => {
     const resultado = await listarAds({
       empresaId,
       contaId: contaId || null,
+      periodoChave: periodoCalc.chave,
       desde: periodoCalc.desde,
       ate: periodoCalc.ate,
       desdeStr,
@@ -38,8 +42,20 @@ router.get('/', async (req, res, next) => {
 
     res.json({
       periodo: { chave: periodoCalc.chave, label: periodoCalc.label, desde: periodoCalc.desde, ate: periodoCalc.ate },
+      sincronizacaoAutomatica: obterStatusSincronizacaoAds(),
       ...resultado,
     });
+  } catch (err) { next(err); }
+});
+
+// POST /api/ads/sincronizar — força um ciclo de sincronização imediato
+// (além do automático em background), pra quem acabou de corrigir a
+// integração (Marketplaces → Advertising habilitado etc.) não precisar
+// esperar o próximo ciclo pra ver o resultado real.
+router.post('/sincronizar', async (req, res, next) => {
+  try {
+    const resultado = await sincronizarTodasAsContasAds();
+    res.json(resultado);
   } catch (err) { next(err); }
 });
 

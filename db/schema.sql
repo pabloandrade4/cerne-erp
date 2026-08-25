@@ -805,3 +805,94 @@ CREATE TABLE IF NOT EXISTS radar_snapshot_custos (
   capturado_em          TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (empresa_id, sku)
 );
+
+-- Persistência do Product Ads do Mercado Livre (correção de 25/08/2026 —
+-- ver docs/02-decisoes.md e docs/04-alteracoes.md). Antes desta correção a
+-- tela Ads consultava a API de Advertising do Mercado Livre AO VIVO, dentro
+-- da própria requisição HTTP da tela, toda vez que a página era aberta.
+-- Pedido explícito do usuário: guardar os dados no banco (sincronizados em
+-- background, ver lib/adsScheduler.js) pra tela Ads nunca depender de
+-- consultar a API inteira a cada abertura.
+--
+-- Uma linha por conta do Mercado Livre — situação da conta na API de
+-- Advertising (achou anunciante? qual o motivo real se não achou?) e
+-- quando foi a última sincronização. `detalhe_api` guarda o corpo REAL da
+-- resposta de erro do Mercado Livre (status HTTP + payload), pedido
+-- explícito do usuário pro diagnóstico nunca ser um texto genérico solto
+-- (ver lib/mlAds.js) — nunca mostrado direto pro usuário final sem
+-- contexto, só disponível pra quem for investigar o motivo real.
+CREATE TABLE IF NOT EXISTS ads_contas (
+  conta_id                 INTEGER PRIMARY KEY REFERENCES ml_contas(id) ON DELETE CASCADE,
+  advertiser_id             VARCHAR(50),
+  site_id                   VARCHAR(10),
+  disponivel                BOOLEAN NOT NULL DEFAULT false,
+  motivo                    VARCHAR(40),
+  mensagem                  TEXT,
+  detalhe_api               JSONB,
+  ultima_sincronizacao_em   TIMESTAMPTZ,
+  ultima_sincronizacao_ok   BOOLEAN,
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Nome das campanhas por anunciante — só pra resolver campaign_id → nome
+-- na tabela de anúncios (lib/ads.js); nunca usada pra recalcular
+-- investimento/ROAS/ACOS de campanha (fonte única continua sendo o anúncio,
+-- ver lib/ads.js).
+CREATE TABLE IF NOT EXISTS ads_campanhas (
+  conta_id      INTEGER NOT NULL REFERENCES ml_contas(id) ON DELETE CASCADE,
+  campanha_id   VARCHAR(50) NOT NULL,
+  nome          VARCHAR(255),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (conta_id, campanha_id)
+);
+
+-- Métricas reais de Ads por anúncio, uma linha por (conta, período-chave,
+-- anúncio) — `periodo_chave` é exatamente uma das chaves de PERIODOS em
+-- lib/periodo.js ('hoje'|'ontem'|'7d'|'30d'|'mes'), o mesmo filtro global
+-- usado em todo o ERP. A sincronização em background (lib/adsScheduler.js)
+-- busca o total do anúncio pra cada uma dessas 5 janelas exatas na API do
+-- Mercado Livre e grava aqui — porque a própria API de Advertising só
+-- devolve um total agregado para o intervalo de datas pedido (não dá pra
+-- "somar dias" depois, é a API que soma), replicar aqui o mesmo conjunto de
+-- janelas do filtro da tela é o jeito de a tela nunca precisar consultar a
+-- API ao vivo, pra qualquer período que o usuário escolher no filtro
+-- existente. `faturamento_atribuido`/`qtd_atribuida` já aplicam a mesma
+-- regra de fallback de sempre (total_amount, senão direct+indirect só
+-- quando os dois existem — ver extrairInvestimentoEReceita em lib/ads.js);
+-- os demais campos (ctr/cvr/roas/acos da API) são passados exatamente como
+-- a API devolveu, nunca recalculados aqui.
+CREATE TABLE IF NOT EXISTS ads_metricas_anuncio (
+  id                        SERIAL PRIMARY KEY,
+  conta_id                  INTEGER NOT NULL REFERENCES ml_contas(id) ON DELETE CASCADE,
+  periodo_chave             VARCHAR(10) NOT NULL,
+  ml_item_id                VARCHAR(30) NOT NULL,
+  campanha_id               VARCHAR(50),
+  titulo                    VARCHAR(255),
+  cliques                   INTEGER,
+  impressoes                INTEGER,
+  cpc                       NUMERIC(12,2),
+  investimento              NUMERIC(12,2),
+  acos_api                  NUMERIC(12,2),
+  ctr_api                   NUMERIC(12,4),
+  cvr_api                   NUMERIC(12,4),
+  roas_api                  NUMERIC(12,2),
+  faturamento_atribuido     NUMERIC(12,2),
+  qtd_atribuida             NUMERIC(12,2),
+  atualizado_em             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (conta_id, periodo_chave, ml_item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ads_metricas_anuncio_conta_periodo ON ads_metricas_anuncio(conta_id, periodo_chave);
+
+-- Série diária (investimento/receita atribuída, somado de todos os
+-- anúncios da conta) — só pro gráfico "Investimento Ads x Receita
+-- atribuída por dia" e pros cards "Gasto hoje"/"Gasto no mês". Uma janela
+-- corrida (ver lib/adsScheduler.js), sempre re-sincronizada, nunca um
+-- histórico "congelado" no dia em que foi gravado.
+CREATE TABLE IF NOT EXISTS ads_diario (
+  conta_id            INTEGER NOT NULL REFERENCES ml_contas(id) ON DELETE CASCADE,
+  data                DATE NOT NULL,
+  investimento        NUMERIC(12,2),
+  receita_atribuida   NUMERIC(12,2),
+  atualizado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (conta_id, data)
+);
