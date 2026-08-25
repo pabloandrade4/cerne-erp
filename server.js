@@ -24,6 +24,7 @@ const faturamentoRouter = require('./routes/faturamento');
 const notasFiscaisRouter = require('./routes/notasFiscais');
 const adsRouter = require('./routes/ads');
 const visaoGeralRouter = require('./routes/visaoGeral');
+const iaGestoraRouter = require('./routes/iaGestora');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +55,7 @@ app.use('/api/faturamento', faturamentoRouter);
 app.use('/api/notas-fiscais', notasFiscaisRouter);
 app.use('/api/ads', adsRouter);
 app.use('/api/visao-geral', visaoGeralRouter);
+app.use('/api/ia-gestora', iaGestoraRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));

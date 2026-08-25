@@ -673,6 +673,43 @@
   .bd-note{ display:flex; align-items:flex-start; gap:8px; background:var(--warning-soft); color:var(--warning); border-radius:10px; padding:10px 12px; font-size:11.5px; font-weight:600; margin-top:10px; }
   .bd-note svg{ width:14px; height:14px; flex-shrink:0; margin-top:1px; }
   .bd-side-note{ font-size:11px; color:var(--text-faint); margin-top:8px; }
+
+  /* ---- IA Gestora (chat) — ativada em 2026, mesmo padrão visual do resto
+     do ERP (tokens, painel, botões), nenhum componente novo de fora. ---- */
+  .ia-shell{ display:flex; flex-direction:column; height:calc(100vh - 190px); min-height:460px; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+  .ia-msgs{ flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:14px; }
+  .ia-msg{ display:flex; gap:10px; max-width:min(680px,88%); }
+  .ia-msg.user{ align-self:flex-end; flex-direction:row-reverse; }
+  .ia-msg-ic{ width:28px; height:28px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .ia-msg.assistant .ia-msg-ic{ background:var(--copper-soft); color:var(--copper); }
+  .ia-msg.user .ia-msg-ic{ background:var(--surface-2); color:var(--text-muted); }
+  .ia-msg-ic svg{ width:14px; height:14px; }
+  .ia-bubble{ background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:11px 14px; font-size:13.5px; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
+  .ia-msg.user .ia-bubble{ background:var(--copper-soft); border-color:transparent; color:var(--text); }
+  .ia-msg.assistant .ia-bubble.erro{ background:var(--danger-soft); border-color:transparent; color:var(--danger); }
+  .ia-msg-tools{ margin-top:7px; font-size:10.5px; color:var(--text-faint); display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .ia-msg-tools svg{ width:11px; height:11px; }
+  .ia-typing{ display:flex; align-items:center; gap:8px; color:var(--text-faint); font-size:12px; padding:2px 4px; }
+  .ia-empty{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:30px; gap:6px; }
+  .ia-empty .empty-icon{ margin-bottom:4px; }
+  .ia-empty h2{ font-size:15px; font-weight:800; font-family:"Archivo",sans-serif; }
+  .ia-empty p{ color:var(--text-muted); font-size:13px; max-width:46ch; }
+  .ia-suggestions{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:14px; max-width:560px; }
+  .ia-chip{ background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:20px; padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer; transition:border-color .15s, background .15s; }
+  .ia-chip:hover{ border-color:var(--copper); background:var(--copper-wash); }
+  .ia-inputbar{ border-top:1px solid var(--border); padding:14px 16px; flex-shrink:0; }
+  .ia-inputbar-context{ font-size:10.5px; color:var(--text-faint); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+  .ia-inputbar-context svg{ width:11px; height:11px; }
+  .ia-input-row{ display:flex; align-items:flex-end; gap:10px; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:8px 8px 8px 14px; }
+  .ia-input-row:focus-within{ border-color:var(--copper); }
+  .ia-textarea{ flex:1; border:none; background:none; outline:none; resize:none; font:inherit; font-size:13.5px; color:var(--text); max-height:120px; padding:6px 0; line-height:1.5; }
+  .ia-textarea::placeholder{ color:var(--text-faint); }
+  .ia-send-btn{ display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; background:var(--copper); color:#fff; border:none; cursor:pointer; flex-shrink:0; transition:opacity .15s; }
+  .ia-send-btn:hover{ background:var(--copper-strong); }
+  .ia-send-btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .ia-send-btn svg{ width:16px; height:16px; }
+  .ia-disclaimer{ font-size:10.5px; color:var(--text-faint); text-align:center; margin-top:9px; }
+  @media (max-width:680px){ .ia-msg{ max-width:96%; } }
 </style>
 </head>
 <body>
@@ -788,6 +825,8 @@
   const ICON = {
     grid:'<rect x="3.5" y="3.5" width="7.2" height="7.2" rx="1.4"/><rect x="13.3" y="3.5" width="7.2" height="7.2" rx="1.4"/><rect x="3.5" y="13.3" width="7.2" height="7.2" rx="1.4"/><rect x="13.3" y="13.3" width="7.2" height="7.2" rx="1.4"/>',
     sparkle:'<path d="M12 3.5 13.6 9 19 10.6 13.6 12.2 12 17.7 10.4 12.2 5 10.6 10.4 9Z"/>',
+    messageCircle:'<path d="M12 3.5c5 0 8.5 3.3 8.5 7.3s-3.5 7.3-8.5 7.3c-1 0-2-.13-2.9-.4L5 19.5l1.3-3.5A6.9 6.9 0 0 1 3.5 10.8C3.5 6.8 7 3.5 12 3.5Z"/><path d="M8.3 10.7h7.4M8.3 13.4h4.8"/>',
+    send:'<path d="M4 12 20 4 13 20l-2-6-6-2Z"/>',
     building:'<rect x="4" y="3" width="16" height="18" rx="1.4"/><path d="M9 8h1M14 8h1M9 12h1M14 12h1M9 16h2.2"/>',
     store:'<path d="M4 9.5 5 4h14l1 5.5"/><path d="M4 9.5a2.3 2.3 0 0 0 4.6 0 2.3 2.3 0 0 0 4.6 0 2.3 2.3 0 0 0 4.6 0 2.3 2.3 0 0 0 4.6 0"/><path d="M5.5 9.8V20h13V9.8"/><rect x="10" y="14" width="4" height="6"/>',
     box:'<path d="M12 3 20.5 7.5 12 12 3.5 7.5Z"/><path d="M3.5 7.5V16.5L12 21V12"/><path d="M20.5 7.5V16.5L12 21"/>',
@@ -833,6 +872,7 @@
   const GROUPS = [
     { id:'geral', label:'Geral', open:true, items:[
       { id:'overview', title:'Visão Geral', icon:'grid' },
+      { id:'iaGestora', title:'IA Gestora', icon:'messageCircle', desc:'Converse com a IA Gestora sobre os dados reais da empresa e período selecionados — vendas, margem, custos, contas a pagar/receber, estoque e alertas.' },
       { id:'alerts', title:'Alertas & IA', icon:'sparkle', action:'Ver tudo', desc:'Central de alertas inteligentes e sugestões geradas por IA sobre a operação.',
         bullets:['Alertas de risco de ruptura de estoque','Alertas de caixa e prazos financeiros','Sugestões de reposição e compra','Anomalias de custo, taxa ou margem'] },
     ]},
@@ -953,7 +993,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','ads','reports'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','ads','reports','iaGestora'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -979,6 +1019,7 @@
     inner += '</div>';
 
     if(id === 'overview'){ inner += '<div id="overviewRoot"></div>'; }
+    else if(id === 'iaGestora'){ inner += '<div id="iaGestoraRoot"></div>'; }
     else if(id === 'companies'){ inner += '<div id="empresasRoot"></div>'; }
     else if(id === 'marketplaces'){ inner += '<div id="marketplacesRoot"></div>'; }
     else if(id === 'orders'){ inner += '<div id="pedidosRoot"></div>'; }
@@ -1019,6 +1060,7 @@
     const scrimEl = document.getElementById('mobileScrim');
     if(scrimEl) scrimEl.classList.remove('show');
     if(id === 'overview' && window.Overview){ if(window.CerneFiltro) window.CerneFiltro.refreshEmpresas(); window.Overview.load(); }
+    if(id === 'iaGestora' && window.IAGestora) window.IAGestora.load();
     if(id === 'companies' && window.Empresas) window.Empresas.load();
     if(id === 'marketplaces' && window.Marketplaces) window.Marketplaces.load(queryStr);
     if(id === 'orders' && window.Pedidos) window.Pedidos.load();
@@ -2015,6 +2057,186 @@
     }
 
     window.Overview = { load };
+  })();
+
+  /* ================= IA GESTORA — chat de consulta e análise =================
+     Ativada em 2026, 3 passos pedidos pelo usuário (ver docs/02-decisoes.md).
+     Primeira versão só de CONSULTA E ANÁLISE — nunca altera nada no sistema.
+     Sempre usa a empresa e o período do HEADER (window.CerneFiltro), igual
+     Visão Geral — nenhum seletor próprio nesta tela. A pergunta e o
+     histórico curto da conversa vão pro backend (POST /api/ia-gestora/
+     perguntar), que consulta os mesmos dados/regras já usados em Visão
+     Geral/Pedidos/Financeiro/Relatórios (lib/ia/ferramentas.js) — a chave
+     do provedor de IA nunca passa pelo navegador. */
+  (function(){
+    const SUGESTOES = [
+      'Como estão minhas vendas hoje?',
+      'Qual produto mais lucrou este mês?',
+      'Tem alguma venda dando prejuízo?',
+      'Quanto vou receber?',
+      'Quais problemas precisam da minha atenção?',
+    ];
+    const HISTORICO_MAX_ENVIADO = 12;
+
+    const state = { messages: [], loading: false, contextKey: null };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    async function apiPerguntar(empresaId, periodo, pergunta, historico){
+      const res = await fetch('/api/ia-gestora/perguntar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresaId, periodo, pergunta, historico }),
+      });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível falar com a IA Gestora agora.');
+      return body;
+    }
+
+    function empresaAtualNome(){
+      const filtro = window.CerneFiltro.state;
+      const emp = filtro.empresas.find(e => e.id === filtro.empresaId);
+      return emp ? (emp.nomeFantasia || emp.razaoSocial) : null;
+    }
+
+    function periodoAtualLabel(){
+      const chave = window.CerneFiltro.state.periodo;
+      const def = HEADER_PERIODOS.find(p => p.chave === chave);
+      return def ? def.label : chave;
+    }
+
+    // Empresa ou período mudou desde a última mensagem: reinicia a conversa
+    // (pedido implícito do usuário — "respeitar SEMPRE a empresa/período do
+    // header" — nunca deixar uma pergunta nova ser respondida misturada com
+    // histórico de uma empresa/período diferente).
+    function sincronizarContexto(){
+      const filtro = window.CerneFiltro.state;
+      const chave = filtro.empresaId + '|' + filtro.periodo;
+      if(state.contextKey !== null && state.contextKey !== chave) state.messages = [];
+      state.contextKey = chave;
+    }
+
+    function load(){
+      sincronizarContexto();
+      render();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-iaGestora');
+      if(page && page.classList.contains('active')){ sincronizarContexto(); render(); }
+    });
+
+    function scrollParaFinal(){
+      const msgsEl = document.getElementById('iaMsgs');
+      if(msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+
+    function msgHTML(msg){
+      const isUser = msg.papel === 'usuario';
+      const bubbleClass = 'ia-bubble' + (msg.erro ? ' erro' : '');
+      let toolsHtml = '';
+      if(!isUser && msg.ferramentasUsadas && msg.ferramentasUsadas.length){
+        toolsHtml = '<div class="ia-msg-tools">'+svg('search')+'<span>Consultou: '+escapeHtml(msg.ferramentasUsadas.join(', '))+'</span></div>';
+      }
+      return '<div class="ia-msg '+(isUser?'user':'assistant')+'">'
+        + '<div class="ia-msg-ic">'+svg(isUser ? 'users' : 'messageCircle')+'</div>'
+        + '<div><div class="'+bubbleClass+'">'+escapeHtml(msg.texto)+'</div>'+toolsHtml+'</div>'
+        + '</div>';
+    }
+
+    function typingHTML(){
+      return '<div class="ia-msg assistant"><div class="ia-msg-ic">'+svg('messageCircle')+'</div>'
+        + '<div class="ia-bubble ia-typing"><span class="spin"></span><span>IA Gestora está consultando os dados…</span></div></div>';
+    }
+
+    function emptyStateHTML(){
+      return '<div class="ia-empty">'
+        + '<div class="empty-icon">'+svg('messageCircle')+'</div>'
+        + '<h2>Pergunte à IA Gestora</h2>'
+        + '<p>Ela consulta os dados reais desta empresa e período — nunca inventa número. Ainda só consulta e analisa: não altera nada no sistema.</p>'
+        + '<div class="ia-suggestions">' + SUGESTOES.map(s => '<button type="button" class="ia-chip" data-pergunta="'+escapeHtml(s)+'">'+escapeHtml(s)+'</button>').join('') + '</div>'
+        + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('iaGestoraRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para conversar com a IA Gestora.</p></div>';
+        return;
+      }
+
+      const empresaNome = empresaAtualNome();
+      const periodoLabel = periodoAtualLabel();
+      const contextoHtml = '<div class="ia-inputbar-context">'
+        + svg('building') + '<span>'+escapeHtml(empresaNome || 'Selecione uma empresa no cabeçalho')+'</span>'
+        + '<span style="opacity:.5;">·</span>'
+        + svg('clock') + '<span>'+escapeHtml(periodoLabel)+'</span>'
+        + '</div>';
+
+      const msgsHtml = state.messages.length
+        ? state.messages.map(msgHTML).join('') + (state.loading ? typingHTML() : '')
+        : (state.loading ? typingHTML() : emptyStateHTML());
+
+      root.innerHTML = '<div class="ia-shell">'
+        + '<div class="ia-msgs" id="iaMsgs">' + msgsHtml + '</div>'
+        + '<div class="ia-inputbar">'
+          + contextoHtml
+          + '<div class="ia-input-row">'
+            + '<textarea class="ia-textarea" id="iaInput" rows="1" placeholder="Pergunte sobre vendas, margem, custos, contas a pagar/receber, estoque…" '+(filtro.empresaId?'':'disabled')+'></textarea>'
+            + '<button class="ia-send-btn" id="iaSendBtn" type="button" '+(filtro.empresaId?'':'disabled')+'>'+svg('send')+'</button>'
+          + '</div>'
+          + '<div class="ia-disclaimer">A IA Gestora só consulta e analisa dados reais desta empresa e período — ainda não altera nada no sistema.</div>'
+        + '</div>'
+      + '</div>';
+
+      scrollParaFinal();
+
+      const input = document.getElementById('iaInput');
+      const sendBtn = document.getElementById('iaSendBtn');
+
+      function autoresize(){ input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; }
+      if(input){
+        input.addEventListener('input', autoresize);
+        input.addEventListener('keydown', (e)=>{
+          if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); enviar(input.value); }
+        });
+      }
+      if(sendBtn) sendBtn.addEventListener('click', ()=> enviar(input ? input.value : ''));
+
+      root.querySelectorAll('.ia-chip').forEach(el=>{
+        el.addEventListener('click', ()=> enviar(el.dataset.pergunta));
+      });
+    }
+
+    async function enviar(textoBruto){
+      const texto = String(textoBruto || '').trim();
+      const filtro = window.CerneFiltro.state;
+      if(!texto || state.loading || !filtro.empresaId) return;
+
+      const historico = state.messages.slice(-HISTORICO_MAX_ENVIADO).map(m => ({ papel: m.papel, texto: m.texto }));
+      state.messages.push({ papel: 'usuario', texto });
+      state.loading = true;
+      render();
+
+      try{
+        const resp = await apiPerguntar(filtro.empresaId, filtro.periodo, texto, historico);
+        const ehErro = resp.aviso === 'nao_configurada' || resp.aviso === 'erro_provedor' || resp.aviso === 'limite_rodadas';
+        state.messages.push({ papel: 'assistente', texto: resp.resposta, ferramentasUsadas: resp.ferramentasUsadas, erro: ehErro });
+      }catch(err){
+        state.messages.push({ papel: 'assistente', texto: err.message || 'Não consegui falar com a IA Gestora agora. Tente novamente.', erro: true });
+      }
+      state.loading = false;
+      render();
+      const inputAfter = document.getElementById('iaInput');
+      if(inputAfter) inputAfter.focus();
+    }
+
+    window.IAGestora = { load };
   })();
 
   /* ================= PEDIDOS — importados do Mercado Livre =================
