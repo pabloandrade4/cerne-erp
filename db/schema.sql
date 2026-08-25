@@ -735,3 +735,73 @@ CREATE TABLE IF NOT EXISTS ia_mensagens (
 );
 CREATE INDEX IF NOT EXISTS idx_ia_mensagens_conversa ON ia_mensagens(conversa_id, criado_em);
 -- docs/02-decisoes.md.
+
+-- Radar da IA — ativado em 25/08/2026 (ver docs/02-decisoes.md), 3º passo
+-- pedido pelo usuário: a IA passa a acompanhar o negócio continuamente, em
+-- segundo plano no SERVIDOR (lib/ia/radarScheduler.js), sem depender do
+-- navegador aberto. `radar_alertas` guarda o resultado JÁ PERSISTIDO das
+-- regras/cálculos determinísticos (lib/ia/radarAnuncios.js/radarNegocio.js)
+-- — nunca um cálculo novo, sempre em cima das mesmas fontes já usadas pelo
+-- resto do ERP. Cada situação tem uma `chave` estável (ex.:
+-- "anuncio_parado:123456789") — o mesmo problema detectado de novo num
+-- ciclo seguinte ATUALIZA a linha existente (nunca duplica um alerta igual
+-- todo dia, pedido explícito do usuário), e uma situação que deixou de ser
+-- verdade fica com status='resolvido' automaticamente (nunca precisa ação
+-- manual pra "limpar" um alerta que já não existe mais).
+CREATE TABLE IF NOT EXISTS radar_alertas (
+  id                 SERIAL PRIMARY KEY,
+  empresa_id         INTEGER NOT NULL REFERENCES empresas(id),
+  chave              VARCHAR(200) NOT NULL,
+  categoria          VARCHAR(60) NOT NULL,
+  severidade         VARCHAR(20) NOT NULL CHECK (severidade IN ('critico', 'atencao', 'oportunidade', 'informativo')),
+  titulo             TEXT NOT NULL,
+  descricao          TEXT NOT NULL,
+  -- `recomendacao` começa com um texto padrão (determinístico, por
+  -- categoria — nunca vazio) e é enriquecida pela IA (lib/ia/radar.js) só
+  -- quando a situação é NOVA ou piorou de severidade — nunca a cada ciclo
+  -- pra não chamar o modelo à toa (pedido explícito do usuário).
+  recomendacao       TEXT NOT NULL,
+  dados              JSONB NOT NULL,
+  pagina             VARCHAR(40),
+  status             VARCHAR(20) NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto', 'resolvido')),
+  criado_em          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolvido_em       TIMESTAMPTZ,
+  ultima_deteccao_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+  interpretado_em    TIMESTAMPTZ,
+  UNIQUE (empresa_id, chave)
+);
+CREATE INDEX IF NOT EXISTS idx_radar_alertas_empresa_status ON radar_alertas(empresa_id, status, severidade);
+
+-- Estado do Radar por empresa (1 linha por empresa) — usado pra: 1) provar
+-- que o radar roda mesmo sem ninguém com o ERP aberto (ultima_execucao_em
+-- persiste no banco, sobrevive a reiniciar o servidor); 2) guardar o
+-- resumo "O QUE PRECISA DA MINHA ATENÇÃO HOJE" já pronto (gerado pela IA a
+-- partir só dos alertas abertos reais — nunca um texto solto sem dado por
+-- trás), mostrado em Visão Geral > Alertas & IA e no resumo da IA Gestora.
+CREATE TABLE IF NOT EXISTS radar_estado (
+  empresa_id       INTEGER PRIMARY KEY REFERENCES empresas(id),
+  ultima_execucao_em TIMESTAMPTZ,
+  ultima_execucao_ok BOOLEAN,
+  ultimo_erro        TEXT,
+  situacoes_abertas  INTEGER NOT NULL DEFAULT 0,
+  resumo_hoje        JSONB,
+  resumo_gerado_em   TIMESTAMPTZ
+);
+
+-- Snapshot interno (NUNCA mostrado direto numa tela) só pra detectar
+-- "o custo de um SKU mudou desde o último ciclo, e a margem foi de X para
+-- Y" (lib/ia/radarNegocio.js) — sem isso não haveria como comparar "antes e
+-- depois" de uma alteração de custo, já que o ERP recalcula toda margem
+-- histórica com o custo ATUAL (nunca guarda o custo de quando a venda
+-- aconteceu). Guarda só o ÚLTIMO valor conhecido por SKU (upsert a cada
+-- ciclo) — não é histórico completo, só o suficiente pra comparar um ciclo
+-- com o anterior.
+CREATE TABLE IF NOT EXISTS radar_snapshot_custos (
+  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
+  sku                   VARCHAR(100) NOT NULL,
+  custo                 NUMERIC(12,2) NOT NULL,
+  margem_percentual_30d NUMERIC(6,2),
+  capturado_em          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (empresa_id, sku)
+);

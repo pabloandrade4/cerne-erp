@@ -307,6 +307,23 @@ describe(
       assert.equal(xlsxRes.status, 404);
     });
 
+    test('GET /radar-resumo: exige login e devolve o formato do Radar já persistido (nunca dispara um ciclo novo aqui)', async () => {
+      const semLogin = await fetch(baseUrl + '/api/ia-gestora/radar-resumo?empresaId=' + EMPRESA_ID);
+      assert.equal(semLogin.status, 401);
+
+      const cookie = await login(USUARIO_A);
+      const semEmpresaId = await fetch(baseUrl + '/api/ia-gestora/radar-resumo', { headers: { Cookie: cookie } });
+      assert.equal(semEmpresaId.status, 400);
+
+      const res = await fetch(baseUrl + '/api/ia-gestora/radar-resumo?empresaId=' + EMPRESA_ID, { headers: { Cookie: cookie } });
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.ok(Array.isArray(body.alertas));
+      assert.ok(body.porSeveridade && 'critico' in body.porSeveridade && 'atencao' in body.porSeveridade && 'oportunidade' in body.porSeveridade && 'informativo' in body.porSeveridade);
+      assert.ok(body.contagem && typeof body.contagem.total === 'number');
+      assert.ok(Array.isArray(body.resumoHoje));
+    });
+
     test('logout: cookie deixa de funcionar (sessão revogada de verdade, não só apagada no navegador)', async () => {
       const cookie = await login(USUARIO_A);
       const antes = await fetch(baseUrl + '/api/ia-gestora/me', { headers: { Cookie: cookie } });

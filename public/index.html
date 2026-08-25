@@ -762,6 +762,8 @@
   .ia-empty .empty-icon{ margin-bottom:4px; }
   .ia-empty h2{ font-size:15px; font-weight:800; font-family:"Archivo",sans-serif; }
   .ia-empty p{ color:var(--text-muted); font-size:13px; max-width:46ch; }
+  .ia-radar-block{ width:100%; max-width:560px; text-align:left; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:14px 16px; margin-top:16px; }
+  .ia-radar-head{ display:flex; align-items:center; gap:8px; font-size:12.5px; }
   .ia-suggestions{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:14px; max-width:560px; }
   .ia-chip{ background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:20px; padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer; transition:border-color .15s, background .15s; }
   .ia-chip:hover{ border-color:var(--copper); background:var(--copper-wash); }
@@ -2178,6 +2180,59 @@
       + '</div>';
     }
 
+    // Radar da IA (25/08/2026) — puramente ADITIVO: nunca troca nada da
+    // alertsPanelHTML acima (regras já existentes, calculadas na hora a
+    // cada requisição). Isto aqui só EXIBE o que o ciclo automático em
+    // segundo plano (server/lib/ia/radarScheduler.js) já persistiu no
+    // Postgres — nenhuma análise nova acontece ao carregar esta tela.
+    const RADAR_SEVERIDADE_COR = { critico:'danger', atencao:'warning', oportunidade:'success', informativo:'teal' };
+    const RADAR_SEVERIDADE_EMOJI = { critico:'🔴', atencao:'🟠', oportunidade:'🟢', informativo:'🔵' };
+    const RADAR_SEVERIDADE_LABEL = { critico:'Crítico', atencao:'Atenção', oportunidade:'Oportunidades', informativo:'Informativo' };
+
+    function radarPanelHTML(painel, painelError){
+      if(painelError) return ''; // já mostrado pela alertsPanelHTML acima — não duplica o erro
+      if(!painel){
+        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Radar da IA</div></div>'
+          + '<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      const radar = painel.radar;
+      if(!radar){
+        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Radar da IA</div></div>'
+          + '<p style="font-size:12px;color:var(--muted);margin:0;">'+escapeHtml(painel.radarError || 'O Radar da IA ainda não rodou o primeiro ciclo — ele roda automaticamente em segundo plano, sem precisar desta tela aberta.')+'</p></div>';
+      }
+
+      const chips = ['critico','atencao','oportunidade','informativo'].map(sev => {
+        const n = radar.contagem[sev] || 0;
+        const cor = RADAR_SEVERIDADE_COR[sev];
+        return '<span class="status-chip" style="color:var(--'+cor+');background:var(--'+cor+'-soft);margin-right:6px;">'+RADAR_SEVERIDADE_EMOJI[sev]+' '+n+' '+RADAR_SEVERIDADE_LABEL[sev]+'</span>';
+      }).join('');
+
+      const resumo = radar.resumoHoje || [];
+      const listaHTML = resumo.length
+        ? resumo.map(r => {
+            const cor = RADAR_SEVERIDADE_COR[r.severidade] || 'teal';
+            return '<div class="conn-row alert-row" data-page="'+escapeHtml(r.pagina || '')+'" style="cursor:'+(r.pagina?'pointer':'default')+';">'
+              + '<div class="conn-row-left"><span class="conn-ic" style="color:var(--'+cor+');">'+r.emoji+'</span><div>'
+                + '<div class="conn-name">'+escapeHtml(r.titulo)+'</div>'
+                + '<div class="conn-sub">'+escapeHtml(r.oQueAconteceu||'')+'</div>'
+                + (r.oQueRecomenda ? '<div class="conn-sub" style="margin-top:2px;"><strong>IA recomenda:</strong> '+escapeHtml(r.oQueRecomenda)+'</div>' : '')
+              + '</div></div>'
+              + (r.pagina ? '<span class="conn-status">'+svg('link')+'</span>' : '')
+            + '</div>';
+          }).join('')
+        : '<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('checkCircle')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">Nada exigindo atenção agora — o Radar continua acompanhando em segundo plano.</p></div>';
+
+      const atualizadoEmFmt = fmtDateTime(radar.ultimaExecucaoEm);
+      const atualizadoNota = atualizadoEmFmt ? '<span class="panel-note">atualizado '+atualizadoEmFmt+'</span>' : '';
+
+      return '<div class="panel">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Radar da IA</div>'+atualizadoNota+'</div>'
+        + '<div style="padding:2px 16px 12px;">'+chips+'</div>'
+        + '<div class="section-label" style="padding:0 16px;"><span>O que precisa da minha atenção hoje</span></div>'
+        + '<div>' + listaHTML + '</div>'
+      + '</div>';
+    }
+
     function render(){
       const root = document.getElementById('overviewRoot');
       if(!root) return;
@@ -2206,7 +2261,8 @@
           + chartCardHTML(state.data)
           + secondaryChartsHTML(state.data, state.painel, state.painelError)
           + sectionLabel('Status da operação')
-          + '<div class="grid-2">' + connectionsPanelHTML(state.painel, state.painelError) + alertsPanelHTML(state.painel, state.painelError) + '</div>';
+          + '<div class="grid-2">' + connectionsPanelHTML(state.painel, state.painelError) + alertsPanelHTML(state.painel, state.painelError) + '</div>'
+          + radarPanelHTML(state.painel, state.painelError);
       }
 
       root.innerHTML = html;
@@ -2246,6 +2302,10 @@
       loginEmail: '', loginSenha: '', loginErro: null, loginLoading: false,
       conversas: [], loadingConversas: false, contextEmpresaId: null,
       conversaId: null, messages: [], loading: false,
+      // Radar da IA (25/08/2026) — resumo do que já foi persistido pelo
+      // ciclo automático em segundo plano (server/lib/ia/radarScheduler.js).
+      // Só LEITURA (GET /radar-resumo) — nunca dispara uma análise nova.
+      radar: null, radarLoading: false, radarError: null,
     };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -2272,6 +2332,7 @@
     const apiAbrirConversa = (id) => apiIa('/conversas/'+id);
     const apiExcluirConversa = (id) => apiIa('/conversas/'+id, { method:'DELETE' });
     const apiPerguntar = (empresaId, periodo, pergunta, conversaId) => apiIa('/perguntar', { method:'POST', body: JSON.stringify({ empresaId, periodo, pergunta, conversaId: conversaId||undefined }) });
+    const apiRadarResumo = (empresaId) => apiIa('/radar-resumo?empresaId='+empresaId);
 
     function empresaAtualNome(){
       const filtro = window.CerneFiltro.state;
@@ -2295,6 +2356,20 @@
       state.loadingConversas = false; render();
     }
 
+    // Radar da IA — só leitura do que o ciclo em segundo plano já persistiu
+    // (nunca dispara um ciclo novo aqui). Auxiliar, igual à lista de
+    // conversas: uma falha aqui não impede conversar com a IA Gestora.
+    async function carregarRadar(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.radar = null; state.radarError = null; return; }
+      state.radarLoading = true; render();
+      try{
+        state.radar = await apiRadarResumo(filtro.empresaId);
+        state.radarError = null;
+      }catch(e){ state.radar = null; state.radarError = e.message || 'Não foi possível carregar o Radar da IA agora.'; }
+      state.radarLoading = false; render();
+    }
+
     // Empresa mudou desde a última vez: uma conversa é sempre de UMA
     // empresa (db/schema.sql#ia_conversas) — trocar de empresa fecha a
     // conversa aberta (nunca mistura pergunta nova com histórico de outra
@@ -2307,6 +2382,7 @@
       if(state.contextEmpresaId !== filtro.empresaId){
         state.contextEmpresaId = filtro.empresaId;
         carregarConversas();
+        carregarRadar();
       }
     }
 
@@ -2420,11 +2496,56 @@
         + '<div class="ia-bubble ia-typing"><span class="spin"></span><span>IA Gestora está consultando os dados…</span></div></div>';
     }
 
+    // Radar da IA — resumo "O que precisa da minha atenção hoje" (Passo 3
+    // do pedido do usuário, ver docs/02-decisoes.md). Mostrado na tela
+    // inicial da IA Gestora (antes de qualquer pergunta) — nunca substitui
+    // o chat, só resume o que o ciclo automático em segundo plano já
+    // detectou. Mesma paleta/emoji de severidade usada em Visão Geral >
+    // Alertas & IA (página overview, função radarPanelHTML).
+    const IA_RADAR_SEVERIDADE_COR = { critico:'danger', atencao:'warning', oportunidade:'success', informativo:'teal' };
+    const IA_RADAR_SEVERIDADE_EMOJI = { critico:'🔴', atencao:'🟠', oportunidade:'🟢', informativo:'🔵' };
+    const IA_RADAR_SEVERIDADE_LABEL = { critico:'Crítico', atencao:'Atenção', oportunidade:'Oportunidades', informativo:'Informativo' };
+
+    function radarResumoBlockHTML(){
+      if(state.radarLoading && !state.radar) return '<div class="ia-radar-block"><span class="spin"></span><span>Carregando o Radar da IA…</span></div>';
+      if(state.radarError) return ''; // auxiliar — some silenciosamente, o chat continua funcionando normalmente
+      if(!state.radar) return '';
+
+      const contagem = state.radar.contagem || {};
+      const totalRelevante = (contagem.critico||0) + (contagem.atencao||0) + (contagem.oportunidade||0);
+      if(!totalRelevante) return '';
+
+      const chips = ['critico','atencao','oportunidade','informativo'].map(sev => {
+        const n = contagem[sev] || 0;
+        if(!n) return '';
+        const cor = IA_RADAR_SEVERIDADE_COR[sev];
+        return '<span class="status-chip" style="color:var(--'+cor+');background:var(--'+cor+'-soft);margin-right:6px;">'+IA_RADAR_SEVERIDADE_EMOJI[sev]+' '+n+' '+IA_RADAR_SEVERIDADE_LABEL[sev]+'</span>';
+      }).join('');
+
+      const itens = (state.radar.resumoHoje || []).slice(0, 5).map(r => {
+        const cor = IA_RADAR_SEVERIDADE_COR[r.severidade] || 'teal';
+        return '<div class="conn-row alert-row" data-page="'+escapeHtml(r.pagina||'')+'" style="cursor:'+(r.pagina?'pointer':'default')+';">'
+          + '<div class="conn-row-left"><span class="conn-ic" style="color:var(--'+cor+');">'+r.emoji+'</span><div>'
+            + '<div class="conn-name">'+escapeHtml(r.titulo)+'</div>'
+            + '<div class="conn-sub">'+escapeHtml(r.oQueAconteceu||'')+'</div>'
+          + '</div></div>'
+          + (r.pagina ? '<span class="conn-status">'+svg('link')+'</span>' : '')
+        + '</div>';
+      }).join('');
+
+      return '<div class="ia-radar-block">'
+        + '<div class="ia-radar-head"><span class="panel-title-ic">'+svg('activity')+'</span><strong>O que precisa da minha atenção hoje</strong></div>'
+        + '<div style="margin:6px 0 10px;">'+chips+'</div>'
+        + itens
+      + '</div>';
+    }
+
     function emptyStateHTML(){
       return '<div class="ia-empty">'
         + '<div class="empty-icon">'+svg('messageCircle')+'</div>'
         + '<h2>Pergunte à IA Gestora</h2>'
         + '<p>Ela consulta os dados reais desta empresa e período — nunca inventa número. Ainda só consulta e analisa: não altera nada no sistema.</p>'
+        + radarResumoBlockHTML()
         + '<div class="ia-suggestions">' + SUGESTOES.map(s => '<button type="button" class="ia-chip" data-pergunta="'+escapeHtml(s)+'">'+escapeHtml(s)+'</button>').join('') + '</div>'
         + '</div>';
     }
@@ -2543,6 +2664,9 @@
 
       root.querySelectorAll('.ia-chip').forEach(el=>{
         el.addEventListener('click', ()=> enviar(el.dataset.pergunta));
+      });
+      root.querySelectorAll('.ia-radar-block .alert-row').forEach(el=>{
+        el.addEventListener('click', () => { const page = el.dataset.page; if(page) navigate(page); });
       });
 
       const novaBtn = document.getElementById('iaNovaConversaBtn');

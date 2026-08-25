@@ -28,6 +28,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { responderPergunta } = require('../lib/ia/orchestrator');
 const { montarPlanilhaAnalise, formatarNomeArquivo } = require('../lib/ia/planilhaAnalise');
+const { obterRadarParaEmpresa } = require('../lib/ia/radar');
 const { verificarSenha } = require('../lib/auth/senha');
 const { criarSessao, revogarSessao, SESSAO_DIAS } = require('../lib/auth/sessoes');
 const { NOME_COOKIE, lerCookie, setarCookie, limparCookie } = require('../lib/auth/cookies');
@@ -155,6 +156,25 @@ router.delete('/conversas/:id', async (req, res, next) => {
     if (conversa === 'proibido') return res.status(404).json({ error: 'Conversa não encontrada.' });
     await pool.query('DELETE FROM ia_conversas WHERE id = $1', [conversa.id]);
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ---------------- Radar da IA (acompanhamento contínuo — ver lib/ia/radar.js) ----------------
+
+// GET /api/ia-gestora/radar-resumo?empresaId=ID — expõe pra tela da IA
+// Gestora o resultado já PERSISTIDO do Radar (radar_alertas/radar_estado),
+// gerado em background pelo ciclo automático (lib/ia/radarScheduler.js).
+// Esta rota NUNCA dispara uma análise nova nem chama IA — só lê o que o
+// último ciclo já calculou e salvou, exatamente como o painel de Visão
+// Geral faz (lib/visaoGeralPainel.js). Mesmo formato de resposta de
+// obterRadarParaEmpresa: { alertas, porSeveridade, contagem, resumoHoje,
+// ultimaExecucaoEm, ultimaExecucaoOk }.
+router.get('/radar-resumo', async (req, res, next) => {
+  try {
+    const empresaId = Number(req.query.empresaId);
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const radar = await obterRadarParaEmpresa(empresaId);
+    res.json(radar);
   } catch (err) { next(err); }
 });
 
