@@ -1,5 +1,112 @@
 # Próximos Passos
 
+- **Concluído em 25/08/2026 (IA Gestora vira central de análise e
+  relatórios — login real só nesta área, histórico de conversas no banco,
+  cards visuais e planilha XLSX automática, testado localmente: Postgres
+  real + servidor real via HTTP + IA mockada, 3 arquivos de teste novos —
+  251 testes no total no projeto com Postgres, 0 falhas):** ver
+  `04-alteracoes.md` e `02-decisoes.md` (30). **Não precisa de nenhuma
+  variável de ambiente nova no Render** (diferente da Shopee) — tudo usa
+  pacotes/módulos já presentes (`crypto` nativo do Node, `express`, `pg`,
+  `exceljs`); só o opcional `IA_SESSAO_DIAS` (quantos dias uma sessão de
+  login dura, padrão 30) existe, e não precisa ser definido. Falta, **nesta
+  ordem**:
+  1. o usuário subir o próximo zip de código pro GitHub (deploy automático
+     no Render cuida do resto);
+  2. **criar o primeiro (e cada) login da IA Gestora rodando este comando
+     no servidor** (não existe tela de "criar conta" — decisão registrada
+     em `02-decisoes.md` (30)):
+     `node db/criarUsuarioIa.js "email@empresa.com" "SenhaForte123" "Nome"`
+     — troque o e-mail/senha/nome pelos reais; a senha precisa ter pelo
+     menos 8 caracteres; rodar de novo com o mesmo e-mail atualiza a senha
+     e o nome desse usuário (não cria duplicado);
+  3. testar ao vivo, com o login criado, o checklist pedido pelo usuário:
+     a) abrir a IA Gestora, fazer login, atualizar a página e confirmar que
+        continua logado e a conversa (se houver) continua na tela;
+     b) fazer uma pergunta, sair da IA Gestora e voltar (ou fechar e abrir
+        o navegador de novo), abrir a conversa antiga pela sidebar e
+        confirmar que o histórico está completo;
+     c) pedir uma análise maior (ex.: "Faça uma análise completa das
+        caixas que mais faturaram este mês.") e confirmar que a resposta
+        vem com resumo/KPIs/tabela/gráfico, não só texto;
+     d) clicar em "Baixar planilha (XLSX)" nessa mesma resposta e abrir o
+        arquivo baixado;
+     e) conferir, número a número, que o valor mostrado na tela, o texto
+        da resposta da IA e a planilha baixada são idênticos;
+  4. se algum dia for necessário limitar quais empresas cada usuário pode
+     ver (hoje qualquer usuário logado vê qualquer empresa ativa — ver
+     `05-problemas-conhecidos.md`), isso é um projeto à parte que toca o
+     ERP inteiro (`routes/empresas.js`, o seletor do cabeçalho
+     compartilhado com todas as telas), não só a IA Gestora — não fazer
+     sem o usuário pedir explicitamente.
+  - **Por instrução explícita do usuário, esta etapa parou aqui** —
+    nenhum outro módulo do ERP foi alterado, nenhum cálculo financeiro
+    mudou, nenhum acesso de escrita foi dado à IA.
+- **Concluído em 25/08/2026 (conectar a Shopee ao ERP — Open Platform v2,
+  só autorização + renovação de token, testado localmente: Postgres real +
+  Express real via HTTP, 24 testes de integração novos — 227 testes no
+  total no projeto com Postgres, 0 falhas):** ver `04-alteracoes.md` e
+  `02-decisoes.md` (29). **Bloqueado só pela falta de credenciais reais da
+  Shopee Open Platform** (nenhuma foi configurada nesta sessão) — nenhuma
+  outra ação de código é necessária. Falta, **nesta ordem**:
+  1. **Criar o app na Shopee Open Platform** (https://open.shopee.com,
+     seção de desenvolvedor/parceiro) e obter **Partner ID** e **Partner
+     Key** — a categoria "live" costuma exigir aprovação da Shopee antes
+     de liberar credenciais de produção; a categoria de teste/sandbox
+     libera na hora e é o caminho recomendado pra validar a conexão
+     primeiro (ver passo 3).
+  2. **Cadastrar a URL de callback no painel do app da Shopee** — campo
+     costuma se chamar "Redirect URL"/"Authorization Callback URL":
+     `https://cerne-erp.onrender.com/api/integracoes/shopee/callback`
+     (mesmo domínio já usado pelo Mercado Livre, caminho novo). Precisa
+     bater **exatamente** com essa URL, senão a Shopee recusa a
+     autorização.
+  3. **Configurar no Render (Settings → Environment) exatamente estas
+     variáveis:**
+     - `SHOPEE_PARTNER_ID` — o Partner ID obtido no passo 1 (só números).
+     - `SHOPEE_PARTNER_KEY` — o Partner Key obtido no passo 1 (nunca
+       compartilhar nem colar em nenhum outro lugar além do Render —
+       nunca vai para o front-end nem para o GitHub).
+     - `SHOPEE_TOKEN_KEY` — uma chave só do ERP (nunca vem da Shopee),
+       32 bytes em base64, pra criptografar os tokens no banco (mesma
+       ideia de `ML_TOKEN_KEY`, mas uma chave própria da Shopee). Gerar
+       uma nova rodando, uma única vez, neste terminal/servidor:
+       `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+       — colar o resultado direto no Render, nunca reaproveitar o valor
+       de `ML_TOKEN_KEY`.
+     - `SHOPEE_HOST` (opcional) — só se quiser testar primeiro contra o
+       ambiente de testes da Shopee antes de ir pra produção: definir como
+       `partner.test-stable.shopeemobile.com`. Sem essa variável, o ERP já
+       usa produção (`partner.shopeemobile.com`) por padrão.
+     - `SHOPEE_REDIRECT_URI` (opcional) — só se quiser sobrescrever a URL
+       calculada automaticamente pelo servidor (protocolo + host da
+       requisição); normalmente não precisa ser definida.
+  4. O usuário subir o próximo zip de código pro GitHub (deploy automático
+     no Render cuida do resto).
+  5. Testar ao vivo os 5 pontos pedidos pelo usuário, na tela
+     **Marketplaces**, abaixo do bloco do Mercado Livre:
+     a) clicar em "Conectar Shopee" — deveria abrir a página de
+        autorização da própria Shopee (nunca dentro do ERP);
+     b) autorizar/selecionar a loja lá e confirmar que a Shopee redireciona
+        de volta pro ERP, caindo em Marketplaces com um aviso de sucesso;
+     c) confirmar que a loja aparece como "Conectada", com Shop ID, nome
+        (quando a Shopee retornar), empresa vinculada e "Última
+        atualização" preenchidos;
+     d) esperar (ou usar o botão "Renovar token") e confirmar, olhando o
+        campo "Token de acesso expira em", que o valor muda depois de uma
+        renovação — automática (ciclo a cada 30min, ver
+        `lib/shopeeTokenScheduler.js`) ou manual;
+     e) reiniciar o servidor (redeploy no Render já serve como teste) e
+        confirmar que a loja continua aparecendo como conectada — nenhum
+        estado depende da memória do processo, só do Postgres.
+  6. **Se algo der errado na autorização** (ex.: mensagem de "wrong sign"
+     ou assinatura inválida), ver `05-problemas-conhecidos.md` — o
+     primeiro lugar a olhar é `lib/shopee.js#assinar`, testando primeiro
+     contra `SHOPEE_HOST=partner.test-stable.shopeemobile.com`.
+  - **Por instrução explícita do usuário, esta etapa parou aqui** — nenhum
+    pedido, estoque, Ads nem financeiro da Shopee foi implementado; não
+    avançar sozinho pra essas áreas sem o usuário pedir depois de validar
+    que a conexão está estável.
 - **Concluído em 25/08/2026 (IA Gestora ganha raciocínio/projeção —
   ferramenta `projecao_mes`, catálogo de 19 para 20, testado localmente:
   Postgres real, 6 testes de integração novos + verificação manual das 3

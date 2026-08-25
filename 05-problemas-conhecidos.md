@@ -3,6 +3,72 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## IA Gestora: login não cobre permissão por empresa; primeiro usuário precisa ser criado por script; "Gráficos" da planilha é dado, não gráfico nativo (25/08/2026)
+- **Login não cria permissão por empresa** (ver `02-decisoes.md` (30)): o
+  novo login real garante que uma conversa é sempre de um usuário só, mas
+  **não** garante "usuário X só pode ver a empresa Y" — qualquer usuário
+  logado continua podendo escolher qualquer empresa ativa no cabeçalho da
+  IA Gestora, exatamente como acontece em toda outra tela do ERP hoje
+  (não existe controle de acesso por empresa em nenhum lugar do sistema).
+  Não era pedido dos "3 passos" desta tarefa e exigiria alterar
+  `routes/empresas.js` e o seletor do cabeçalho, compartilhados com o
+  resto do ERP — fora do escopo de "só a área da IA Gestora". Se algum
+  dia isso for necessário, é um projeto à parte que toca o ERP inteiro,
+  não só a IA Gestora.
+- **Não existe tela de "criar minha conta"** — o primeiro (e todo) login
+  da IA Gestora precisa ser criado rodando um script no servidor:
+  `node db/criarUsuarioIa.js "email@empresa.com" "SenhaForte123" "Nome"`
+  (ver `06-proximos-passos.md` para o comando completo). Enquanto nenhum
+  usuário for criado, a tela da IA Gestora mostra a tela de login
+  normalmente, mas ninguém consegue entrar.
+- **A aba "Gráficos" da planilha XLSX é uma tabela de dados, não um
+  gráfico nativo do Excel** (ver `lib/ia/planilhaAnalise.js`) — a mesma
+  categoria/série que aparece como barra na conversa vira uma tabela
+  simples (categoria + valor por coluna) na planilha, porque o `exceljs`
+  usado neste projeto não tem suporte a `addChart`/`addImage` (nem o real
+  do npm nesta versão, nem o stub de dev). Os números são exatamente os
+  mesmos do gráfico mostrado na conversa — só a apresentação (barra visual
+  vs. tabela) muda entre os dois lugares. Se algum dia for pedido um
+  gráfico nativo de verdade na planilha, precisaria trocar de biblioteca
+  ou gerar a imagem do gráfico separadamente e inserir com `addImage`.
+
+## Shopee: falta configurar Partner ID/Partner Key reais + confirmar a assinatura HMAC contra a Shopee de verdade (25/08/2026)
+- Ao conectar a Shopee (ver `04-alteracoes.md` e `02-decisoes.md` (29)), o
+  fluxo inteiro (autorização → callback → armazenamento → renovação de
+  token → reconexão após reiniciar o servidor) foi testado de ponta a
+  ponta com a API da Shopee **mockada** (`test/shopee.test.js`, 24 testes,
+  Postgres real + Express real via HTTP). Isso prova que a lógica do ERP
+  está correta para qualquer resposta que a Shopee possa dar — não prova
+  que a assinatura HMAC (`sign`) implementada em `lib/shopee.js` está
+  byte a byte igual ao que a Shopee real exige.
+- **Motivo:** este ambiente de desenvolvimento não conseguiu abrir
+  `open.shopee.com` (documentação oficial) — o acesso à internet aqui é
+  restrito a um conjunto de domínios permitidos, e o domínio da Shopee não
+  está nesse conjunto. O algoritmo foi implementado cruzando várias fontes
+  de terceiros (guias de integração e, principalmente, o SDK open-source
+  `congminh1254/shopee-sdk`, que confirma os nomes de campo exatos —
+  `access_token`/`refresh_token`/`expire_in`), mas nenhuma chamada foi
+  feita contra um Partner ID/Partner Key reais (esta sessão não tem
+  nenhum) — diferente do Mercado Livre, onde uma chamada real com chave
+  inválida já confirmou o formato de erro da API (ver entrada anterior
+  sobre a IA Gestora/provedor).
+- **Precisa de confirmação do usuário ao vivo em produção:** depois de
+  criar o app na Shopee Open Platform e configurar as 3 variáveis de
+  ambiente no Render (`SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY`,
+  `SHOPEE_TOKEN_KEY` — ver `06-proximos-passos.md` para o passo a passo
+  completo), clicar em "Conectar Shopee" na tela Marketplaces. **Se
+  aparecer um erro de assinatura** ("wrong sign" ou parecido) na tela ou
+  no log do servidor, o primeiro lugar a olhar é a função `assinar()` em
+  `server/lib/shopee.js` — testar primeiro contra o ambiente de testes da
+  Shopee (`SHOPEE_HOST=partner.test-stable.shopeemobile.com`, variável de
+  ambiente opcional), como a própria Shopee recomenda para descartar erro
+  de credencial antes de suspeitar do código. Se a autorização funcionar
+  normalmente, não é preciso fazer nada — o desenho já está correto.
+- **Nunca bloqueou nem vai bloquear o resto do ERP:** sem as 3 variáveis
+  configuradas, a tela Marketplaces mostra "Integração com a Shopee ainda
+  não configurada" (mesmo padrão já usado pelo Mercado Livre) — nunca
+  quebra a tela nem qualquer outra parte do sistema.
+
 ## Relatórios → Produtos "Por Caixa": sem tela de gestão dos vínculos SKU → produto base (25/08/2026)
 - A visão "Por Caixa" prioriza um vínculo SALVO em `produto_base_skus`
   quando existe, e cai pro padrão automático do SKU quando não existe
@@ -96,17 +162,15 @@ desenvolvimento, para não serem esquecidas.
   pra cada pergunta (isso só é testável com uma chave real, ao vivo). Ver
   `06-proximos-passos.md` para o checklist das 10 perguntas pedidas pelo
   usuário, pendente de execução ao vivo.
-- **Sobre "permissões do usuário" (um dos 3 pontos pedidos pelo usuário):**
-  o ERP ainda não tem login nem permissão por usuário implementados (só a
-  tabela `users`, sem tela/rota — ver `00-visao-geral.md`). Por isso, hoje,
-  o único controle de acesso que a IA Gestora aplica — igual a toda outra
-  rota do sistema — é "a empresa consultada existe de verdade" (validado
-  em `lib/ia/orchestrator.js` antes de qualquer pergunta). **Não é uma
-  lacuna desta etapa especificamente** — é uma limitação do ERP inteiro,
-  já registrada como pendência aberta (ver `06-proximos-passos.md`). Não
-  há necessidade de ação agora; quando login/permissão por usuário
-  existir, o ponto certo de aplicar a checagem por usuário já está
-  isolado (comentado em `lib/ia/ferramentas.js`).
+- **Sobre "permissões do usuário" — RESOLVIDO em 25/08/2026 (30), ver
+  `02-decisoes.md` (30):** a IA Gestora agora exige login real
+  (e-mail/senha) e toda conversa é isolada por usuário — um usuário nunca
+  acessa a conversa de outro (testado com dois usuários reais em
+  `test/iaGestoraRoutes.test.js`). Fica de fora, deliberadamente:
+  permissão por EMPRESA continua não existindo — qualquer usuário logado
+  pode selecionar qualquer empresa ativa no cabeçalho, igual ao resto do
+  ERP (nenhuma tela do sistema tem "usuário X só vê empresa Y"). Ver a
+  entrada de baixo, "IA Gestora: login não cobre permissão por empresa".
 - **Revisão de 25/08/2026 (nova ferramenta `projecao_mes` — ver
   `02-decisoes.md` (28)):** mesmo bloqueio de sempre, sem novidade — falta
   só a `IA_API_KEY` de produção. A projeção de faturamento/margem/pedidos/

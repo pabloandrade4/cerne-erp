@@ -149,7 +149,56 @@ junto da nova).
   justamente para esse cenário.
 
 ## Shopee
-_(sem regras registradas ainda)_
+- **Integração real via OAuth da Shopee Open Platform v2** (não é simulação),
+  ativada em 25/08/2026 — pedido do usuário em 3 passos: preparar a
+  integração (credenciais só no backend), fazer o botão "Conectar Shopee"
+  funcionar de verdade, e testar/manter a conexão viva (renovação de
+  token). **Nesta etapa, só a conexão da loja** — pedidos, estoque, Ads e
+  financeiro da Shopee **não fazem parte** (pedido explícito do usuário:
+  "não importe pedidos ainda", "não implemente estoque, Ads, Full ou
+  financeiro da Shopee nesta tarefa"). Ver `02-decisoes.md` (29).
+- O usuário clica em "Conectar Shopee" na tela de Marketplaces, autoriza no
+  site da própria Shopee (login/consentimento acontece lá, nunca dentro do
+  ERP) e volta conectado. Uma empresa pode ter uma loja da Shopee conectada
+  (1 loja por `shopee_shop_id`, vinculada a uma empresa do ERP) — mesmo
+  desenho já usado pelo Mercado Livre.
+- **Diferente do Mercado Livre (OAuth2 + PKCE padrão), a Shopee Open
+  Platform v2 assina CADA chamada** com HMAC-SHA256 (parâmetro `sign`,
+  calculado com o `Partner Key`, que nunca trafega pela rede) — nunca usa
+  PKCE. A Shopee também não tem um parâmetro `state` nativo na URL de
+  autorização; a proteção contra CSRF é embutida na própria URL de retorno
+  (`redirect`), que a Shopee preserva ao anexar `code`/`shop_id` de volta.
+  Ver `lib/shopee.js`.
+- Access token e refresh token ficam **criptografados no banco**
+  (AES-256-GCM, mesmo algoritmo do Mercado Livre) — nunca em texto puro,
+  nunca expostos para o front-end. A chave de criptografia é **própria da
+  Shopee** (`SHOPEE_TOKEN_KEY`, variável de ambiente separada de
+  `ML_TOKEN_KEY`) — um segredo nunca depende do outro.
+- **Renovação de token é PROATIVA** (diferente do Mercado Livre, que renova
+  sob demanda ao usar o token): como esta etapa ainda não importa pedidos
+  da Shopee, não existe nenhuma outra chamada periódica que naturalmente
+  manteria o token em uso — por isso um ciclo próprio
+  (`lib/shopeeTokenScheduler.js`), rodando no servidor a cada 30 minutos,
+  renova qualquer loja cujo token vença em menos de 60 minutos, mantendo a
+  conexão viva indefinidamente sem exigir que o usuário reconecte
+  manualmente. O access token da Shopee vale 4h; o refresh token, usado com
+  regularidade por este ciclo, nunca fica tempo suficiente sem uso a ponto
+  de expirar.
+- **Salvo no banco após a autorização:** Shop ID, nome da loja (quando a
+  API retorna), região, empresa vinculada, access token e refresh token
+  (criptografados), expiração do token, status da conexão (`ativa` | `erro`
+  | `desconectada`) e última atualização — mesmos campos já usados pelo
+  Mercado Livre, adaptados ao vocabulário da Shopee.
+- Reconectar a mesma loja (mesmo `shopee_shop_id`) nunca duplica linha —
+  é sempre um upsert, mesma regra do Mercado Livre.
+- **Nunca inventa dado**: se o nome/região da loja não vier na chamada
+  extra feita logo após a autorização, a conexão ainda é salva (o
+  essencial: tokens + Shop ID) — só sem nome/região por ora, nunca um valor
+  inventado no lugar.
+- **Ambiente configurável** (`SHOPEE_HOST`, variável de ambiente) —
+  permite apontar para o ambiente de testes/sandbox da Shopee
+  (`partner.test-stable.shopeemobile.com`) sem alterar código, antes de
+  usar o ambiente de produção (`partner.shopeemobile.com`, padrão).
 
 ## Visão Geral
 - A tela **nunca chama a API do Mercado Livre em tempo real** — todos os
@@ -208,8 +257,10 @@ _(sem regras registradas ainda)_
     pode ser calculado com segurança (nunca um valor inventado).
   - **Conexões & Empresas:** quantidade real de empresas cadastradas;
     Mercado Livre — quantidade de contas conectadas, status e última
-    sincronização; Shopee — sempre "Nenhuma conta conectada" (integração
-    ainda não existe). Nenhum texto fictício de demonstração.
+    sincronização; **Shopee (real desde 25/08/2026)** — quantidade de lojas
+    conectadas e status (a Shopee ainda não tem "última sincronização" de
+    pedidos pra mostrar aqui — só a conexão em si, ver seção **Shopee**).
+    Nenhum texto fictício de demonstração.
   - **Alertas & IA:** central de alertas por regras simples sobre dado
     real (não é uma IA/modelo preditivo ainda) — SKU sem custo
     cadastrado, pedido sem custo (impede a margem), venda com margem de
@@ -660,15 +711,32 @@ _(sem regras registradas ainda)_
   `lib/contasPagar.js`, `lib/contasReceber.js`, `lib/visaoGeralPainel.js`,
   `ml_estoque_itens`) — o mesmo período, na mesma tela, nunca tem um
   faturamento diferente entre a IA Gestora e o resto do ERP.
-- **Permissões do usuário:** o ERP ainda não tem login/permissão por
-  usuário implementados (a tabela `users` existe, mas sem tela nem rota —
-  ver `00-visao-geral.md`). Por isso, hoje, o único controle de acesso que
-  existe em qualquer parte do sistema — inclusive na IA Gestora — é "a
-  empresa consultada precisa existir de verdade" (o backend valida isso
-  antes de responder qualquer pergunta). Quando login/permissão por
-  usuário existir, o ponto certo de aplicar essa checagem já está isolado
-  em `lib/ia/ferramentas.js`/`lib/ia/orchestrator.js`, documentado no
-  próprio código.
+- **Login real, só nesta área (25/08/2026).** A IA Gestora agora exige
+  login (e-mail/senha, tabela `users` já existente) antes de conversar —
+  `router.use(exigirLogin)` em `routes/iaGestora.js`. **Nenhuma outra tela
+  do ERP passou a exigir login nesta mudança** — o resto do sistema
+  continua exatamente como era (sem tela de login, sem sessão), porque o
+  pedido foi alterar SOMENTE a área da IA Gestora. Sessão é um token
+  opaco (não é JWT) guardado em cookie `httpOnly`, validado contra
+  `sessoes_usuario` no banco — um logout real revoga a sessão no servidor
+  (não é só apagar cookie no navegador). Criação de usuário é só por
+  script de bootstrap (`node db/criarUsuarioIa.js "email" "senha" "nome"`
+  no servidor) — não existe tela de "criar minha conta". Ver `02-decisoes.md`.
+- **O que o login garante — e o que ele NÃO garante.** Garante que uma
+  conversa (histórico, mensagens) é sempre de um usuário só: um usuário
+  nunca lista, abre ou apaga a conversa de outro (todo acesso filtra por
+  `usuario_id`, testado em `test/iaGestoraRoutes.test.js`). **Não** cria
+  permissão por empresa — qualquer usuário logado pode selecionar qualquer
+  empresa ativa no cabeçalho, exatamente como qualquer outra tela do ERP já
+  funciona hoje (não existe controle "usuário X só vê empresa Y" em
+  nenhuma tela do sistema, e criar isso ficaria fora do escopo desta
+  tarefa). Ver `05-problemas-conhecidos.md`.
+- **Histórico de conversas é salvo no banco** (`ia_conversas`/
+  `ia_mensagens`), nunca só no navegador — sobrevive a atualizar a página,
+  fechar o navegador ou trocar de computador, porque não depende de
+  `localStorage`. A tela mostra uma lista das conversas do usuário
+  (título, data), permite abrir uma conversa antiga e continuar de onde
+  parou, começar uma nova e excluir uma conversa quando quiser.
 - **A chave do provedor de IA nunca fica no front-end.** Toda a
   comunicação com o provedor (hoje: Anthropic/Claude, via chamada HTTP
   direta no backend) acontece só no servidor — o navegador só fala com
@@ -679,6 +747,28 @@ _(sem regras registradas ainda)_
 - **Sem IA_API_KEY configurada, a tela abre normalmente** (nunca quebra o
   resto do ERP) e avisa, na própria conversa, que a IA Gestora ainda não
   está configurada no servidor.
+- **Resposta visual, quando faz sentido (25/08/2026).** Para perguntas
+  simples ("Quanto faturei hoje?") a resposta continua só texto. Para uma
+  análise/relatório maior, a IA pode apresentar a resposta em um "card":
+  resumo (período/empresa), indicadores (KPIs), tabela, gráfico (barra de
+  produtos/lojas, linha de evolução, REALIZADO×PROJETADO no fluxo de
+  caixa etc.), conclusões e um aviso de atenção quando identifica um
+  problema (ex: margem negativa depois do Ads). **Quem decide se a
+  pergunta merece esse tratamento visual é o próprio modelo de IA**
+  (chamando ou não a ferramenta `apresentar_analise`) — não existe uma
+  lista fixa de palavras-chave no código. **Todo número do card vem de
+  uma ferramenta já executada na mesma pergunta — nunca é calculado ou
+  inventado pelo modelo.** Só a análise textual (as "conclusões" e o
+  aviso de "atenção") é escrita pela IA; nenhum valor numérico é. Ver
+  `lib/ia/estrutura.js` e `02-decisoes.md`.
+- **Planilha (XLSX) automática, quando a resposta tem card visual
+  (25/08/2026).** Sempre que a resposta tiver tabela ou gráfico, um botão
+  "Baixar planilha" fica disponível na própria mensagem. **A planilha usa
+  exatamente os mesmos dados estruturados que a conversa mostrou** —
+  nunca uma nova consulta ao banco, nunca o texto da resposta reformatado
+  — então é impossível a conversa mostrar um total e a planilha mostrar
+  outro. Respeita a empresa/período/filtro exatos da pergunta que gerou
+  aquela mensagem. Ver `lib/ia/planilhaAnalise.js`.
 - Perguntas de exemplo que a IA já responde com dado real: quanto vendi
   hoje, quanto estou lucrando este mês, qual minha margem de contribuição,
   qual produto está dando mais lucro/prejuízo, quanto gastei com

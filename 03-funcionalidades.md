@@ -3,13 +3,46 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
-## IA Gestora — chat de consulta, análise e projeção com dados reais (2026)
+## IA Gestora — central de análise e relatórios, com histórico, cards visuais e planilha automática (2026)
 - **Status:** concluído e testado localmente (Postgres real + servidor
-  real via HTTP — 203 testes automatizados no projeto com Postgres, 0
-  falhas, incluindo 19 testes de integração comparando cada ferramenta
-  nova número a número contra a função canônica que a tela correspondente
-  do ERP usa). Ainda **só de consulta, análise e projeção** — nenhuma ação
+  real via HTTP — **251 testes automatizados no projeto com Postgres, 0
+  falhas**). Ainda **só de consulta, análise e projeção** — nenhuma ação
   automática foi implementada, nenhum acesso de escrita foi dado à IA.
+  **Ampliação de 25/08/2026 (30)** (ver `02-decisoes.md` (30)), pedida
+  pelo usuário em 3 passos ("transformar a IA Gestora em uma central de
+  análise e relatórios"): (1) **login real** (e-mail/senha, escopado só a
+  esta área — nenhuma outra tela do ERP passou a exigir login) e
+  **histórico de conversas salvo no banco** (nunca só `localStorage`) —
+  lista de conversas, abrir uma antiga e continuar, apagar, sobrevive a
+  atualizar a página/logar de novo, e um usuário nunca acessa a conversa
+  de outro; (2) **respostas visuais** — quando a pergunta é uma
+  análise/relatório maior (não uma pergunta simples de um número só), a
+  resposta ganha um card com resumo, KPIs, tabela, gráfico (barra/linha,
+  sempre com dado real) e conclusões, com aviso de "atenção" quando a IA
+  identifica um problema (ex.: margem negativa depois do Ads) — quem
+  decide se a pergunta merece esse tratamento é o próprio modelo; (3)
+  **planilha XLSX automática** disponível para download em qualquer
+  resposta que tenha tabela/gráfico, usando **exatamente os mesmos dados
+  já mostrados na conversa** (nunca uma nova consulta, nunca o texto
+  reformatado) — garantia de que a conversa e a planilha nunca divergem.
+  **Ampliações anteriores, 25/08/2026 (28)** (ver `02-decisoes.md` (28)): a IA ganhou
+  capacidade de RACIOCÍNIO/PROJEÇÃO — nova ferramenta `projecao_mes`
+  (catálogo foi de 19 para **20**, e agora **21** com `apresentar_analise`
+  na etapa (30)) para perguntas de "quanto devo
+  faturar/lucrar/vender/gastar de Ads até o fim do mês" ou "se continuar
+  nesse ritmo…", sempre separando REALIZADO de PROJETADO na resposta; o
+  system prompt também foi corrigido para nunca mais recusar uma pergunta
+  só por "o ERP não tem essa tela" quando já existe dado suficiente para
+  calcular a resposta combinando ferramentas. **Ampliação de 25/08/2026
+  (27)** (ver `02-decisoes.md` (27)): catálogo de ferramentas foi de 9 para
+  19, cobrindo praticamente todos os módulos do ERP (vendas, produtos por
+  SKU/por caixa, Ads, estoque/dinheiro parado em estoque, contas a
+  pagar/receber, fluxo de caixa, DRE completa, compras por fornecedor,
+  notas fiscais, comparação com período anterior, e uma base de
+  conhecimento pra explicar regras/limitações). Continua faltando só uma
+  `IA_API_KEY` de produção válida do próprio usuário para responder de
+  verdade (ver `05-problemas-conhecidos.md`) — sem chave configurada, a
+  tela abre normalmente e avisa que a IA ainda não está configurada.
   **Ampliação de 25/08/2026 (28)** (ver `02-decisoes.md` (28)): a IA ganhou
   capacidade de RACIOCÍNIO/PROJEÇÃO — nova ferramenta `projecao_mes`
   (catálogo foi de 19 para **20**) para perguntas de "quanto devo
@@ -61,23 +94,36 @@ cada uma e o status (em desenvolvimento / concluída).
   com a API de Mensagens da Anthropic — sem SDK novo, `fetch` nativo),
   `server/lib/ia/providers/index.js` (registro de provedor/modelo,
   trocável por variável de ambiente sem mexer no resto), `server/lib/ia/
-  ferramentas.js` (catálogo de 20 ferramentas, incluindo `projecao_mes` —
-  cada uma uma casca fina sobre uma função já existente do ERP),
+  ferramentas.js` (catálogo de 21 ferramentas, incluindo `projecao_mes` e
+  `apresentar_analise` — cada uma uma casca fina sobre uma função já
+  existente do ERP, exceto `apresentar_analise`, que não toca o banco),
   `server/lib/compras.js` e `server/lib/ia/baseConhecimento.js` (módulos
   de apoio — ver `02-decisoes.md` (27)), `server/lib/ia/orchestrator.js`
   (laço de pergunta → ferramenta → resposta; regras 5-A/5-B de quando
-  projetar e nunca recusar por falta de tela), `server/routes/iaGestora.js`
-  (`POST /api/ia-gestora/perguntar`), `server/public/index.html` (módulo
-  `window.IAGestora`, item de menu "IA Gestora"). Ver `02-decisoes.md`
-  (22), (27) e (28) para o desenho completo.
+  projetar e nunca recusar por falta de tela; regra 7 de quando montar
+  card visual), `server/lib/ia/estrutura.js` (monta o card
+  resumo/KPI/tabela/gráfico a partir só de ferramentas já executadas —
+  nunca calcula nada), `server/lib/ia/planilhaAnalise.js` (gera o XLSX a
+  partir do mesmo card salvo), `server/lib/auth/*` (senha, sessão, cookie,
+  middleware de login — usados só aqui), `server/db/criarUsuarioIa.js`
+  (script de bootstrap pra criar o primeiro login),
+  `server/routes/iaGestora.js` (`/login`, `/logout`, `/me`, `/conversas`,
+  `/perguntar`, `/conversas/:id/mensagens/:id/xlsx`),
+  `server/public/index.html` (módulo `window.IAGestora` — login, sidebar
+  de conversas, card visual, download de planilha; item de menu "IA
+  Gestora"). Ver `02-decisoes.md` (22), (27), (28) e (30) para o desenho
+  completo.
 - **O que falta:** só configurar `IA_API_KEY` no Render com uma chave real
   da conta Anthropic do usuário (https://console.anthropic.com) e testar
   ao vivo as perguntas reais — a integração em si (formato de erro,
   categorização, `Api-Version`/headers) já foi confirmada contra a API
-  real numa etapa anterior; o catálogo ampliado (incluindo `projecao_mes`)
-  foi verificado no nível de cada ferramenta (número a número contra
-  recálculo manual e contra a função canônica), não no nível de uma
-  conversa real com o modelo (só possível depois da chave configurada).
+  real numa etapa anterior; o catálogo ampliado (incluindo `projecao_mes`
+  e o card visual/planilha) foi verificado no nível de cada ferramenta e
+  de ponta a ponta via HTTP com a chamada à Anthropic mockada (número a
+  número contra recálculo manual e contra a função canônica), não no
+  nível de uma conversa real com o modelo (só possível depois da chave
+  configurada). Também falta criar o primeiro usuário de login — ver o
+  comando exato em `06-proximos-passos.md`.
   Por instrução explícita do usuário, não avançar sozinho para a IA poder
   alterar dados (custo, estoque, compras, contas, notas fiscais, anúncios,
   pedidos) sem o usuário pedir depois de validar que ela entende
@@ -555,9 +601,50 @@ cada uma e o status (em desenvolvimento / concluída).
   `server/routes/custos.js` (alíquota de imposto, `/api/config-financeiro`),
   `server/public/index.html` (módulos `window.Marketplaces`,
   `window.Pedidos`, `window.Produtos`).
-- **O que falta:** Shopee, DRE/financeiro completo, IA, notas fiscais —
-  nada disso foi pedido ainda. Também falta otimizar a sincronização para
-  contas com muitos pedidos (ver `05-problemas-conhecidos.md`).
+- **O que falta:** otimizar a sincronização para contas com muitos pedidos
+  (ver `05-problemas-conhecidos.md`). Shopee agora tem conexão real (ver
+  seção **Integração real com a Shopee**, abaixo), mas ainda sem pedidos —
+  isso e mais Full/Ads/financeiro da Shopee ficam para uma etapa futura.
+
+## Integração real com a Shopee (conexão + renovação de token — 25/08/2026)
+- **Status:** concluído e testado localmente (Postgres real + Express
+  real via HTTP — 24 testes de integração novos em `test/shopee.test.js`,
+  227 testes no total no projeto com Postgres, 0 falhas). **Ainda só
+  conexão** — pedidos, estoque, Ads e financeiro da Shopee **não fazem
+  parte desta etapa** (pedido explícito do usuário). Falta configurar
+  Partner ID/Partner Key reais no Render e testar ao vivo (ver
+  `05-problemas-conhecidos.md` e `06-proximos-passos.md`) — sem essas
+  variáveis, a tela Marketplaces mostra "Integração com a Shopee ainda não
+  configurada", sem quebrar o resto do ERP.
+- **O que é:** conexão real via OAuth (Shopee Open Platform v2) com uma
+  loja da Shopee por empresa (tela **Marketplaces**, abaixo do bloco do
+  Mercado Livre) — o usuário clica em "Conectar Shopee", autoriza no site
+  da própria Shopee (login/consentimento acontece lá) e volta conectado.
+  Depois de conectada, a tela mostra loja/Shop ID/região/empresa
+  vinculada/status/token expira em/última atualização, com um botão
+  "Renovar token" manual (a renovação já acontece sozinha no servidor a
+  cada 30 minutos) e "Reconectar". O painel "Conexões & Empresas" de Visão
+  Geral também passou a mostrar o número real de lojas Shopee conectadas
+  (antes sempre "Nenhuma conta conectada", hardcoded).
+- **Diferenças de desenho em relação ao Mercado Livre** (ver
+  `01-regras-de-negocio.md` e `02-decisoes.md` (29) para o porquê de cada
+  uma): a Shopee assina cada chamada com HMAC-SHA256 (nunca usa PKCE);
+  chave de criptografia dos tokens é própria (`SHOPEE_TOKEN_KEY`, nunca
+  `ML_TOKEN_KEY`); a renovação de token é proativa (ciclo automático a
+  cada 30min), não "sob demanda" como o Mercado Livre — porque, sem
+  sincronização de pedidos ainda, nada mais chamaria a API da Shopee com
+  regularidade suficiente pra manter o token vivo sozinho.
+- **Onde está:** `server/lib/shopee.js` (cliente da API — autorização,
+  troca/renovação de token, assinatura HMAC), `server/lib/shopeeCrypto.js`
+  (criptografia dos tokens), `server/lib/shopeeTokenScheduler.js` (ciclo
+  automático de renovação), `server/routes/shopee.js` (conectar/callback/
+  renovar-token), `server/public/index.html` (bloco Shopee dentro de
+  `window.Marketplaces`).
+- **O que falta:** configurar `SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY` e
+  `SHOPEE_TOKEN_KEY` no Render (ver `06-proximos-passos.md` para a lista
+  exata) e testar ao vivo os 5 pontos pedidos pelo usuário: autorização,
+  retorno pro ERP, armazenamento da conexão, renovação do token e
+  reconexão após reiniciar o servidor.
 
 ## Pedido cai sozinho no sistema (importação automática por webhook)
 - **Status:** concluído (código testado localmente; teste de ponta a ponta

@@ -3,6 +3,369 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-25 (30) — IA Gestora vira "central de análise e relatórios": histórico salvo no banco (com login real, só nesta área), respostas visuais (KPI/tabela/gráfico) e planilha XLSX automática com os MESMOS dados
+
+Pedido do usuário, em 3 passos, com a constraint explícita de ler a
+documentação e "preservar tudo que já está funcionando" antes de alterar, e
+"não alterar outros módulos nesta tarefa": (1) salvar as conversas da IA no
+banco — não só `localStorage` — com histórico por usuário, abrir conversa
+antiga, apagar conversa, sobrevivendo a atualizar a página ou logar de
+novo, respeitando "usuário; empresa/CNPJ; permissões — um usuário não pode
+acessar conversas de outro usuário sem autorização"; (2) melhorar a forma
+como a IA entrega análises — resumo, KPIs, tabelas, gráficos (com DADOS
+REAIS, "não invente dados apenas para preencher visual"), insights e um
+aviso de "atenção" quando há problema, adaptando a apresentação ao tipo de
+pergunta; (3) gerar automaticamente uma planilha XLSX com os MESMOS dados
+da resposta ("não pode acontecer de a conversa mostrar um total e a
+planilha mostrar outro"), respeitando a empresa/loja/período/filtro
+exatos da pergunta, organizada em abas quando fizer sentido. Constraint
+final repetida: **"Não altere os cálculos financeiros existentes"** e
+**"Pare depois desses 3 passos."**
+
+**0) Bloqueio descoberto antes de alterar qualquer coisa — decidido com o
+usuário via pergunta direta.** Lendo a documentação e o código (conforme
+pedido) antes de mexer em qualquer coisa, ficou claro que o requisito
+"usuário não pode acessar conversa de outro usuário sem autorização" é
+impossível de cumprir de verdade hoje: **o ERP não tem autenticação em
+lugar nenhum** — a tabela `users` existe no schema mas nunca foi usada
+(sem tela de login, sem sessão, sem verificação de senha); a única
+"identidade" hoje é a empresa selecionada no cabeçalho, que qualquer
+pessoa pode trocar. Apresentadas 3 opções ao usuário: (a) escopar conversa
+só por empresa, sem login de verdade; (b) identificação leve por
+navegador, sem senha; (c) login real (tela, sessão, senha), usando a
+tabela `users` já existente, com risco explícito de que isso é "um
+projeto bem maior que só a IA Gestora". **O usuário escolheu (c),
+login real.** Decisão registrada aqui porque ela molda todo o resto desta
+etapa: login passou a existir de verdade, mas — para não violar "não
+altere outros módulos" — **aplicado SOMENTE dentro de `routes/iaGestora.js`**
+(`router.use(exigirLogin)`), nunca em qualquer outra rota/tela do ERP.
+Nenhuma outra tela pede senha depois desta mudança.
+
+**1) Login real, sem nenhuma dependência nova** (`lib/auth/senha.js`,
+`lib/auth/sessoes.js`, `lib/auth/cookies.js`, `lib/auth/middleware.js`,
+`db/criarUsuarioIa.js`) — escolhido deliberadamente para não depender de
+`bcrypt` (pacote não instalável neste sandbox sem acesso ao registro
+npm; produção no Render também não tinha essa dependência antes):
+- **Senha:** `crypto.scryptSync` (nativo do Node, recomendação da OWASP
+  quando bcrypt não está disponível), salt aleatório de 16 bytes por
+  senha (a mesma senha nunca gera o mesmo hash duas vezes), comparação
+  em tempo constante (`crypto.timingSafeEqual`) — `verificarSenha` nunca
+  lança exceção, mesmo com hash malformado.
+- **Sessão:** token opaco (32 bytes aleatórios, não é JWT/não
+  auto-contido) — o banco (`sessoes_usuario`) guarda só o **hash
+  SHA-256** do token, nunca o token em si; um dump do banco sozinho não
+  permite se passar por um usuário logado. Guardado em cookie
+  `httpOnly; SameSite=Lax` (`Secure` quando a requisição é https, mesmo
+  padrão já usado nos redirects OAuth de Mercado Livre/Shopee). Logout
+  (`revogarSessao`) apaga a linha no banco — sessão realmente invalidada
+  no servidor, não só cookie apagado no navegador (testado explicitamente
+  em `test/iaGestoraRoutes.test.js`: mesma sessão não funciona mais depois
+  do logout). Duração configurável via `IA_SESSAO_DIAS` (padrão 30 dias,
+  opcional).
+- **Criação de usuário é só por script**, rodado manualmente no servidor —
+  não existe (e não foi pedido) tela de "criar minha conta": ver o comando
+  exato em `06-proximos-passos.md`.
+- **O que o login garante, e o que ele deliberadamente NÃO garante:**
+  garante que toda conversa (`ia_conversas`/`ia_mensagens`) pertence a UM
+  usuário, e todo acesso (listar/abrir/apagar) filtra por
+  `usuario_id = req.usuario.id` — testado com dois usuários reais (A e B)
+  em `test/iaGestoraRoutes.test.js`: a lista de B nunca mostra conversa de
+  A, abrir por ID direto devolve 404 (nunca revela que a conversa existe),
+  apagar como B devolve 404 e a conversa de A continua intacta. **Não**
+  cria permissão por empresa — qualquer usuário logado pode escolher
+  qualquer empresa ativa no cabeçalho, exatamente como qualquer outra
+  tela do ERP já funciona hoje. Criar uma ACL de empresa por usuário
+  tocaria `routes/empresas.js` e o seletor do cabeçalho, compartilhado com
+  o resto do sistema — fora do escopo de "só a área da IA Gestora" desta
+  tarefa, e por isso deliberadamente não feito. Ver `05-problemas-conhecidos.md`.
+
+**2) Histórico de conversas no banco, nunca só `localStorage`**
+(`db/schema.sql`: tabelas novas `ia_conversas` e `ia_mensagens`,
++ `sessoes_usuario`, + `users.ativo`) — `routes/iaGestora.js` reescrito
+com `GET /conversas`, `GET /conversas/:id`, `DELETE /conversas/:id` e
+`POST /perguntar` (aceita `conversaId` opcional pra continuar uma
+conversa existente; carrega o histórico do BANCO — nunca confia num
+histórico que o navegador mandasse — últimas 20 mensagens). Uma conversa
+é sempre de UMA empresa (`ia_conversas.empresa_id`); trocar de empresa no
+cabeçalho fecha a conversa aberta no front-end (nunca mistura pergunta
+nova com histórico de outra empresa). Título da conversa é sugerido pela
+própria IA (via `apresentar_analise`, ver abaixo) quando disponível,
+senão a própria pergunta truncada.
+
+**3) Card visual (resumo/KPIs/tabela/gráfico/insights/atenção) — decisão
+central: quem decide é o MODELO, e todo número vem de ferramenta já
+executada, nunca do modelo** (`lib/ia/ferramentas.js` ganhou uma 21ª
+ferramenta, `apresentar_analise`; `lib/ia/estrutura.js`, novo módulo puro
+e determinístico, `montarEstrutura`):
+- `apresentar_analise` **não consulta nada** — o handler só ecoa a
+  própria entrada (`tituloConversa`, `insights[]`, `atencao?`). A
+  descrição da ferramenta instrui o modelo a chamá-la só para
+  análises/relatórios/rankings maiores, nunca para uma pergunta simples
+  de um número só — é essa decisão do modelo (chamar ou não) que decide
+  se a resposta ganha tratamento visual, satisfazendo "adapte a
+  apresentação conforme o tipo de pergunta" sem nenhuma lista de palavras-
+  chave hardcoded em lugar nenhum. Regra 7 nova no system prompt
+  (`orchestrator.js`) explica exatamente quando usar.
+- **Separação estrita:** todo KPI/linha de tabela/ponto de gráfico é
+  produzido por `lib/ia/estrutura.js`, lendo SÓ a saída já real de outras
+  ferramentas chamadas na mesma pergunta (`ADAPTADORES`, um por
+  ferramenta) — zero participação do modelo nesses números. A ÚNICA parte
+  do card escrita pelo modelo é o texto qualitativo: `insights` (as
+  conclusões) e `atencao` (o aviso de problema). Isso significa que a
+  regra "nunca inventar número" vale também pra camada visual nova, com a
+  mesma garantia estrutural que já existe pro texto (ver decisão (26)).
+  Quando o modelo não chama `apresentar_analise`, `estrutura` volta
+  `null` e a resposta continua só texto — comportamento idêntico ao de
+  antes desta tarefa.
+- **Cobertura: 13 das 21 ferramentas têm adaptador visual hoje**
+  (`resumo_vendas`, `resultado_periodo`, `produtos_desempenho`,
+  `produtos_por_caixa_desempenho`, `desempenho_por_loja`,
+  `fluxo_de_caixa`, `contas_a_receber_resumo`, `contas_a_pagar_resumo`,
+  `dre_completa`, `ads_desempenho`, `comparacao_periodo_anterior`,
+  `projecao_mes`, `vendas_com_prejuizo`) — são exatamente as ferramentas
+  cuja saída tem números/rankings/séries que fazem sentido num card
+  (KPI, tabela ou gráfico). As demais (ex: ferramentas de consulta muito
+  pontual, como buscar um pedido específico) continuam só texto — não
+  ganham adaptador porque não têm o que desenhar num card sem inventar
+  estrutura.
+- `fluxo_de_caixa`/`projecao_mes` sempre separam KPIs com `grupo:
+  'REALIZADO'` de `grupo: 'PROJETADO'` no card — mesma exigência textual
+  já usada desde a decisão (28), agora também no visual.
+- Gráficos são desenhados como barras HTML/CSS simples
+  (`.ia-chart-bar-fill`) — sem biblioteca de gráficos nova (nenhuma
+  dependência de CDN/npm adicionada).
+
+**4) Planilha XLSX com garantia estrutural de nunca divergir da conversa**
+(`lib/ia/planilhaAnalise.js`, `montarPlanilhaAnalise`) — a decisão de
+design mais importante desta etapa para cumprir "a planilha deve
+utilizar os MESMOS dados da resposta": a planilha é gerada a partir do
+**mesmo objeto `estrutura` já salvo em `ia_mensagens.estruturado`**
+quando a mensagem foi respondida — nunca de uma nova consulta ao banco,
+nunca reformatando o texto da resposta. Isso garante paridade byte a
+byte entre o que a conversa mostrou e o que a planilha contém, inclusive
+anos depois (mesmo que o dado subjacente do ERP mude, a planilha de uma
+conversa antiga continua mostrando exatamente o que foi mostrado na
+hora) — uma garantia mais forte que "consultar de novo e torcer para
+bater". `GET /conversas/:id/mensagens/:mensagemId/xlsx` verifica dono da
+conversa e devolve 404 (nunca uma planilha vazia/inventada) quando a
+mensagem não tem card visual. Nome do arquivo segue o mesmo padrão de
+`routes/relatorios.js` (ex.: `relatorio-caixas-2026-07-26-a-2026-08-25.xlsx`).
+Abas: "Resumo" (sempre), "Dados" (só quando há tabela), "Gráficos" (só
+quando há gráfico — como dado em tabela, não gráfico nativo do Excel:
+ver `05-problemas-conhecidos.md`).
+
+**5) Correções de infraestrutura de desenvolvimento (sandbox), sem risco
+de produção** — descobertas ao implementar os itens acima, nenhuma delas
+altera o que roda no Render (que instala os pacotes npm reais):
+- **`exceljs` era um stub praticamente inútil** (`server/node_modules/`,
+  nunca commitado/publicado) — `addRow().getCell` não existia,
+  `writeBuffer()` devolvia buffer vazio. Reescrito como um modelo de
+  planilha em memória de verdade (Workbook/Worksheet/Row/Cell/Column,
+  `addRow`/`getCell`/`getRow`/`columns`/`eachRow` etc.) — necessário
+  porque nenhuma etapa anterior deste projeto tinha um teste que
+  exercitasse de verdade uma rota de exportação XLSX (o próprio código
+  antigo já previa essa lacuna, comentário deixado por uma etapa
+  anterior). Verificado sem regressão contra a função `gerarXlsxGenerico`
+  já existente em `routes/relatorios.js` (que já usava esse stub antes
+  desta tarefa e nunca tinha sido testada de ponta a ponta).
+- **Stub do Express não tinha `router.use()`** (só
+  `get/post/put/patch/delete`) — necessário para
+  `router.use(exigirLogin)`. Adicionado `Router.prototype.use`, e
+  corrigido um bug latente no `dispatchStack` que forçava todo layer de
+  um router montado a `type: 'route'`, o que quebraria silenciosamente
+  qualquer middleware (`type: 'mw'`) dentro de um router — corrigido
+  antes de virar falha de teste.
+- Ambas as mudanças ficam só em `server/node_modules/` (nunca
+  commitadas/publicadas) — o Render de produção continua instalando os
+  pacotes reais do `package.json`, que já têm essas funções.
+
+**Verificação feita nesta etapa:** suíte completa com Postgres real —
+**251/251 testes passando** (3 arquivos novos: `test/iaAuth.test.js` —
+hash/senha e sessão; `test/iaEstrutura.test.js` — os 13 adaptadores,
+inclusive paridade numérica exata com a entrada sintética; e
+`test/iaGestoraRoutes.test.js` — 12 testes de integração HTTP completa,
+com IA mockada só na chamada à Anthropic, cobrindo: login errado/certo,
+cookie/sessão, pergunta sem login (401), pergunta simples sem card,
+análise completa com card + download da planilha comparado campo a campo
+com a resposta da conversa (a prova da paridade planilha/conversa), KPI
+comparado número a número com o cálculo independente de
+`resumirPeriodo`, listar/continuar conversa, **isolamento entre dois
+usuários reais**, exclusão em cascata das mensagens, **sobrevivência a
+reiniciar o processo do servidor** (fecha o servidor de teste, recarrega
+`routes/iaGestora.js` do zero, confirma que a conversa e a sessão
+continuam acessíveis — prova de que nada fica só em memória), planilha
+ausente devolve 404 (nunca inventada), e logout revoga a sessão de
+verdade. `git diff`/revisão manual confirmam que nenhum módulo de cálculo
+financeiro (`lib/relatorioVendas.js`, `lib/dre.js`, `lib/contasPagar.js`,
+`lib/contasReceber.js`, `lib/relatoriosAgregados.js`, `lib/ads.js` etc.)
+foi alterado nesta etapa — só leitura da saída já pronta deles.
+
+**Arquivos alterados/criados nesta etapa:** `db/schema.sql` (3 tabelas +
+1 coluna nova); `lib/auth/senha.js`, `lib/auth/sessoes.js`,
+`lib/auth/cookies.js`, `lib/auth/middleware.js`, `db/criarUsuarioIa.js`
+(todos novos); `lib/ia/estrutura.js`, `lib/ia/planilhaAnalise.js` (novos);
+`lib/ia/ferramentas.js` (+1 ferramenta), `lib/ia/orchestrator.js` (+regra
+7, monta `estrutura`), `lib/ia/baseConhecimento.js` (2 textos
+desatualizados corrigidos); `routes/iaGestora.js` (reescrita completa —
+login, conversas, planilha); `public/index.html` (tela da IA Gestora
+reescrita: login, sidebar de conversas, card visual, botão de planilha —
+nenhuma outra tela/módulo do front-end alterada);
+`server/node_modules/exceljs/index.js`, `server/node_modules/express/index.js`
+(stubs de dev, nunca publicados); `test/iaAuth.test.js`,
+`test/iaEstrutura.test.js`, `test/iaGestoraRoutes.test.js` (novos). Por
+pedido explícito do usuário, nenhum módulo de cálculo financeiro e
+nenhuma outra tela/rota do ERP foi alterada nesta etapa.
+
+## 2026-08-25 (29) — Conectar a Shopee ao ERP (Open Platform v2 — só autorização, estável e testada; SEM pedidos/estoque/Ads/financeiro)
+
+Pedido do usuário, em 3 passos, com a constraint de ler a documentação e
+"preservar tudo que já está funcionando com Mercado Livre" antes de
+alterar qualquer coisa: (1) preparar a integração — usar a Shopee Open
+Platform **oficial e atual** (nunca endpoint antigo/documentação
+desatualizada), credenciais só no backend (Partner ID, Partner Key, URL de
+callback), nunca no front-end nem no GitHub; (2) fazer o botão "Conectar
+Shopee" funcionar de verdade (OAuth real: ERP → autorização oficial →
+loja autorizada → volta conectado), salvando Shop ID, nome da loja,
+empresa/CNPJ vinculada, access token, refresh token, expiração, status e
+última atualização — tokens só no backend; (3) testar e manter a conexão
+(visualizar loja/Shop ID/empresa/status/última sincronização, renovar
+token automaticamente, sobreviver a um reinício do servidor). Explícito:
+**"Não importe pedidos ainda"**, **"Não implemente estoque, Ads, Full ou
+financeiro da Shopee nesta tarefa"**, "Primeiro quero UMA loja Shopee
+conectada e estável."
+
+**Por que Open Platform v2 (não PKCE, diferente do Mercado Livre) —
+`lib/shopee.js`:** a Shopee assina CADA chamada com HMAC-SHA256 (parâmetro
+`sign`, chave = Partner Key, que nunca sai do servidor) sobre uma "base
+string" que varia por tipo de chamada — "public" (`partner_id + path +
+timestamp`, usada pela URL de autorização e pelas trocas de token, porque
+ainda não existe/não é necessário um token específico de loja nesses 3
+casos) e "shop" (mesma base + `access_token + shop_id`, usada por qualquer
+chamada sobre uma loja já autorizada, ex.: `shop/get_shop_info`). A Shopee
+também não usa PKCE nem tem parâmetro `state` nativo na URL de
+autorização — a proteção CSRF foi embutida na própria `redirect` URL
+(`.../callback?state=XYZ`), que a Shopee preserva e devolve junto com
+`code`/`shop_id`.
+
+**Limitação de verificação, registrada com transparência (mesmo espírito
+do caso "User Products" do Estoque — ver `05-problemas-conhecidos.md`):**
+não foi possível abrir `open.shopee.com` (documentação oficial) direto
+deste ambiente de desenvolvimento — o acesso à internet aqui é
+restrito a um conjunto de domínios permitidos, e o domínio oficial da
+Shopee não está nesse conjunto. O algoritmo de assinatura acima foi
+cruzado com múltiplas fontes de terceiros nesta etapa (guias de
+integração, e principalmente o SDK open-source `congminh1254/shopee-sdk`,
+que documenta os nomes exatos de campo — `access_token`, `refresh_token`,
+`expire_in` — usados em todo `lib/shopee.js`) até convergirem no mesmo
+desenho, mas nenhuma chamada foi feita contra um Partner ID/Partner Key
+reais (esta sessão não tem nenhum). Se a Shopee responder "wrong sign" (ou
+erro de assinatura equivalente) numa chamada ao vivo, o primeiro lugar a
+conferir é a função `assinar()` em `lib/shopee.js` — testar primeiro
+contra o ambiente de testes da Shopee (`SHOPEE_HOST=partner.test-stable.
+shopeemobile.com`), como a própria Shopee recomenda.
+
+**Chave de criptografia PRÓPRIA da Shopee (`lib/shopeeCrypto.js`, nunca
+`lib/crypto.js`):** mesmo algoritmo AES-256-GCM já usado pelo Mercado
+Livre, mas com uma variável de ambiente separada (`SHOPEE_TOKEN_KEY`, não
+`ML_TOKEN_KEY`) — decisão deliberada de segurança (um segredo nunca
+depende do outro) e também a forma mais segura de garantir "preservar tudo
+que já está funcionando com Mercado Livre": `lib/crypto.js` não foi
+tocado, nem uma linha.
+
+**Renovação de token PROATIVA (`lib/shopeeTokenScheduler.js`), diferente
+do padrão "sob demanda" do Mercado Livre (`lib/mlSync.js#
+getContaComTokenValido`):** o Mercado Livre renova o token só na hora de
+usá-lo, o que funciona porque a sincronização de pedidos already usa o
+token o tempo todo. Como esta etapa explicitamente NÃO importa pedidos da
+Shopee, não existe nenhuma outra chamada periódica que naturalmente
+manteria o token da Shopee em uso — sem uma renovação proativa, o
+access_token (válido 4h) e mais tarde o próprio refresh_token (que
+também expira sem uso) deixariam a conexão morrer sozinha, contrariando o
+pedido do usuário ("para que a conexão não pare quando o access token
+expirar"). Por isso um ciclo próprio, rodando no servidor a cada 30
+minutos (configurável via `SHOPEE_TOKEN_RENOVACAO_INTERVALO_MS`), renova
+qualquer loja `ativa` cujo token vença em menos de 60 minutos — folga
+confortável (30min de intervalo < 60min de margem) pra nunca deixar passar
+o vencimento. Mesmo padrão de isolamento de erro do `lib/syncScheduler.js`
+do Mercado Livre (Promise.allSettled — uma loja falhando nunca impede as
+demais nem os próximos ciclos).
+
+**Banco de dados** (`shopee_contas`, `shopee_oauth_states` — ver
+`db/schema.sql`): mesmo desenho de `ml_contas`/`ml_oauth_states`, com os
+nomes adaptados ao vocabulário da Shopee (`shopee_shop_id`, `shop_name`,
+`region`). `ultima_sincronizacao_em` existe na tabela mas fica sempre
+`NULL` nesta etapa (reservado para quando a importação de pedidos da
+Shopee for pedida) — mesmo padrão já usado para preparar estrutura sem
+inventar dado (ex.: `produtos_base`/`produto_base_skus`, criadas numa
+etapa e só usadas de verdade numa etapa posterior).
+
+**Efeito colateral necessário, fora dos 3 passos pedidos mas preservando
+a regra "nunca inventar/nunca informação falsa":** `lib/
+visaoGeralPainel.js#conexoesEEmpresas` tinha `shopee: {contasConectadas:
+0, status: 'nao_conectado'}` **hardcoded** desde a criação da parte
+inferior de Visão Geral (entrada 21) — comentário no próprio código já
+dizia "já estruturado pra virar real automaticamente quando essa
+integração existir". Como essa integração passou a existir nesta etapa,
+deixar o valor hardcoded faria o painel "Conexões & Empresas" mostrar uma
+mentira (Shopee sempre desconectada mesmo depois de conectar uma loja de
+verdade) — o mesmo tipo de problema que a regra "nunca inventar" existe
+pra evitar, só que ao contrário (esconder um dado real, não inventar um
+falso). Corrigido para consultar `shopee_contas` de verdade, mesma lógica
+de status já usada para o Mercado Livre (`ativa`/`erro`/`desconectada`/
+`sem_conta`) — `public/index.html` (bloco "Conexões & Empresas")
+atualizado a par disso. Nenhuma outra regra de Visão Geral mudou.
+
+**Descoberta e correção no stub local de Express (só ambiente de
+desenvolvimento/teste, nunca produção — `server/node_modules/express/
+index.js`):** ao escrever os testes de HTTP real para as rotas de OAuth da
+Shopee (primeira vez que qualquer rota de OAuth deste projeto — Mercado
+Livre incluído — foi exercitada via requisição HTTP real neste ambiente),
+descobriu-se que o stub mínimo de Express (criado porque este ambiente não
+tem acesso ao registry do npm — ver `05-problemas-conhecidos.md`) nunca
+implementou `res.redirect()`, `req.get()` nem `req.protocol`. Isso nunca
+tinha sido notado porque nenhum teste anterior batia `/conectar`/
+`/callback` via HTTP real (nem do Mercado Livre, nem de mais nada) — só
+testes de unidade/integração de banco. As 3 funções foram adicionadas ao
+stub, fielmente ao comportamento do Express real (`res.redirect(url)` ou
+`res.redirect(status, url)`; `req.get(nome)` lendo o header
+case-insensitive; `req.protocol` = `https` atrás de `X-Forwarded-Proto`
+ou TLS direto, `http` senão). Zero risco de produção: o stub nunca é
+commitado nem enviado no zip de deploy (Render instala o `express` real do
+npm, versão fixada em `package.json`) — o efeito é só que, a partir de
+agora, rotas de OAuth (Mercado Livre e Shopee) também podem ser testadas
+via HTTP real nesta sessão.
+
+**Testado nesta etapa (Postgres real, sem chamada real à Shopee — mesma
+limitação de sempre, sem Partner ID/Key reais nesta sessão): 24 testes
+novos em `test/shopee.test.js`** (227 testes no total no projeto com
+Postgres, 0 falhas) — assinatura HMAC (bate com cálculo manual
+independente, tipos "public" e "shop"), troca/renovação de token (`fetch`
+mockado simulando a API da Shopee), erro de negócio da Shopee (HTTP 200
+com `error` no corpo) sempre vira exceção, ciclo de renovação automática
+(isolamento de erro, nunca renova token longe do vencimento, nunca inclui
+loja com status=erro), "reconexão após reiniciar o servidor" (módulo
+recarregado do zero, sem nenhum estado em memória, continua renovando a
+partir só do que está no Postgres), e as 5 rotas HTTP reais (Express real
++ Postgres real, API da Shopee mockada): autorização, retorno pro ERP,
+armazenamento da conexão (Shop ID/nome/empresa/tokens criptografados/
+expiração/status), reconectar a mesma loja nunca duplica linha, e
+renovação manual via botão. **Continua não sendo possível testar contra a
+Shopee real** (sem Partner ID/Partner Key de produção nesta sessão) — ver
+`05-problemas-conhecidos.md` e `06-proximos-passos.md` para o checklist de
+verificação ao vivo, pendente de execução pelo usuário depois de
+configurar as credenciais reais.
+
+**Arquivos novos:** `server/lib/shopee.js`, `server/lib/shopeeCrypto.js`,
+`server/lib/shopeeTokenScheduler.js`, `server/routes/shopee.js`,
+`server/test/shopee.test.js`. **Arquivos alterados:** `server/db/
+schema.sql` (2 tabelas novas), `server/server.js` (registro da rota +
+início do ciclo de renovação), `server/lib/visaoGeralPainel.js` e
+`server/public/index.html` (efeito colateral necessário acima),
+`server/test/visaoGeralPainel.test.js` (2 testes ajustados ao dado real).
+**Nenhum arquivo do Mercado Livre foi alterado** (`lib/mercadolivre.js`,
+`lib/mlSync.js`, `lib/crypto.js`, `lib/pkce.js`, `lib/syncScheduler.js`,
+`routes/integracoes.js`) — confirmado por diff antes de finalizar.
+
 ## 2026-08-25 (28) — IA Gestora ganha capacidade de RACIOCÍNIO e PROJEÇÃO (raciocínio matemático sobre dado real, nunca "não tenho essa funcionalidade")
 
 Pedido do usuário: corrigir um comportamento observado — ao perguntar "Pode
