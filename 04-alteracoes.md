@@ -2,6 +2,71 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-26 (36) — Redesign visual do ERP (dark premium) — só layout/CSS, nenhuma regra de negócio tocada
+- **Pedido do usuário:** aplicar o novo design visual (5 imagens de
+  referência: Pedidos, IA Gestora, Financeiro, Visão Geral, Performance de
+  Anúncios) com uma regra explícita — "REFATORAÇÃO VISUAL, não
+  REFATORAÇÃO DO SISTEMA": nenhuma API, rota de backend, cálculo,
+  integração ou estrutura de dados poderia mudar. **Confirmado ao final:**
+  nenhum arquivo em `server/routes/`, `server/lib/` ou `server/db/` foi
+  tocado nesta sessão (conferido por data de modificação — só
+  `server/public/index.html` mudou). Suite completa: **331/331 testes
+  passando** (com `DATABASE_URL` apontando pro Postgres real de dev,
+  incluindo os testes de integração) em todo ponto de checagem.
+- **Design tokens globais:** paleta escura "graphite" com cobre/laranja
+  como cor primária, azul petróleo e roxo/magenta como cores de apoio
+  (`--petrol`, `--purple` e variações `-soft`/`-strong`) adicionadas aos
+  três blocos de tema (`:root` escuro padrão, `@media
+  prefers-color-scheme:light`, `:root[data-theme="light"]`) — usadas
+  depois em todos os KPIs/gráficos novos abaixo.
+- **Financeiro (dashboard consolidado):** corrigido bug de layout onde os
+  links "Ver todas"/"Ver demonstrativo completo" viravam células extras
+  soltas no grid (agora ficam dentro do próprio card); corrigido overflow
+  silencioso da mini-tabela de Recebimentos (3 colunas cortadas sem
+  scrollbar visível mesmo em telas grandes); nova classe `.fin-grid-3` com
+  larguras de coluna ajustadas.
+- **Pedidos:** nova linha de KPIs (Pedidos, Vendas, Margem R$/%, Ticket
+  médio, Cancelados) reaproveitando o endpoint já existente
+  `GET /api/relatorios/resumo-vendas` (mesmo dado que Visão Geral já usa —
+  nenhuma rota nova, nenhum cálculo novo); o modal de detalhe do pedido
+  virou um painel lateral deslizante (`#sidePanelRoot`, novo container,
+  para não arriscar quebrar os outros ~10 módulos que usam `#modalRoot`) —
+  a lógica de busca e montagem do conteúdo do pedido é a mesma de antes,
+  só mudou o container visual.
+- **Performance de Anúncios, Visitas e Conversão, Margem por Anúncio:**
+  linha de KPIs, 2 rankings (top 5) e 1 gráfico de barras novos em cada
+  tela — todos "soma de exibição" (soma/média/razão de valores que o
+  backend já retornava por linha, documentado inline no código) e sempre
+  com estado vazio honesto ("Dado não disponível", "margem incompleta",
+  "Ads pendente", "Sem dados suficientes") em vez de zero fabricado —
+  verificado com screenshot no dado real (esparso) da empresa de teste.
+- **IA Gestora:** layout mudou de 2 colunas pra 3 (Conversas | Chat |
+  painel direito), igual à referência. Painel direito novo com "Insights
+  principais" (4 KPIs — Faturamento, Margem média, Ticket médio, Pedidos —
+  reaproveitando o mesmo `resumo-vendas` já usado em Pedidos, sem "vs.
+  período anterior" porque esse endpoint não traz comparação, então não
+  foi inventada) e "O que precisa da minha atenção hoje" (o Radar da IA já
+  existente, que antes só aparecia na tela vazia do chat e sumia ao
+  conversar — agora fica sempre visível). A lógica de conversa, histórico,
+  login e o card de resposta (`cardHTML`) da IA não foram tocados.
+- **Demais telas (Marketplaces, Produtos, Anúncios, Fornecedores, Compras,
+  Ads, Relatórios e outras):** achado e corrigido um bug visual real e
+  antigo — o `<select>` de filtro por empresa/loja (`.empresa-picker
+  select`) nunca tinha estilo próprio e caía no visual padrão branco do
+  navegador, destoando do tema escuro em quase toda tela do sistema. Uma
+  única correção de CSS (reaproveitando o estilo já existente de `.field
+  select`) resolveu em todas as telas de uma vez — nenhum HTML/JS mudou.
+- **Não implementado, por decisão consciente de não arriscar backend/
+  lógica** (ver `02-decisoes.md` (36) para o porquê de cada um):
+  aba "Fixadas/Recentes" e busca de conversas na IA Gestora (não existe
+  esse dado no backend); painel "Resumo executivo" da IA Gestora (exigiria
+  chamar a IA automaticamente ao abrir a tela, hoje ela só responde quando
+  o usuário pergunta); Visão Geral e Alertas & IA ficaram como estavam
+  (já bem alinhadas ao novo design, sem necessidade de mudança).
+- **Entrega:** `git push` continua bloqueado nesta sessão (ver
+  `05-problemas-conhecidos.md`) — entregue via zip, como nas sessões
+  anteriores.
+
 ## 2026-08-26 (35) — Correção real do "Não foi possível carregar" + capa/foto, Ads atribuído separado, identidade centralizada
 - **Pedido do usuário:** as 3 telas novas (item (34) abaixo) não estavam
   funcionando de verdade em produção — "Antes de modificar o visual,

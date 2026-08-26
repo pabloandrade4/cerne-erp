@@ -3,6 +3,75 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-26 (36) — Redesign visual: onde a linha "só visual" foi traçada
+
+- **Regra usada em toda decisão desta sessão:** o usuário pediu
+  explicitamente para tratar isso como "REFATORAÇÃO VISUAL, não
+  REFATORAÇÃO DO SISTEMA" e para parar e avisar antes de qualquer mudança
+  visual que exigisse tocar backend/regra de negócio. Cada decisão abaixo
+  foi resolvida assim: dá pra fazer só com CSS/HTML/reaproveitando um
+  endpoint que já existe? Faz. Precisaria de rota nova, campo novo numa
+  resposta de API existente, ou comportamento novo (ex.: IA respondendo
+  sozinha)? Não faz — registra aqui e informa no resumo final.
+
+- **Por que Pedidos não ganhou um campo `resumo` na resposta de
+  `GET /api/pedidos`, mesmo sendo puramente aditivo:** a função que
+  calcularia esse resumo (`resumirPeriodo()`) já existe e já está pronta,
+  sem uso nessa rota — teria sido trivial e resultado num campo novo,
+  nunca quebrando quem já consome essa resposta. Mesmo assim, a regra do
+  usuário foi "não altere... estruturas de dados" da API — então em vez
+  disso a tela de Pedidos passou a chamar `GET /api/relatorios/resumo-vendas`
+  (a mesma rota que Visão Geral já usa), uma segunda chamada do
+  front-end em vez de uma mudança na rota existente.
+
+- **Por que o painel "Insights principais" da IA Gestora reaproveita esse
+  mesmo endpoint (`resumo-vendas`) em vez de inventar um cálculo:** é
+  leitura pura (GET), já testado e usado em produção por 3 telas
+  diferentes (Visão Geral, Pedidos, Financeiro) — reaproveitar o mesmo
+  dado garante que a IA Gestora nunca mostra um número diferente do resto
+  do sistema pro mesmo período/empresa. O card não mostra "vs. período
+  anterior" (como na imagem de referência) porque esse endpoint não
+  calcula comparação com período anterior — mostrar isso exigiria uma
+  segunda chamada e um cálculo novo só pra essa tela; decidido deixar de
+  fora em vez de inventar.
+
+- **Por que o painel "Resumo executivo" da referência da IA Gestora não
+  foi implementado:** na imagem de referência é um parágrafo gerado
+  (linguagem natural, não um número formatado) — mostrar algo assim exigiria
+  ou (a) inventar o texto no front-end (nunca aceitável — a IA "falaria"
+  algo que não disse), ou (b) chamar a IA automaticamente toda vez que a
+  tela abre, o que muda o comportamento atual (hoje ela só processa/
+  responde quando o usuário pergunta algo) e teria custo/efeito colateral
+  novo. Como isso não é "só visual", ficou de fora — o usuário pode pedir
+  isso como funcionalidade nova depois, com escopo próprio.
+
+- **Por que a sidebar de Conversas não ganhou busca nem abas "Fixadas/
+  Recentes" (presentes na imagem de referência):** conferido no backend
+  (`routes/iaGestora.js`) que não existe conceito de conversa fixada — só
+  criar/listar/abrir/excluir. Adicionar esses controles sem uma lógica
+  real por trás seria decoração que não funciona (uma aba "Fixadas" que
+  nunca fixa nada). Deixado de fora até existir esse dado.
+
+- **Por que o Radar da IA (painel "O que precisa da minha atenção hoje")
+  virou permanente em vez de só aparecer na tela vazia do chat:** o dado
+  (`state.radar`, `GET /radar-resumo`) já existia e já era carregado toda
+  vez que a tela abre — só nunca ficava visível depois da primeira
+  pergunta. Mover pro painel lateral fixo é puramente de posição/CSS,
+  sem nenhuma mudança na leitura ou no cálculo do radar.
+
+- **Por que Visão Geral e Alertas & IA não mudaram nesta sessão:** na
+  varredura de todas as telas "demais" contra o novo sistema de design,
+  as duas já usavam integralmente os componentes/tokens já revisados
+  (cards de KPI, paleta escura, cores por tinta) — mudar por mudar sem um
+  problema real identificado não estava dentro do pedido.
+
+- **Por que o bug do `<select>` branco foi corrigido mesmo sem estar em
+  nenhuma das 5 imagens de referência:** é uma inconsistência visual real,
+  generalizada (afeta ~12 telas) e a correção é uma única regra de CSS
+  reaproveitando um estilo que já existe e já é usado em outro lugar do
+  mesmo arquivo — risco equivalente a zero, e diretamente a favor do
+  pedido "mesmo design system em toda tela".
+
 ## 2026-08-26 (35) — Diagnóstico com acesso real de produção, endpoint clássico de Ads, identidade centralizada
 
 - **Diagnosticar com dado real em vez de suposição:** o usuário pediu
