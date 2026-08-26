@@ -419,6 +419,17 @@
   .chart-empty p{ margin:0; font-size:12px; color:var(--text-muted); line-height:1.45; }
   .chart-empty .ghost-btn{ margin-top:3px; }
 
+  /* ---- Fluxo de Caixa: bloco da fórmula (saldo + entradas - saídas = projetado) ---- */
+  .formula-box{ display:flex; flex-direction:column; gap:2px; }
+  .formula-row{ display:grid; grid-template-columns:22px 1fr auto; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px dashed var(--border); }
+  .formula-row:last-child{ border-bottom:none; }
+  .formula-sinal{ font-weight:700; color:var(--text-faint); text-align:center; }
+  .formula-label{ font-size:12.5px; color:var(--text-muted); }
+  .formula-valor{ font-size:13px; font-weight:700; white-space:nowrap; }
+  .formula-total{ margin-top:4px; padding-top:11px; border-top:2px solid var(--border-strong); border-bottom:none; }
+  .formula-total .formula-label{ color:var(--text); font-weight:700; }
+  .formula-total .formula-valor{ font-size:15px; }
+
   /* ---- Connections / integrations panel ---- */
   .progress-track{ height:6px; border-radius:4px; background:var(--surface-2); border:1px solid var(--border); overflow:hidden; margin:10px 0 14px; }
   .progress-fill{ height:100%; border-radius:4px; background:var(--copper); width:0%; transition:width .3s ease; }
@@ -985,6 +996,10 @@
         bullets:['Faturamento por empresa e canal','Faturamento por produto','Metas e comparativos','Projeção de faturamento'] },
       { id:'invoices', title:'Notas Fiscais', icon:'fileText', action:'Emitir NF-e', desc:'Emissão e gestão de notas fiscais vinculadas aos pedidos.',
         bullets:['Emissão de NF-e por pedido','Status de autorização na SEFAZ','Cancelamentos e cartas de correção','Vínculo com transportadoras'] },
+      { id:'fixedExpenses', title:'Despesas Fixas', icon:'refreshCw', action:'Nova despesa fixa', desc:'Despesas recorrentes da empresa (aluguel, salários, pró-labore, sistemas, contador, energia, internet e outras).',
+        bullets:['Frequência mensal, semanal ou anual','Ativação e desativação sem perder histórico','Gera a Conta a Pagar automaticamente a cada período','Nunca duplica: cada ocorrência vira 1 única conta a pagar'] },
+      { id:'cashFlow', title:'Fluxo de Caixa', icon:'activity', action:'Definir saldo inicial', desc:'Evolução diária do caixa, separando sempre o que já ACONTECEU (realizado) do que é só PREVISTO (projetado).',
+        bullets:['Saldo inicial informado pelo usuário — nunca inventado','Contas a pagar/receber + despesas fixas previstas, sem duplicar','Recebimentos previstos dos marketplaces separados (sem data certa)','7/15/30 dias, este mês, próximo mês ou período personalizado'] },
     ]},
     { id:'analise', label:'Análise', open:false, items:[
       { id:'ads', title:'Ads', icon:'megaphone', action:'Conectar Ads', desc:'Investimento e retorno das campanhas de publicidade dentro dos marketplaces.',
@@ -1065,7 +1080,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','ads','reports','iaGestora'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','reports','iaGestora'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1085,6 +1100,10 @@
       inner += '<button class="primary-btn enabled" id="btnNewContaPagar" type="button">'+svg('plus')+'<span>Nova conta a pagar</span></button>';
     } else if(id === 'receivable'){
       inner += '<button class="primary-btn enabled" id="btnNewContaReceber" type="button">'+svg('plus')+'<span>Nova conta a receber</span></button>';
+    } else if(id === 'fixedExpenses'){
+      inner += '<button class="primary-btn enabled" id="btnNewDespesaFixa" type="button">'+svg('plus')+'<span>Nova despesa fixa</span></button>';
+    } else if(id === 'cashFlow'){
+      inner += '<button class="ghost-btn" id="btnSaldoInicialFluxoCaixa" type="button" style="cursor:pointer;opacity:1;">'+svg('wallet')+'<span>Definir saldo inicial</span></button>';
     } else if(id !== 'overview' && !REAL_MODULES.includes(id)){
       inner += '<button class="primary-btn" disabled>'+svg('plus')+'<span>'+(p.action||'Em breve')+'</span></button>';
     }
@@ -1108,6 +1127,8 @@
     else if(id === 'dre'){ inner += '<div id="dreRoot"></div>'; }
     else if(id === 'billing'){ inner += '<div id="faturamentoRoot"></div>'; }
     else if(id === 'invoices'){ inner += '<div id="notasFiscaisRoot"></div>'; }
+    else if(id === 'fixedExpenses'){ inner += '<div id="despesasFixasRoot"></div>'; }
+    else if(id === 'cashFlow'){ inner += '<div id="fluxoCaixaRoot"></div>'; }
     else if(id === 'ads'){ inner += '<div id="adsRoot"></div>'; }
     else if(id === 'reports'){ inner += '<div id="relatoriosRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
@@ -1149,6 +1170,8 @@
     if(id === 'dre' && window.DRE) window.DRE.load();
     if(id === 'billing' && window.Faturamento) window.Faturamento.load();
     if(id === 'invoices' && window.NotasFiscais) window.NotasFiscais.load();
+    if(id === 'fixedExpenses' && window.DespesasFixas) window.DespesasFixas.load();
+    if(id === 'cashFlow' && window.FluxoCaixa) window.FluxoCaixa.load();
     if(id === 'ads' && window.Ads) window.Ads.load();
     if(id === 'reports' && window.Relatorios) window.Relatorios.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
@@ -4947,6 +4970,630 @@
     }
 
     window.Recebimentos = { load };
+  })();
+
+  /* ================= DESPESAS FIXAS — cadastro de despesas recorrentes =================
+     Ativado em 25/08/2026 (ver docs/04-alteracoes.md). Usa o filtro do
+     HEADER (só empresa — window.CerneFiltro.state.empresaId; despesa fixa
+     não tem período, é um cadastro, igual Empresas/Fornecedores/Produtos).
+     Uma despesa fixa é só o MOLDE — quem representa dinheiro de verdade é a
+     Conta a Pagar gerada automaticamente em segundo plano (ver
+     server/lib/despesasFixasScheduler.js); o botão "Gerar agora" força um
+     ciclo imediato pra quem acabou de cadastrar não precisar esperar. */
+  (function(){
+    const FREQ_LABEL = { mensal:'Mensal', semanal:'Semanal', anual:'Anual' };
+    const DIA_SEMANA_LABEL = { 1:'Segunda-feira', 2:'Terça-feira', 3:'Quarta-feira', 4:'Quinta-feira', 5:'Sexta-feira', 6:'Sábado', 7:'Domingo' };
+    const state = { loading:false, error:null, despesas:[], ativoFiltro:'todos', geracaoAutomatica:null, gerandoAgora:false };
+    let categoriasSugeridas = null;
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+    function hojeBRT(){
+      const BRT_OFFSET_MS = 3*60*60*1000;
+      const brt = new Date(Date.now() - BRT_OFFSET_MS);
+      const p = n => String(n).padStart(2,'0');
+      return brt.getUTCFullYear()+'-'+p(brt.getUTCMonth()+1)+'-'+p(brt.getUTCDate());
+    }
+    function diaDaSemanaISO(dataStr){
+      const [y,m,d] = dataStr.split('-').map(Number);
+      const dow = new Date(Date.UTC(y,m-1,d)).getUTCDay();
+      return dow===0 ? 7 : dow;
+    }
+    function vencimentoLabel(d){
+      if(d.frequencia==='semanal') return DIA_SEMANA_LABEL[d.diaVencimento] || ('Dia '+d.diaVencimento);
+      if(d.frequencia==='anual'){ const [,m] = (d.dataInicio||'').split('-'); const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']; return 'Dia '+d.diaVencimento+'/'+(MESES[Number(m)-1]||''); }
+      return 'Dia '+d.diaVencimento;
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+
+    async function api(path, opts){
+      const res = await fetch('/api/despesas-fixas'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+    async function apiCategorias(){
+      if(categoriasSugeridas) return categoriasSugeridas;
+      try{ const res = await fetch('/api/despesas-fixas/categorias-sugeridas'); categoriasSugeridas = ((await res.json()).categorias)||[]; }
+      catch(e){ categoriasSugeridas = []; }
+      return categoriasSugeridas;
+    }
+
+    async function loadDespesas(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.despesas=[]; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: filtro.empresaId });
+        if(state.ativoFiltro !== 'todos') params.set('ativo', state.ativoFiltro);
+        const data = await api('?'+params.toString());
+        state.despesas = data.despesas;
+        state.geracaoAutomatica = data.geracaoAutomatica;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar as despesas fixas.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    function load(){ loadDespesas(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-fixedExpenses');
+      if(page && page.classList.contains('active')) loadDespesas();
+      else render();
+    });
+
+    function statusGeracaoTexto(g){
+      if(!g) return '';
+      if(g.emExecucao) return 'Gerando agora…';
+      if(!g.ultimaExecucaoEm) return 'Ainda não rodou nenhum ciclo de geração.';
+      const quando = new Date(g.ultimaExecucaoEm).toLocaleString('pt-BR');
+      if(g.ultimoErro) return 'Último ciclo (' + quando + ') falhou: ' + g.ultimoErro;
+      return 'Última verificação: ' + quando + (g.ultimoTotalGeradas ? (' — ' + g.ultimoTotalGeradas + ' conta(s) a pagar gerada(s)') : ' — nenhuma conta nova (já estava tudo gerado)');
+    }
+
+    function render(){
+      const root = document.getElementById('despesasFixasRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de cadastrar despesas fixas.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:760px;">Cada despesa fixa é um molde — a cada período (mensal, semanal ou anual) o sistema gera automaticamente a Conta a Pagar correspondente, sem duplicar caso o ciclo rode mais de uma vez. '+(state.geracaoAutomatica?escapeHtml(statusGeracaoTexto(state.geracaoAutomatica)):'')+'</div>';
+
+      html += '<div class="toolbar">'
+        + '<div class="seg" id="dfSeg">'
+          + [['todos','Todas'],['true','Ativas'],['false','Inativas']].map(function(par){ return '<button data-ativo="'+par[0]+'" class="'+(state.ativoFiltro===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<button class="ghost-btn" id="dfGerarAgora" type="button" style="cursor:pointer;opacity:1;" '+(state.gerandoAgora?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.gerandoAgora?'Gerando…':'Gerar agora')+'</span></button>'
+      + '</div>';
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando despesas fixas…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="dfRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      } else if(!state.despesas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('refreshCw')+'</div>'
+          + '<h2>Nenhuma despesa fixa cadastrada</h2>'
+          + '<p class="lead">Cadastre despesas recorrentes como aluguel, salários, pró-labore, sistemas, contador, energia ou internet — o sistema gera as contas a pagar sozinho a cada período.</p>'
+          + '<button class="primary-btn enabled" id="dfEmptyNew" type="button">'+svg('plus')+'<span>Nova despesa fixa</span></button>'
+        + '</div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Descrição</th><th>Categoria</th><th>Valor</th><th>Frequência</th><th>Vencimento</th><th>Início</th><th>Término</th><th>Status</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.despesas.map(d => '<tr'+(!d.ativo?' style="opacity:.6;"':'')+'>'
+            + '<td>'+escapeHtml(d.descricao)+(d.observacao?'<div class="di-sub">'+escapeHtml(d.observacao)+'</div>':'')+'</td>'
+            + '<td>'+escapeHtml(d.categoria||'—')+'</td>'
+            + '<td class="mono">'+money(d.valor)+'</td>'
+            + '<td>'+(FREQ_LABEL[d.frequencia]||d.frequencia)+'</td>'
+            + '<td>'+vencimentoLabel(d)+'</td>'
+            + '<td class="tab-nums">'+fmtDate(d.dataInicio)+'</td>'
+            + '<td class="tab-nums">'+fmtDate(d.dataFim)+'</td>'
+            + '<td><span class="status-chip" style="color:var(--'+(d.ativo?'success':'text-muted')+');background:'+(d.ativo?'var(--success-soft)':'var(--surface-2)')+';">'+(d.ativo?'Ativa':'Inativa')+'</span></td>'
+            + '<td><div class="row-actions">'
+              + '<button class="row-ic-btn" data-edit="'+d.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
+              + (d.ativo
+                ? '<button class="row-ic-btn" data-desativar="'+d.id+'" title="Desativar" type="button">'+svg('power')+'</button>'
+                : '<button class="row-ic-btn" data-ativar="'+d.id+'" title="Ativar" type="button">'+svg('power')+'</button>')
+              + '<button class="row-ic-btn danger" data-excluir="'+d.id+'" title="Excluir" type="button">'+svg('trash')+'</button>'
+            + '</div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const seg = document.getElementById('dfSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.ativoFiltro = b.dataset.ativo; loadDespesas(); }));
+      const retry = document.getElementById('dfRetry');
+      if(retry) retry.addEventListener('click', loadDespesas);
+      const emptyNew = document.getElementById('dfEmptyNew');
+      if(emptyNew) emptyNew.addEventListener('click', ()=> openModal());
+      const gerarAgora = document.getElementById('dfGerarAgora');
+      if(gerarAgora) gerarAgora.addEventListener('click', async ()=>{
+        state.gerandoAgora = true; render();
+        try{
+          const r = await api('/gerar', { method:'POST', body: JSON.stringify({ empresaId: window.CerneFiltro.state.empresaId }) });
+          toast(r.totalGeradas ? (r.totalGeradas+' conta(s) a pagar gerada(s).') : 'Nada novo para gerar — já estava tudo em dia.');
+          loadDespesas();
+        }catch(err){ toast(err.message, 'error'); }
+        finally{ state.gerandoAgora = false; render(); }
+      });
+
+      root.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=>{
+        const d = state.despesas.find(x=>String(x.id)===b.dataset.edit);
+        if(d) openModal(d);
+      }));
+      root.querySelectorAll('[data-ativar]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{ await api('/'+b.dataset.ativar+'/ativar', { method:'PATCH' }); toast('Despesa fixa ativada.'); loadDespesas(); }
+        catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+      root.querySelectorAll('[data-desativar]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{ await api('/'+b.dataset.desativar+'/desativar', { method:'PATCH' }); toast('Despesa fixa desativada — as contas já geradas continuam intactas.'); loadDespesas(); }
+        catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+      root.querySelectorAll('[data-excluir]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{ await api('/'+b.dataset.excluir, { method:'DELETE' }); toast('Despesa fixa excluída.'); loadDespesas(); }
+        catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+    }
+
+    function openModal(despesa){
+      const isEdit = !!despesa;
+      const modalRoot = document.getElementById('modalRoot');
+      const hoje = hojeBRT();
+      const freq = isEdit ? despesa.frequencia : 'mensal';
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card" style="max-width:600px;">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar despesa fixa':'Nova despesa fixa')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+(isEdit?'Alterar aqui só afeta as PRÓXIMAS ocorrências — contas a pagar já geradas não mudam.':'Preencha os dados da despesa recorrente. O sistema gera a Conta a Pagar automaticamente a cada período.')+'</div>'
+          + '<form id="dfForm">'
+            + '<div class="field"><label>Descrição</label><input type="text" id="fDescricao" placeholder="Ex: Aluguel da sede" value="'+(isEdit?escapeHtml(despesa.descricao):'')+'">'
+              + '<div class="field-error" id="eDescricao" style="display:none;"></div></div>'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Categoria <span class="opt">(opcional)</span></label><input type="text" id="fCategoria" list="dlCategoriasDespesaFixa" value="'+(isEdit?escapeHtml(despesa.categoria||''):'')+'"><datalist id="dlCategoriasDespesaFixa"></datalist></div>'
+              + '<div class="field narrow"><label>Valor</label><input type="text" inputmode="decimal" id="fValor" value="'+(isEdit?String(despesa.valor).replace('.',','):'')+'">'
+                + '<div class="field-error" id="eValor" style="display:none;"></div></div>'
+            + '</div>'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Frequência</label><select id="fFrequencia">'
+                + ['mensal','semanal','anual'].map(function(f){ return '<option value="'+f+'" '+(freq===f?'selected':'')+'>'+FREQ_LABEL[f]+'</option>'; }).join('')
+              + '</select></div>'
+              + '<div class="field narrow" id="wrapDiaVencimento"><label id="labelDiaVencimento">Dia de vencimento</label>'
+                + '<input type="number" min="1" max="31" id="fDiaVencimento" value="'+(isEdit&&despesa.frequencia!=='semanal'?despesa.diaVencimento:'')+'">'
+                + '<div class="field-hint" id="hintDiaVencimento" style="display:none;"></div>'
+                + '<div class="field-error" id="eDiaVencimento" style="display:none;"></div></div>'
+            + '</div>'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Data de início</label><input type="date" id="fDataInicio" value="'+(isEdit?despesa.dataInicio:hoje)+'">'
+                + '<div class="field-error" id="eDataInicio" style="display:none;"></div></div>'
+              + '<div class="field narrow"><label>Data de término <span class="opt">(se houver)</span></label><input type="date" id="fDataFim" value="'+(isEdit&&despesa.dataFim?despesa.dataFim:'')+'">'
+                + '<div class="field-error" id="eDataFim" style="display:none;"></div></div>'
+            + '</div>'
+            + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" value="'+(isEdit?escapeHtml(despesa.observacao||''):'')+'"></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Criar despesa fixa')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+
+      function atualizarCampoDiaVencimento(){
+        const f = document.getElementById('fFrequencia').value;
+        const dataInicio = document.getElementById('fDataInicio').value;
+        const input = document.getElementById('fDiaVencimento');
+        const label = document.getElementById('labelDiaVencimento');
+        const hint = document.getElementById('hintDiaVencimento');
+        if(f === 'semanal'){
+          input.style.display = 'none';
+          label.textContent = 'Dia de vencimento';
+          hint.style.display = 'block';
+          hint.textContent = dataInicio ? ('Toda '+DIA_SEMANA_LABEL[diaDaSemanaISO(dataInicio)]+' (mesmo dia da semana da data de início).') : 'Definido automaticamente pelo dia da semana da data de início.';
+        } else {
+          input.style.display = '';
+          hint.style.display = 'none';
+          label.textContent = f === 'anual' ? 'Dia do mês (mês = mês da data de início)' : 'Dia do mês';
+        }
+      }
+      document.getElementById('fFrequencia').addEventListener('change', atualizarCampoDiaVencimento);
+      document.getElementById('fDataInicio').addEventListener('change', atualizarCampoDiaVencimento);
+      atualizarCampoDiaVencimento();
+
+      apiCategorias().then(categorias=>{
+        const dl = document.getElementById('dlCategoriasDespesaFixa');
+        if(dl) dl.innerHTML = categorias.map(function(c){ return '<option value="'+escapeHtml(c)+'"></option>'; }).join('');
+      });
+
+      document.getElementById('dfForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eDescricao','eValor','eDiaVencimento','eDataInicio','eDataFim'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+
+        const frequencia = document.getElementById('fFrequencia').value;
+        const dataInicio = document.getElementById('fDataInicio').value;
+        const payload = {
+          empresaId: window.CerneFiltro.state.empresaId,
+          descricao: document.getElementById('fDescricao').value,
+          categoria: document.getElementById('fCategoria').value,
+          valor: Number(document.getElementById('fValor').value.replace(',','.')),
+          frequencia,
+          diaVencimento: frequencia === 'semanal' ? diaDaSemanaISO(dataInicio || hoje) : Number(document.getElementById('fDiaVencimento').value),
+          dataInicio,
+          dataFim: document.getElementById('fDataFim').value || null,
+          observacao: document.getElementById('fObservacao').value,
+        };
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/'+despesa.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Despesa fixa atualizada.' : 'Despesa fixa criada.');
+          loadDespesas();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            let mostrou = false;
+            ['descricao','valor','diaVencimento','dataInicio','dataFim'].forEach(function(campo){
+              if(err.errors[campo]){
+                const elId = 'e'+campo.charAt(0).toUpperCase()+campo.slice(1);
+                if(document.getElementById(elId)){ const el=document.getElementById(elId); el.textContent=err.errors[campo]; el.style.display='block'; mostrou = true; }
+              }
+            });
+            if(!mostrou) toast(err.message, 'error');
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    document.getElementById('btnNewDespesaFixa').addEventListener('click', ()=> openModal());
+
+    window.DespesasFixas = { load };
+  })();
+
+  /* ================= FLUXO DE CAIXA — evolução diária do caixa =================
+     Ativado em 25/08/2026 (ver docs/04-alteracoes.md e docs/02-decisoes.md).
+     Usa a empresa do filtro do HEADER (window.CerneFiltro.state.empresaId),
+     mas tem PERÍODO PRÓPRIO (7/15/30 dias, este mês, próximo mês, período
+     personalizado) — diferente do período do header (hoje/ontem/7d/30d/mes,
+     que nunca inclui datas futuras): Fluxo de Caixa é sempre uma projeção
+     pra FRENTE, então precisa do próprio filtro (ver lib/fluxoCaixa.js).
+     REALIZADO x PROJETADO sempre separados visualmente; "Saldo atual"/
+     "Saldo projetado" só aparecem se o usuário informar um saldo inicial —
+     o ERP não tem integração bancária real, nunca inventa esse número. */
+  (function(){
+    const PERIODO_OPCOES = [
+      ['7d','7 dias'], ['15d','15 dias'], ['30d','30 dias'],
+      ['mes','Este mês'], ['proximoMes','Próximo mês'], ['personalizado','Personalizado'],
+    ];
+    const state = { loading:false, error:null, periodoChave:'30d', desdePersonalizado:null, atePersonalizado:null, dados:null };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function moneyOuIndisponivel(campo){
+      if(!campo || campo.valor===null || campo.valor===undefined) return '<span class="dash" title="Informe o saldo inicial para calcular">Não informado</span>';
+      return money(campo.valor);
+    }
+    function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+    function fmtDiaCurto(diaISO){ const [, m, d] = diaISO.split('-'); return d+'/'+m; }
+    function hojeBRT(){
+      const BRT_OFFSET_MS = 3*60*60*1000;
+      const brt = new Date(Date.now() - BRT_OFFSET_MS);
+      const p = n => String(n).padStart(2,'0');
+      return brt.getUTCFullYear()+'-'+p(brt.getUTCMonth()+1)+'-'+p(brt.getUTCDate());
+    }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+
+    async function api(path, opts){
+      const res = await fetch('/api/fluxo-caixa'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+
+    async function loadFluxo(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.dados=null; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: state.periodoChave });
+        if(state.periodoChave === 'personalizado'){
+          params.set('desde', state.desdePersonalizado || hojeBRT());
+          params.set('ate', state.atePersonalizado || hojeBRT());
+        }
+        state.dados = await api('?'+params.toString());
+      }catch(err){ state.error = err.message || 'Não foi possível carregar o fluxo de caixa.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    function load(){
+      if(!state.desdePersonalizado) state.desdePersonalizado = hojeBRT();
+      if(!state.atePersonalizado) state.atePersonalizado = hojeBRT();
+      loadFluxo();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-cashFlow');
+      if(page && page.classList.contains('active')) loadFluxo();
+      else render();
+    });
+
+    // ---- cards de topo ----
+    function cardHTML(k){
+      return '<div class="kpi-hero" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
+        + '<div class="kpi-hero-label">'+escapeHtml(k.label)+'</div>'
+        + '<div class="kpi-hero-value">'+k.valueHtml+'</div>'
+        + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
+      + '</div>';
+    }
+    function cardsHTML(dados){
+      const c = dados.cards;
+      const items = [
+        { label:'Saldo atual', icon:'wallet', tint: c.saldoAtual.valor===null?'muted':(c.saldoAtual.valor>=0?'success':'danger'), valueHtml: moneyOuIndisponivel(c.saldoAtual), note:'Hoje, a partir do saldo inicial informado' },
+        { label:'Entradas previstas', icon:'arrowDownCircle', tint:'success', valueHtml: money(c.entradasPrevistas), note:'A receber no período selecionado — ainda não é dinheiro disponível' },
+        { label:'Saídas previstas', icon:'arrowUpCircle', tint:'copper', valueHtml: money(c.saidasPrevistas), note:'Contas a pagar + despesas fixas previstas no período' },
+        { label:'Saldo projetado', icon:'activity', tint: (c.saldoProjetado.valor===null?'muted':(c.saldoProjetado.valor>=0?'success':'danger')), valueHtml: moneyOuIndisponivel(c.saldoProjetado), note:'Saldo estimado ao final do período — nunca dinheiro garantido' },
+        { label:'Contas vencidas', icon:'alertCircle', tint: c.contasVencidas>0?'danger':'muted', valueHtml: money(c.contasVencidas), note:'A pagar vencidas + a receber atrasadas (saldo em aberto, agora)' },
+      ];
+      return '<div class="kpi-hero-grid">' + items.map(cardHTML).join('') + '</div>';
+    }
+
+    // ---- fórmula (exatamente como pedido: saldo + contas a receber + recebimentos marketplace - contas a pagar - despesas fixas = saldo projetado) ----
+    function formulaHTML(dados){
+      const f = dados.resumoFormula;
+      const linha = (label, valorHtml, sinal) => '<div class="formula-row"><span class="formula-sinal">'+(sinal||'')+'</span><span class="formula-label">'+label+'</span><span class="formula-valor mono">'+valorHtml+'</span></div>';
+      return '<div class="chart-card" style="margin-bottom:14px;">'
+        + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('barChart')+'</span>Como o saldo projetado é calculado</div></div>'
+        + '<div class="formula-box">'
+          + linha('Saldo inicial / atual', moneyOuIndisponivel(f.saldoInicialOuAtual))
+          + linha('Contas a receber (no período)', money(f.contasAReceber), '+')
+          + linha('Recebimentos previstos dos marketplaces', money(f.recebimentosPrevistosMarketplaces), '+')
+          + linha('Contas a pagar (no período)', money(f.contasAPagar), '−')
+          + linha('Despesas fixas previstas (ainda não geradas em Contas a Pagar)', money(f.despesasFixasPrevistas), '−')
+          + '<div class="formula-row formula-total"><span class="formula-sinal">=</span><span class="formula-label">Saldo projetado</span><span class="formula-valor mono">'+moneyOuIndisponivel(f.saldoProjetado)+'</span></div>'
+        + '</div>'
+        + '<div class="field-hint" style="margin-top:10px;">Recebimentos previstos dos marketplaces entram só no total acima — o Mercado Livre não informa a data de liberação (ver tela Recebimentos), então esse valor nunca é encaixado num dia específico do gráfico abaixo, pra nunca inventar uma data.'
+          + (dados.recebimentosMarketplaces && dados.recebimentosMarketplaces.quantidade ? (' ('+dados.recebimentosMarketplaces.quantidade+' pedido(s) no período.)') : '')
+        + '</div>'
+      + '</div>';
+    }
+
+    // ---- gráfico: evolução do saldo de caixa (REALIZADO sólido, PROJETADO tracejado) ----
+    function chartSaldoHTML(dados){
+      const dias = dados.serieDiaria;
+      const temSaldo = dias.some(d => d.saldoAcumulado !== null && d.saldoAcumulado !== undefined);
+      if(!dias.length || !temSaldo){
+        return '<div class="chart-canvas h-lg">' + chartGridLines(4)
+          + chartEmptyState('wallet', 'Informe o saldo inicial para ver a evolução do caixa — sem isso o ERP não inventa nenhum saldo.', 'Definir saldo inicial')
+        + '</div>';
+      }
+      const n = dias.length;
+      const W = Math.max(n*14, 14), H = 100, topPad = 10, botPad = 10;
+      const usable = H - topPad - botPad;
+      const vals = dias.map(d => d.saldoAcumulado||0);
+      const maxV = Math.max(0, ...vals), minV = Math.min(0, ...vals);
+      const range = (maxV - minV) || 1;
+      const yFor = v => topPad + usable * (1 - (v - minV) / range);
+      const baseY = yFor(0);
+
+      const pontos = dias.map((d,i)=> ({ x:i*14+7, y:yFor(d.saldoAcumulado||0), d }));
+      const realizadoPts = pontos.filter(p=>!p.d.ehPassado || p.d.ehHoje).length ? pontos.filter(p=>p.d.ehPassado || p.d.ehHoje) : [];
+      // ponto de corte: tudo até (e incluindo) hoje é REALIZADO/já conhecido; a partir do dia seguinte é PROJETADO
+      let corte = pontos.findIndex(p=>p.d.ehHoje);
+      if(corte === -1) corte = dias[0].ehPassado ? pontos.length-1 : -1; // período inteiro no passado ou inteiro futuro
+      const solidos = corte===-1 ? [] : pontos.slice(0, corte+1);
+      const tracejados = corte===-1 ? pontos : pontos.slice(corte);
+
+      const linhaSolida = solidos.length>1 ? '<polyline points="'+solidos.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="var(--teal)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>' : '';
+      const linhaTracejada = tracejados.length>1 ? '<polyline points="'+tracejados.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="var(--copper)" stroke-width="2" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>' : '';
+      const dots = pontos.map(p=>{
+        const label = fmtDiaCurto(p.d.dia)+' — '+(p.d.ehPassado||p.d.ehHoje?'Realizado':'Projetado')+': '+money(p.d.saldoAcumulado);
+        return '<circle cx="'+p.x+'" cy="'+p.y+'" r="1.8" fill="'+(p.d.ehPassado||p.d.ehHoje?'var(--teal)':'var(--copper)')+'" vector-effect="non-scaling-stroke"><title>'+escapeHtml(label)+'</title></circle>';
+      }).join('');
+      const baseline = '<line x1="0" y1="'+baseY+'" x2="'+W+'" y2="'+baseY+'" stroke="var(--border-strong)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+
+      const labelStep = Math.max(1, Math.ceil(n/9));
+      const labels = dias.map((d,i) => '<span>'+((i%labelStep===0 || i===n-1) ? escapeHtml(fmtDiaCurto(d.dia)) : '')+'</span>').join('');
+
+      return '<div class="chart-canvas" style="position:relative;height:200px;padding:0;">'
+        + '<svg class="simple-chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:100%;">'
+          + baseline + linhaSolida + linhaTracejada + dots
+        + '</svg>'
+      + '</div>'
+      + '<div class="simple-chart-xlabels" style="grid-template-columns:repeat('+n+',1fr);">' + labels + '</div>';
+    }
+    function chartCardHTML(dados){
+      return '<div class="chart-card" style="margin-bottom:14px;">'
+        + '<div class="chart-card-head">'
+          + '<div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Evolução do saldo de caixa</div>'
+          + '<div class="chart-legend">'
+            + '<span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>Realizado</span>'
+            + '<span class="legend-item"><span class="legend-dot" style="background:var(--copper)"></span>Projetado</span>'
+            + '<span class="panel-note">'+(dados.periodo?escapeHtml(dados.periodo.label):'')+'</span>'
+          + '</div>'
+        + '</div>'
+        + chartSaldoHTML(dados)
+      + '</div>';
+    }
+
+    // ---- tabela diária REALIZADO x PROJETADO ----
+    function tabelaDiariaHTML(dados){
+      const dias = dados.serieDiaria;
+      if(!dias.length) return '';
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Dia</th><th>Situação</th><th>Entradas realizadas</th><th>Saídas realizadas</th><th>Entradas projetadas</th><th>Saídas projetadas</th><th>Saldo acumulado</th>'
+        + '</tr></thead><tbody>'
+        + dias.map(d => '<tr'+(d.ehHoje?' style="background:var(--surface-2);"':'')+'>'
+          + '<td class="tab-nums">'+fmtDate(d.dia)+(d.ehHoje?' <span class="status-chip" style="margin-left:6px;color:var(--teal);background:var(--teal-soft);">Hoje</span>':'')+'</td>'
+          + '<td><span class="status-chip" style="'+(d.ehPassado||d.ehHoje?'color:var(--teal);background:var(--teal-soft);':'color:var(--copper);background:var(--copper-soft);')+'">'+(d.ehPassado||d.ehHoje?'Realizado':'Projetado')+'</span></td>'
+          + '<td class="mono">'+(d.realizado.entradas?money(d.realizado.entradas):'—')+'</td>'
+          + '<td class="mono">'+(d.realizado.saidas?money(d.realizado.saidas):'—')+'</td>'
+          + '<td class="mono">'+(d.projetado.entradas?money(d.projetado.entradas):'—')+'</td>'
+          + '<td class="mono">'+(d.projetado.saidas?money(d.projetado.saidas):'—')+'</td>'
+          + '<td class="mono">'+(d.saldoAcumulado===null?'<span class="dash">Não informado</span>':money(d.saldoAcumulado))+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    function periodoSeletorHTML(){
+      let html = '<div class="toolbar"><div class="seg" id="fcSeg">'
+        + PERIODO_OPCOES.map(function(par){ return '<button data-periodo="'+par[0]+'" class="'+(state.periodoChave===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+      + '</div></div>';
+      if(state.periodoChave === 'personalizado'){
+        html += '<div class="inline-form" style="margin-top:0;margin-bottom:14px;align-items:flex-end;">'
+          + '<div class="field narrow"><label>De</label><input type="date" id="fcDesde" value="'+(state.desdePersonalizado||'')+'"></div>'
+          + '<div class="field narrow"><label>Até</label><input type="date" id="fcAte" value="'+(state.atePersonalizado||'')+'"></div>'
+          + '<button class="ghost-btn" id="fcAplicar" type="button" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Aplicar</span></button>'
+        + '</div>';
+      }
+      return html;
+    }
+
+    function render(){
+      const root = document.getElementById('fluxoCaixaRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de ver o fluxo de caixa.</p></div>';
+        return;
+      }
+
+      let html = periodoSeletorHTML();
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando fluxo de caixa…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="fcRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      } else if(!state.dados){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('activity')+'</div><h2>Selecione uma empresa</h2></div>';
+      } else {
+        html += cardsHTML(state.dados)
+          + formulaHTML(state.dados)
+          + chartCardHTML(state.dados)
+          + tabelaDiariaHTML(state.dados);
+      }
+
+      root.innerHTML = html;
+
+      const seg = document.getElementById('fcSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.periodoChave = b.dataset.periodo; loadFluxo(); }));
+      const retry = document.getElementById('fcRetry');
+      if(retry) retry.addEventListener('click', loadFluxo);
+      const aplicar = document.getElementById('fcAplicar');
+      if(aplicar) aplicar.addEventListener('click', ()=>{
+        state.desdePersonalizado = document.getElementById('fcDesde').value || hojeBRT();
+        state.atePersonalizado = document.getElementById('fcAte').value || hojeBRT();
+        loadFluxo();
+      });
+      root.querySelectorAll('.chart-empty [disabled]').forEach(b=> { b.disabled=false; b.style.cursor='pointer'; b.style.opacity='1'; b.addEventListener('click', abrirModalSaldoInicial); });
+    }
+
+    function abrirModalSaldoInicial(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ toast('Selecione uma empresa primeiro.', 'error'); return; }
+      const modalRoot = document.getElementById('modalRoot');
+      const hoje = hojeBRT();
+      const atual = state.dados && state.dados.saldoInicial;
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card" style="max-width:520px;">'
+          + '<div class="modal-head"><div class="modal-title">Definir saldo inicial</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">Informado por você — o ERP não tem integração bancária, então nunca calcula esse número sozinho. A partir daqui, o Fluxo de Caixa soma o que já foi realmente pago/recebido e o que está previsto.</div>'
+          + '<form id="fcSaldoForm">'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Valor do saldo</label><input type="text" inputmode="decimal" id="fSaldoValor" placeholder="Ex: 15000,00" value="'+(atual?String(atual.valor).replace('.',','):'')+'">'
+                + '<div class="field-error" id="eSaldoValor" style="display:none;"></div></div>'
+              + '<div class="field narrow"><label>Data de referência</label><input type="date" id="fSaldoData" value="'+(atual?atual.dataReferencia:hoje)+'">'
+                + '<div class="field-error" id="eSaldoData" style="display:none;"></div></div>'
+            + '</div>'
+            + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fSaldoObs" placeholder="Ex: extrato do banco X em '+hoje+'" value="'+(atual&&atual.observacao?escapeHtml(atual.observacao):'')+'"></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Salvar saldo inicial</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+
+      document.getElementById('fcSaldoForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eSaldoValor','eSaldoData'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+        const payload = {
+          empresaId: filtro.empresaId,
+          valor: Number(document.getElementById('fSaldoValor').value.replace(',','.')),
+          dataReferencia: document.getElementById('fSaldoData').value,
+          observacao: document.getElementById('fSaldoObs').value,
+        };
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          await api('/saldo-inicial', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast('Saldo inicial salvo.');
+          loadFluxo();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            if(err.errors.valor){ const el=document.getElementById('eSaldoValor'); el.textContent=err.errors.valor; el.style.display='block'; }
+            if(err.errors.dataReferencia){ const el=document.getElementById('eSaldoData'); el.textContent=err.errors.dataReferencia; el.style.display='block'; }
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    const btnSaldo = document.getElementById('btnSaldoInicialFluxoCaixa');
+    if(btnSaldo) btnSaldo.addEventListener('click', abrirModalSaldoInicial);
+
+    window.FluxoCaixa = { load };
   })();
 
   /* ================= DRE — Demonstrativo de Resultado do Exercício =================
