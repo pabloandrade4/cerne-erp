@@ -3,6 +3,76 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-26 (35) — Diagnóstico com acesso real de produção, endpoint clássico de Ads, identidade centralizada
+
+- **Diagnosticar com dado real em vez de suposição:** o usuário pediu
+  explicitamente "descubra e corrija a causa real desse erro" e "não deixe
+  apenas uma mensagem genérica". Em vez de tentar reproduzir o erro só
+  localmente, usado o acesso real (disponível nesta sessão) ao Postgres de
+  produção (Supabase) e aos logs reais do serviço no Render — encontrado o
+  stack trace exato do crash (`MODULE_NOT_FOUND` na pasta `routes/`).
+  Confirmado clonando o próprio repositório do GitHub (leitura anônima —
+  funciona mesmo com `git push` bloqueado nesta sessão, técnica útil pra
+  próximas sessões: `git clone --depth 5 <repo> /tmp/algum-lugar` deixa
+  inspecionar exatamente o que está publicado, sem depender de memória de
+  sessões anteriores).
+
+- **Por que um fallback de endpoint, e não trocar de vez para o formato
+  clássico:** a decisão foi manter o endpoint "novo" (Global Selling) como
+  primeira tentativa (é o documentado como atual pelo Mercado Livre) e só
+  cair pro formato clássico (`/v1/{advertiser_id}/product_ads/items`)
+  quando o novo responde 404 — nunca em outros códigos de erro (401/403 é
+  problema de acesso, não de endpoint errado; 500 é problema do servidor
+  do Mercado Livre). Registrar qual formato funcionou (`formatoEndpoint`)
+  em vez de esconder a diferença. Fonte usada para o formato clássico:
+  `developers.mercadolivre.com.br/en_us/product-ads-us-read` (a doc do
+  domínio novo, `global-selling.mercadolibre.com`, bloqueia acesso
+  automatizado com 403 — mas essa página legada continua acessível e
+  documenta exatamente esse endpoint, com o mesmo shape de resposta que o
+  parser já esperava).
+
+- **Por que "Ads atribuído" nunca entra no cálculo de resultado real —
+  pedido explícito do usuário:** o Mercado Ads atribui cliques/vendas a
+  campanhas usando sua própria janela de atribuição, que não é a mesma
+  coisa que "esta venda real aconteceu". Misturar os dois inflaria (ou
+  reduziria, dependendo do caso) o resultado real de forma que não bate
+  com o que entrou no caixa de verdade. Por isso os dois ficam sempre
+  visualmente separados na tela e nunca somados no back-end — mesmo que
+  isso signifique mostrar dois números de "cliques"/["vendas atribuídas"]
+  que um usuário desatento poderia querer somar à margem.
+
+- **Por que a imagem nunca é reenviada ao Mercado Livre nem salva no ERP —
+  pedido explícito do usuário ("nunca reenviar imagem duplicada"):** o
+  campo `imagemUrl` guarda só a URL (`secure_thumbnail`/`thumbnail`) que já
+  vem do catálogo ao vivo do Mercado Livre a cada consulta — o `<img>` no
+  front-end carrega direto dessa URL. Nenhum download/upload de arquivo de
+  imagem acontece neste ERP. Trade-off consciente: se o Mercado Livre
+  trocar a imagem do anúncio, a próxima consulta já reflete isso
+  automaticamente (não existe uma cópia desatualizada guardada em lugar
+  nenhum) — mas também significa que, se a API estiver fora do ar, a
+  imagem também fica indisponível (mesmo racional já usado pra preço/
+  status ao vivo).
+
+- **Por que `resolverIdentidade()` prioriza o título do catálogo ao vivo
+  sobre o título gravado na venda:** antes desta correção, cada tela
+  montava sua própria versão de "qual é o título deste anúncio" com uma
+  lógica ligeiramente diferente (uma preferia o título da venda, outra o
+  vivo) — exatamente o problema que o usuário apontou ("não quero cada
+  página construindo uma versão diferente do mesmo anúncio"). Decisão:
+  quando o catálogo ao vivo está disponível, ele é a fonte de verdade (é o
+  título atual, o vendedor pode ter renomeado o anúncio depois da venda);
+  o título da venda histórica só é usado como último recurso, quando a
+  conta está sem conexão válida com o Mercado Livre.
+
+- **Limitação aceita conscientemente:** nenhuma verificação desta correção
+  pôde ser feita contra uma resposta real da API do Mercado Livre — o
+  ambiente de desenvolvimento não tem saída de rede para
+  `api.mercadolibre.com` (confirmado com um teste de conectividade direto,
+  timeout). Tudo que envolve o Mercado Livre de verdade (capa real,
+  fallback de endpoint de Ads contra uma resposta real, visitas reais)
+  precisa ser conferido pelo usuário depois do deploy — ver
+  `05-problemas-conhecidos.md`.
+
 ## 2026-08-26 (34) — Três abas novas em Análise: Performance de Anúncios, Visitas e Conversão, Margem por Anúncio
 
 - **Pedido do usuário, "Pare depois dessas 3 abas", "Não altere outros

@@ -695,6 +695,49 @@ número estimado.**
   limiares por terço do próprio conjunto filtrado (documentados em
   `server/lib/margemAnuncio.js`).
 
+### Correção do erro "Não foi possível carregar" + identidade centralizada (26/08/2026, tarde)
+- **As 3 telas ficaram fora do ar em produção** (não era um bug de lógica:
+  o deploy manual no GitHub esqueceu de subir a pasta `routes/` das 3
+  telas novas, o servidor caía no boot com `MODULE_NOT_FOUND` e uma
+  instância antiga sem essas telas continuava servindo — daí o erro
+  genérico no front-end). Ver `04-alteracoes.md` (35) e
+  `05-problemas-conhecidos.md` para o diagnóstico completo e a instrução
+  de deploy corrigida.
+- **Capa/foto do anúncio:** as 3 telas agora mostram a miniatura real
+  (`secure_thumbnail`/`thumbnail` do catálogo ao vivo do Mercado Livre,
+  nunca reenviada/duplicada no ERP — só exibida por URL). Sem imagem
+  disponível → placeholder discreto (ícone neutro), nunca um espaço vazio
+  quebrado nem um erro. Clicar na miniatura OU no título abre o mesmo
+  modal de detalhe.
+- **Identidade centralizada (`resolverIdentidade` em
+  `server/lib/anunciosBase.js`):** as 3 telas agora resolvem
+  item_id/imagem/SKU/loja/título a partir da MESMA função, para nunca
+  construir uma versão diferente do mesmo anúncio em cada tela. O título
+  agora prioriza o catálogo ao vivo do Mercado Livre (mais atual) sobre o
+  título gravado na venda histórica, quando os dois existem.
+- **Visitas e Conversão ganhou a coluna Faturamento** (fazia parte do
+  pedido original e não tinha sido incluída).
+- **Margem por Anúncio — Ads separado em dois blocos, nunca misturados:**
+  "Ads (atribuído pelo Mercado Ads)" (cliques, impressões, CTR/CVR/ROAS/
+  ACOS e faturamento que o próprio Mercado Ads atribui à campanha — dado
+  informativo da plataforma de Ads) é mostrado ao lado de, mas nunca
+  somado com, o "Resultado real após Ads" (que continua sendo só: Margem
+  de contribuição − investimento em Ads, ambos vindos das vendas reais).
+  Anúncio sem Ads sincronizado ainda mostra o texto literal **"Ads
+  pendente"** nos dois blocos, e a margem antes do Ads continua sendo
+  calculada normalmente independente disso. Também ganhou a coluna
+  Pedidos (só tinha quantidade vendida).
+- **Bug real de produção corrigido em `server/lib/mlAds.js`:** o endpoint
+  "novo"/Global Selling de Product Ads
+  (`/marketplace/advertising/{site}/advertisers/{id}/product_ads/ads`)
+  respondia 404 mesmo para um anunciante confirmado (conta real
+  PFEMBALAGEMS, advertiser_id 753060) — API do Mercado Livre com uma
+  incompatibilidade real, não um erro deste ERP. Corrigido com um
+  fallback: tenta o endpoint novo primeiro, e SÓ num 404 (nunca em 401/
+  403/500) tenta o formato clássico (`/v1/{advertiser_id}/product_ads/
+  items`). Ver `02-decisoes.md` para os detalhes e a fonte da
+  documentação usada.
+
 ## DRE
 - **Ativado em 24/08/2026.** Nenhuma fórmula financeira nova — é a mesma
   fonte única já usada em Visão Geral/Pedidos/Financeiro/Relatórios

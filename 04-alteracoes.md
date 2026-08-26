@@ -2,6 +2,104 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-26 (35) — Correção real do "Não foi possível carregar" + capa/foto, Ads atribuído separado, identidade centralizada
+- **Pedido do usuário:** as 3 telas novas (item (34) abaixo) não estavam
+  funcionando de verdade em produção — "Antes de modificar o visual,
+  descubra e corrija a causa real desse erro." Só estes 3 passos, sem
+  alterar outros módulos.
+- **Causa raiz encontrada com evidência real, não suposição:** usando
+  acesso (novo nesta sessão) ao Postgres real de produção (Supabase,
+  projeto "cais erp") e aos logs reais do serviço no Render, confirmado
+  que o servidor de produção caía no boot com
+  `Error: Cannot find module './routes/performanceAnuncios'`
+  (`MODULE_NOT_FOUND`). Clonando o repositório real do GitHub
+  (`pabloandrade4/cerne-erp`, só leitura — `git push` continua bloqueado
+  nesta sessão, ver `05-problemas-conhecidos.md`) confirmou que o último
+  upload manual pro GitHub esqueceu a pasta `server/routes/` das 3 telas
+  novas (`performanceAnuncios.js`, `visitasConversao.js`,
+  `margemAnuncio.js`) — `lib/` e `public/index.html` já tinham subido
+  certo, só faltou `routes/`. Uma instância nova do Render entrava em
+  crash-loop a cada ~4s enquanto uma instância antiga (sem essas 3 telas)
+  continuava respondendo — por isso o front-end só mostrava o erro
+  genérico "Não foi possível carregar", nunca a causa real. **Corrigido:**
+  zip de entrega desta vez conferido explicitamente para conter TODA a
+  pasta `server/routes/`, com instrução clara pro usuário subir a pasta
+  inteira (não só os arquivos novos).
+- **Capa/foto real do anúncio (pedido explícito):** `lib/mlAnuncios.js`
+  passa a pedir `thumbnail,secure_thumbnail` na API de Anúncios e expor
+  `imagemUrl` (`secure_thumbnail` prioritário, https). As 3 telas mostram
+  essa miniatura (36px, 64px no modal) — nunca reenviada/duplicada no ERP,
+  só referenciada por URL; placeholder discreto quando a API não retorna
+  imagem. Clicar na miniatura OU no título abre o mesmo modal de detalhe
+  (comportamento já existente, agora também no clique da imagem).
+- **Identidade centralizada — pedido explícito ("as 3 páginas precisam
+  conversar entre si"):** nova função `resolverIdentidade()` em
+  `server/lib/anunciosBase.js`, usada pelas 3 telas (`performanceAnuncios.js`,
+  `visitasConversao.js` e, novidade, `margemAnuncio.js` — que antes nunca
+  consultava o catálogo ao vivo do Mercado Livre) pra resolver item_id/
+  imagem/SKU/loja/título sempre da mesma forma. Testado com um caso de
+  integração novo que compara a mesma linha nas 3 telas e falha se
+  divergir.
+- **`server/lib/visitasConversao.js`:** adicionado o campo `faturamento`
+  por linha (fazia parte do pedido original e tinha ficado de fora) + 2
+  ordenações novas ("muitas visitas + poucas vendas", "poucas visitas +
+  boa conversão").
+- **Bug real de produção encontrado e corrigido em `server/lib/mlAds.js`:**
+  usando o `detalhe_api` gravado na última tentativa real da conta
+  PFEMBALAGEMS (advertiser_id 753060, Mercado Ads), confirmado que o
+  endpoint "novo"/Global Selling de Product Ads
+  (`/marketplace/advertising/{site}/advertisers/{id}/product_ads/ads`)
+  responde 404 mesmo com o anunciante já confirmado — incompatibilidade
+  real da API do Mercado Livre pra esta conta, não um bug deste ERP.
+  Corrigido com um fallback documentado: tenta sempre o endpoint novo
+  primeiro; SÓ num 404 (nunca em 401/403/500 — não faria sentido tentar
+  outro caminho pra um erro de acesso) tenta o formato clássico
+  (`/v1/{advertiser_id}/product_ads/items`, `/v1/{advertiser_id}/
+  product_ads/campaigns` — endpoint documentado em
+  `developers.mercadolivre.com.br/en_us/product-ads-us-read`, já que o
+  domínio novo `global-selling.mercadolibre.com` bloqueia acesso
+  automatizado). Registra qual formato funcionou (`formatoEndpoint`).
+  Testado com `test/mlAdsFallback.test.js` (5 casos, mockando a API — sem
+  rede real).
+- **Bug real encontrado e corrigido em `motivoDeErro()` (mesmo arquivo):**
+  um 404 na listagem de Ads DEPOIS do anunciante já confirmado estava
+  sendo rotulado como "Nenhuma conta de anunciante encontrada" — mensagem
+  factualmente errada, já que o anunciante FOI encontrado. Corrigido com
+  um novo motivo (`sem_anuncios_ads`) que cita o advertiser_id real.
+- **`server/lib/margemAnuncio.js` — Ads atribuído separado do resultado
+  real (pedido explícito):** cada linha agora tem um bloco `adsAtribuido`
+  (campanha, cliques, impressões, CTR/CVR/ROAS/ACOS, faturamento atribuído
+  — tudo vindo da própria API do Mercado Ads) que NUNCA entra no cálculo
+  de `resultadoAposAds`/`margemAposAdsPct` (esse continua sendo só: margem
+  de contribuição das vendas reais menos o investimento real em Ads).
+  Texto "Ads pendente" (literal, pedido do usuário) quando ainda não há
+  Ads sincronizado pro anúncio — a margem antes do Ads é calculada
+  normalmente mesmo assim. Também ganhou o campo `quantidadePedidos`
+  (antes só tinha unidades vendidas).
+- **Testes:** suíte completa do projeto **332/332 passando** (0 falha —
+  confirma que nenhum outro módulo quebrou), incluindo os novos
+  `test/mlAdsFallback.test.js` (5) e os casos novos em
+  `test/anunciosAnaliseBase.test.js` (identidade) e
+  `test/anunciosAnalise.integration.test.js` (imagemUrl, Ads separado,
+  identidade cruzada entre Performance e Margem).
+- **Bug visual encontrado e corrigido durante o teste manual (Playwright):**
+  a nova célula de miniatura + título (`.anuncio-cell-flex`) quebrava o
+  título palavra por palavra em ~10 linhas — o algoritmo automático de
+  largura de coluna da `<table>` espremia essa coluna pra caber as demais.
+  Corrigido travando a largura máxima da célula e truncando o título com
+  reticências (mesma ideia que a tabela de Pedidos já usa, agora escopada
+  só em `.anuncio-cell-flex` pra não alterar nenhuma tabela existente).
+- **Testado com dados reais (empresa 900, 6 anúncios reais) e os 4 filtros
+  de período (Hoje, 7 dias, 30 dias, Este mês):** todos retornando dado
+  correto nas 3 rotas. Faturamento, tarifas, frete do vendedor e imposto
+  de um anúncio real conferidos à mão contra `ml_pedidos`/
+  `ml_pedido_itens`/`config_financeiro` — bateram exatos (ver
+  `05-problemas-conhecidos.md` para o que NÃO pôde ser testado nesta
+  sessão: capa real, preço/status ao vivo, visitas reais e o fallback de
+  Ads contra uma resposta real da API — o ambiente de desenvolvimento não
+  tem acesso de rede ao Mercado Livre).
+- **Conforme pedido, nenhum outro módulo foi alterado nesta tarefa.**
+
 ## 2026-08-26 (34) — Análise ganha 3 abas: Performance de Anúncios, Visitas e Conversão, Margem por Anúncio
 - **Pedido do usuário, "Pare depois dessas 3 abas":** 3 telas novas dentro
   do grupo Análise, cada anúncio real do Mercado Livre analisado

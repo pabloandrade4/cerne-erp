@@ -3,43 +3,55 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
-## Análise por Anúncio: formato real da resposta da API de Visitas não verificado; contas de teste com token expirado; teste `financeiro.test.js` pré-existente falhando por data (26/08/2026)
-- **Formato exato da resposta de `GET /items/visits` não conferido contra
-  uma chamada real:** as 2 contas do Mercado Livre disponíveis neste
-  ambiente de desenvolvimento (empresas 8 e 900) estão com `status='erro'`
-  (token expirado), então toda chamada real à API de Visitas
-  (`server/lib/mlVisitas.js`) falhou com erro de autenticação nesta sessão
-  — nunca uma resposta de sucesso pra conferir o formato exato do JSON. O
-  parsing (`interpretarResposta`) foi escrito defensivamente, tentando os
-  formatos mais prováveis descritos na documentação oficial pesquisada
-  (`developers.mercadolivre.com.br/pt_br/recurso-visits` e
-  `global-selling.mercadolibre.com/devsite/visits`) — se o formato real
-  vier diferente, o anúncio fica com "Dado não disponível" (nunca quebra,
-  nunca inventa um número), mas o número pode aparecer indisponível mesmo
-  quando a API teria o dado. **Ação necessária:** assim que uma conta com
-  token válido e Product Ads/anúncios reais estiver disponível, chamar
-  `GET /items/visits?ids=...&date_from=...&date_to=...` manualmente e
-  comparar com `interpretarResposta` em `lib/mlVisitas.js`, ajustando o
-  parsing se o formato divergir. O mesmo vale para
-  `GET /users/{id}/items_visits/time_window` (série diária agregada, usada
-  nos gráficos).
-- **Preço/status/estoque ao vivo (Performance de Anúncios) e catálogo
-  completo (`buscarTodosAnunciosDaConta`) também não testados contra uma
-  resposta real**, pelo mesmo motivo (token expirado) — o comportamento
-  testado e confirmado foi o de indisponibilidade (`conta_com_erro`),
-  nunca a leitura de um catálogo real paginado.
-- **Teste pré-existente `test/financeiro.test.js` com 5 falhas,
-  encontradas nesta sessão mas SEM RELAÇÃO com esta tarefa** (não
-  alterado, "Não altere outros módulos" respeitado): os testes "cria conta
-  vencida (vencimento no passado)" e "resumo: atrasado/totalAReceber..."
-  usam uma data relativa (`ontem`) que, neste ambiente, não está batendo
-  com o que `contasPagar.js`/`contasReceber.js` consideram "vencido" no
-  momento do teste — parece um problema de fuso horário/limite de dia
-  (BRT vs. UTC) que só aparece dependendo da hora exata em que a suíte
-  roda, não algo introduzido pelas 3 abas novas (confirmado rodando
-  `node --test test/financeiro.test.js` isoladamente, sem nenhum arquivo
-  desta tarefa carregado). **Ação necessária:** investigar e corrigir
-  numa tarefa própria de Contas a Pagar/Receber, fora do escopo desta.
+## Análise por Anúncio: formato real da resposta da API de Visitas/imagem/Ads não verificado contra uma resposta real (ambiente sem saída de rede pro Mercado Livre); teste `financeiro.test.js` (26/08/2026, atualizado 26/08/2026 à tarde)
+- **RESOLVIDO em 26/08/2026 à tarde:** as 3 telas estavam fora do ar em
+  produção (erro "Não foi possível carregar") por um deploy manual
+  incompleto no GitHub, não por um bug de lógica — ver `04-alteracoes.md`
+  (35) e `02-decisoes.md` (35) para o diagnóstico completo (feito com
+  acesso real ao Postgres/logs de produção) e a correção.
+- **Confirmado nesta sessão: o ambiente de desenvolvimento não tem saída
+  de rede para `api.mercadolibre.com`** (teste direto de conectividade —
+  `curl` deu timeout/conexão recusada). Isso explica por que nenhuma
+  chamada real ao Mercado Livre (visitas, capa/foto, preço/status ao vivo,
+  fallback de endpoint de Ads) pôde ser testada contra uma resposta real
+  nesta sessão nem nas anteriores — não é possível a partir deste sandbox,
+  só depois do deploy real. Os itens abaixo continuam abertos:
+  - **Formato exato da resposta de `GET /items/visits` não conferido
+    contra uma chamada real.** O parsing (`interpretarResposta`) foi
+    escrito defensivamente, tentando os formatos mais prováveis descritos
+    na documentação oficial pesquisada
+    (`developers.mercadolivre.com.br/pt_br/recurso-visits` e
+    `global-selling.mercadolibre.com/devsite/visits`) — se o formato real
+    vier diferente, o anúncio fica com "Dado não disponível" (nunca
+    quebra, nunca inventa um número), mas o número pode aparecer
+    indisponível mesmo quando a API teria o dado. **Ação necessária:**
+    depois do deploy, com uma conta com token válido, chamar
+    `GET /items/visits?ids=...&date_from=...&date_to=...` manualmente e
+    comparar com `interpretarResposta` em `lib/mlVisitas.js`. O mesmo vale
+    para `GET /users/{id}/items_visits/time_window`.
+  - **Capa/foto (`imagemUrl`) e preço/status/estoque ao vivo (catálogo
+    completo, `buscarTodosAnunciosDaConta`) não testados contra uma
+    resposta real** — o comportamento testado e confirmado foi o de
+    indisponibilidade (`conta_com_erro`)/placeholder, nunca a leitura real
+    de uma imagem ou catálogo paginado. **Ação necessária:** conferir
+    depois do deploy que a miniatura mostrada bate com a foto real de
+    cada anúncio no Mercado Livre (checklist do usuário, item 3).
+  - **Fallback de endpoint de Ads (`lib/mlAds.js`, novo → clássico) nunca
+    executou contra uma resposta real de nenhum dos dois formatos** — só
+    testado com a API mockada (`test/mlAdsFallback.test.js`). A decisão de
+    tentar o formato clássico só em 404 foi baseada no `detalhe_api`
+    gravado numa tentativa real anterior (não numa chamada feita nesta
+    sessão). **Ação necessária:** depois do deploy, conferir nos logs do
+    Render qual `formatoEndpoint` está sendo usado de fato pra conta
+    PFEMBALAGEMS e se os dados de Ads aparecem corretos na tela.
+- **Teste pré-existente `test/financeiro.test.js`:** as 5 falhas
+  encontradas na sessão de 26/08/2026 de manhã (sensibilidade a data/fuso,
+  sem relação com esta tarefa) **não se repetiram** rodando a suíte
+  completa de novo nesta sessão (332/332 testes passando, 0 falha) —
+  consistente com a hipótese já registrada de que o problema depende da
+  hora exata em que a suíte roda (BRT vs. UTC), não foi corrigido de
+  propósito. Se voltar a falhar, o diagnóstico já registrado continua
+  valendo.
 - **Correção a uma afirmação anterior desta mesma lista:** a entrada
   "Despesas Fixas / Fluxo de Caixa" abaixo (25/08/2026) diz que este
   ambiente "não tem acesso a um navegador Playwright" — isso estava
@@ -489,9 +501,9 @@ desenvolvimento, para não serem esquecidas.
   precisa diferenciar por tipo/origem do cupom (exigiria mais dado da API,
   possivelmente `/payments/{id}` completo em vez do resumo do pedido).
 
-## Correção de margem (24/08/2026): Row Level Security desligada em todas as tabelas do Supabase de produção
+## Correção de margem (24/08/2026): Row Level Security desligada em todas as tabelas do Supabase de produção — AINDA ABERTO, agora 38 tabelas (atualizado 26/08/2026)
 - Ao investigar os Bugs 1-4 (ver `04-alteracoes.md` (15)), o Supabase
-  reportou que as 21 tabelas do banco de produção estão com Row Level
+  reportou que as tabelas do banco de produção estão com Row Level
   Security (RLS) **desligada** — qualquer requisição com a chave `anon`
   (pública, usada por bibliotecas cliente Supabase) consegue ler ou editar
   qualquer linha de qualquer tabela, sem autenticação nenhuma. O SQL de
@@ -503,8 +515,19 @@ desenvolvimento, para não serem esquecidas.
   funcionamento atual do sistema** — mas é uma porta aberta se a chave
   pública do projeto (`anon key`) algum dia vazar ou for usada em algum
   código cliente. **Precisa de uma decisão do usuário** sobre quando
-  habilitar RLS com as políticas certas (fora do escopo desta correção de
-  margem).
+  habilitar RLS com as políticas certas (continua fora do escopo de toda
+  tarefa feita até agora).
+- **Atualizado em 26/08/2026:** ao consultar o advisor de segurança do
+  Supabase de novo (projeto de produção "cais erp", `hattwcduuhpipygxzmam`)
+  durante o diagnóstico do erro "Não foi possível carregar", o mesmo aviso
+  segue aberto — agora em **38 tabelas** (o banco cresceu desde 24/08 com
+  as tabelas novas de Despesas Fixas, Ads, Análise por Anúncio etc., todas
+  criadas sem RLS, seguindo o padrão já existente). Nenhuma tabela nova
+  desta tarefa mudou esse estado nem foi criada com RLS — só se manteve
+  consistente com o resto do banco. Continua sem aplicação automática
+  (mesmo motivo acima); o SQL de habilitação, quando o usuário decidir
+  aplicar, precisa vir junto com as políticas de acesso por tabela, não só
+  o `ENABLE ROW LEVEL SECURITY`.
 
 ## Unificação Produtos/Custo & Margem: migração de dados ainda não confirmada em produção (24/08/2026)
 - A migração que copia os dados de `custos_produto` (antiga tela "Custo &
