@@ -896,3 +896,81 @@ CREATE TABLE IF NOT EXISTS ads_diario (
   atualizado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (conta_id, data)
 );
+
+-- ============================================================
+-- Etapa: Despesas Fixas + Fluxo de Caixa (25/08/2026)
+-- ============================================================
+--
+-- Despesas fixas são um MODELO de despesa recorrente (aluguel, salários,
+-- pró-labore, sistemas, contador, energia, internet etc.) — não são, elas
+-- mesmas, um lançamento financeiro. A cada ciclo (lib/despesasFixasScheduler.js)
+-- o sistema gera a Conta a Pagar correspondente em contas_pagar, usando a
+-- despesa fixa só como "molde". `categoria` é texto livre, mesma decisão
+-- (e mesma lista sugerida, reaproveitada) de contas_pagar.categoria — sem
+-- plano de contas definido no ERP ainda.
+--
+-- `dia_vencimento`: pro significado depender da frequência —
+--   mensal/anual: dia do mês (1-31; se o mês tiver menos dias, cai no
+--     último dia dele — ver normalizarDiaMes em lib/despesasFixas.js);
+--   semanal: dia da semana ISO (1=segunda...7=domingo), sempre derivado do
+--     dia da semana de data_inicio (nunca escolhido separado, pra nunca
+--     ficar inconsistente com a própria data de início).
+-- Anual usa o MÊS de data_inicio como o mês da ocorrência (só um campo de
+-- dia a mais não faria sentido sem mês; não criamos um segundo campo
+-- "mes_vencimento" pra não duplicar informação que data_inicio já dá).
+--
+-- `ativo`: pedido explícito do usuário ("cadastrar, editar, ativar e
+-- desativar") — uma despesa fixa inativa só para de gerar novas contas a
+-- pagar; nunca apaga nem altera as que já foram geradas (mesmo raciocínio
+-- de imutabilidade do histórico já usado em contas_pagar/contas_receber).
+CREATE TABLE IF NOT EXISTS despesas_fixas (
+  id             SERIAL PRIMARY KEY,
+  empresa_id     INTEGER NOT NULL REFERENCES empresas(id),
+  descricao      VARCHAR(200) NOT NULL,
+  categoria      VARCHAR(100),
+  valor          NUMERIC(12,2) NOT NULL,
+  frequencia     VARCHAR(10) NOT NULL, -- mensal | semanal | anual
+  dia_vencimento INTEGER NOT NULL,
+  data_inicio    DATE NOT NULL,
+  data_fim       DATE,
+  ativo          BOOLEAN NOT NULL DEFAULT true,
+  observacao     TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Vínculo entre a conta a pagar GERADA automaticamente e a despesa fixa que
+-- a originou — coluna adicionada em contas_pagar (tabela já existente,
+-- por isso ALTER + ADD COLUMN IF NOT EXISTS, mesmo padrão já usado neste
+-- arquivo para ml_pedido_pagamentos/produtos_base). NULL pra toda conta a
+-- pagar lançada manualmente (a grande maioria) — só é preenchida pela
+-- geração automática (lib/despesasFixas.js#gerarContasPagarAutomaticas).
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS despesa_fixa_id INTEGER REFERENCES despesas_fixas(id);
+
+-- Trava de não-duplicação (pedido explícito do usuário: "não duplicar
+-- contas caso o processo seja executado mais de uma vez"). Índice único
+-- PARCIAL (só quando despesa_fixa_id não é nulo — contas manuais nunca
+-- competem entre si por essa regra): no máximo 1 conta a pagar por
+-- (despesa fixa, vencimento). A geração automática usa
+-- INSERT ... ON CONFLICT (despesa_fixa_id, vencimento) DO NOTHING — mesma
+-- garantia mesmo se o ciclo rodar 2x seguidas ou em paralelo.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_contas_pagar_despesa_fixa_vencimento
+  ON contas_pagar(despesa_fixa_id, vencimento) WHERE despesa_fixa_id IS NOT NULL;
+
+-- Saldo inicial de caixa, INFORMADO PELO USUÁRIO — nunca lido de um banco
+-- de verdade (o ERP não tem nenhuma integração bancária) e nunca inventado
+-- pelo sistema. Mesma regra já registrada em lib/visaoGeralPainel.js
+-- (fluxoDeCaixa/saldoProjetado): sem uma fonte real de saldo bancário,
+-- qualquer "saldo atual" só pode existir se o próprio usuário informar o
+-- ponto de partida — a partir daí o Fluxo de Caixa soma os movimentos reais
+-- (contas pagas/recebidas) e projetados (contas em aberto) em cima desse
+-- valor. Uma linha por empresa (upsert): só o valor mais recente importa,
+-- não um histórico de todos os ajustes.
+CREATE TABLE IF NOT EXISTS fluxo_caixa_saldo_inicial (
+  empresa_id       INTEGER PRIMARY KEY REFERENCES empresas(id),
+  valor            NUMERIC(14,2) NOT NULL,
+  data_referencia  DATE NOT NULL,
+  observacao       TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);

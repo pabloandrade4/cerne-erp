@@ -544,6 +544,31 @@
   .cell-stack{ display:flex; flex-direction:column; gap:1px; line-height:1.35; }
   .cell-stack-sub{ font-size:10.5px; color:var(--text-faint); }
 
+  /* Miniatura da capa/foto principal do anúncio — usada nas 3 telas de
+     Análise por Anúncio (Performance de Anúncios, Visitas e Conversão,
+     Margem por Anúncio) e no modal de detalhe compartilhado. Pedido
+     explícito do usuário: "miniaturas consistentes e pequenas, sem deixar
+     as tabelas gigantes" — por isso um tamanho fixo pequeno em toda tabela;
+     "placeholder discreto" quando o anúncio não tem imagem disponível (não
+     é um erro, é a ausência normal de um dado que a API não retornou). */
+  .anuncio-thumb{ width:36px; height:36px; border-radius:7px; object-fit:cover; flex-shrink:0; background:var(--surface-2); border:1px solid var(--border-strong); display:block; }
+  .anuncio-thumb-placeholder{ width:36px; height:36px; border-radius:7px; flex-shrink:0; background:var(--surface-2); border:1px solid var(--border-strong); display:flex; align-items:center; justify-content:center; color:var(--text-faint); }
+  .anuncio-thumb-placeholder svg{ width:16px; height:16px; }
+  .anuncio-thumb-lg{ width:64px; height:64px; border-radius:10px; object-fit:cover; flex-shrink:0; background:var(--surface-2); border:1px solid var(--border-strong); display:block; }
+  .anuncio-thumb-lg-placeholder{ width:64px; height:64px; border-radius:10px; flex-shrink:0; background:var(--surface-2); border:1px solid var(--border-strong); display:flex; align-items:center; justify-content:center; color:var(--text-faint); }
+  .anuncio-thumb-lg-placeholder svg{ width:24px; height:24px; }
+  /* Sem isso, o algoritmo de layout automático de <table> espreme a coluna
+     do anúncio (que agora tem miniatura + título) pra caber as outras 11
+     colunas, quebrando o título palavra por palavra em ~10 linhas. Trava a
+     largura máxima da célula e trunca o título com reticências — mesma
+     ideia que .compact-orders já usa pra Pedidos, mas escopado só em
+     .anuncio-cell-flex (exclusivo das 3 telas de Análise) pra não mudar
+     nada nas tabelas existentes. */
+  .anuncio-cell-flex{ display:flex; align-items:center; gap:9px; max-width:260px; }
+  .anuncio-cell-flex .cell-stack{ min-width:0; flex:1 1 auto; }
+  .anuncio-cell-flex .prod-title{ display:block; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .anuncio-cell-flex .cell-stack-sub{ display:block; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
   /* Tabela de Pedidos: colunas mais estreitas e fonte um pouco menor pra caber
      na largura normal da tela desktop sem precisar rolar pro lado — só essa
      tabela, o resto do sistema (Empresas, Marketplaces, Custos) continua com
@@ -6465,8 +6490,18 @@
      outras 2 abas. */
   (function(){
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    // Mesmo padrão de miniatura das 3 telas (ver comentário em thumbHTML na
+    // aba Performance de Anúncios) — versão "lg" pro modal, onde a imagem
+    // tem mais destaque.
+    function thumbHTML(url){
+      if(!url) return '<span class="anuncio-thumb-lg-placeholder" title="Sem imagem disponível">'+svg('box')+'</span>';
+      return '<span style="position:relative;display:inline-block;width:64px;height:64px;flex-shrink:0;">'
+        + '<img class="anuncio-thumb-lg" src="'+escapeHtml(url)+'" alt="" loading="lazy" style="position:absolute;inset:0;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+        + '<span class="anuncio-thumb-lg-placeholder" style="display:none;position:absolute;inset:0;">'+svg('box')+'</span>'
+      + '</span>';
+    }
 
-    function abrir({ titulo, sku, loja, mlItemId, campos, origem }){
+    function abrir({ titulo, sku, loja, mlItemId, imagemUrl, campos, origem }){
       const modalRoot = document.getElementById('modalRoot');
       const outrasAbas = [
         { id:'performanceAnuncios', label:'Performance de Anúncios' },
@@ -6475,9 +6510,13 @@
       ].filter(a => a.id !== origem);
 
       modalRoot.innerHTML = '<div class="modal-overlay" id="anuncioDetModalOverlay"><div class="modal-card" style="max-width:580px;">'
-        + '<div class="modal-head"><h3 class="modal-title">'+escapeHtml(titulo||'(sem título)')+'</h3>'
+        + '<div class="modal-head" style="align-items:flex-start;">'
+          + '<div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0;">'
+            + thumbHTML(imagemUrl)
+            + '<div style="min-width:0;"><h3 class="modal-title">'+escapeHtml(titulo||'(sem título)')+'</h3>'
+            + '<div class="modal-sub" style="margin-top:2px;">'+(sku?('SKU <span class="mono">'+escapeHtml(sku)+'</span>'):'sem SKU')+(loja?(' · '+escapeHtml(loja)):'')+(mlItemId?(' · <span class="mono">'+escapeHtml(mlItemId)+'</span>'):'')+'</div></div>'
+          + '</div>'
           + '<button class="row-ic-btn" id="anuncioDetModalClose" type="button">'+svg('x')+'</button></div>'
-        + '<div class="modal-sub">'+(sku?('SKU <span class="mono">'+escapeHtml(sku)+'</span>'):'sem SKU')+(loja?(' · '+escapeHtml(loja)):'')+(mlItemId?(' · <span class="mono">'+escapeHtml(mlItemId)+'</span>'):'')+'</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:16px 0;">'
           + campos.map(c => '<div><div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.02em;">'+escapeHtml(c.label)+'</div><div style="font-size:14px;font-weight:600;margin-top:2px;">'+(c.html!==undefined?c.html:escapeHtml(c.value===null||c.value===undefined?'—':String(c.value)))+'</div></div>').join('')
         + '</div>'
@@ -6521,6 +6560,22 @@
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '<span style="color:var(--text-faint);font-style:italic;">indisponível</span>' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function pctFmt(v){ return v===null||v===undefined ? '—' : (v>=0?'+':'')+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    // Miniatura da capa/foto principal do anúncio (dado real, vindo AO VIVO
+    // do Mercado Livre — ver lib/mlAnuncios.js). "Placeholder discreto"
+    // (ícone neutro) quando o anúncio não tem imagem disponível — nunca uma
+    // imagem inventada/de outro anúncio. onerror troca pro placeholder se a
+    // URL vier quebrada (imagem removida no Mercado Livre depois do
+    // catálogo ter sido consultado, por exemplo).
+    function thumbHTML(url, tam){
+      const cls = tam==='lg' ? 'anuncio-thumb-lg' : 'anuncio-thumb';
+      const clsPh = tam==='lg' ? 'anuncio-thumb-lg-placeholder' : 'anuncio-thumb-placeholder';
+      const px = tam==='lg' ? 64 : 36;
+      if(!url) return '<span class="'+clsPh+'" title="Sem imagem disponível">'+svg('box')+'</span>';
+      return '<span style="position:relative;display:inline-block;width:'+px+'px;height:'+px+'px;flex-shrink:0;">'
+        + '<img class="'+cls+'" src="'+escapeHtml(url)+'" alt="" loading="lazy" style="position:absolute;inset:0;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+        + '<span class="'+clsPh+'" style="display:none;position:absolute;inset:0;">'+svg('box')+'</span>'
+      + '</span>';
+    }
 
     async function apiPerformance(empresaId, periodo, contaId, sku, status){
       const params = new URLSearchParams({ empresaId, periodo });
@@ -6605,10 +6660,12 @@
     }
 
     function anuncioCellHTML(l){
-      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="cell-stack">'
-        + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
-        + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
-      + '</div></a></td>';
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="anuncio-cell-flex">'
+        + thumbHTML(l.imagemUrl)
+        + '<div class="cell-stack">'
+          + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+          + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+        + '</div></div></a></td>';
     }
 
     function criteriosResumoHTML(c){
@@ -6640,7 +6697,7 @@
 
     function abrirDetalhe(l){
       window.AnuncioDetalheModal.abrir({
-        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, origem: 'performanceAnuncios',
+        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, imagemUrl: l.imagemUrl, origem: 'performanceAnuncios',
         campos: [
           { label:'Produto cadastrado', value: l.produto },
           { label:'Status', html: statusLabel(l.status) },
@@ -6761,6 +6818,14 @@
     function pctOrIndisp(v){ return v===null||v===undefined ? dadoNaoDisp() : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
     function pctSinal(v){ return v===null||v===undefined ? '—' : (v>=0?'+':'')+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
     function fmtDiaCurto(diaISO){ const [, m, d] = diaISO.split('-'); return d+'/'+m; }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function thumbHTML(url){
+      if(!url) return '<span class="anuncio-thumb-placeholder" title="Sem imagem disponível">'+svg('box')+'</span>';
+      return '<span style="position:relative;display:inline-block;width:36px;height:36px;flex-shrink:0;">'
+        + '<img class="anuncio-thumb" src="'+escapeHtml(url)+'" alt="" loading="lazy" style="position:absolute;inset:0;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+        + '<span class="anuncio-thumb-placeholder" style="display:none;position:absolute;inset:0;">'+svg('box')+'</span>'
+      + '</span>';
+    }
 
     async function apiVisitas(empresaId, periodo, contaId, sku){
       const params = new URLSearchParams({ empresaId, periodo });
@@ -6802,9 +6867,17 @@
       { valor:'piorConversao', label:'Pior conversão' },
       { valor:'maiorCrescimentoVisitas', label:'Maior crescimento de visitas' },
       { valor:'maiorQuedaVisitas', label:'Maior queda de visitas' },
+      { valor:'muitasVisitasPoucasVendas', label:'Muitas visitas, poucas vendas' },
+      { valor:'poucasVisitasBoaConversao', label:'Poucas visitas, boa conversão' },
     ];
     function valOr(l, campo, seAusente){ const v = l[campo]; return v===null||v===undefined ? seAusente : v; }
     function ordenarLinhas(linhas, sort){
+      if(sort==='muitasVisitasPoucasVendas'){
+        return linhas.filter(l=>l.insights.muitasVisitasPoucasVendas).slice().sort((a,b)=> valOr(b,'visitas',-Infinity) - valOr(a,'visitas',-Infinity));
+      }
+      if(sort==='poucasVisitasBoaConversao'){
+        return linhas.filter(l=>l.insights.poucasVisitasBoaConversao).slice().sort((a,b)=> valOr(b,'conversao',-Infinity) - valOr(a,'conversao',-Infinity));
+      }
       const copia = linhas.slice();
       if(sort==='menosVisitados') return copia.sort((a,b)=> valOr(a,'visitas',Infinity) - valOr(b,'visitas',Infinity));
       if(sort==='melhorConversao') return copia.sort((a,b)=> valOr(b,'conversao',-Infinity) - valOr(a,'conversao',-Infinity));
@@ -6825,15 +6898,17 @@
     }
 
     function anuncioCellHTML(l){
-      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="cell-stack">'
-        + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
-        + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
-      + '</div></a></td>';
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="anuncio-cell-flex">'
+        + thumbHTML(l.imagemUrl)
+        + '<div class="cell-stack">'
+          + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+          + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+        + '</div></div></a></td>';
     }
 
     function tabelaHTML(linhas){
       return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-        + '<th>Anúncio / SKU</th><th>Loja</th><th>Visitas</th><th>Unid. vendidas</th><th>Pedidos</th><th>Conversão (pedidos÷visitas)</th>'
+        + '<th>Anúncio / SKU</th><th>Loja</th><th>Visitas</th><th>Unid. vendidas</th><th>Pedidos</th><th>Faturamento</th><th>Conversão (pedidos÷visitas)</th>'
         + '<th>Visitas per. anterior</th><th>Evolução visitas</th><th>Evolução conversão</th><th>Sinalizações</th>'
         + '</tr></thead><tbody>'
         + linhas.map(l => '<tr>'
@@ -6842,6 +6917,7 @@
           + '<td class="mono">'+intOrIndisp(l.visitas)+'</td>'
           + '<td class="mono tab-nums">'+l.unidadesVendidas+'</td>'
           + '<td class="mono tab-nums">'+l.pedidos+'</td>'
+          + '<td class="mono">'+money(l.faturamento)+'</td>'
           + '<td class="mono">'+pctOrIndisp(l.conversao)+'</td>'
           + '<td class="mono">'+intOrIndisp(l.visitasAnterior)+'</td>'
           + '<td class="mono" style="'+(l.evolucaoVisitasPercentual!==null?(l.evolucaoVisitasPercentual>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.visitasNovo?'<span style="color:var(--teal);">Novo</span>':pctSinal(l.evolucaoVisitasPercentual))+'</td>'
@@ -6910,11 +6986,12 @@
 
     function abrirDetalhe(l){
       window.AnuncioDetalheModal.abrir({
-        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, origem: 'visitasConversao',
+        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, imagemUrl: l.imagemUrl, origem: 'visitasConversao',
         campos: [
           { label:'Visitas no período', html: intOrIndisp(l.visitas) },
           { label:'Unidades vendidas', value: l.unidadesVendidas },
           { label:'Pedidos', value: l.pedidos },
+          { label:'Faturamento', html: money(l.faturamento) },
           { label:'Conversão (pedidos÷visitas)', html: pctOrIndisp(l.conversao) },
           { label:'Visitas período anterior', html: intOrIndisp(l.visitasAnterior) },
           { label:'Evolução de visitas', html: l.visitasNovo?'Novo no período':pctSinal(l.evolucaoVisitasPercentual) },
@@ -6984,7 +7061,12 @@
         html += '<div class="empty-panel"><div class="empty-icon">'+svg('eye')+'</div>'
           + '<h2>Nenhum anúncio encontrado</h2><p class="lead">Nenhum anúncio com venda ou dado para os filtros escolhidos.</p></div>';
       } else if(state.data){
-        html += tabelaHTML(ordenarLinhas(state.data.linhas, state.sort));
+        const linhasOrdenadas = ordenarLinhas(state.data.linhas, state.sort);
+        if(!linhasOrdenadas.length){
+          html += '<div class="empty-panel"><div class="empty-icon">'+svg('eye')+'</div><h2>Nenhum anúncio nesta ordenação/filtro</h2><p class="lead">Experimente "Todas as lojas" ou outra ordenação.</p></div>';
+        } else {
+          html += tabelaHTML(linhasOrdenadas);
+        }
       }
 
       root.innerHTML = html;
@@ -7022,9 +7104,35 @@
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function pendenteCusto(){ return '<span style="color:var(--text-faint);font-style:italic;" title="Falta cadastrar o custo deste SKU em Produtos.">margem incompleta</span>'; }
-    function pendenteAds(){ return '<span style="color:var(--text-faint);font-style:italic;" title="Sem sincronização de Ads para este anúncio/período.">sem dado de Ads</span>'; }
+    // Pedido explícito do usuário: "Se o Ads ainda não estiver sincronizado
+    // para determinado anúncio, mostre: Ads pendente" (texto literal).
+    function pendenteAds(){ return '<span style="color:var(--text-faint);font-style:italic;" title="Sem sincronização de Ads para este anúncio/período.">Ads pendente</span>'; }
     function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function pctFmt(v){ return v===null||v===undefined ? '—' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    function intFmt(v){ return v===null||v===undefined ? '—' : Number(v).toLocaleString('pt-BR'); }
+    function thumbHTML(url){
+      if(!url) return '<span class="anuncio-thumb-placeholder" title="Sem imagem disponível">'+svg('box')+'</span>';
+      return '<span style="position:relative;display:inline-block;width:36px;height:36px;flex-shrink:0;">'
+        + '<img class="anuncio-thumb" src="'+escapeHtml(url)+'" alt="" loading="lazy" style="position:absolute;inset:0;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+        + '<span class="anuncio-thumb-placeholder" style="display:none;position:absolute;inset:0;">'+svg('box')+'</span>'
+      + '</span>';
+    }
+    // "Performance atribuída pelo Mercado Ads" — dado bruto que o próprio
+    // Ads calcula (cliques, impressões, CTR/CVR/ROAS, faturamento que o Ads
+    // ATRIBUI ao anúncio) — pedido explícito do usuário: "deixe separado:
+    // Performance atribuída pelo Mercado Ads de Resultado real do anúncio
+    // após Ads". Renderizado à parte do resultado real (que usa só vendas
+    // reais, nunca a atribuição do Ads).
+    function adsAtribuidoResumoHTML(ads){
+      if(!ads || !ads.disponivel) return '<span style="color:var(--text-faint);font-style:italic;">Ads pendente</span>';
+      const partes = [];
+      if(ads.cliques!==null && ads.cliques!==undefined) partes.push(intFmt(ads.cliques)+' cliques');
+      if(ads.impressoes!==null && ads.impressoes!==undefined) partes.push(intFmt(ads.impressoes)+' impr.');
+      if(ads.roasApi!==null && ads.roasApi!==undefined) partes.push('ROAS '+Number(ads.roasApi).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}));
+      else if(ads.acosApi!==null && ads.acosApi!==undefined) partes.push('ACOS '+pctFmt(ads.acosApi));
+      return '<span style="font-size:12px;color:var(--text-muted);">'+(partes.length?escapeHtml(partes.join(' · ')):'<span style="color:var(--text-faint);font-style:italic;">sem métricas</span>')+'</span>'
+        + (ads.campanha?('<div class="cell-stack-sub">'+escapeHtml(ads.campanha)+'</div>'):'');
+    }
 
     async function apiMargem(empresaId, periodo, contaId, sku){
       const params = new URLSearchParams({ empresaId, periodo });
@@ -7091,21 +7199,24 @@
     }
 
     function anuncioCellHTML(l){
-      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="cell-stack">'
-        + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
-        + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
-      + '</div></a></td>';
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="anuncio-cell-flex">'
+        + thumbHTML(l.imagemUrl)
+        + '<div class="cell-stack">'
+          + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+          + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+        + '</div></div></a></td>';
     }
 
     function tabelaHTML(linhas){
       return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-        + '<th>Anúncio / SKU</th><th>Produto</th><th>Loja</th><th>Qtd vendida</th><th>Faturamento</th><th>Custo produtos</th><th>Imposto</th>'
-        + '<th>Tarifas</th><th>Frete vendedor</th><th>Margem contrib.</th><th>Margem %</th><th>Ads</th><th>Resultado após Ads</th><th>Margem após Ads %</th><th>Destaques</th>'
+        + '<th>Anúncio / SKU</th><th>Produto</th><th>Loja</th><th>Pedidos</th><th>Qtd vendida</th><th>Faturamento</th><th>Custo produtos</th><th>Imposto</th>'
+        + '<th>Tarifas</th><th>Frete vendedor</th><th>Margem contrib.</th><th>Margem %</th><th>Ads (investimento)</th><th>Ads (atribuído pelo Mercado Ads)</th><th>Resultado real após Ads</th><th>Margem real após Ads %</th><th>Destaques</th>'
         + '</tr></thead><tbody>'
         + linhas.map(l => '<tr>'
           + anuncioCellHTML(l)
           + '<td>'+(l.produto?escapeHtml(l.produto):'<span style="color:var(--text-faint);">—</span>')+'</td>'
           + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td class="mono tab-nums">'+l.quantidadePedidos+'</td>'
           + '<td class="mono tab-nums">'+l.quantidadeVendida+'</td>'
           + '<td class="mono">'+money(l.faturamento)+'</td>'
           + '<td class="mono">'+(l.custoProdutos===null?pendenteCusto():money(l.custoProdutos))+'</td>'
@@ -7115,6 +7226,7 @@
           + '<td class="mono" style="'+(l.margemContribuicao!==null?(l.margemContribuicao>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.margemIncompleta?pendenteCusto():money(l.margemContribuicao))+'</td>'
           + '<td class="mono">'+(l.margemIncompleta?'—':pctFmt(l.margemContribuicaoPct))+'</td>'
           + '<td class="mono">'+(l.semDadosAds?pendenteAds():money(l.investimentoAds))+'</td>'
+          + '<td>'+adsAtribuidoResumoHTML(l.adsAtribuido)+'</td>'
           + '<td class="mono" style="'+(l.resultadoAposAds!==null?(l.resultadoAposAds>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.resultadoAposAds===null?(l.margemIncompleta?pendenteCusto():pendenteAds()):money(l.resultadoAposAds))+'</td>'
           + '<td class="mono">'+(l.margemAposAdsPct===null?'—':pctFmt(l.margemAposAdsPct))+'</td>'
           + '<td>'+destaquesHTML(l)+'</td>'
@@ -7123,20 +7235,32 @@
     }
 
     function abrirDetalhe(l){
+      const ads = l.adsAtribuido;
       window.AnuncioDetalheModal.abrir({
-        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, origem: 'margemAnuncio',
+        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, imagemUrl: l.imagemUrl, origem: 'margemAnuncio',
         campos: [
+          { label:'Pedidos', value: l.quantidadePedidos },
           { label:'Quantidade vendida', value: l.quantidadeVendida },
           { label:'Faturamento', html: money(l.faturamento) },
           { label:'Custo dos produtos', html: l.custoProdutos===null?pendenteCusto():money(l.custoProdutos) },
           { label:'Imposto', html: money(l.imposto) },
           { label:'Tarifas/comissões', html: l.tarifas===null?'—':money(l.tarifas) },
           { label:'Frete do vendedor', html: l.freteVendedor===null?'—':money(l.freteVendedor) },
-          { label:'Margem de contribuição', html: l.margemIncompleta?pendenteCusto():money(l.margemContribuicao) },
+          { label:'Margem de contribuição (antes do Ads)', html: l.margemIncompleta?pendenteCusto():money(l.margemContribuicao) },
           { label:'Margem de contribuição %', html: l.margemIncompleta?'—':pctFmt(l.margemContribuicaoPct) },
-          { label:'Gasto com Ads', html: l.semDadosAds?pendenteAds():money(l.investimentoAds) },
-          { label:'Resultado após Ads', html: l.resultadoAposAds===null?'—':money(l.resultadoAposAds) },
-          { label:'Margem após Ads %', html: l.margemAposAdsPct===null?'—':pctFmt(l.margemAposAdsPct) },
+          { label:'— Resultado real (vendas reais) —', html: '<hr style="border:none;border-top:1px solid var(--border-strong);margin:2px 0;">' },
+          { label:'Investimento em Ads (real, sincronizado)', html: l.semDadosAds?pendenteAds():money(l.investimentoAds) },
+          { label:'Resultado real após Ads', html: l.resultadoAposAds===null?'—':money(l.resultadoAposAds) },
+          { label:'Margem real após Ads %', html: l.margemAposAdsPct===null?'—':pctFmt(l.margemAposAdsPct) },
+          { label:'— Performance atribuída pelo Mercado Ads —', html: '<hr style="border:none;border-top:1px solid var(--border-strong);margin:2px 0;">' },
+          { label:'Campanha', value: (ads && ads.campanha) || (ads && ads.disponivel ? '—' : 'Ads pendente') },
+          { label:'Cliques', value: ads && ads.disponivel ? intFmt(ads.cliques) : 'Ads pendente' },
+          { label:'Impressões', value: ads && ads.disponivel ? intFmt(ads.impressoes) : 'Ads pendente' },
+          { label:'CTR (Mercado Ads)', html: ads && ads.disponivel ? pctFmt(ads.ctrApi) : pendenteAds() },
+          { label:'CVR (Mercado Ads)', html: ads && ads.disponivel ? pctFmt(ads.cvrApi) : pendenteAds() },
+          { label:'ROAS (Mercado Ads)', value: ads && ads.disponivel && ads.roasApi!==null && ads.roasApi!==undefined ? ads.roasApi : (ads && ads.disponivel ? '—' : 'Ads pendente') },
+          { label:'ACOS (Mercado Ads)', html: ads && ads.disponivel ? pctFmt(ads.acosApi) : pendenteAds() },
+          { label:'Faturamento atribuído pelo Ads', html: ads && ads.disponivel ? money(ads.faturamentoAtribuido) : pendenteAds() },
         ],
       });
     }
@@ -7152,7 +7276,7 @@
         return;
       }
 
-      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:980px;">FATURAMENTO − tarifas/comissões − frete do vendedor − imposto − custo dos produtos = <strong>MARGEM DE CONTRIBUIÇÃO</strong>. MARGEM DE CONTRIBUIÇÃO − Ads = <strong>RESULTADO APÓS ADS</strong>. Mesma fórmula usada em Pedidos, Financeiro e Relatórios — nunca uma conta nova. Quando falta o custo de algum SKU em <strong>Produtos</strong>, a margem daquele anúncio aparece marcada como incompleta.</div>';
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:980px;">FATURAMENTO − tarifas/comissões − frete do vendedor − imposto − custo dos produtos = <strong>MARGEM DE CONTRIBUIÇÃO</strong>. MARGEM DE CONTRIBUIÇÃO − Ads = <strong>RESULTADO APÓS ADS</strong>. Mesma fórmula usada em Pedidos, Financeiro e Relatórios — nunca uma conta nova. Quando falta o custo de algum SKU em <strong>Produtos</strong>, a margem daquele anúncio aparece marcada como incompleta. A coluna <strong>"Ads (atribuído pelo Mercado Ads)"</strong> mostra cliques/impressões/CTR/ROAS calculados pelo próprio Mercado Ads — é informativo, separado do <strong>resultado real</strong> (que usa só vendas reais). Quando um anúncio ainda não tem Ads sincronizado, aparece <strong>"Ads pendente"</strong> e a margem antes do Ads continua calculada normalmente.</div>';
 
       if(state.data && !state.data.semConta){
         html += '<div class="toolbar"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
