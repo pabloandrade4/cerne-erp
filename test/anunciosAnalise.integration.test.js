@@ -64,6 +64,18 @@ describe('Análise por anúncio (Performance / Visitas e Conversão / Margem) �
       assert.ok(resultado.situacaoPorConta.some((s) => !s.disponivel && s.motivo === 'conta_com_erro'));
     });
 
+    test('toda linha tem o campo imagemUrl (capa/foto) — null quando a conta está com erro (nunca inventado), nunca ausente do formato', async () => {
+      const { periodoCalc, desdeStr, ateStr } = periodoDeTeste();
+      const resultado = await performanceAnuncios.gerarPerformanceAnuncios({ empresaId: EMPRESA_ID, contaId: null, sku: null, status: null, periodoCalc, desdeStr, ateStr });
+      assert.ok(resultado.linhas.length > 0);
+      resultado.linhas.forEach((l) => {
+        assert.ok('imagemUrl' in l, 'campo imagemUrl precisa existir em toda linha, mesmo que null');
+        // conta 900 está com token expirado neste ambiente — sem catálogo ao
+        // vivo, então a imagem tem que vir null, nunca uma URL inventada.
+        assert.equal(l.imagemUrl, null);
+      });
+    });
+
     test('filtro de SKU restringe as linhas retornadas', async () => {
       const { periodoCalc, desdeStr, ateStr } = periodoDeTeste();
       const todos = await performanceAnuncios.gerarPerformanceAnuncios({ empresaId: EMPRESA_ID, contaId: null, sku: null, status: null, periodoCalc, desdeStr, ateStr });
@@ -148,6 +160,40 @@ describe('Análise por anúncio (Performance / Visitas e Conversão / Margem) �
       const { periodoCalc } = periodoDeTeste();
       const resultado = await margemAnuncio.gerarMargemPorAnuncio({ empresaId: EMPRESA_ID, contaId: 900, sku: null, periodoCalc, periodoChaveAds: periodoCalc.chave });
       resultado.linhas.forEach((l) => assert.equal(l.contaMlId, 900));
+    });
+
+    test('toda linha tem quantidadePedidos e o bloco adsAtribuido separado do resultado real (disponivel=false quando não há sync de Ads, nunca inventado)', async () => {
+      const { periodoCalc } = periodoDeTeste();
+      const resultado = await margemAnuncio.gerarMargemPorAnuncio({ empresaId: EMPRESA_ID, contaId: null, sku: null, periodoCalc, periodoChaveAds: periodoCalc.chave });
+      assert.ok(resultado.linhas.length > 0);
+      resultado.linhas.forEach((l) => {
+        assert.equal(typeof l.quantidadePedidos, 'number');
+        assert.ok(l.adsAtribuido, 'bloco adsAtribuido precisa sempre existir');
+        assert.equal(typeof l.adsAtribuido.disponivel, 'boolean');
+        // conta 900 nunca sincronizou Ads neste ambiente (ver ads_contas) —
+        // então "Ads pendente" tem que se refletir tanto no resultado real
+        // (semDadosAds) quanto no bloco separado (adsAtribuido.disponivel).
+        if (l.semDadosAds) assert.equal(l.adsAtribuido.disponivel, false);
+      });
+    });
+
+    test('mesma identidade (item_id, SKU, loja) que Performance de Anúncios para o mesmo anúncio — as páginas não podem divergir', async () => {
+      const { periodoCalc, desdeStr, ateStr } = periodoDeTeste();
+      const [perf, margem] = await Promise.all([
+        performanceAnuncios.gerarPerformanceAnuncios({ empresaId: EMPRESA_ID, contaId: null, sku: null, status: null, periodoCalc, desdeStr, ateStr }),
+        margemAnuncio.gerarMargemPorAnuncio({ empresaId: EMPRESA_ID, contaId: null, sku: null, periodoCalc, periodoChaveAds: periodoCalc.chave }),
+      ]);
+      const porItemPerf = new Map(perf.linhas.filter((l) => l.mlItemId).map((l) => [l.mlItemId, l]));
+      let comparados = 0;
+      margem.linhas.forEach((l) => {
+        const p = l.mlItemId && porItemPerf.get(l.mlItemId);
+        if (!p) return;
+        assert.equal(l.sku, p.sku);
+        assert.equal(l.loja, p.loja);
+        assert.equal(l.imagemUrl, p.imagemUrl);
+        comparados++;
+      });
+      assert.ok(comparados > 0, 'precisa comparar ao menos 1 anúncio em comum entre Performance e Margem');
     });
   });
 });

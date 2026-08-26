@@ -7,7 +7,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { periodoAnteriorEquivalente } = require('../lib/periodoComparacao');
-const { calcularCrescimento, agruparVendasDetalhado, diasEntre } = require('../lib/anunciosBase');
+const { calcularCrescimento, agruparVendasDetalhado, diasEntre, resolverIdentidade } = require('../lib/anunciosBase');
 const { classificarIndicador } = require('../lib/performanceAnuncios');
 
 describe('periodoComparacao — período anterior equivalente', () => {
@@ -102,6 +102,34 @@ describe('anunciosBase — diasEntre', () => {
     const a = new Date('2026-08-01T00:00:00Z');
     const b = new Date('2026-08-15T00:00:00Z');
     assert.equal(diasEntre(a, b), 14);
+  });
+});
+
+describe('anunciosBase — resolverIdentidade (mesma identidade nas 3 abas: item_id, capa/foto, SKU, loja, título)', () => {
+  test('capa/foto SÓ vem do catálogo ao vivo, nunca é inventada a partir da venda', () => {
+    const venda = { mlItemId: 'MLB1', sku: 'SKU-1', titulo: 'Título da venda', loja: 'Loja A', contaMlId: 1 };
+    const vivo = { id: 'MLB1', sku: 'SKU-1', titulo: 'Título ao vivo', loja: 'Loja A', contaId: 1, preco: 99.9, status: 'active', imagemUrl: 'https://http2.mlstatic.com/foo.jpg' };
+    const r = resolverIdentidade({ mlItemId: 'MLB1', venda, vivo });
+    assert.equal(r.imagemUrl, 'https://http2.mlstatic.com/foo.jpg');
+    assert.equal(r.anuncio, 'Título ao vivo', 'título ao vivo tem prioridade sobre o título da venda quando os dois existem');
+    assert.equal(r.precoAtual, 99.9);
+    assert.equal(r.status, 'active');
+  });
+
+  test('anúncio vendido mas fora do catálogo ao vivo (ex: encerrado há muito tempo): sem imagem, nunca uma imagem de outro anúncio', () => {
+    const venda = { mlItemId: 'MLB2', sku: 'SKU-2', titulo: 'Só na venda', loja: 'Loja B', contaMlId: 2 };
+    const r = resolverIdentidade({ mlItemId: 'MLB2', venda, vivo: null });
+    assert.equal(r.imagemUrl, null);
+    assert.equal(r.anuncio, 'Só na venda');
+    assert.equal(r.status, null);
+  });
+
+  test('anúncio vivo sem nenhuma venda no período: usa dados do catálogo ao vivo', () => {
+    const vivo = { id: 'MLB3', sku: 'SKU-3', titulo: 'Vivo sem venda', loja: 'Loja C', contaId: 3, preco: 50, status: 'active', imagemUrl: 'https://x/img.jpg' };
+    const r = resolverIdentidade({ mlItemId: 'MLB3', venda: null, vivo });
+    assert.equal(r.imagemUrl, 'https://x/img.jpg');
+    assert.equal(r.sku, 'SKU-3');
+    assert.equal(r.loja, 'Loja C');
   });
 });
 
