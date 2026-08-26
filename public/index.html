@@ -1004,6 +1004,12 @@
     { id:'analise', label:'Análise', open:false, items:[
       { id:'ads', title:'Ads', icon:'megaphone', action:'Conectar Ads', desc:'Investimento e retorno das campanhas de publicidade dentro dos marketplaces.',
         bullets:['Investimento por conta e campanha','ACOS e ROAS por produto','Impacto do Ads na margem real','Sugestões de otimização'] },
+      { id:'performanceAnuncios', title:'Performance de Anúncios', icon:'tag', desc:'Cada anúncio real do Mercado Livre, com vendas, faturamento, crescimento e indicador de desempenho — critérios objetivos e documentados.',
+        bullets:['Ranking por vendas, faturamento e crescimento','🟢🟡🔴 com critérios objetivos e documentados','Anúncios sem vender há vários dias','Filtros por empresa, loja, período, SKU e status'] },
+      { id:'visitasConversao', title:'Visitas e Conversão', icon:'eye', desc:'Funil de cada anúncio: visitas, vendas e conversão — dado real da API do Mercado Livre, "Dado não disponível" quando a API não retorna.',
+        bullets:['Conversão = pedidos ÷ visitas × 100','Ranking de mais/menos visitados e melhor/pior conversão','Gráficos de visitas x vendas e conversão no tempo','Nunca inventa número de visita'] },
+      { id:'margemAnuncio', title:'Margem por Anúncio', icon:'wallet', desc:'Margem de contribuição real de cada anúncio, antes e depois do Ads — mesma fórmula de Pedidos, Financeiro e Relatórios.',
+        bullets:['Faturamento, custo, imposto, tarifas e frete por anúncio','Resultado após Ads (margem − investimento)','Rankings de maior resultado, prejuízo e margem %','Sinaliza margem incompleta quando falta custo do SKU'] },
       { id:'reports', title:'Relatórios', icon:'lineChart', action:'Novo relatório', desc:'Relatórios operacionais e financeiros configuráveis.',
         bullets:['Relatórios pré-configurados','Exportação em Excel e PDF','Filtros por empresa, canal e período','Relatórios agendados'] },
     ]},
@@ -1080,7 +1086,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','reports','iaGestora'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','reports','iaGestora'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1130,6 +1136,9 @@
     else if(id === 'fixedExpenses'){ inner += '<div id="despesasFixasRoot"></div>'; }
     else if(id === 'cashFlow'){ inner += '<div id="fluxoCaixaRoot"></div>'; }
     else if(id === 'ads'){ inner += '<div id="adsRoot"></div>'; }
+    else if(id === 'performanceAnuncios'){ inner += '<div id="performanceAnunciosRoot"></div>'; }
+    else if(id === 'visitasConversao'){ inner += '<div id="visitasConversaoRoot"></div>'; }
+    else if(id === 'margemAnuncio'){ inner += '<div id="margemAnuncioRoot"></div>'; }
     else if(id === 'reports'){ inner += '<div id="relatoriosRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
@@ -1173,6 +1182,9 @@
     if(id === 'fixedExpenses' && window.DespesasFixas) window.DespesasFixas.load();
     if(id === 'cashFlow' && window.FluxoCaixa) window.FluxoCaixa.load();
     if(id === 'ads' && window.Ads) window.Ads.load();
+    if(id === 'performanceAnuncios' && window.PerformanceAnuncios) window.PerformanceAnuncios.load(queryStr);
+    if(id === 'visitasConversao' && window.VisitasConversao) window.VisitasConversao.load(queryStr);
+    if(id === 'margemAnuncio' && window.MargemAnuncio) window.MargemAnuncio.load(queryStr);
     if(id === 'reports' && window.Relatorios) window.Relatorios.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
@@ -6441,6 +6453,756 @@
     }
 
     window.Ads = { load };
+  })();
+
+  /* ================= MODAL COMPARTILHADO — Detalhe do anúncio (Análise) =================
+     Usado pelas 3 abas abaixo (Performance de Anúncios, Visitas e
+     Conversão, Margem por Anúncio) — pedido explícito do usuário: "Quero
+     conseguir clicar em um anúncio em qualquer uma dessas telas e abrir os
+     detalhes daquele anúncio." Mostra os campos já carregados daquela linha
+     (nenhuma chamada nova à API — os dados já vieram do backend na tela de
+     origem) e oferece atalhos para ver o MESMO anúncio (mesmo SKU) nas
+     outras 2 abas. */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    function abrir({ titulo, sku, loja, mlItemId, campos, origem }){
+      const modalRoot = document.getElementById('modalRoot');
+      const outrasAbas = [
+        { id:'performanceAnuncios', label:'Performance de Anúncios' },
+        { id:'visitasConversao', label:'Visitas e Conversão' },
+        { id:'margemAnuncio', label:'Margem por Anúncio' },
+      ].filter(a => a.id !== origem);
+
+      modalRoot.innerHTML = '<div class="modal-overlay" id="anuncioDetModalOverlay"><div class="modal-card" style="max-width:580px;">'
+        + '<div class="modal-head"><h3 class="modal-title">'+escapeHtml(titulo||'(sem título)')+'</h3>'
+          + '<button class="row-ic-btn" id="anuncioDetModalClose" type="button">'+svg('x')+'</button></div>'
+        + '<div class="modal-sub">'+(sku?('SKU <span class="mono">'+escapeHtml(sku)+'</span>'):'sem SKU')+(loja?(' · '+escapeHtml(loja)):'')+(mlItemId?(' · <span class="mono">'+escapeHtml(mlItemId)+'</span>'):'')+'</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:16px 0;">'
+          + campos.map(c => '<div><div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.02em;">'+escapeHtml(c.label)+'</div><div style="font-size:14px;font-weight:600;margin-top:2px;">'+(c.html!==undefined?c.html:escapeHtml(c.value===null||c.value===undefined?'—':String(c.value)))+'</div></div>').join('')
+        + '</div>'
+        + (outrasAbas.length && sku ? '<div class="modal-sub" style="margin-top:4px;">Ver este mesmo anúncio (por SKU) em:</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
+            + outrasAbas.map(a=>'<button class="btn-secondary" data-ir-para="'+a.id+'" type="button">'+escapeHtml(a.label)+'</button>').join('')
+          + '</div>' : '')
+        + '<div class="modal-actions"><button type="button" class="btn-secondary" id="anuncioDetModalFechar">Fechar</button></div>'
+      + '</div></div>';
+
+      const overlay = document.getElementById('anuncioDetModalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('anuncioDetModalClose').addEventListener('click', close);
+      document.getElementById('anuncioDetModalFechar').addEventListener('click', close);
+      modalRoot.querySelectorAll('[data-ir-para]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const destino = btn.dataset.irPara;
+          close();
+          navigate(destino + (sku ? ('?sku='+encodeURIComponent(sku)) : ''));
+        });
+      });
+    }
+
+    window.AnuncioDetalheModal = { abrir };
+  })();
+
+  /* ================= PERFORMANCE DE ANÚNCIOS =================
+     Ativada em 26/08/2026, pedido explícito do usuário. Vendas vêm da mesma
+     fonte única de sempre (lib/relatorioVendas.js); preço/status/estoque
+     vêm AO VIVO do Mercado Livre (mesma fonte da tela Anúncios) — quando a
+     conta está com erro de conexão, esses campos aparecem indisponíveis,
+     NUNCA um valor antigo ou estimado. Os indicadores 🟢🟡🔴 seguem
+     critérios objetivos e documentados (ver lib/performanceAnuncios.js e
+     docs/01-regras-de-negocio.md) — nunca definidos "no olho". Empresa e
+     período vêm do filtro do header (window.CerneFiltro); loja, SKU e
+     status são filtros só desta tela. */
+  (function(){
+    const state = { loading:false, error:null, data:null, contaId:'', sku:'', status:'', sort:'maisVendidos' };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '<span style="color:var(--text-faint);font-style:italic;">indisponível</span>' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pctFmt(v){ return v===null||v===undefined ? '—' : (v>=0?'+':'')+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+
+    async function apiPerformance(empresaId, periodo, contaId, sku, status){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      if(sku) params.set('sku', sku);
+      if(status) params.set('status', status);
+      const res = await fetch('/api/performance-anuncios?'+params.toString());
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Performance de Anúncios.');
+      return body;
+    }
+
+    async function loadDados(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiPerformance(filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.status); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    function load(queryStr){
+      if(queryStr){
+        const params = new URLSearchParams(queryStr);
+        if(params.get('sku')) state.sku = params.get('sku');
+      }
+      loadDados();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-performanceAnuncios');
+      if(page && page.classList.contains('active')) loadDados();
+      else render();
+    });
+
+    const OPCOES_ORDENACAO = [
+      { valor:'maisVendidos', label:'Mais vendidos' },
+      { valor:'menosVendidos', label:'Menos vendidos' },
+      { valor:'maiorFaturamento', label:'Maior faturamento' },
+      { valor:'menorFaturamento', label:'Menor faturamento' },
+      { valor:'maiorCrescimento', label:'Maior crescimento' },
+      { valor:'maiorQueda', label:'Maior queda' },
+      { valor:'semVendas', label:'Anúncios sem vendas' },
+    ];
+    function valOr(l, campo, seAusente){ const v = l[campo]; return v===null||v===undefined ? seAusente : v; }
+    function ordenarLinhas(linhas, sort){
+      if(sort === 'semVendas'){
+        return linhas.filter(l=>l.semVendaNoPeriodo).slice().sort((a,b)=> valOr(b,'diasSemVender', 999999) - valOr(a,'diasSemVender', 999999));
+      }
+      const copia = linhas.slice();
+      if(sort==='menosVendidos') return copia.sort((a,b)=> a.unidadesVendidas - b.unidadesVendidas);
+      if(sort==='menorFaturamento') return copia.sort((a,b)=> (a.faturamento||0) - (b.faturamento||0));
+      if(sort==='maiorCrescimento') return copia.sort((a,b)=> valOr(b,'crescimentoPercentual',-Infinity) - valOr(a,'crescimentoPercentual',-Infinity));
+      if(sort==='maiorQueda') return copia.sort((a,b)=> valOr(a,'crescimentoPercentual',Infinity) - valOr(b,'crescimentoPercentual',Infinity));
+      if(sort==='maiorFaturamento') return copia.sort((a,b)=> (b.faturamento||0) - (a.faturamento||0));
+      return copia.sort((a,b)=> b.unidadesVendidas - a.unidadesVendidas); // 'maisVendidos' (padrão)
+    }
+
+    function statusLabel(status){
+      const map = { active:'Ativo', paused:'Pausado', closed:'Encerrado' };
+      return map[status] || (status ? escapeHtml(status) : 'Indisponível');
+    }
+
+    function indicadorHTML(l){
+      if(l.indicador==='baixo') return '<span style="color:var(--danger);font-weight:600;white-space:nowrap;">🔴 Baixo desempenho</span>';
+      if(l.indicador==='atencao') return '<span style="color:var(--warning);font-weight:600;white-space:nowrap;">🟡 Atenção</span>';
+      if(l.indicador==='bom') return '<span style="color:var(--success);font-weight:600;white-space:nowrap;">🟢 Bom desempenho</span>';
+      if(l.indicador==='sem_classificacao') return '<span style="color:var(--text-faint);">Sem classificação ainda</span>';
+      return '<span style="color:var(--text-faint);">'+statusLabel(l.status)+'</span>';
+    }
+
+    function tagsHTML(l){
+      const tags = [];
+      if(l.tags.semVendaVariosDias) tags.push('Sem vender há '+l.diasSemVender+'d');
+      else if(l.semVendaHistorico) tags.push('Nunca vendeu');
+      if(l.tags.vendendoCadaVezMenos) tags.push('Vendendo menos');
+      if(l.tags.crescendo) tags.push('Crescendo');
+      if(l.tags.praticamenteParado) tags.push('Praticamente parado');
+      if(l.novoNoPeriodo) tags.push('Novo no período');
+      if(!tags.length) return '';
+      return tags.map(t=>'<span style="display:inline-block;font-size:11px;padding:2px 7px;border-radius:20px;background:var(--surface-2);color:var(--text-muted);margin:0 4px 4px 0;">'+escapeHtml(t)+'</span>').join('');
+    }
+
+    function anuncioCellHTML(l){
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="cell-stack">'
+        + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+        + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+      + '</div></a></td>';
+    }
+
+    function criteriosResumoHTML(c){
+      if(!c) return '';
+      return '<div class="field-hint" style="margin-bottom:12px;max-width:960px;">Critérios objetivos: 🔴 Baixo desempenho = '+c.diasSemVenderRuim+'+ dias sem vender, ou parou de vender (vendia no período anterior e não vendeu agora), ou queda de '+Math.abs(c.quedaFortePct)+'% ou mais nas unidades vendidas. 🟡 Atenção = '+c.diasSemVenderAtencao+' a '+(c.diasSemVenderRuim-1)+' dias sem vender, ou queda de '+Math.abs(c.quedaModeradaPct)+'% ou mais, ou vendendo muito pouco (média ≤ '+c.mediaDiaParado+' unidade/dia). 🟢 Bom desempenho = vendeu no período sem nenhum desses sinais. Só se aplica a anúncios com status ativo.</div>';
+    }
+
+    function tabelaHTML(linhas){
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Produto</th><th>Loja</th><th>Status</th><th>Indicador</th><th>Preço atual</th>'
+        + '<th>Unid. vendidas</th><th>Pedidos</th><th>Faturamento</th><th>Média/dia</th><th>vs. período anterior</th><th>Sinalizações</th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td>'+(l.produto?escapeHtml(l.produto):'<span style="color:var(--text-faint);">—</span>')+'</td>'
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td>'+statusLabel(l.status)+'</td>'
+          + '<td>'+indicadorHTML(l)+'</td>'
+          + '<td class="mono">'+money(l.precoAtual)+'</td>'
+          + '<td class="mono tab-nums">'+l.unidadesVendidas+'</td>'
+          + '<td class="mono tab-nums">'+l.quantidadePedidos+'</td>'
+          + '<td class="mono">'+money(l.faturamento)+'</td>'
+          + '<td class="mono">'+Number(l.mediaVendasPorDia).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'
+          + '<td class="mono" style="'+(l.crescimentoPercentual!==null?(l.crescimentoPercentual>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.novoNoPeriodo?'<span style="color:var(--teal);">Novo</span>':pctFmt(l.crescimentoPercentual))+'</td>'
+          + '<td>'+tagsHTML(l)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    function abrirDetalhe(l){
+      window.AnuncioDetalheModal.abrir({
+        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, origem: 'performanceAnuncios',
+        campos: [
+          { label:'Produto cadastrado', value: l.produto },
+          { label:'Status', html: statusLabel(l.status) },
+          { label:'Indicador', html: indicadorHTML(l) },
+          { label:'Preço atual', html: money(l.precoAtual) },
+          { label:'Unidades vendidas', value: l.unidadesVendidas },
+          { label:'Pedidos', value: l.quantidadePedidos },
+          { label:'Faturamento', html: money(l.faturamento) },
+          { label:'Média de vendas/dia', value: l.mediaVendasPorDia },
+          { label:'Unid. período anterior', value: l.unidadesPeriodoAnterior },
+          { label:'Crescimento', html: l.novoNoPeriodo ? 'Novo no período' : pctFmt(l.crescimentoPercentual) },
+          { label:'Dias sem vender', value: l.diasSemVender===null ? (l.semVendaHistorico ? 'nunca vendeu' : '—') : l.diasSemVender },
+        ],
+      });
+    }
+
+    function render(){
+      const root = document.getElementById('performanceAnunciosRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver Performance de Anúncios aqui.</p></div>';
+        return;
+      }
+
+      let html = criteriosResumoHTML(state.data && state.data.criterios);
+
+      if(state.data && !state.data.semConta){
+        html += '<div class="toolbar"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="paLojaSelect"><option value="">Todas as lojas</option>'
+            + state.data.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+          + '</select></div>'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="paStatusSelect"><option value="">Todos os status</option>'
+            + ['active','paused','closed'].map(s=>'<option value="'+s+'" '+(s===state.status?'selected':'')+'>'+statusLabel(s)+'</option>').join('')
+          + '</select></div>'
+          + '<input type="text" id="paSkuInput" placeholder="Buscar por SKU…" value="'+escapeHtml(state.sku)+'" style="height:38px;padding:0 12px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-1);min-width:160px;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="paSortSelect">'
+            + OPCOES_ORDENACAO.map(o=>'<option value="'+o.valor+'" '+(o.valor===state.sort?'selected':'')+'>Ordenar por: '+escapeHtml(o.label)+'</option>').join('')
+          + '</select></div>'
+        + '</div></div>';
+
+        if(state.data.situacaoPorConta && state.data.situacaoPorConta.some(s=>!s.disponivel)){
+          html += '<div class="table-card" style="padding:12px 16px;margin-bottom:14px;border-left:3px solid var(--warning);">'
+            + state.data.situacaoPorConta.filter(s=>!s.disponivel).map(s=>
+              '<div style="font-size:12.5px;color:var(--text-muted);display:flex;gap:8px;align-items:flex-start;margin:4px 0;">'
+                + '<span style="color:var(--warning);flex-shrink:0;">'+svg('alertCircle')+'</span>'
+                + '<span><strong>'+escapeHtml(s.loja||('Conta '+s.contaId))+'</strong>: '+escapeHtml(s.mensagem||'')+'</span>'
+              + '</div>'
+            ).join('')
+          + '</div>';
+        }
+      }
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando Performance de Anúncios…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data && state.data.semConta){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma conta do Mercado Livre conectada</h2><p class="lead">Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> para ver Performance de Anúncios aqui.</p></div>';
+      } else if(state.data && !state.data.linhas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
+          + '<h2>Nenhum anúncio encontrado</h2><p class="lead">Nenhum anúncio com venda ou dado ao vivo para os filtros escolhidos.</p></div>';
+      } else if(state.data){
+        const linhasOrdenadas = ordenarLinhas(state.data.linhas, state.sort);
+        if(!linhasOrdenadas.length){
+          html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div><h2>Nenhum anúncio nesta ordenação/filtro</h2><p class="lead">Experimente "Todas as lojas"/"Todos os status" ou outra ordenação.</p></div>';
+        } else {
+          html += tabelaHTML(linhasOrdenadas);
+        }
+      }
+
+      root.innerHTML = html;
+
+      const selLoja = document.getElementById('paLojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadDados(); });
+      const selStatus = document.getElementById('paStatusSelect');
+      if(selStatus) selStatus.addEventListener('change', ()=>{ state.status = selStatus.value; loadDados(); });
+      const skuInput = document.getElementById('paSkuInput');
+      if(skuInput){
+        let debounce = null;
+        skuInput.addEventListener('input', ()=>{
+          clearTimeout(debounce);
+          debounce = setTimeout(()=>{ state.sku = skuInput.value; loadDados(); }, 400);
+        });
+      }
+      const selSort = document.getElementById('paSortSelect');
+      if(selSort) selSort.addEventListener('change', ()=>{ state.sort = selSort.value; render(); });
+
+      root.querySelectorAll('.anuncio-link').forEach(el=>{
+        el.addEventListener('click', ()=>{
+          const mlItemId = el.dataset.mlItem;
+          const l = (state.data.linhas||[]).find(x=>x.mlItemId===mlItemId);
+          if(l) abrirDetalhe(l);
+        });
+      });
+    }
+
+    window.PerformanceAnuncios = { load };
+  })();
+
+  /* ================= VISITAS E CONVERSÃO =================
+     Ativada em 26/08/2026, pedido explícito do usuário. Visitas vêm da API
+     de Visitas do Mercado Livre (lib/mlVisitas.js — novo cliente,
+     endpoints reais); vendas/pedidos vêm da mesma fonte única de sempre.
+     Conversão = pedidos ÷ visitas × 100 (definição explícita, mostrada em
+     toda a tela). REGRA DO USUÁRIO: nunca inventar número de visitas — "Dado
+     não disponível" é mostrado literalmente quando a API não retorna. */
+  (function(){
+    const state = { loading:false, error:null, data:null, contaId:'', sku:'', sort:'maisVisitados' };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function dadoNaoDisp(){ return '<span style="color:var(--text-faint);font-style:italic;">Dado não disponível</span>'; }
+    function intOrIndisp(v){ return v===null||v===undefined ? dadoNaoDisp() : Number(v).toLocaleString('pt-BR'); }
+    function pctOrIndisp(v){ return v===null||v===undefined ? dadoNaoDisp() : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
+    function pctSinal(v){ return v===null||v===undefined ? '—' : (v>=0?'+':'')+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function fmtDiaCurto(diaISO){ const [, m, d] = diaISO.split('-'); return d+'/'+m; }
+
+    async function apiVisitas(empresaId, periodo, contaId, sku){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      if(sku) params.set('sku', sku);
+      const res = await fetch('/api/visitas-conversao?'+params.toString());
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Visitas e Conversão.');
+      return body;
+    }
+
+    async function loadDados(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiVisitas(filtro.empresaId, filtro.periodo, state.contaId, state.sku); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    function load(queryStr){
+      if(queryStr){
+        const params = new URLSearchParams(queryStr);
+        if(params.get('sku')) state.sku = params.get('sku');
+      }
+      loadDados();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-visitasConversao');
+      if(page && page.classList.contains('active')) loadDados();
+      else render();
+    });
+
+    const OPCOES_ORDENACAO = [
+      { valor:'maisVisitados', label:'Mais visitados' },
+      { valor:'menosVisitados', label:'Menos visitados' },
+      { valor:'melhorConversao', label:'Melhor conversão' },
+      { valor:'piorConversao', label:'Pior conversão' },
+      { valor:'maiorCrescimentoVisitas', label:'Maior crescimento de visitas' },
+      { valor:'maiorQuedaVisitas', label:'Maior queda de visitas' },
+    ];
+    function valOr(l, campo, seAusente){ const v = l[campo]; return v===null||v===undefined ? seAusente : v; }
+    function ordenarLinhas(linhas, sort){
+      const copia = linhas.slice();
+      if(sort==='menosVisitados') return copia.sort((a,b)=> valOr(a,'visitas',Infinity) - valOr(b,'visitas',Infinity));
+      if(sort==='melhorConversao') return copia.sort((a,b)=> valOr(b,'conversao',-Infinity) - valOr(a,'conversao',-Infinity));
+      if(sort==='piorConversao') return copia.sort((a,b)=> valOr(a,'conversao',Infinity) - valOr(b,'conversao',Infinity));
+      if(sort==='maiorCrescimentoVisitas') return copia.sort((a,b)=> valOr(b,'evolucaoVisitasPercentual',-Infinity) - valOr(a,'evolucaoVisitasPercentual',-Infinity));
+      if(sort==='maiorQuedaVisitas') return copia.sort((a,b)=> valOr(a,'evolucaoVisitasPercentual',Infinity) - valOr(b,'evolucaoVisitasPercentual',Infinity));
+      return copia.sort((a,b)=> valOr(b,'visitas',-Infinity) - valOr(a,'visitas',-Infinity)); // 'maisVisitados'
+    }
+
+    function insightsHTML(l){
+      const tags = [];
+      if(l.insights.muitasVisitasPoucasVendas) tags.push(['Muitas visitas, poucas vendas','var(--warning)']);
+      if(l.insights.poucasVisitasBoaConversao) tags.push(['Poucas visitas, boa conversão','var(--teal)']);
+      if(l.insights.muitasVisitasBoaConversao) tags.push(['Anúncio forte','var(--success)']);
+      if(l.insights.quedaDeVisitas) tags.push(['Queda de visitas','var(--danger)']);
+      if(!tags.length) return '';
+      return tags.map(([t,cor])=>'<span style="display:inline-block;font-size:11px;padding:2px 7px;border-radius:20px;background:var(--surface-2);color:'+cor+';font-weight:600;margin:0 4px 4px 0;">'+escapeHtml(t)+'</span>').join('');
+    }
+
+    function anuncioCellHTML(l){
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="cell-stack">'
+        + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+        + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+      + '</div></a></td>';
+    }
+
+    function tabelaHTML(linhas){
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Loja</th><th>Visitas</th><th>Unid. vendidas</th><th>Pedidos</th><th>Conversão (pedidos÷visitas)</th>'
+        + '<th>Visitas per. anterior</th><th>Evolução visitas</th><th>Evolução conversão</th><th>Sinalizações</th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td class="mono">'+intOrIndisp(l.visitas)+'</td>'
+          + '<td class="mono tab-nums">'+l.unidadesVendidas+'</td>'
+          + '<td class="mono tab-nums">'+l.pedidos+'</td>'
+          + '<td class="mono">'+pctOrIndisp(l.conversao)+'</td>'
+          + '<td class="mono">'+intOrIndisp(l.visitasAnterior)+'</td>'
+          + '<td class="mono" style="'+(l.evolucaoVisitasPercentual!==null?(l.evolucaoVisitasPercentual>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.visitasNovo?'<span style="color:var(--teal);">Novo</span>':pctSinal(l.evolucaoVisitasPercentual))+'</td>'
+          + '<td class="mono">'+(l.evolucaoConversaoPontos===null?'—':((l.evolucaoConversaoPontos>=0?'+':'')+l.evolucaoConversaoPontos.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' p.p.'))+'</td>'
+          + '<td>'+insightsHTML(l)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    // ---- Gráficos: Visitas x Vendas (barras+linha) e Conversão ao longo do tempo (linha) ----
+    function chartVisitasVendasHTML(serie){
+      if(!serie || !serie.length){
+        return '<div class="chart-canvas h-lg">' + chartGridLines(4) + chartEmptyState('lineChart', 'Sem série diária disponível para este período.') + '</div>';
+      }
+      const n = serie.length;
+      const W = Math.max(n*10, 10), H = 100, topPad = 8, botPad = 10;
+      const usable = H - topPad - botPad;
+      const vals = serie.flatMap(d => [d.unidades||0, d.visitas||0]);
+      const maxV = Math.max(1, ...vals);
+      const yFor = v => topPad + usable * (1 - (v||0) / maxV);
+      const baseY = yFor(0);
+      const barW = 6;
+      let bars = '', points = [];
+      serie.forEach((d,i)=>{
+        const cx = i*10+5;
+        const y1 = yFor(d.unidades||0);
+        const barY = Math.min(y1, baseY), barH = Math.max(Math.abs(y1-baseY), 0.6);
+        const label = fmtDiaCurto(d.dia)+' — Vendas: '+(d.unidades||0)+' · Visitas: '+(d.visitas===null?'dado não disponível':d.visitas);
+        bars += '<rect x="'+(cx-barW/2)+'" y="'+barY+'" width="'+barW+'" height="'+barH+'" rx="1" fill="var(--copper)" fill-opacity="0.85"><title>'+escapeHtml(label)+'</title></rect>';
+        if(d.visitas!==null) points.push(cx+','+yFor(d.visitas));
+      });
+      const line = points.length ? '<polyline points="'+points.join(' ')+'" fill="none" stroke="var(--teal)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>' : '';
+      const baseline = '<line x1="0" y1="'+baseY+'" x2="'+W+'" y2="'+baseY+'" stroke="var(--border-strong)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+      const labelStep = Math.max(1, Math.ceil(n/9));
+      const labels = serie.map((d,i) => '<span>'+((i%labelStep===0 || i===n-1) ? escapeHtml(fmtDiaCurto(d.dia)) : '')+'</span>').join('');
+      return '<div class="chart-canvas" style="position:relative;height:200px;padding:0;">'
+        + '<svg class="simple-chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:100%;">' + baseline + bars + line + '</svg>'
+      + '</div>'
+      + '<div class="simple-chart-xlabels" style="grid-template-columns:repeat('+n+',1fr);">' + labels + '</div>';
+    }
+    function chartConversaoHTML(serie){
+      const comDado = (serie||[]).filter(d=>d.conversao!==null);
+      if(!comDado.length){
+        return '<div class="chart-canvas h-lg">' + chartGridLines(4) + chartEmptyState('activity', 'Sem conversão diária disponível (depende de visitas, que não estão disponíveis neste período).') + '</div>';
+      }
+      const n = serie.length;
+      const W = Math.max(n*10, 10), H = 100, topPad = 8, botPad = 10;
+      const usable = H - topPad - botPad;
+      const maxV = Math.max(1, ...comDado.map(d=>d.conversao));
+      const yFor = v => topPad + usable * (1 - v/maxV);
+      let points = [];
+      serie.forEach((d,i)=>{ if(d.conversao!==null) points.push((i*10+5)+','+yFor(d.conversao)); });
+      const line = '<polyline points="'+points.join(' ')+'" fill="none" stroke="var(--success)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>';
+      const dots = serie.map((d,i)=>{
+        if(d.conversao===null) return '';
+        const cx=i*10+5, cy=yFor(d.conversao);
+        return '<circle cx="'+cx+'" cy="'+cy+'" r="1.6" fill="var(--success)" vector-effect="non-scaling-stroke"><title>'+escapeHtml(fmtDiaCurto(d.dia)+' — Conversão: '+d.conversao.toFixed(2)+'%')+'</title></circle>';
+      }).join('');
+      const labelStep = Math.max(1, Math.ceil(n/9));
+      const labels = serie.map((d,i) => '<span>'+((i%labelStep===0 || i===n-1) ? escapeHtml(fmtDiaCurto(d.dia)) : '')+'</span>').join('');
+      return '<div class="chart-canvas" style="position:relative;height:200px;padding:0;">'
+        + '<svg class="simple-chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:100%;">' + line + dots + '</svg>'
+      + '</div>'
+      + '<div class="simple-chart-xlabels" style="grid-template-columns:repeat('+n+',1fr);">' + labels + '</div>';
+    }
+
+    function abrirDetalhe(l){
+      window.AnuncioDetalheModal.abrir({
+        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, origem: 'visitasConversao',
+        campos: [
+          { label:'Visitas no período', html: intOrIndisp(l.visitas) },
+          { label:'Unidades vendidas', value: l.unidadesVendidas },
+          { label:'Pedidos', value: l.pedidos },
+          { label:'Conversão (pedidos÷visitas)', html: pctOrIndisp(l.conversao) },
+          { label:'Visitas período anterior', html: intOrIndisp(l.visitasAnterior) },
+          { label:'Evolução de visitas', html: l.visitasNovo?'Novo no período':pctSinal(l.evolucaoVisitasPercentual) },
+          { label:'Evolução de conversão', value: l.evolucaoConversaoPontos===null?'—':(l.evolucaoConversaoPontos+' p.p.') },
+        ],
+      });
+    }
+
+    function render(){
+      const root = document.getElementById('visitasConversaoRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver Visitas e Conversão aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:960px;">Conversão = <strong>pedidos ÷ visitas × 100</strong> (um pedido com várias unidades do mesmo anúncio conta como 1 conversão). Visitas vêm direto da API de Visitas do Mercado Livre — quando a API não retorna esse dado para um anúncio/período, a tela mostra "Dado não disponível" (nunca um número estimado). Os gráficos mostram a série diária agregada de todas as lojas/anúncios filtrados — a API do Mercado Livre não oferece visitas diárias por anúncio individual.</div>';
+
+      if(state.data && !state.data.semConta){
+        html += '<div class="toolbar"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="vcLojaSelect"><option value="">Todas as lojas</option>'
+            + state.data.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+          + '</select></div>'
+          + '<input type="text" id="vcSkuInput" placeholder="Buscar por SKU…" value="'+escapeHtml(state.sku)+'" style="height:38px;padding:0 12px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-1);min-width:160px;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="vcSortSelect">'
+            + OPCOES_ORDENACAO.map(o=>'<option value="'+o.valor+'" '+(o.valor===state.sort?'selected':'')+'>Ordenar por: '+escapeHtml(o.label)+'</option>').join('')
+          + '</select></div>'
+        + '</div></div>';
+
+        if(state.data.situacaoPorConta && state.data.situacaoPorConta.some(s=>!s.disponivel)){
+          html += '<div class="table-card" style="padding:12px 16px;margin-bottom:14px;border-left:3px solid var(--warning);">'
+            + state.data.situacaoPorConta.filter(s=>!s.disponivel).map(s=>
+              '<div style="font-size:12.5px;color:var(--text-muted);display:flex;gap:8px;align-items:flex-start;margin:4px 0;">'
+                + '<span style="color:var(--warning);flex-shrink:0;">'+svg('alertCircle')+'</span>'
+                + '<span><strong>'+escapeHtml(s.loja||('Conta '+s.contaId))+'</strong>: '+escapeHtml(s.mensagem||'')+'</span>'
+              + '</div>'
+            ).join('')
+          + '</div>';
+        }
+
+        if(state.data.grafico){
+          html += '<div class="chart-card" style="margin-bottom:14px;">'
+            + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('lineChart')+'</span>Visitas x Vendas</div>'
+              + '<div class="chart-legend"><span class="legend-item"><span class="legend-dot" style="background:var(--copper)"></span>Vendas (unidades)</span><span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>Visitas</span></div>'
+            + '</div>'
+            + chartVisitasVendasHTML(state.data.grafico.serieDiaria)
+          + '</div>';
+          html += '<div class="chart-card" style="margin-bottom:14px;">'
+            + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Conversão ao longo do tempo</div></div>'
+            + chartConversaoHTML(state.data.grafico.serieDiaria)
+          + '</div>';
+        }
+      }
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando Visitas e Conversão…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data && state.data.semConta){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma conta do Mercado Livre conectada</h2><p class="lead">Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> para ver Visitas e Conversão aqui.</p></div>';
+      } else if(state.data && !state.data.linhas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('eye')+'</div>'
+          + '<h2>Nenhum anúncio encontrado</h2><p class="lead">Nenhum anúncio com venda ou dado para os filtros escolhidos.</p></div>';
+      } else if(state.data){
+        html += tabelaHTML(ordenarLinhas(state.data.linhas, state.sort));
+      }
+
+      root.innerHTML = html;
+
+      const selLoja = document.getElementById('vcLojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadDados(); });
+      const skuInput = document.getElementById('vcSkuInput');
+      if(skuInput){
+        let debounce = null;
+        skuInput.addEventListener('input', ()=>{ clearTimeout(debounce); debounce = setTimeout(()=>{ state.sku = skuInput.value; loadDados(); }, 400); });
+      }
+      const selSort = document.getElementById('vcSortSelect');
+      if(selSort) selSort.addEventListener('change', ()=>{ state.sort = selSort.value; render(); });
+
+      root.querySelectorAll('.anuncio-link').forEach(el=>{
+        el.addEventListener('click', ()=>{
+          const mlItemId = el.dataset.mlItem;
+          const l = (state.data.linhas||[]).find(x=>x.mlItemId===mlItemId);
+          if(l) abrirDetalhe(l);
+        });
+      });
+    }
+
+    window.VisitasConversao = { load };
+  })();
+
+  /* ================= MARGEM POR ANÚNCIO =================
+     Ativada em 26/08/2026, pedido explícito do usuário. Usa a MESMA regra
+     financeira de Pedidos/Financeiro/Relatórios/Ads (lib/resultadoVenda.js)
+     — nenhuma fórmula nova. Investimento em Ads vem da mesma fonte da tela
+     Ads. Quando falta custo de algum SKU, a margem aparece marcada como
+     incompleta (nunca uma soma parcial disfarçada de completa). */
+  (function(){
+    const state = { loading:false, error:null, data:null, contaId:'', sku:'', sort:'maiorResultado' };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function pendenteCusto(){ return '<span style="color:var(--text-faint);font-style:italic;" title="Falta cadastrar o custo deste SKU em Produtos.">margem incompleta</span>'; }
+    function pendenteAds(){ return '<span style="color:var(--text-faint);font-style:italic;" title="Sem sincronização de Ads para este anúncio/período.">sem dado de Ads</span>'; }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pctFmt(v){ return v===null||v===undefined ? '—' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+
+    async function apiMargem(empresaId, periodo, contaId, sku){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      if(sku) params.set('sku', sku);
+      const res = await fetch('/api/margem-anuncio?'+params.toString());
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Margem por Anúncio.');
+      return body;
+    }
+
+    async function loadDados(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiMargem(filtro.empresaId, filtro.periodo, state.contaId, state.sku); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    function load(queryStr){
+      if(queryStr){
+        const params = new URLSearchParams(queryStr);
+        if(params.get('sku')) state.sku = params.get('sku');
+      }
+      loadDados();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-margemAnuncio');
+      if(page && page.classList.contains('active')) loadDados();
+      else render();
+    });
+
+    const OPCOES_ORDENACAO = [
+      { valor:'maiorResultado', label:'Maior resultado' },
+      { valor:'maiorPrejuizo', label:'Maior prejuízo' },
+      { valor:'maiorMargemPct', label:'Maior margem %' },
+      { valor:'menorMargemPct', label:'Menor margem %' },
+      { valor:'maiorFaturamento', label:'Maior faturamento' },
+      { valor:'maiorGastoAds', label:'Maior gasto com Ads' },
+    ];
+    function valOr(l, campo, seAusente){ const v = l[campo]; return v===null||v===undefined ? seAusente : v; }
+    function ordenarLinhas(linhas, sort){
+      const copia = linhas.slice();
+      if(sort==='maiorPrejuizo') return copia.sort((a,b)=> valOr(a,'resultadoAposAds',Infinity) - valOr(b,'resultadoAposAds',Infinity));
+      if(sort==='maiorMargemPct') return copia.sort((a,b)=> valOr(b,'margemContribuicaoPct',-Infinity) - valOr(a,'margemContribuicaoPct',-Infinity));
+      if(sort==='menorMargemPct') return copia.sort((a,b)=> valOr(a,'margemContribuicaoPct',Infinity) - valOr(b,'margemContribuicaoPct',Infinity));
+      if(sort==='maiorFaturamento') return copia.sort((a,b)=> (b.faturamento||0) - (a.faturamento||0));
+      if(sort==='maiorGastoAds') return copia.sort((a,b)=> valOr(b,'investimentoAds',-Infinity) - valOr(a,'investimentoAds',-Infinity));
+      return copia.sort((a,b)=> valOr(b,'resultadoAposAds',-Infinity) - valOr(a,'resultadoAposAds',-Infinity)); // 'maiorResultado'
+    }
+
+    function destaquesHTML(l){
+      const tags = [];
+      if(l.destaques.margemNegativa) tags.push(['Margem negativa','var(--danger)']);
+      else if(l.destaques.prejuizoAposAds) tags.push(['Prejuízo após Ads','var(--danger)']);
+      if(l.destaques.faturaMuitoPoucaMargem) tags.push(['Fatura muito, pouca margem','var(--warning)']);
+      if(l.destaques.adsConsumindoResultado) tags.push(['Ads consumindo resultado','var(--warning)']);
+      if(l.destaques.vendePoucoOtimaMargem) tags.push(['Vende pouco, ótima margem','var(--teal)']);
+      if(l.destaques.vendeMuitoMargemSaudavel) tags.push(['Vende muito, margem saudável','var(--success)']);
+      if(!tags.length) return '';
+      return tags.map(([t,cor])=>'<span style="display:inline-block;font-size:11px;padding:2px 7px;border-radius:20px;background:var(--surface-2);color:'+cor+';font-weight:600;margin:0 4px 4px 0;">'+escapeHtml(t)+'</span>').join('');
+    }
+
+    function anuncioCellHTML(l){
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="cell-stack">'
+        + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+        + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+      + '</div></a></td>';
+    }
+
+    function tabelaHTML(linhas){
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Produto</th><th>Loja</th><th>Qtd vendida</th><th>Faturamento</th><th>Custo produtos</th><th>Imposto</th>'
+        + '<th>Tarifas</th><th>Frete vendedor</th><th>Margem contrib.</th><th>Margem %</th><th>Ads</th><th>Resultado após Ads</th><th>Margem após Ads %</th><th>Destaques</th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td>'+(l.produto?escapeHtml(l.produto):'<span style="color:var(--text-faint);">—</span>')+'</td>'
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td class="mono tab-nums">'+l.quantidadeVendida+'</td>'
+          + '<td class="mono">'+money(l.faturamento)+'</td>'
+          + '<td class="mono">'+(l.custoProdutos===null?pendenteCusto():money(l.custoProdutos))+'</td>'
+          + '<td class="mono">'+money(l.imposto)+'</td>'
+          + '<td class="mono">'+(l.tarifas===null?'<span style="color:var(--text-faint);">—</span>':money(l.tarifas))+'</td>'
+          + '<td class="mono">'+(l.freteVendedor===null?'<span style="color:var(--text-faint);">—</span>':money(l.freteVendedor))+'</td>'
+          + '<td class="mono" style="'+(l.margemContribuicao!==null?(l.margemContribuicao>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.margemIncompleta?pendenteCusto():money(l.margemContribuicao))+'</td>'
+          + '<td class="mono">'+(l.margemIncompleta?'—':pctFmt(l.margemContribuicaoPct))+'</td>'
+          + '<td class="mono">'+(l.semDadosAds?pendenteAds():money(l.investimentoAds))+'</td>'
+          + '<td class="mono" style="'+(l.resultadoAposAds!==null?(l.resultadoAposAds>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.resultadoAposAds===null?(l.margemIncompleta?pendenteCusto():pendenteAds()):money(l.resultadoAposAds))+'</td>'
+          + '<td class="mono">'+(l.margemAposAdsPct===null?'—':pctFmt(l.margemAposAdsPct))+'</td>'
+          + '<td>'+destaquesHTML(l)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    function abrirDetalhe(l){
+      window.AnuncioDetalheModal.abrir({
+        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, origem: 'margemAnuncio',
+        campos: [
+          { label:'Quantidade vendida', value: l.quantidadeVendida },
+          { label:'Faturamento', html: money(l.faturamento) },
+          { label:'Custo dos produtos', html: l.custoProdutos===null?pendenteCusto():money(l.custoProdutos) },
+          { label:'Imposto', html: money(l.imposto) },
+          { label:'Tarifas/comissões', html: l.tarifas===null?'—':money(l.tarifas) },
+          { label:'Frete do vendedor', html: l.freteVendedor===null?'—':money(l.freteVendedor) },
+          { label:'Margem de contribuição', html: l.margemIncompleta?pendenteCusto():money(l.margemContribuicao) },
+          { label:'Margem de contribuição %', html: l.margemIncompleta?'—':pctFmt(l.margemContribuicaoPct) },
+          { label:'Gasto com Ads', html: l.semDadosAds?pendenteAds():money(l.investimentoAds) },
+          { label:'Resultado após Ads', html: l.resultadoAposAds===null?'—':money(l.resultadoAposAds) },
+          { label:'Margem após Ads %', html: l.margemAposAdsPct===null?'—':pctFmt(l.margemAposAdsPct) },
+        ],
+      });
+    }
+
+    function render(){
+      const root = document.getElementById('margemAnuncioRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver Margem por Anúncio aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:980px;">FATURAMENTO − tarifas/comissões − frete do vendedor − imposto − custo dos produtos = <strong>MARGEM DE CONTRIBUIÇÃO</strong>. MARGEM DE CONTRIBUIÇÃO − Ads = <strong>RESULTADO APÓS ADS</strong>. Mesma fórmula usada em Pedidos, Financeiro e Relatórios — nunca uma conta nova. Quando falta o custo de algum SKU em <strong>Produtos</strong>, a margem daquele anúncio aparece marcada como incompleta.</div>';
+
+      if(state.data && !state.data.semConta){
+        html += '<div class="toolbar"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="maLojaSelect"><option value="">Todas as lojas</option>'
+            + state.data.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+          + '</select></div>'
+          + '<input type="text" id="maSkuInput" placeholder="Buscar por SKU…" value="'+escapeHtml(state.sku)+'" style="height:38px;padding:0 12px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-1);min-width:160px;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="maSortSelect">'
+            + OPCOES_ORDENACAO.map(o=>'<option value="'+o.valor+'" '+(o.valor===state.sort?'selected':'')+'>Ordenar por: '+escapeHtml(o.label)+'</option>').join('')
+          + '</select></div>'
+        + '</div></div>';
+      }
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando Margem por Anúncio…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data && state.data.semConta){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma conta do Mercado Livre conectada</h2><p class="lead">Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> para ver Margem por Anúncio aqui.</p></div>';
+      } else if(state.data && !state.data.linhas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('wallet')+'</div>'
+          + '<h2>Nenhuma venda no período</h2><p class="lead">Não há vendas para os filtros escolhidos.</p></div>';
+      } else if(state.data){
+        html += tabelaHTML(ordenarLinhas(state.data.linhas, state.sort));
+      }
+
+      root.innerHTML = html;
+
+      const selLoja = document.getElementById('maLojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadDados(); });
+      const skuInput = document.getElementById('maSkuInput');
+      if(skuInput){
+        let debounce = null;
+        skuInput.addEventListener('input', ()=>{ clearTimeout(debounce); debounce = setTimeout(()=>{ state.sku = skuInput.value; loadDados(); }, 400); });
+      }
+      const selSort = document.getElementById('maSortSelect');
+      if(selSort) selSort.addEventListener('change', ()=>{ state.sort = selSort.value; render(); });
+
+      root.querySelectorAll('.anuncio-link').forEach(el=>{
+        el.addEventListener('click', ()=>{
+          const mlItemId = el.dataset.mlItem;
+          const l = (state.data.linhas||[]).find(x=>x.mlItemId===mlItemId);
+          if(l) abrirDetalhe(l);
+        });
+      });
+    }
+
+    window.MargemAnuncio = { load };
   })();
 
   /* ================= RELATÓRIOS — categorias com dados 100% reaproveitados =================
