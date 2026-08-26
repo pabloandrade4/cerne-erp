@@ -2,6 +2,95 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-26 (34) — Análise ganha 3 abas: Performance de Anúncios, Visitas e Conversão, Margem por Anúncio
+- **Pedido do usuário, "Pare depois dessas 3 abas":** 3 telas novas dentro
+  do grupo Análise, cada anúncio real do Mercado Livre analisado
+  individualmente. Ver `02-decisoes.md` (34) para o desenho completo e as
+  decisões de negócio (critérios objetivos, definição de conversão, por
+  que o gráfico é agregado, etc).
+- **Arquivos novos de base compartilhada:**
+  `server/lib/periodoComparacao.js` (período anterior de mesma duração,
+  não altera `lib/periodo.js`), `server/lib/anunciosBase.js` (agrupamento
+  de vendas por anúncio com todos os componentes financeiros, catálogo ao
+  vivo do Mercado Livre por conta, última venda por anúncio, nomes de
+  produto por SKU, cálculo de crescimento — reaproveitado pelas 3 telas),
+  `server/lib/mlVisitas.js` (cliente novo da API de Visitas do Mercado
+  Livre — `GET /items/visits`, `GET /users/{id}/items_visits/time_window`).
+- **`server/lib/mlAnuncios.js` (aditivo):** nova função
+  `buscarTodosAnunciosDaConta` (pagina o catálogo inteiro da conta, com
+  limite de segurança) — a função existente `buscarAnunciosDaConta` (usada
+  pela tela Anúncios) não foi alterada em comportamento, só refatorada
+  internamente para reaproveitar a resolução de token.
+- **`server/lib/ads.js` (aditivo):** exportada `buscarMetricasPorAnuncio`
+  (já existia, só não era exportada) — usada por Margem por Anúncio para
+  ler o investimento em Ads já sincronizado. Nenhuma mudança na tela Ads.
+- **Arquivo novo `server/lib/performanceAnuncios.js`:** vendas reais por
+  anúncio (fonte única de sempre) + catálogo ao vivo (preço/status/
+  estoque) + última venda + crescimento vs. período anterior; classifica
+  🟢/🟡/🔴 com critérios objetivos e documentados (constantes nomeadas,
+  exportadas para os testes).
+- **Arquivo novo `server/lib/visitasConversao.js`:** funil por anúncio
+  (visitas × vendas × conversão), série diária agregada para os 2
+  gráficos, insights objetivos (muitas visitas+poucas vendas, poucas
+  visitas+boa conversão, anúncio forte, queda de visitas).
+- **Arquivo novo `server/lib/margemAnuncio.js`:** margem de contribuição e
+  resultado após Ads por anúncio, reaproveitando a mesma fórmula de
+  sempre; destaques objetivos (fatura muito/pouca margem, margem negativa,
+  prejuízo após Ads, Ads consumindo resultado, vende pouco/ótima margem,
+  vende muito/margem saudável).
+- **Rotas novas:** `server/routes/performanceAnuncios.js`
+  (`GET /api/performance-anuncios`), `server/routes/visitasConversao.js`
+  (`GET /api/visitas-conversao`), `server/routes/margemAnuncio.js`
+  (`GET /api/margem-anuncio`). Wiring em `server.js`, nenhuma rota
+  existente alterada.
+- **Front-end (`public/index.html`), aditivo:** 3 itens novos no menu
+  Análise (entre Ads e Relatórios) — mesmo padrão de módulo auto-contido
+  (IIFE + `window.<Modulo>`), usando `window.CerneFiltro` (empresa/
+  período) + filtro de loja/SKU/status próprio de cada tela (mesmo padrão
+  da tela Ads). Modal compartilhado `window.AnuncioDetalheModal` (clique
+  no anúncio em qualquer uma das 3 telas → abre o detalhe com os campos já
+  carregados + botões para ver o mesmo anúncio, por SKU, nas outras 2
+  abas). **Nenhum outro módulo foi alterado.**
+- **Bug encontrado e corrigido durante o teste manual (Playwright):** a
+  função `navigate()` não repassava a query string (`?sku=...`) para os 3
+  módulos novos ao trocar de página — o clique em "ver este anúncio em
+  Margem por Anúncio" navegava para a tela certa mas sem pré-preencher o
+  filtro de SKU. Corrigido (mesma linha das outras 25 chamadas de
+  `.load()`, só faltava passar `queryStr`) e confirmado por teste
+  automatizado com Playwright: clique no anúncio → modal → botão "Margem
+  por Anúncio" → tela filtrada para exatamente 1 linha (o mesmo SKU).
+- **Bug encontrado e corrigido durante o teste manual:** o modal de
+  detalhe usava a classe CSS `modal` (não existe no projeto — a classe
+  correta é `modal-card`), então o modal aparecia sem caixa/fundo,
+  sobrepondo o conteúdo da tela por trás. Corrigido para `modal-card` +
+  `modal-title` (mesmo padrão de todos os outros modais do sistema).
+- **Testes novos:** `server/test/anunciosAnaliseBase.test.js` (20 casos
+  puros, sem banco — período anterior, agrupamento de vendas,
+  `calcularCrescimento`, critérios objetivos do indicador 🟢🟡🔴) e
+  `server/test/anunciosAnalise.integration.test.js` (10 casos com Postgres
+  real, empresa 900 — reconciliação de faturamento com
+  `lib/relatorioVendas.js`, comportamento com token de conta expirado
+  (preço/status/visitas nunca inventados), filtro de SKU/loja, empresa sem
+  conta). Suíte completa: **315/320 passando** (290 já existentes + 30
+  novos, 0 regressão nos módulos já existentes — os 5 que falham são em
+  `test/financeiro.test.js`, um teste **pré-existente e sem relação com
+  esta tarefa**, sensível à data corrente; ver `05-problemas-conhecidos.md`).
+- **Testado com dados reais (empresa 900 — "PFEMBALAGEMS"):** as 3 rotas
+  batem exatamente com `/api/relatorios/resumo-vendas` (mesma fonte —
+  R$ 558,92 de faturamento, 10 pedidos, em ambas), confirmando a
+  reconciliação com Pedidos/Relatórios pedida no checklist. Testado
+  visualmente com Playwright (screenshots das 3 telas + do modal de
+  detalhe + da navegação cruzada) contra o servidor real rodando nesta
+  sessão — nenhum erro de JavaScript no console.
+- **Limitação conhecida, documentada (não é um bug):** as 2 contas do
+  Mercado Livre disponíveis neste ambiente de desenvolvimento estão com
+  token expirado (status `erro`) — por isso preço/status/estoque ao vivo e
+  visitas nunca puderam ser testados contra uma resposta real da API
+  nesta sessão; o comportamento testado e confirmado foi exatamente o
+  esperado nesse cenário: nunca inventar o dado, mostrar o motivo real
+  ("conexão com erro" / "Dado não disponível"). Ver
+  `05-problemas-conhecidos.md`.
+
 ## 2026-08-25 (33) — Financeiro ganha 2 abas: Despesas Fixas (recorrência → Contas a Pagar automática) e Fluxo de Caixa (evolução diária, REALIZADO x PROJETADO)
 - **Pedido do usuário, em 3 passos, "Não altere outros módulos":** cadastro
   de despesas recorrentes que gera sozinho a Conta a Pagar do período sem

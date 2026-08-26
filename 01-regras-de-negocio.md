@@ -630,6 +630,71 @@ _(sem regras registradas ainda)_
 - **Só endpoints ATUAIS da API de Advertising do Mercado Livre** — nunca
   os endpoints legados/descontinuados, mesmo que ainda respondam.
 
+## Análise por Anúncio — Performance de Anúncios / Visitas e Conversão / Margem por Anúncio (26/08/2026)
+Três telas dentro do grupo Análise, todas usando os mesmos filtros globais
+(empresa/loja/período) e permitindo abrir o detalhe de qualquer anúncio a
+partir de qualquer uma das três. **Nunca inventa dado; nunca mistura loja/
+CNPJ diferente do filtrado; quando uma informação depende de uma API não
+integrada ou indisponível no momento, mostra o motivo real, nunca um
+número estimado.**
+
+### Performance de Anúncios
+- Indicadores 🟢 Bom desempenho / 🟡 Atenção / 🔴 Baixo desempenho seguem
+  **critérios objetivos, documentados e nunca "no olho"** (constantes
+  nomeadas em `server/lib/performanceAnuncios.js`), só aplicados a
+  anúncios com status ativo:
+  - 🔴 **Baixo desempenho** quando: está 14+ dias sem nenhuma venda; OU
+    vendia no período anterior e não vendeu nada no período atual; OU
+    caiu 50% ou mais nas unidades vendidas vs. o período anterior.
+  - 🟡 **Atenção** quando (e não é 🔴): está 7 a 13 dias sem vender; OU
+    caiu 20% ou mais nas unidades vendidas; OU está "praticamente parado"
+    (vendeu no período, mas média ≤ 0,1 unidade/dia — menos de 1 a cada 10
+    dias).
+  - 🟢 **Bom desempenho**: vendeu ao menos 1 unidade no período, sem
+    nenhum dos sinais acima.
+  - Anúncio pausado/encerrado não recebe indicador de cor nenhum — mostra
+    o próprio status.
+- "Comparação com período anterior" usa uma janela de mesma duração,
+  imediatamente anterior ao início do período selecionado (ver
+  `server/lib/periodoComparacao.js`) — a mesma regra para as 5 chaves do
+  filtro global.
+- Preço atual/status/estoque vêm AO VIVO do Mercado Livre (mesma fonte da
+  tela Anúncios); quando a conta está com erro de conexão, esses campos
+  aparecem indisponíveis, nunca um valor antigo.
+
+### Visitas e Conversão
+- **Conversão = pedidos ÷ visitas × 100** (não unidades ÷ visitas — um
+  pedido com várias unidades do mesmo anúncio conta como 1 conversão),
+  sempre rotulado explicitamente na tela.
+- Visitas vêm da API de Visitas do Mercado Livre. **Nunca inventa número
+  de visitas** — quando a API não retorna o dado para um anúncio/período,
+  a tela mostra literalmente "Dado não disponível" (nunca 0, nunca "—").
+- Os gráficos "Visitas x Vendas" e "Conversão ao longo do tempo" mostram a
+  série diária AGREGADA de todas as lojas/anúncios filtrados — a API do
+  Mercado Livre não oferece visitas diárias por anúncio individual sem uma
+  chamada por anúncio (não escala).
+- Insights (muitas visitas + poucas vendas, poucas visitas + boa
+  conversão, anúncio forte, queda de visitas) só são calculados para
+  anúncios com visita disponível; "muitas"/"poucas" são relativas ao
+  terço de cima/baixo do próprio conjunto filtrado, nunca um número fixo.
+
+### Margem por Anúncio
+- **Usa a MESMA fórmula/fonte de Pedidos, Financeiro, Relatórios e Ads —
+  nunca uma fórmula nova:** FATURAMENTO − tarifas/comissões − frete do
+  vendedor − imposto − custo dos produtos = MARGEM DE CONTRIBUIÇÃO; MARGEM
+  DE CONTRIBUIÇÃO − Ads = RESULTADO APÓS ADS.
+- Quando falta o custo de algum SKU em Produtos, a margem daquele anúncio
+  aparece marcada como incompleta (nunca uma soma parcial disfarçada de
+  completa). Imposto nunca é sinalizado como "ausente por SKU": neste ERP
+  a alíquota de imposto é única por empresa (não por SKU), então sempre é
+  calculada quando há valor de venda — sinalizar "imposto ausente" seria
+  inventar uma situação que o sistema nunca produz de verdade.
+- Destaques (fatura muito mas deixa pouca margem, margem negativa,
+  prejuízo após Ads, Ads consumindo grande parte do resultado, vende
+  pouco mas ótima margem, vende muito com margem saudável) usam os mesmos
+  limiares por terço do próprio conjunto filtrado (documentados em
+  `server/lib/margemAnuncio.js`).
+
 ## DRE
 - **Ativado em 24/08/2026.** Nenhuma fórmula financeira nova — é a mesma
   fonte única já usada em Visão Geral/Pedidos/Financeiro/Relatórios

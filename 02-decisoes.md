@@ -3,6 +3,126 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-26 (34) — Três abas novas em Análise: Performance de Anúncios, Visitas e Conversão, Margem por Anúncio
+
+- **Pedido do usuário, "Pare depois dessas 3 abas", "Não altere outros
+  módulos":** analisar cada anúncio real do Mercado Livre em 3 telas
+  separadas dentro do grupo Análise, usando os mesmos filtros globais
+  (empresa/loja/período), com critérios objetivos e documentados para
+  qualquer indicador/status, nunca inventando dado, e permitindo clicar
+  num anúncio em qualquer uma das 3 telas para abrir o detalhe. Ver
+  `04-alteracoes.md` (34) para a lista completa de arquivos.
+
+- **Critérios objetivos dos indicadores 🟢🟡🔴 (Performance de Anúncios) —
+  por que estes números:** o usuário pediu explicitamente "não crie esses
+  status arbitrariamente". Em vez de um único limiar mágico, os critérios
+  combinam 3 sinais que já existem nos dados reais (dias sem vender,
+  crescimento/queda de unidades vendidas vs. o período anterior de mesma
+  duração, e média de vendas por dia) em 2 faixas (queda forte ≥50% / queda
+  moderada ≥20%, 14+ dias sem vender / 7-13 dias sem vender) — os mesmos
+  números estão em `lib/performanceAnuncios.js` (constantes nomeadas no
+  topo do arquivo, nunca "no olho" dentro da lógica) e em
+  `01-regras-de-negocio.md`. Só se aplicam a anúncios com status "active"
+  — um anúncio pausado/encerrado tem seu próprio badge de status, não faz
+  sentido avaliar "desempenho" de um anúncio que nem está no ar.
+
+- **Período anterior ("comparação com período anterior"):** criado
+  `lib/periodoComparacao.js` (não altera `lib/periodo.js`, mesmo padrão já
+  usado para `lib/fluxoCaixa.js`) com uma única regra simples para as 5
+  chaves do filtro global: mesma duração, imediatamente anterior ao início
+  do período selecionado. Para "Este mês" isso NÃO é "o mês de calendário
+  anterior inteiro" (duração variável) — é a mesma quantidade de dias
+  corridos antes do dia 1. Decisão consciente de manter uma única regra
+  simples e sempre igual, em vez de um cálculo especial por chave que
+  seria mais "natural" para calendário mas inconsistente entre si.
+
+- **Definição de conversão (Visitas e Conversão):** o usuário pediu para
+  "usar a métrica mais adequada... e deixar claro qual definição está
+  sendo usada". Decidido: **Conversão = pedidos ÷ visitas × 100** (não
+  unidades ÷ visitas) — um pedido com 3 unidades do mesmo anúncio conta
+  como 1 conversão, é a definição padrão de taxa de conversão de
+  e-commerce e evita inflar a conversão de anúncios vendidos em kit/multi-
+  unidade. Mostrado com esse rótulo explícito em toda a tela (cabeçalho da
+  coluna, `field-hint`, modal de detalhe), nunca só "Conversão".
+
+- **API de Visitas do Mercado Livre — pesquisada e integrada de verdade,
+  mas resposta NÃO verificada contra uma conta real:** endpoint real
+  pesquisado na documentação oficial (`GET /items/visits?ids=...&date_from=
+  ...&date_to=...`, ver `lib/mlVisitas.js`) e implementado com chamada real
+  à API. As duas contas ML disponíveis neste ambiente de desenvolvimento
+  estão com token expirado (status `erro`), então o formato exato da
+  resposta da API nunca pôde ser conferido contra uma chamada real nesta
+  sessão — o parsing foi feito defensivamente (tenta os formatos mais
+  prováveis descritos na documentação) e, se o formato real vier diferente
+  do esperado, o anúncio simplesmente fica com "Dado não disponível" (nunca
+  quebra, nunca inventa um número). Ver `05-problemas-conhecidos.md`.
+
+- **Gráficos "Visitas x Vendas" e "Conversão ao longo do tempo" são
+  agregados (toda a loja/anúncios filtrados), não por anúncio individual:**
+  decisão forçada pela própria API do Mercado Livre — o endpoint de série
+  diária de visitas (`items_visits/time_window`) é por CONTA (usuário
+  vendedor), não por anúncio; pedir a série diária de cada anúncio
+  individualmente exigiria 1 chamada por anúncio, o que não escala para um
+  catálogo inteiro. Documentado em `lib/visitasConversao.js` e na própria
+  tela (`field-hint`). A tabela por anúncio mostra visitas TOTAIS do
+  período e a evolução (comparação percentual) vs. o período anterior —
+  não uma série diária por anúncio.
+
+- **"Muitas"/"poucas" visitas, "fatura muito"/"vende pouco" são relativos
+  ao próprio conjunto filtrado, por terços — não um valor fixo em reais/
+  visitas:** um valor fixo (ex: "1000 visitas é muito") funcionaria para
+  uma empresa e seria absurdo para outra 10x maior/menor. Decidido comparar
+  cada anúncio aos outros do MESMO resultado filtrado (empresa/loja/
+  período), usando o terço de cima/baixo do conjunto como corte — mesmo
+  critério em `lib/margemAnuncio.js` e `lib/visitasConversao.js`. Com menos
+  de 3 anúncios no conjunto, nenhum destaque relativo é calculado (não faz
+  sentido "terço" de 1 ou 2 itens).
+
+- **Margem por Anúncio reaproveita EXATAMENTE a fórmula de sempre — nenhum
+  cálculo novo:** pedido explícito do usuário ("Não crie uma nova fórmula
+  específica para essa página"). `lib/margemAnuncio.js` não recalcula nada
+  — agrupa por anúncio os mesmos itens de pedido já calculados por
+  `lib/relatorioVendas.js` (via `lib/anunciosBase.js#agruparVendasDetalhado`,
+  que usa `lib/resultadoVenda.js`) e o investimento em Ads já sincronizado
+  (mesma fonte da tela Ads — `lib/ads.js#buscarMetricasPorAnuncio`, agora
+  exportado; mudança puramente aditiva, não altera a tela Ads).
+
+- **"Imposto ausente por SKU" nunca é sinalizado — decisão consciente,
+  não uma omissão:** o usuário pediu para sinalizar quando "algum SKU
+  estiver sem custo ou imposto". Neste ERP o imposto é uma ALÍQUOTA ÚNICA
+  POR EMPRESA (`config_financeiro`, não por SKU — ver `lib/resultadoVenda.js`),
+  sempre calculada quando o valor da venda existe. Sinalizar "imposto
+  ausente" seria inventar uma situação que o modelo de dados atual nunca
+  produz de verdade. Documentado no topo de `lib/margemAnuncio.js`: a causa
+  real de margem incompleta hoje é sempre custo do produto não cadastrado
+  em Produtos (mesmo sinal `margemIncompleta`/`pendentes` já usado em
+  Pedidos, Relatórios e Ads) — se um dia o imposto passar a ser por SKU,
+  esta tela precisa ser revisada.
+
+- **"Abrir os detalhes do anúncio" — modal compartilhado com navegação
+  cruzada por SKU, em vez de uma 4ª tela nova:** em vez de criar uma
+  página de detalhe do zero (que exigiria decidir uma URL própria, um
+  layout novo, e ainda assim duplicaria dado já carregado), decidido um
+  modal compartilhado (`window.AnuncioDetalheModal`, um único código
+  reaproveitado pelas 3 telas) que mostra os campos JÁ CARREGADOS daquela
+  linha (nenhuma chamada nova à API) e oferece botões para abrir o MESMO
+  anúncio (filtrado pelo SKU) nas outras 2 abas — clicar em "Visitas e
+  Conversão" dentro do modal de Performance de Anúncios navega pra lá já
+  com o filtro de SKU preenchido. Reaproveita o padrão de rota com
+  query string já existente (`navigate('marketplaces?ml=...')`).
+
+- **Playwright estava disponível neste ambiente o tempo todo — correção a
+  uma afirmação anterior:** a entrada de 25/08/2026 (33) registrou "este
+  ambiente de desenvolvimento não tem acesso a um navegador Playwright
+  nesta etapa". Isso estava ERRADO — o Chromium do Playwright está
+  pré-instalado neste ambiente (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`)
+  e foi usado nesta etapa para testar as 3 telas novas visualmente
+  (screenshots + captura de erros de console), inclusive o clique no
+  anúncio e a navegação cruzada entre as 3 abas com o filtro de SKU. Ver
+  `05-problemas-conhecidos.md` para o que ainda não pôde ser testado (dados
+  ao vivo do Mercado Livre, por causa do token expirado das contas de
+  teste).
+
 ## 2026-08-25 (33) — Duas abas novas em Financeiro: Despesas Fixas (recorrência → Contas a Pagar automática, sem duplicar) e Fluxo de Caixa (evolução diária, REALIZADO x PROJETADO)
 
 - **Pedido do usuário, em 3 passos, "Não altere outros módulos":** (1)

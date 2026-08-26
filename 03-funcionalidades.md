@@ -3,6 +3,55 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
+## Performance de Anúncios (Análise — 26/08/2026)
+- **Status:** concluído, testado com Postgres local + dados reais (empresa
+  900) via `curl` e visualmente via Playwright (screenshots, sem erro de
+  JavaScript) + suíte automatizada (`test/anunciosAnaliseBase.test.js`,
+  `test/anunciosAnalise.integration.test.js`). Preço/status ao vivo do
+  Mercado Livre não testados contra uma resposta real (token de teste
+  expirado — ver `05-problemas-conhecidos.md`); o comportamento de
+  indisponibilidade nesse cenário foi testado e confirmado.
+- **O que é:** tabela com cada anúncio real do Mercado Livre (título, ID,
+  SKU, produto cadastrado, loja, status, preço atual, unidades vendidas,
+  pedidos, faturamento, média de vendas/dia, comparação com o período
+  anterior, crescimento/queda), indicador de desempenho 🟢🟡🔴 com
+  critérios objetivos documentados, sinalizações (sem vender há vários
+  dias, vendendo cada vez menos, crescendo, praticamente parado). Filtros:
+  empresa, loja, período, SKU, status. Ordenações: mais/menos vendidos,
+  maior/menor faturamento, maior crescimento/queda, anúncios sem vendas.
+- **Onde:** menu Análise → Performance de Anúncios.
+
+## Visitas e Conversão (Análise — 26/08/2026)
+- **Status:** concluído, mesmo nível de teste da tela acima. Visitas da
+  API do Mercado Livre não testadas contra uma resposta real (token de
+  teste expirado); o comportamento "Dado não disponível" nesse cenário foi
+  testado e confirmado ponta a ponta (backend + tela).
+- **O que é:** funil por anúncio (visitas, unidades vendidas, pedidos,
+  conversão = pedidos ÷ visitas × 100, evolução de visitas/conversão vs.
+  período anterior), insights (muitas visitas + poucas vendas, poucas
+  visitas + boa conversão, anúncio forte, queda de visitas), rankings
+  (mais/menos visitados, melhor/pior conversão, maior crescimento/queda de
+  visitas) e 2 gráficos (Visitas x Vendas, Conversão ao longo do tempo —
+  série agregada de todas as lojas/anúncios filtrados). Nunca inventa
+  número de visitas.
+- **Onde:** menu Análise → Visitas e Conversão.
+
+## Margem por Anúncio (Análise — 26/08/2026)
+- **Status:** concluído, testado com Postgres local + dados reais (empresa
+  900): faturamento e margem batem exatamente com Pedidos/Relatórios/Ads
+  (mesma fonte, sem cálculo novo). Testado visualmente via Playwright.
+- **O que é:** para cada anúncio, agrupa as vendas reais do período e
+  mostra faturamento, custo dos produtos, imposto, tarifas/comissões,
+  frete do vendedor, margem de contribuição (R$ e %), gasto com Ads,
+  resultado após Ads, margem após Ads (%) — mesma fórmula/fonte de
+  Pedidos/Financeiro/Relatórios/Ads. Rankings (maior resultado, maior
+  prejuízo, maior/menor margem %, maior faturamento, maior gasto com Ads)
+  e destaques objetivos (fatura muito mas pouca margem, margem negativa,
+  Ads consumindo o resultado, vende pouco com ótima margem, vende muito
+  com margem saudável). Sinaliza claramente quando falta custo de algum
+  SKU (margem incompleta).
+- **Onde:** menu Análise → Margem por Anúncio.
+
 ## Despesas Fixas (cadastro de despesas recorrentes, com geração automática de Contas a Pagar — 25/08/2026)
 - **Status:** concluído, testado localmente (Postgres local, chamadas HTTP
   diretas ao servidor real + suíte automatizada — `test/despesasFixas.test.js`,

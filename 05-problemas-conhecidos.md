@@ -3,6 +3,51 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Análise por Anúncio: formato real da resposta da API de Visitas não verificado; contas de teste com token expirado; teste `financeiro.test.js` pré-existente falhando por data (26/08/2026)
+- **Formato exato da resposta de `GET /items/visits` não conferido contra
+  uma chamada real:** as 2 contas do Mercado Livre disponíveis neste
+  ambiente de desenvolvimento (empresas 8 e 900) estão com `status='erro'`
+  (token expirado), então toda chamada real à API de Visitas
+  (`server/lib/mlVisitas.js`) falhou com erro de autenticação nesta sessão
+  — nunca uma resposta de sucesso pra conferir o formato exato do JSON. O
+  parsing (`interpretarResposta`) foi escrito defensivamente, tentando os
+  formatos mais prováveis descritos na documentação oficial pesquisada
+  (`developers.mercadolivre.com.br/pt_br/recurso-visits` e
+  `global-selling.mercadolibre.com/devsite/visits`) — se o formato real
+  vier diferente, o anúncio fica com "Dado não disponível" (nunca quebra,
+  nunca inventa um número), mas o número pode aparecer indisponível mesmo
+  quando a API teria o dado. **Ação necessária:** assim que uma conta com
+  token válido e Product Ads/anúncios reais estiver disponível, chamar
+  `GET /items/visits?ids=...&date_from=...&date_to=...` manualmente e
+  comparar com `interpretarResposta` em `lib/mlVisitas.js`, ajustando o
+  parsing se o formato divergir. O mesmo vale para
+  `GET /users/{id}/items_visits/time_window` (série diária agregada, usada
+  nos gráficos).
+- **Preço/status/estoque ao vivo (Performance de Anúncios) e catálogo
+  completo (`buscarTodosAnunciosDaConta`) também não testados contra uma
+  resposta real**, pelo mesmo motivo (token expirado) — o comportamento
+  testado e confirmado foi o de indisponibilidade (`conta_com_erro`),
+  nunca a leitura de um catálogo real paginado.
+- **Teste pré-existente `test/financeiro.test.js` com 5 falhas,
+  encontradas nesta sessão mas SEM RELAÇÃO com esta tarefa** (não
+  alterado, "Não altere outros módulos" respeitado): os testes "cria conta
+  vencida (vencimento no passado)" e "resumo: atrasado/totalAReceber..."
+  usam uma data relativa (`ontem`) que, neste ambiente, não está batendo
+  com o que `contasPagar.js`/`contasReceber.js` consideram "vencido" no
+  momento do teste — parece um problema de fuso horário/limite de dia
+  (BRT vs. UTC) que só aparece dependendo da hora exata em que a suíte
+  roda, não algo introduzido pelas 3 abas novas (confirmado rodando
+  `node --test test/financeiro.test.js` isoladamente, sem nenhum arquivo
+  desta tarefa carregado). **Ação necessária:** investigar e corrigir
+  numa tarefa própria de Contas a Pagar/Receber, fora do escopo desta.
+- **Correção a uma afirmação anterior desta mesma lista:** a entrada
+  "Despesas Fixas / Fluxo de Caixa" abaixo (25/08/2026) diz que este
+  ambiente "não tem acesso a um navegador Playwright" — isso estava
+  ERRADO, o Chromium do Playwright está pré-instalado e funcionou
+  normalmente nesta etapa (ver `02-decisoes.md` (34)). As telas de
+  Despesas Fixas/Fluxo de Caixa continuam sem teste visual só porque não
+  foi feito na época, não por limitação do ambiente.
+
 ## Despesas Fixas / Fluxo de Caixa: não testado em navegador real, recebimentos previstos só cobrem Mercado Livre, saldo inicial sem histórico (25/08/2026)
 - **UI testada só por chamadas HTTP diretas + suíte automatizada, nunca
   clicada num navegador real** — este ambiente de desenvolvimento não tem

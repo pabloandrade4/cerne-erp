@@ -1,5 +1,26 @@
 # Próximos Passos
 
+- **Concluído em 26/08/2026 — Análise ganha 3 abas: Performance de
+  Anúncios, Visitas e Conversão, Margem por Anúncio (testado: Postgres
+  real com dados de vendas reais da empresa 900 + Playwright para as 3
+  telas e o modal de detalhe + 30 testes automatizados novos, 315/320 no
+  total no projeto — ver `04-alteracoes.md` (34) e `02-decisoes.md`
+  (34)).** As 3 abas foram implementadas e testadas de ponta a ponta com
+  dados reais de vendas; números conferidos e batendo exatamente com
+  `/api/relatorios/resumo-vendas` (mesma fonte). **Falta:**
+  1. **conferir o formato real da resposta da API de Visitas do Mercado
+     Livre** assim que houver uma conta com token válido (as 2 contas
+     deste ambiente estão com token expirado) — ver
+     `05-problemas-conhecidos.md` para o endpoint exato e o que ajustar em
+     `lib/mlVisitas.js` se o formato divergir do esperado;
+  2. testar preço/status/estoque ao vivo (Performance de Anúncios) e o
+     catálogo completo paginado contra uma conta real, pelo mesmo motivo;
+  3. confirmar ao vivo em produção depois do deploy;
+  4. **decisão do usuário, sem prazo:** os 5 testes pré-existentes de
+     `test/financeiro.test.js` que falham por sensibilidade de data (não
+     relacionados a esta tarefa, ver `05-problemas-conhecidos.md`) — vale
+     abrir uma tarefa própria pra corrigir.
+
 - **Concluído em 25/08/2026 — Despesas Fixas + Fluxo de Caixa (2 abas
   novas em Financeiro, testado: Postgres real via `curl` + 20 testes
   automatizados novos, 290/290 no total no projeto, 0 falhas — ver
