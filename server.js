@@ -6,6 +6,7 @@ const { iniciarSincronizacaoAutomatica } = require('./lib/syncScheduler');
 const { iniciarRenovacaoAutomatica: iniciarRenovacaoAutomaticaShopee } = require('./lib/shopeeTokenScheduler');
 const { iniciarRadarDaIA } = require('./lib/ia/radarScheduler');
 const { iniciarSincronizacaoAutomaticaAds } = require('./lib/adsScheduler');
+const { iniciarGeracaoAutomaticaDeDespesasFixas } = require('./lib/despesasFixasScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
@@ -23,12 +24,17 @@ const estoqueProdutoBaseRouter = require('./routes/estoqueProdutoBase');
 const contasPagarRouter = require('./routes/contasPagar');
 const contasReceberRouter = require('./routes/contasReceber');
 const recebimentosRouter = require('./routes/recebimentos');
+const despesasFixasRouter = require('./routes/despesasFixas');
+const fluxoCaixaRouter = require('./routes/fluxoCaixa');
 const dreRouter = require('./routes/dre');
 const faturamentoRouter = require('./routes/faturamento');
 const notasFiscaisRouter = require('./routes/notasFiscais');
 const adsRouter = require('./routes/ads');
 const visaoGeralRouter = require('./routes/visaoGeral');
 const iaGestoraRouter = require('./routes/iaGestora');
+const performanceAnunciosRouter = require('./routes/performanceAnuncios');
+const visitasConversaoRouter = require('./routes/visitasConversao');
+const margemAnuncioRouter = require('./routes/margemAnuncio');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -55,12 +61,17 @@ app.use('/api/estoque-produto-base', estoqueProdutoBaseRouter);
 app.use('/api/contas-pagar', contasPagarRouter);
 app.use('/api/contas-receber', contasReceberRouter);
 app.use('/api/recebimentos', recebimentosRouter);
+app.use('/api/despesas-fixas', despesasFixasRouter);
+app.use('/api/fluxo-caixa', fluxoCaixaRouter);
 app.use('/api/dre', dreRouter);
 app.use('/api/faturamento', faturamentoRouter);
 app.use('/api/notas-fiscais', notasFiscaisRouter);
 app.use('/api/ads', adsRouter);
 app.use('/api/visao-geral', visaoGeralRouter);
 app.use('/api/ia-gestora', iaGestoraRouter);
+app.use('/api/performance-anuncios', performanceAnunciosRouter);
+app.use('/api/visitas-conversao', visitasConversaoRouter);
+app.use('/api/margem-anuncio', margemAnuncioRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -98,6 +109,10 @@ async function start() {
     // servidor, nunca dependendo da tela Ads estar aberta (ver
     // lib/adsScheduler.js).
     iniciarSincronizacaoAutomaticaAds();
+    // Despesas Fixas — geração automática das Contas a Pagar recorrentes,
+    // sempre no servidor, nunca dependendo da tela estar aberta (ver
+    // lib/despesasFixasScheduler.js).
+    iniciarGeracaoAutomaticaDeDespesasFixas();
   });
 }
 
