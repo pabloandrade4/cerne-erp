@@ -3,6 +3,66 @@
 Lista das partes do ERP que já foram desenvolvidas, com uma descrição curta de
 cada uma e o status (em desenvolvimento / concluída).
 
+## Despesas Fixas (cadastro de despesas recorrentes, com geração automática de Contas a Pagar — 25/08/2026)
+- **Status:** concluído, testado localmente (Postgres local, chamadas HTTP
+  diretas ao servidor real + suíte automatizada — `test/despesasFixas.test.js`,
+  12 casos). Ainda não testado num navegador real nem ao vivo em produção.
+- **O que é:** tela para cadastrar despesas recorrentes da empresa (aluguel,
+  salários, pró-labore, sistemas, contador, energia, internet, outras),
+  com descrição, empresa, categoria (texto livre, mesmas sugestões de
+  Contas a Pagar), valor, frequência (mensal/semanal/anual), dia de
+  vencimento, data de início, data de término (opcional) e status ativo/
+  inativo. Ações: cadastrar, editar, ativar, desativar (excluir só é
+  permitido se a despesa nunca gerou nenhuma conta a pagar). A cada ciclo
+  automático (a cada 1 hora, em segundo plano no servidor) ou a um clique
+  em "Gerar agora", o sistema cria sozinho a Conta a Pagar correspondente
+  ao período que chegou — nunca duplica, mesmo rodando o processo mais de
+  uma vez (garantido também por um índice único no banco). Editar/
+  desativar uma despesa fixa nunca altera as contas a pagar já geradas.
+  Filtro de empresa do header funciona nesta tela.
+- **Onde está:** `server/lib/despesasFixas.js`,
+  `server/lib/despesasFixasScheduler.js`, `server/routes/despesasFixas.js`,
+  `server/public/index.html` (módulo `window.DespesasFixas`).
+- **O que falta:** anexar boleto/comprovante ao cadastro (não foi pedido
+  ainda); um plano de contas de verdade para "categoria" (mesma pendência
+  já registrada em Contas a Pagar/Contas a Receber).
+
+## Fluxo de Caixa (evolução diária do caixa, REALIZADO x PROJETADO — 25/08/2026)
+- **Status:** concluído, testado localmente (Postgres local, chamadas HTTP
+  diretas ao servidor real + suíte automatizada — `test/fluxoCaixa.test.js`,
+  8 casos, incluindo o teste central de não-duplicação). Ainda não testado
+  num navegador real nem ao vivo em produção.
+- **O que é:** tela com a evolução diária do caixa, sempre separando o que
+  já ACONTECEU (realizado) do que é só PREVISTO (projetado) — nunca trata
+  um recebimento previsto como dinheiro já disponível. Cards no topo:
+  saldo atual, entradas previstas, saídas previstas, saldo projetado e
+  contas vencidas. Um bloco mostra exatamente a fórmula usada (saldo
+  inicial/atual + contas a receber + recebimentos previstos dos
+  marketplaces − contas a pagar − despesas fixas previstas = saldo
+  projetado) e um gráfico mostra a evolução do saldo dia a dia (sólido =
+  realizado, tracejado = projetado). Filtros de período **próprios** desta
+  tela (diferentes do período do header, porque aqui é sempre uma
+  projeção pra frente): 7, 15 ou 30 dias, este mês, próximo mês ou período
+  personalizado. Filtro de empresa do header funciona nesta tela.
+- **Saldo inicial é sempre informado pelo usuário** (botão "Definir saldo
+  inicial") — o ERP não tem integração bancária real, então nunca
+  calcula ou inventa esse número sozinho; sem ele informado, os cards de
+  saldo aparecem como "Não informado" em vez de mostrar um valor incorreto.
+- **Nunca duplica valor:** uma despesa fixa que já gerou uma conta a pagar
+  conta só uma vez no total (via a conta a pagar) — nunca soma de novo
+  como "despesa fixa prevista". Recebimentos previstos dos marketplaces
+  (Mercado Livre) entram só no total da fórmula, nunca num dia específico
+  do gráfico, porque o marketplace não informa a data de liberação.
+- **Onde está:** `server/lib/fluxoCaixa.js`, `server/routes/fluxoCaixa.js`,
+  `server/public/index.html` (módulo `window.FluxoCaixa`). Não usa nem
+  altera o card "Fluxo de Caixa" já existente na Visão Geral
+  (`lib/visaoGeralPainel.js`), que continua exatamente como estava.
+- **O que falta:** recebimentos previstos da Shopee (hoje só existe
+  integração de recebimentos para o Mercado Livre — ver
+  `lib/recebimentosMl.js`); histórico de ajustes do saldo inicial (hoje só
+  guarda o valor mais recente, não um histórico de todas as vezes que foi
+  alterado).
+
 ## IA Gestora — central de análise e relatórios, com histórico, cards visuais e planilha automática (2026)
 - **Status:** concluído e testado localmente (Postgres real + servidor
   real via HTTP — **251 testes automatizados no projeto com Postgres, 0

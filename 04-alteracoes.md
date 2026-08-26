@@ -2,7 +2,75 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
-## 2026-08-25 (32) — Ads: diagnóstico real, endpoints ATUAIS de Product Ads (fim dos legados) e sincronização em banco
+## 2026-08-25 (33) — Financeiro ganha 2 abas: Despesas Fixas (recorrência → Contas a Pagar automática) e Fluxo de Caixa (evolução diária, REALIZADO x PROJETADO)
+- **Pedido do usuário, em 3 passos, "Não altere outros módulos":** cadastro
+  de despesas recorrentes que gera sozinho a Conta a Pagar do período sem
+  duplicar; tela de Fluxo de Caixa (cards, gráfico, tabela diária,
+  filtros de 7/15/30 dias/este mês/próximo mês/personalizado); integração
+  sem duplicar valor quando uma despesa fixa já virou conta a pagar. Ver
+  `02-decisoes.md` (33) para o desenho completo e as decisões de negócio.
+- **Schema novo (aditivo):** `despesas_fixas` (o "molde" da despesa
+  recorrente), `fluxo_caixa_saldo_inicial` (1 linha por empresa, saldo
+  SEMPRE informado pelo usuário — nunca calculado) e uma coluna nova em
+  `contas_pagar` (`despesa_fixa_id`, `ALTER TABLE ... ADD COLUMN IF NOT
+  EXISTS`) + um índice único PARCIAL
+  (`(despesa_fixa_id, vencimento) WHERE despesa_fixa_id IS NOT NULL`) que
+  garante, no próprio banco, no máximo 1 conta a pagar por (despesa fixa,
+  data) — a trava definitiva contra duplicação.
+- **Arquivo novo `server/lib/despesasFixas.js`:** CRUD completo (criar,
+  editar, ativar, desativar, excluir — bloqueado se já gerou histórico) +
+  `ocorrenciasNoIntervalo` (cálculo puro de datas de vencimento pra
+  mensal/semanal/anual, com clamp de fim de mês) +
+  `gerarContasPagarAutomaticas` (gera as contas a pagar que faltam, até o
+  fim do mês corrente, com `INSERT ... ON CONFLICT ... DO NOTHING
+  RETURNING id` — idempotente mesmo rodando 2x seguidas).
+- **Arquivo novo `server/lib/despesasFixasScheduler.js`:** ciclo automático
+  em background (mesmo padrão de `adsScheduler.js`), a cada 1 hora
+  (`DESPESAS_FIXAS_SYNC_INTERVALO_MS`), gerando as contas a pagar de todas
+  as despesas fixas ativas de todas as empresas; nunca depende do
+  navegador aberto. Wiring de uma linha em `server.js`
+  (`iniciarGeracaoAutomaticaDeDespesasFixas()`).
+- **Arquivo novo `server/lib/fluxoCaixa.js`:** agregação sem tabela de
+  movimentos própria — junta `contas_pagar`, `contas_receber`, despesas
+  fixas ainda não geradas (com a checagem de duplicidade contra
+  `contas_pagar.despesa_fixa_id`) e `lib/recebimentosMl.js`, sempre
+  separando REALIZADO (o que já foi pago/recebido) de PROJETADO (o que
+  está pendente). Período próprio (`calcularPeriodoFluxoCaixa`),
+  independente do período do header. Saldo acumulado por dia só é
+  calculado se o usuário informou um saldo inicial; sem isso, vem `null`
+  com o motivo.
+- **Rotas novas:** `server/routes/despesasFixas.js`
+  (`GET/POST /api/despesas-fixas`, `PUT/PATCH .../ativar/.../desativar`,
+  `DELETE`, `GET .../categorias-sugeridas`, `POST .../gerar` — geração
+  manual imediata) e `server/routes/fluxoCaixa.js`
+  (`GET /api/fluxo-caixa`, `GET/POST .../saldo-inicial`). Wiring em
+  `server.js`, nenhuma rota existente alterada.
+- **Front-end (`public/index.html`), aditivo:** 2 itens novos no menu
+  Financeiro (Despesas Fixas, Fluxo de Caixa) — mesmo padrão de módulo
+  auto-contido (IIFE + `window.<Modulo>`) de Contas a Pagar/Receber.
+  Despesas Fixas: tabela + modal de cadastro (frequência muda o campo
+  "dia de vencimento" dinamicamente — escondido/calculado sozinho quando
+  semanal) + botão "Gerar agora". Fluxo de Caixa: seletor de período
+  próprio, 5 cards, bloco "Como o saldo projetado é calculado" (a fórmula
+  pedida pelo usuário), gráfico de evolução do saldo (SVG à mão, sólido =
+  realizado / tracejado = projetado) e tabela diária REALIZADO x
+  PROJETADO. As duas telas usam a empresa do filtro do header
+  (`window.CerneFiltro.state.empresaId`), como pedido. **Nenhum outro
+  módulo foi alterado** — inclusive o card "Fluxo de Caixa" da Visão Geral
+  (`visaoGeralPainel.js`) continua exatamente como estava, com "Saldo
+  projetado: Indisponível".
+- **Bug encontrado e corrigido durante o teste manual:** a primeira versão
+  só "trazia pra hoje" contas a pagar/receber vencidas no passado, mas não
+  fazia o mesmo para despesas fixas ainda não geradas — o total
+  "despesas fixas previstas" da fórmula não batia com o total de "saídas
+  previstas" do período. Corrigido antes de entregar (ver `02-decisoes.md`
+  (33) para o detalhe).
+- **Testes novos:** `server/test/despesasFixas.test.js` (12 casos) e
+  `server/test/fluxoCaixa.test.js` (8 casos, incluindo o teste central:
+  criar despesa fixa → conferir que ela aparece como "prevista" → gerar a
+  conta a pagar → conferir que ela some de "prevista" e o total do período
+  continua o MESMO valor, nunca dobra). Suíte completa: 290/290 passando
+  (270 já existentes + 20 novos).
 - **Pedido do usuário, em 3 passos:** a tela Ads mostrava "Nenhuma conta de
   anunciante encontrada" numa conta que usa publicidade de verdade. (1)
   descobrir a causa real, com log/interface mostrando status e causa reais;

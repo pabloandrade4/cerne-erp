@@ -1,5 +1,25 @@
 # Próximos Passos
 
+- **Concluído em 25/08/2026 — Despesas Fixas + Fluxo de Caixa (2 abas
+  novas em Financeiro, testado: Postgres real via `curl` + 20 testes
+  automatizados novos, 290/290 no total no projeto, 0 falhas — ver
+  `04-alteracoes.md` (33) e `02-decisoes.md` (33)).** Os 3 passos pedidos
+  foram implementados e testados na lógica de backend de ponta a ponta
+  (cadastro de despesa fixa, geração automática de conta a pagar sem
+  duplicar mesmo rodando 2x, fluxo de caixa com REALIZADO x PROJETADO e a
+  fórmula pedida). **Falta:**
+  1. testar a tela num navegador real (este ambiente de desenvolvimento
+     não tem acesso a um navegador nesta etapa — ver
+     `05-problemas-conhecidos.md`): abrir Despesas Fixas, cadastrar uma
+     despesa, clicar em "Gerar agora" e conferir que ela aparece em
+     Contas a Pagar; abrir Fluxo de Caixa, definir um saldo inicial e
+     conferir os cards/gráfico/tabela;
+  2. confirmar ao vivo em produção depois do deploy;
+  3. **decisão do usuário, sem prazo:** se/quando integrar recebimentos da
+     Shopee, somar essa fonte também em "recebimentos previstos dos
+     marketplaces" no Fluxo de Caixa (hoje só cobre Mercado Livre — ver
+     `05-problemas-conhecidos.md`).
+
 - **Concluído em 25/08/2026 — parte 2 (Ads: diagnóstico real, endpoints
   ATUAIS de Product Ads e sincronização em banco, testado: Postgres real +
   API mockada, 270 testes automatizados no total no projeto, 0 falhas —

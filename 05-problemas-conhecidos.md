@@ -3,6 +3,41 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Despesas Fixas / Fluxo de Caixa: não testado em navegador real, recebimentos previstos só cobrem Mercado Livre, saldo inicial sem histórico (25/08/2026)
+- **UI testada só por chamadas HTTP diretas + suíte automatizada, nunca
+  clicada num navegador real** — este ambiente de desenvolvimento não tem
+  acesso a um navegador Playwright nesta etapa (diferente de correções
+  anteriores, como Contas a Pagar/Receber, que puderam ser clicadas ao
+  vivo). A lógica de backend (geração automática, não-duplicação,
+  REALIZADO x PROJETADO, fórmula do saldo) foi validada de ponta a ponta
+  via `curl` contra o servidor real + Postgres local e pela suíte de
+  testes (20 casos novos). O HTML/JS novo foi conferido por leitura
+  cuidadosa e checagem de sintaxe (`node --check`), seguindo exatamente o
+  mesmo padrão dos módulos existentes (Contas a Pagar/Receber) — mas o
+  fluxo de clicar nos formulários, abrir modais e ler o gráfico na tela
+  real ainda não foi confirmado visualmente. **Recomendado:** o usuário
+  (ou uma próxima sessão com acesso a navegador) testar a tela ao vivo
+  depois do deploy antes de confiar 100% nela no dia a dia.
+- **Recebimentos previstos de marketplace no Fluxo de Caixa só cobrem o
+  Mercado Livre** (reaproveita `lib/recebimentosMl.js`, que já existia) —
+  a Shopee está conectada ao ERP (só autorização, ver `02-decisoes.md`
+  (29)) mas ainda não tem uma integração de pedidos/recebimentos
+  equivalente. Quando essa integração existir, o Fluxo de Caixa pode
+  somar a Shopee na mesma linha "recebimentos previstos dos marketplaces".
+- **Saldo inicial guarda só o valor mais recente, não um histórico de
+  ajustes.** Definir um novo saldo inicial sobrescreve o anterior (mesmo
+  raciocínio de upsert já usado em outras telas simples do ERP) — se o
+  usuário quiser auditar "quando e por quanto o saldo foi ajustado ao
+  longo do tempo", isso precisaria de uma tabela de histórico, não
+  implementada nesta etapa por não ter sido pedida.
+- **Despesa fixa semanal deriva o dia de vencimento automaticamente do dia
+  da semana da data de início** (nunca um campo escolhido à parte) — é uma
+  decisão deliberada pra nunca ficar inconsistente (ver `02-decisoes.md`
+  (33)), mas significa que o usuário não escolhe "toda sexta-feira"
+  livremente: o dia da semana sai de qual dia da semana cai a data de
+  início escolhida. A tela mostra esse dia calculado no formulário antes
+  de salvar, pra nunca ser uma surpresa.
+
 ## Radar da IA: intervalo fixo de 15 min, heurística de compra é nova (sem reorder point no ERP), recomendação em texto exige IA_API_KEY (25/08/2026)
 - **Intervalo de 15 minutos é um valor declarado, não configurado pelo
   usuário na tela.** Ajustável só por variável de ambiente

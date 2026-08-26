@@ -529,6 +529,49 @@ _(sem regras registradas ainda)_
 ## Recebimentos dos marketplaces
 _(sem regras registradas ainda)_
 
+## Despesas Fixas (25/08/2026)
+- Uma despesa fixa é um **molde** de despesa recorrente da empresa
+  (aluguel, salários, pró-labore, sistemas, contador, energia, internet,
+  outras) — não é, ela mesma, dinheiro. Quem representa dinheiro de
+  verdade é sempre a Conta a Pagar gerada a partir dela.
+- Campos: descrição, empresa, categoria (texto livre, com sugestões),
+  valor, frequência (mensal, semanal ou anual), dia de vencimento, data de
+  início, data de término (opcional), ativo/inativo.
+- **Nunca lançar a mesma despesa manualmente todo mês.** A cada período
+  que chega (o mês vira, a semana vira, o ano vira), o sistema gera
+  sozinho, em segundo plano, a conta a pagar correspondente — sem
+  depender de ninguém abrir a tela.
+- **Nunca duplicar.** Rodar o processo de geração mais de uma vez (ciclo
+  automático de hora em hora, ou o botão "Gerar agora") nunca cria uma
+  segunda conta a pagar pra a mesma ocorrência — garantido também por uma
+  trava no próprio banco de dados (não só na aplicação).
+- Editar ou desativar uma despesa fixa **nunca** altera as contas a pagar
+  já geradas — só afeta as próximas ocorrências. Excluir só é permitido
+  se ela nunca gerou nenhuma conta (senão, o caminho é desativar, pra não
+  perder o histórico).
+
+## Fluxo de Caixa (25/08/2026)
+- Visão diária do caixa, sempre separando **REALIZADO** (o que já
+  aconteceu: conta paga, conta recebida) de **PROJETADO** (o que está
+  previsto: conta pendente, despesa fixa ainda não gerada). Um valor
+  previsto **nunca** é tratado como dinheiro já disponível.
+- Fórmula mostrada ao usuário: saldo inicial/atual **+** contas a receber
+  **+** recebimentos previstos dos marketplaces **−** contas a pagar
+  **−** despesas fixas previstas **=** saldo projetado.
+- **Saldo inicial é sempre informado pelo usuário** — o ERP não tem
+  integração bancária real, então nunca calcula ou inventa esse número
+  sozinho. Sem essa informação, os campos de saldo aparecem como "não
+  informado", nunca um valor incorreto.
+- **Nunca contar a mesma saída duas vezes.** Se uma despesa fixa já gerou
+  uma conta a pagar, o Fluxo de Caixa considera esse valor **uma única
+  vez** (pela conta a pagar) — nunca soma de novo como "despesa fixa
+  prevista" por cima.
+- Períodos disponíveis: 7, 15 ou 30 dias, este mês, próximo mês ou período
+  personalizado — sempre olhando pra FRENTE a partir de hoje (diferente do
+  período do cabeçalho do sistema, que olha pra trás).
+- O filtro de empresa do cabeçalho funciona nesta tela e em Despesas
+  Fixas.
+
 ## Custos
 - **Desde 24/08/2026, custo por SKU e alíquota de imposto são cadastrados
   na tela Produtos** (não existe mais uma tela separada "Custo & Margem")

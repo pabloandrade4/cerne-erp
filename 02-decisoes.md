@@ -3,6 +3,135 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-25 (33) — Duas abas novas em Financeiro: Despesas Fixas (recorrência → Contas a Pagar automática, sem duplicar) e Fluxo de Caixa (evolução diária, REALIZADO x PROJETADO)
+
+- **Pedido do usuário, em 3 passos, "Não altere outros módulos":** (1)
+  cadastro de despesas recorrentes (aluguel, salários, pró-labore,
+  sistemas, contador, energia, internet, outras — frequência mensal/
+  semanal/anual, cadastrar/editar/ativar/desativar) que gera sozinha a
+  Conta a Pagar do período, sem nunca duplicar mesmo rodando o processo
+  mais de uma vez; (2) tela de Fluxo de Caixa com saldo, contas a
+  receber/pagar, despesas fixas previstas e recebimentos previstos dos
+  marketplaces, visão diária, filtros de 7/15/30 dias/este mês/próximo
+  mês/personalizado, sempre separando REALIZADO de PROJETADO, cards de
+  topo e gráfico de evolução; (3) integrar sem duplicar valor nenhum —
+  "Aluguel em Despesas Fixas = R$3.000, Conta a Pagar gerada = R$3.000 ⇒
+  Fluxo de Caixa conta R$3.000 uma única vez, nunca R$6.000" — e manter o
+  filtro de empresa do header funcionando nas duas abas novas.
+- **Despesa fixa é só um MOLDE — quem representa dinheiro de verdade
+  continua sendo `contas_pagar`.** Nada de uma segunda tabela de
+  "lançamentos financeiros" paralela: a cada ciclo, `lib/despesasFixas.js`
+  gera a linha em `contas_pagar` (com `despesa_fixa_id` preenchido) e a
+  partir daí ela é uma conta a pagar igual qualquer outra — aparece em
+  Contas a Pagar, pode ser paga/cancelada por lá, entra no DRE, etc. Isso
+  também é o que evita a duplicação: editar/desativar uma despesa fixa
+  **nunca** altera contas já geradas (mesma filosofia de imutabilidade de
+  fato financeiro já usada em `contas_pagar`/`contas_receber`/`compras`).
+- **Trava de não-duplicação em DOIS níveis, não só um.** (a) Índice único
+  PARCIAL em `contas_pagar(despesa_fixa_id, vencimento) WHERE
+  despesa_fixa_id IS NOT NULL` — no máximo 1 conta por (despesa fixa,
+  data), garantido pelo próprio Postgres, não só pela aplicação; (b) a
+  geração usa `INSERT ... ON CONFLICT (despesa_fixa_id, vencimento) ...
+  DO NOTHING RETURNING id` — se o ciclo automático (a cada hora) e um
+  clique manual em "Gerar agora" colidirem, só um dos dois efetivamente
+  insere, o outro recebe 0 linhas de volta. Testado rodando o ciclo 2x
+  seguidas (`test/despesasFixas.test.js`): a segunda rodada sempre gera 0
+  contas novas, e o banco nunca tem 2 linhas pra a mesma ocorrência.
+  **Detalhe técnico encontrado só ao testar de verdade:** o driver `pg`
+  deste ambiente de desenvolvimento (stub local, nunca usado em produção —
+  ver `05-problemas-conhecidos.md`) não preenche `rowCount` em
+  `INSERT ... DO NOTHING` sem `RETURNING`; por isso a contagem de "quantas
+  contas foram geradas" usa `RETURNING id` + `rows.length` em vez de
+  `rowCount` — funciona igual nos dois ambientes (stub local e `pg` real
+  em produção) e é mais robusto de qualquer forma.
+- **`dia_vencimento` muda de significado conforme a frequência** (ao invés
+  de inventar 3 campos diferentes): mensal/anual = dia do mês (1-31,
+  ajustado pro último dia quando o mês é mais curto — igual qualquer
+  cobrança recorrente de verdade: dia 31 cai em 28/29 de fevereiro);
+  semanal = dia da semana ISO (1=segunda...7=domingo), **sempre calculado
+  a partir do dia da semana de `data_inicio`, nunca aceito separado do
+  formulário** — evita a despesa ficar inconsistente com a própria data em
+  que ela começa a se repetir. Anual usa o MÊS de `data_inicio` como o mês
+  da ocorrência (não existe um segundo campo "mês de vencimento" — seria
+  duplicar informação que `data_inicio` já dá).
+- **Horizonte da geração automática = fim do mês corrente** (não o dia
+  exato do vencimento). "Quando chegar o novo período" foi interpretado
+  como "o mês já começou" — a conta a pagar aparece assim que o mês vira,
+  dando tempo do usuário se planejar antes do vencimento chegar de
+  verdade, em vez de só no dia. Ciclo automático a cada 1 hora
+  (`lib/despesasFixasScheduler.js`, mesmo padrão de `lib/adsScheduler.js`
+  — roda dentro do processo Node do servidor, nunca depende do navegador
+  aberto), mais um botão "Gerar agora" (`POST /api/despesas-fixas/gerar`)
+  pra quem acabou de cadastrar não precisar esperar o próximo ciclo.
+- **Campo "empresa/CNPJ" do pedido = o seletor de empresa já existente**
+  (`empresaId`), igual todo o resto do ERP — não um campo de texto livre
+  pro CNPJ. O CNPJ já está no cadastro de Empresas; duplicar esse dado
+  como texto solto em Despesas Fixas criaria uma segunda fonte que podia
+  ficar desatualizada.
+- **Fluxo de Caixa tem PERÍODO PRÓPRIO, deliberadamente separado do
+  período do header** (`window.CerneFiltro`/`lib/periodo.js`, que só tem
+  hoje/ontem/7d/30d/mes e nunca inclui data futura). Fluxo de Caixa é
+  sempre uma projeção pra FRENTE — "7/15/30 dias" aqui contam a partir de
+  HOJE (inclusive) até N-1 dias à frente, o oposto do "últimos N dias" do
+  resto do ERP. Implementado só dentro de `lib/fluxoCaixa.js`
+  (`calcularPeriodoFluxoCaixa`), sem tocar em `lib/periodo.js` nem em
+  nenhuma outra tela — só a empresa do header é reaproveitada.
+- **Saldo inicial é SEMPRE informado pelo usuário — nunca calculado ou
+  inventado pelo sistema.** O ERP não tem nenhuma integração bancária real
+  (mesma regra já registrada pra o card "Fluxo de Caixa" da Visão Geral em
+  `lib/visaoGeralPainel.js`, que continua **intocado**, com "Saldo
+  projetado: Indisponível" hardcoded exatamente como antes). Nova tabela
+  `fluxo_caixa_saldo_inicial` (1 linha por empresa, upsert) guarda valor +
+  data de referência informados pelo usuário; sem essa informação, "Saldo
+  atual"/"Saldo projetado" aparecem como "Não informado" (nunca um número,
+  nunca zero disfarçado de saldo real) em vez de travar a tela — REALIZADO
+  e PROJETADO (entradas/saídas do período) continuam sempre calculáveis
+  independente disso.
+- **Contas/despesas vencidas no passado são "trazidas" pra dentro de
+  HOJE no gráfico/tabela diária** (nunca pra uma data futura inventada).
+  Uma conta pendente com vencimento ontem não desaparece da série nem fica
+  presa no passado — ela soma no dia de hoje, junto com o que já é de
+  hoje, porque é dinheiro que já deveria ter saído/entrado. Aplicado
+  igualmente a contas a pagar, contas a receber E despesas fixas ainda não
+  geradas (`somarPorDiaComDobraParaHoje` e a mesma lógica dentro de
+  `calcularDespesasFixasPrevistasPorDia`) — achado um bug real nessa
+  simetria durante os testes manuais: a primeira versão só "dobrava" contas
+  a pagar/receber, esquecendo despesas fixas ainda não geradas, o que
+  fazia `despesasFixasPrevistas` e `saidasPrevistas` baterem números
+  diferentes (uma inconsistência visível na fórmula); corrigido antes de
+  entregar.
+- **Recebimentos previstos dos marketplaces entram só como TOTAL do
+  período, nunca num dia específico do gráfico/tabela diária.** O Mercado
+  Livre não devolve data de liberação (mesma limitação já documentada em
+  `lib/recebimentosMl.js`/tela Recebimentos) — inventar um dia pra plotar
+  esse valor seria inventar um dado que o ERP não tem. Aparecem
+  destacados, com essa ressalva explícita, no bloco "Como o saldo
+  projetado é calculado" (a fórmula pedida pelo usuário: saldo inicial/
+  atual + contas a receber + recebimentos previstos dos marketplaces −
+  contas a pagar − despesas fixas previstas = saldo projetado).
+- **Sem tabela de "movimentos" nova para o Fluxo de Caixa** — mesma
+  filosofia de DRE/Recebimentos: `lib/fluxoCaixa.js` só reorganiza dado
+  que já existe em `contas_pagar`, `contas_receber`, despesas fixas ainda
+  não geradas e `lib/recebimentosMl.js`, nunca uma segunda fórmula
+  financeira paralela.
+- **Gráfico "Evolução do saldo de caixa"**: SVG desenhado à mão (mesmo
+  padrão de Visão Geral/Ads — sem biblioteca de gráfico), uma linha só
+  (saldo acumulado por dia), sólida até hoje (realizado) e tracejada dali
+  em diante (projetado), com tooltip por ponto. Sem saldo inicial
+  informado, mostra um empty state explicando o motivo, com atalho pra
+  abrir o formulário de saldo inicial — nunca um gráfico com eixo zerado
+  fingindo ser um dado real.
+- **Testado**: `test/despesasFixas.test.js` (12 casos: validação,
+  `ocorrenciasNoIntervalo` puro para as 3 frequências incluindo clamp de
+  fim de mês e dia da semana derivado, geração idempotente rodando 2x,
+  edição não altera conta já gerada, ativar/desativar, exclusão bloqueada
+  depois de já ter gerado histórico) e `test/fluxoCaixa.test.js` (8 casos:
+  período próprio, saldo inicial nunca inventado, a peça central —
+  despesa fixa já gerada não conta 2x no total do período — e separação
+  REALIZADO x PROJETADO por dia). Suíte inteira do projeto rodada depois:
+  290/290 passando (270 já existentes + 20 novos), nada quebrado nos
+  outros módulos.
+
 ## 2026-08-25 (32) — Ads: diagnóstico real (nunca mais "nenhum anunciante encontrado" genérico), endpoints ATUAIS de Product Ads e sincronização em banco
 
 - **Pedido do usuário, em 3 passos, com uma instrução MUITO IMPORTANTE:**
