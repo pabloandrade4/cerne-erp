@@ -2,6 +2,88 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-27 (42) — Camada de contexto de negócio + raio-X da empresa + identificar_produto_fisico (Etapa (b) da proposta de contexto de negócio da IA)
+- **Contexto:** segunda etapa aprovada de
+  `docs/PROPOSTA-contexto-negocio-ia-gestora.md` ("pode seguir", na
+  sequência da etapa (a) — ver `(41)` acima). Ordem: (a) mapa de produtos
+  ✅; **(b) camada de contexto + raio-X + identificar_produto_fisico ✅
+  (esta entrada)**; (c) regras de negócio; (d) tarefas ligadas ao Radar;
+  (e) WhatsApp, só depois do usuário escolher o provedor.
+- **Princípio seguido à risca (ponto 2 da proposta — "compor, não
+  recriar"):** nenhum arquivo desta etapa calcula um número novo. Tudo é
+  casca fina sobre módulos já existentes e já validados
+  (`lib/visaoGeralPainel.js`, `lib/recebimentosMl.js`,
+  `produtos_base`/`produto_base_aliases` da etapa (a)).
+- **`server/lib/mapaProdutos.js` (novo, fora de `lib/ia/` — convenção de
+  nomes já aprovada, ponto 1 da proposta):** `identificarProdutoFisico(empresaId,
+  textoLivre)` — resolve um texto livre ("a caixa 20x20x20", um código, um
+  apelido) num produto físico cadastrado, numa cascata de 4 camadas
+  (código exato → apelido exato → medida exata → busca aproximada),
+  **nunca escolhendo sozinha entre candidatos**: devolve sempre um de 3
+  status — `identificado` (exatamente 1 resultado), `ambiguo` (mais de um
+  — a IA deve perguntar ao usuário, nunca supor) ou `nao_encontrado`.
+  Empresa sempre isolada (nunca vaza produto de uma empresa pra outra).
+- **`server/lib/ia/contextoNegocio.js` (novo, dentro de `lib/ia/` — é uma
+  composição pensada especificamente pro formato que a IA consome):**
+  `montarRaioXEmpresa({empresaId, periodoChave})` — junta
+  `painelVisaoGeral` (mesma fonte da tela Visão Geral: vendas por canal,
+  fluxo de caixa, conexões, alertas, Radar) com
+  `recebimentosMl.resumoRecebimentosMarketplace` (detalhe por status —
+  a_receber/disponível/recebido). Nunca quebra se o Radar falhar (mesma
+  disciplina já usada por `painelVisaoGeral`).
+- **`server/lib/ia/ferramentas.js`:** 2 ferramentas novas, ADITIVAS,
+  SOMENTE LEITURA — `identificar_produto_fisico` (casca sobre
+  `lib/mapaProdutos.js`) e `visao_geral_empresa` (casca sobre
+  `lib/ia/contextoNegocio.js`, pensada pra perguntas gerais/abertas como
+  "como está o negócio" numa única chamada, em vez de encadear 4-5
+  ferramentas). Nenhuma ferramenta já existente foi alterada.
+- **"Produto em foco" — contexto entre perguntas da mesma conversa (ponto
+  2.6 da proposta):** quando `identificar_produto_fisico` resolve com
+  CERTEZA (`identificado`), o produto vira o "foco" da conversa — guardado
+  em `ia_conversas.contexto_ativo` (coluna `JSONB` nova,
+  `db/schema.sql`) e devolvido pra IA na próxima pergunta via uma linha
+  extra no system prompt (`lib/ia/orchestrator.js#linhaProdutoEmFoco`),
+  pra ela entender "e desse produto, quanto vendi essa semana?" sem o
+  usuário repetir o nome. Nunca atualizado por um resultado `ambiguo`;
+  nunca apagado por uma pergunta que não tocou no assunto. Implementado
+  com o menor footprint possível: sem loop novo, sem tabela nova além da
+  1 coluna — só uma variável rastreada inline no laço de ferramentas já
+  existente (`produtoEmFocoAtual`) e 2 pontos de leitura/escrita que
+  `routes/iaGestora.js` já tocava (a mesma consulta que busca a conversa;
+  o mesmo UPDATE que já atualizava `atualizado_em`).
+- **`lib/ia/orchestrator.js`:** `HISTORICO_MAX_MENSAGENS` 8 → 12 (uma
+  conversa de acompanhamento sobre o mesmo produto tende a durar mais
+  rodadas; ainda cabe folgadamente no que `routes/iaGestora.js` já busca
+  do banco, 20 — nenhuma mudança lá foi necessária). `responderPergunta`
+  ganhou o parâmetro `contextoAtivo` (opcional) e todo retorno (sucesso,
+  não configurada, limite de rodadas, erro do provedor) agora inclui
+  `produtoEmFoco`.
+- **`routes/iaGestora.js`:** `buscarConversaDoUsuario` passou a trazer
+  `contexto_ativo`; `POST /perguntar` lê esse valor e passa como
+  `contextoAtivo` pra `responderPergunta` (só quando já existe uma
+  conversa — nunca lido do corpo da requisição, mesma disciplina já usada
+  pro histórico) e grava de volta `resultado.produtoEmFoco` quando ele vier
+  preenchido.
+- **Testes novos:** `test/mapaProdutos.test.js` (8 casos — as 4 camadas,
+  ambiguidade em cada uma delas, texto vazio, isolamento entre empresas);
+  extensão de `test/iaFerramentas.test.js` (5 casos — as 2 ferramentas
+  novas, incluindo comparação número a número de `visao_geral_empresa`
+  contra `painelVisaoGeral`/`resumoRecebimentosMarketplace`); extensão de
+  `test/iaOrchestrator.test.js` (5 casos — rastreamento de "produto em
+  foco", preservação entre perguntas, linha no system prompt). Suíte
+  completa: **386/386** (368 da etapa (a) + 18 novos).
+- Um bug real encontrado e corrigido durante os testes: a query de
+  `identificarProdutoFisico` por apelido fazia `JOIN` entre
+  `produtos_base`/`produto_base_aliases` (ambas têm coluna `id`) sem
+  qualificar as colunas do `SELECT` — Postgres real rejeita isso com
+  "column reference id is ambiguous" (não é um problema do stub de dev,
+  teria quebrado em produção também). Corrigido qualificando todas as
+  colunas com `pb.` nas duas queries que fazem `JOIN`.
+- Verificação manual: servidor sobe normalmente com a migração nova
+  (`ia_conversas.contexto_ativo`); as duas ferramentas novas testadas
+  diretamente contra o banco de desenvolvimento real (empresa 900, dados
+  reais) via script pontual — devolveram dado real, sem erro.
+
 ## 2026-08-27 (41) — Mapa de Produtos: medida/categoria/aliases + tela de gestão (Etapa (a) da proposta de contexto de negócio da IA)
 - **Contexto:** primeira etapa aprovada de
   `docs/PROPOSTA-contexto-negocio-ia-gestora.md` (arquitetura de "IA

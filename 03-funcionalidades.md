@@ -145,9 +145,25 @@ cada uma e o status (em desenvolvimento / concluída).
 
 ## IA Gestora — central de análise e relatórios, com histórico, cards visuais e planilha automática (2026)
 - **Status:** concluído e testado localmente (Postgres real + servidor
-  real via HTTP — **251 testes automatizados no projeto com Postgres, 0
+  real via HTTP — **386 testes automatizados no projeto com Postgres, 0
   falhas**). Ainda **só de consulta, análise e projeção** — nenhuma ação
   automática foi implementada, nenhum acesso de escrita foi dado à IA.
+  **Etapa (b) da "IA Gestora que conhece o negócio" (27/08/2026 (42))** —
+  ver `02-decisoes.md` (42): a IA ganhou uma "camada de contexto de
+  negócio". Duas ferramentas novas, ambas SOMENTE LEITURA:
+  `identificar_produto_fisico` (resolve um texto livre — "a caixa
+  20x20x20", um apelido — num produto físico cadastrado em Mapa de
+  Produtos, numa cascata de 4 camadas que **nunca escolhe sozinha** entre
+  candidatos ambíguos: sempre devolve identificado/ambíguo/não encontrado,
+  perguntando ao usuário quando houver mais de um candidato) e
+  `visao_geral_empresa` (um "raio-X" da empresa numa única chamada —
+  vendas por canal, fluxo de caixa, conexões, alertas e Radar — pra
+  perguntas gerais como "como está o negócio", em vez de encadear várias
+  ferramentas). E "produto em foco": quando a IA identifica um produto com
+  certeza, ele vira o assunto da conversa (persistido, nunca perdido ao
+  trocar de pergunta) até a conversa mudar de produto — pra perguntas de
+  acompanhamento tipo "e desse produto, quanto vendi essa semana?"
+  funcionarem sem repetir o nome.
   **Ampliação de 25/08/2026 (30)** (ver `02-decisoes.md` (30)), pedida
   pelo usuário em 3 passos ("transformar a IA Gestora em uma central de
   análise e relatórios"): (1) **login real** (e-mail/senha, escopado só a
@@ -239,28 +255,30 @@ cada uma e o status (em desenvolvimento / concluída).
   com a API de Mensagens da Anthropic — sem SDK novo, `fetch` nativo),
   `server/lib/ia/providers/index.js` (registro de provedor/modelo,
   trocável por variável de ambiente sem mexer no resto), `server/lib/ia/
-  ferramentas.js` (catálogo de **25 ferramentas** — 21 + `projecao_mes`/
-  `apresentar_analise` já existentes + 3 novas de 27/08/2026:
-  `recebimentos_marketplace_resumo`, `fluxo_de_caixa_detalhado`,
-  `extrato_bancario_analise`, sempre somente leitura, ver
-  `04-alteracoes.md` (40) — cada uma uma casca fina sobre uma função já
-  existente do ERP, exceto `apresentar_analise`, que não toca o banco),
+  ferramentas.js` (catálogo de **27 ferramentas** — 25 já existentes + 2
+  novas de 27/08/2026 (42): `identificar_produto_fisico` (casca sobre
+  `server/lib/mapaProdutos.js`, fora de `lib/ia/` por decisão do usuário —
+  ver `02-decisoes.md` (42)) e `visao_geral_empresa` (casca sobre
+  `server/lib/ia/contextoNegocio.js`), sempre somente leitura — cada uma
+  uma casca fina sobre uma função já existente do ERP, exceto
+  `apresentar_analise`, que não toca o banco),
   `server/lib/compras.js` e `server/lib/ia/baseConhecimento.js` (módulos
   de apoio — ver `02-decisoes.md` (27)), `server/lib/ia/orchestrator.js`
   (laço de pergunta → ferramenta → resposta; regras 5-A/5-B de quando
   projetar e nunca recusar por falta de tela; regra 7 de quando montar
-  card visual), `server/lib/ia/estrutura.js` (monta o card
-  resumo/KPI/tabela/gráfico a partir só de ferramentas já executadas —
-  nunca calcula nada), `server/lib/ia/planilhaAnalise.js` (gera o XLSX a
-  partir do mesmo card salvo), `server/lib/auth/*` (senha, sessão, cookie,
-  middleware de login — usados só aqui), `server/db/criarUsuarioIa.js`
-  (script de bootstrap pra criar o primeiro login),
-  `server/routes/iaGestora.js` (`/login`, `/logout`, `/me`, `/conversas`,
-  `/perguntar`, `/conversas/:id/mensagens/:id/xlsx`),
+  card visual; desde 27/08/2026 também rastreia o "produto em foco" da
+  conversa — ver acima e `02-decisoes.md` (42)), `server/lib/ia/estrutura.js`
+  (monta o card resumo/KPI/tabela/gráfico a partir só de ferramentas já
+  executadas — nunca calcula nada), `server/lib/ia/planilhaAnalise.js`
+  (gera o XLSX a partir do mesmo card salvo), `server/lib/auth/*` (senha,
+  sessão, cookie, middleware de login — usados só aqui),
+  `server/db/criarUsuarioIa.js` (script de bootstrap pra criar o primeiro
+  login), `server/routes/iaGestora.js` (`/login`, `/logout`, `/me`,
+  `/conversas`, `/perguntar`, `/conversas/:id/mensagens/:id/xlsx`),
   `server/public/index.html` (módulo `window.IAGestora` — login, sidebar
   de conversas, card visual, download de planilha; item de menu "IA
-  Gestora"). Ver `02-decisoes.md` (22), (27), (28) e (30) para o desenho
-  completo.
+  Gestora"). Ver `02-decisoes.md` (22), (27), (28), (30) e (42) para o
+  desenho completo.
 - **O que falta:** só configurar `IA_API_KEY` no Render com uma chave real
   da conta Anthropic do usuário (https://console.anthropic.com) e testar
   ao vivo as perguntas reais — a integração em si (formato de erro,

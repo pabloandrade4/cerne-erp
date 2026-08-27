@@ -1,34 +1,40 @@
 # Próximos Passos
 
-- **Concluído em 27/08/2026 — Proposta de arquitetura "IA Gestora que
-  conhece o negócio" aprovada; Etapa (a) implementada — Mapa de Produtos
-  (medida/categoria/aliases + tela de gestão) (testado: Postgres real,
-  368/368 testes automatizados no projeto (era 351/351) + smoke-test
-  manual via `curl` cobrindo toda a superfície nova — ver
-  `04-alteracoes.md` (41) e `02-decisoes.md` (41)).** Depois da auditoria
-  completa do código real (`docs/PROPOSTA-contexto-negocio-ia-gestora.md`)
-  e aprovação do usuário ("vamos seguir sua orientação pode prosseguir"),
-  a Etapa (a) da ordem proposta foi concluída: `produtos_base` ganhou
-  `medida`/`categoria`, tabela nova `produto_base_aliases`, API estendida
-  (`routes/produtosBase.js`), e a tela "Mapa de Produtos" — fechando o gap
-  crítico identificado na auditoria (API completa, zero UI). De brinde, um
-  bug de roteamento do `express`-stub deste ambiente de dev foi encontrado
-  e corrigido (ver `05-problemas-conhecidos.md`). **Falta (próximas
-  etapas da proposta, na ordem aprovada):**
-  1. **Etapa (b)** — camada de contexto de negócio
-     (`server/lib/ia/contextoNegocio.js`), função de raio-X da empresa
-     (compondo `painelVisaoGeral`) e a ferramenta de IA
-     `identificar_produto_fisico` (linguagem natural → produto físico,
-     usando código/medida/apelidos já cadastrados na Etapa (a));
-  2. **Etapa (c)** — regras de negócio declaradas pelo usuário
+- **Concluído em 27/08/2026 — Etapa (b) da "IA Gestora que conhece o
+  negócio" implementada — camada de contexto de negócio, raio-X da
+  empresa, `identificar_produto_fisico` e "produto em foco" (testado:
+  Postgres real, **386/386 testes automatizados no projeto** (era
+  368/368) + verificação manual: servidor sobe normalmente com a migração
+  nova, as 2 ferramentas testadas diretamente contra dado real da empresa
+  900 — ver `04-alteracoes.md` (42) e `02-decisoes.md` (42)).** Depois da
+  Etapa (a) (Mapa de Produtos), a Etapa (b) da ordem aprovada foi
+  concluída: `server/lib/mapaProdutos.js#identificarProdutoFisico`
+  (cascata de 4 camadas, nunca escolhe sozinha entre candidatos
+  ambíguos), `server/lib/ia/contextoNegocio.js#montarRaioXEmpresa`
+  (composição sobre `painelVisaoGeral`/`recebimentosMl`, nenhum cálculo
+  novo), 2 ferramentas novas de IA (`identificar_produto_fisico`,
+  `visao_geral_empresa`) e o mecanismo de "produto em foco" (coluna nova
+  `ia_conversas.contexto_ativo`). Um bug real (query com `JOIN` sem
+  qualificar coluna ambígua) foi encontrado pelos próprios testes e
+  corrigido — ver `04-alteracoes.md` (42). **Falta (próximas etapas da
+  proposta, na ordem aprovada):**
+  1. **Etapa (c)** — regras de negócio declaradas pelo usuário
      (`regras_negocio_ia`), sempre com confirmação explícita antes de
-     gravar;
-  3. **Etapa (d)** — tabela `tarefas` ligada ao Radar já existente (alerta
+     gravar — o único write-exception que a proposta permite pra IA
+     (`definir_regra_negocio`, sempre gated atrás de confirmação explícita
+     do usuário na mesma conversa);
+  2. **Etapa (d)** — tabela `tarefas` ligada ao Radar já existente (alerta
      → tarefa, sempre por ação explícita, nunca automática por padrão);
-  4. **Etapa (e)** — integração de WhatsApp, bloqueada até o usuário
+  3. **Etapa (e)** — integração de WhatsApp, bloqueada até o usuário
      escolher o provedor (Meta Cloud API / Twilio / Z-API / outro) e
      fornecer as credenciais — mesma pendência de padrão já usada pra
      `IA_API_KEY`;
+  4. testar ao vivo, numa conversa real (depois de `IA_API_KEY` estar
+     configurada em produção), as perguntas de acompanhamento que a Etapa
+     (b) foi desenhada pra resolver — ex: "quanto tenho da caixa
+     20x20x20?" seguido de "e quanto vendi dela essa semana?" — hoje só
+     verificado no nível da ferramenta/orquestrador com provedor falso
+     (ver `05-problemas-conhecidos.md`);
   5. **se o usuário quiser** (não pedido ainda): a IA passar a sugerir
      apelidos automaticamente (`origem: 'ia_sugerido'`, sempre com
      confirmação) a partir de padrões percebidos em conversas reais — o

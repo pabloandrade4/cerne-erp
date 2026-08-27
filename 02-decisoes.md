@@ -3,6 +3,75 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-27 (42) — Camada de contexto de negócio + raio-X da empresa + identificar_produto_fisico
+
+- **"Nunca escolher sozinha entre candidatos ambíguos" é a regra que
+  desenhou toda a função de identificação.** `identificarProdutoFisico`
+  poderia ter sido escrita pra "escolher o mais parecido" (ex: por
+  similaridade de texto) — deliberadamente não foi. Ela sempre devolve 1
+  de 3 status (`identificado`/`ambiguo`/`nao_encontrado`) e nunca decide
+  por conta própria quando mais de um produto bate — isso é uma
+  continuação direta da regra central de toda a IA Gestora ("nunca
+  inventar/nunca resolver conflito de dado sozinha", ver
+  `docs/PROPOSTA-contexto-negocio-ia-gestora.md`), aplicada agora também
+  à IDENTIFICAÇÃO de uma entidade, não só a um número.
+
+- **Camadas exatas antes da busca aproximada, cada uma parando a cascata
+  assim que encontra QUALQUER candidato.** Código exato tem prioridade
+  sobre apelido, que tem prioridade sobre medida — mesmo que o texto do
+  usuário pareça bater com mais de uma camada ao mesmo tempo — porque
+  código é o identificador mais forte do cadastro (`UNIQUE` por empresa).
+  Só quando as 3 buscas exatas não encontram nada é que a busca
+  aproximada (`ILIKE`) entra — ela é sempre a última tentativa, nunca a
+  primeira, porque é a mais propensa a trazer falso-positivo.
+
+- **`lib/mapaProdutos.js` fora de `lib/ia/`; `lib/ia/contextoNegocio.js`
+  dentro — mesma convenção já aprovada na etapa (a) (ponto 1 da
+  proposta).** Identificar um produto físico a partir de texto não é uma
+  capacidade exclusiva da IA (poderia, no futuro, ser usada por outra tela
+  do ERP que precise "traduzir" texto → produto) — por isso vive fora de
+  `lib/ia/`. Já `montarRaioXEmpresa` é uma composição pensada
+  especificamente pro formato que a IA consome (nunca usada pela tela
+  Visão Geral, que já chama `painelVisaoGeral` diretamente) — por isso
+  fica dentro.
+
+- **`visao_geral_empresa` reaproveita `painelVisaoGeral` por inteiro, em
+  vez de reescrever uma versão "resumida" para a IA.** A proposta é
+  explícita ("compor, não recriar"): criar uma segunda função que decide
+  sozinha o que é "importante o suficiente" pra IA ver seria uma segunda
+  fonte de verdade arriscada (ex: um alerta que aparece na tela mas nunca
+  chega pra IA). A única adição real é `resumoRecebimentosMarketplace`
+  (detalhe por status, que `painelVisaoGeral.fluxoCaixa.recebimentosMl`
+  não tem) — tudo o mais é o mesmo objeto que a tela Visão Geral já
+  calcula.
+
+- **"Produto em foco" guardado como o MENOR estado possível — 1 coluna
+  JSONB, sem tabela nova, sem endpoint novo.** A proposta (ponto 2.6)
+  pedia a IA entender perguntas de acompanhamento ("e desse produto...")
+  sem o usuário repetir o nome. A tentação seria desenhar um sistema geral
+  de "memória de entidades" da conversa — decisão consciente de NÃO fazer
+  isso agora: só produto físico, só a última identificação com certeza,
+  guardada em `ia_conversas.contexto_ativo` (a mesma linha que já existe
+  por conversa), lida/escrita nos 2 pontos que `routes/iaGestora.js` já
+  tocava. Se no futuro surgir necessidade de guardar outro tipo de "foco"
+  (ex: uma loja, um fornecedor), o mesmo campo JSONB comporta sem
+  migração nova — mas essa generalização não foi antecipada sem um pedido
+  real, pra não construir abstração sem uso comprovado.
+
+- **`produtoEmFoco` só é atualizado quando a identificação vem com
+  CERTEZA — nunca em `ambiguo`, nunca em `nao_encontrado`.** Se a IA
+  identificasse um produto errado (ou ambíguo) e isso virasse o foco da
+  conversa, uma pergunta de acompanhamento passaria a responder sobre o
+  produto errado silenciosamente — o tipo exato de erro silencioso que a
+  proposta pede pra nunca acontecer.
+
+- **`HISTORICO_MAX_MENSAGENS` 8 → 12, sem mudar `HISTORICO_LIMITE_BANCO`
+  (continua 20, em `routes/iaGestora.js`).** Um valor deliberadamente
+  modesto: o suficiente pra uma conversa de acompanhamento sobre o mesmo
+  produto não perder contexto cedo demais, sem inflar o prompt a cada
+  pergunta. Continua bem abaixo do que já é buscado do banco — nenhuma
+  mudança na consulta em si foi necessária.
+
 ## 2026-08-27 (41) — Mapa de Produtos: medida/categoria/aliases + tela de gestão
 
 - **Auditoria antes de arquitetura, arquitetura antes de código.** Pedido

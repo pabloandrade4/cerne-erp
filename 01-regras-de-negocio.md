@@ -1101,6 +1101,25 @@ número estimado.**
   devolve vêm das mesmas funções que alimentam as telas Recebimentos e
   Fluxo de Caixa (nunca uma segunda conta paralela), então nunca divergem
   do que a tela mostra.
+- **Identificação de produto físico e "raio-X" da empresa (27/08/2026 —
+  Etapa (b) de "IA Gestora que conhece o negócio").** A IA passou a
+  conseguir traduzir um texto livre do usuário ("a caixa 20x20x20", um
+  apelido cadastrado) num produto físico do Mapa de Produtos, e a montar
+  uma visão ampla da empresa (vendas por canal, fluxo de caixa, conexões,
+  alertas, Radar) numa única resposta, quando a pergunta for geral/aberta
+  ("como está o negócio hoje"). **Regra dura: a IA NUNCA escolhe sozinha
+  entre produtos ambíguos.** Quando mais de um produto bate com o texto
+  informado, ela sempre pergunta ao usuário qual é o certo, listando os
+  candidatos — nunca supõe, nunca pega "o mais parecido".
+- **"Produto em foco" da conversa (27/08/2026).** Quando a IA identifica um
+  produto físico com certeza numa pergunta, esse produto passa a ser o
+  assunto da conversa — perguntas de acompanhamento como "e desse produto,
+  quanto vendi essa semana?" funcionam sem o usuário repetir o nome. Esse
+  foco só é atualizado quando a identificação vem com certeza (nunca
+  quando fica ambíguo), e só muda quando a IA identificar um produto
+  diferente — nunca é apagado só porque uma pergunta no meio da conversa
+  não tocou no assunto. Continua sem nenhuma escrita: é só "do que estamos
+  falando agora", nunca uma regra de negócio nem um dado financeiro.
 
 ### Radar da IA — acompanhamento contínuo em segundo plano (25/08/2026)
 - **A IA Gestora deixa de depender só de pergunta.** Além do chat, um
