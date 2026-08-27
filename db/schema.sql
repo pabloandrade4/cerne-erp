@@ -974,3 +974,140 @@ CREATE TABLE IF NOT EXISTS fluxo_caixa_saldo_inicial (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ============================================================
+-- Etapa: Recebimentos, Extrato Bancário e Conciliação (27/08/2026)
+-- ============================================================
+-- Pedido do usuário, em 3 passos (ver docs/02-decisoes.md): (1) organizar
+-- os recebimentos de marketplace com status financeiro real; (2) importar
+-- extrato bancário (XLSX/CSV) semanalmente, sem duplicar; (3) dar essa
+-- leitura pra IA Gestora. Nenhuma tabela financeira já existente
+-- (contas_pagar/contas_receber/ml_pedidos/fluxo_caixa_saldo_inicial) foi
+-- alterada — só reaproveitadas por essas tabelas novas.
+
+-- Recebimentos de marketplace — ANTES calculado só na hora (sem tabela
+-- própria, ver comentário histórico acima de contas_receber), agora
+-- PERSISTIDO: a conciliação bancária (extrato_movimentos, abaixo) precisa
+-- de uma linha de verdade pra apontar e atualizar de status — não dá pra
+-- conciliar um valor calculado on-the-fly que desaparece a cada request.
+-- Nunca duplica: chave única (empresa_id, marketplace, referencia_externa).
+-- Populada/atualizada por UPSERT a partir de ml_pedidos (elegíveis:
+-- pagamento aprovado e não cancelado — mesmo critério de sempre, ver
+-- lib/recebimentosMl.js) — nenhuma segunda fórmula financeira: valor
+-- bruto/taxas/líquido esperado continuam vindo exatamente do mesmo cálculo
+-- de lib/relatorioVendas.js. O UPSERT nunca sobrescreve status/datas
+-- efetivas/valor recebido (só os campos calculados a partir do pedido) —
+-- uma vez conciliado, a materialização seguinte não desfaz a conciliação.
+CREATE TABLE IF NOT EXISTS recebimentos_marketplace (
+  id                         SERIAL PRIMARY KEY,
+  empresa_id                 INTEGER NOT NULL REFERENCES empresas(id),
+  marketplace                VARCHAR(30) NOT NULL,   -- 'Mercado Livre' | 'Shopee' (estrutural — só ML tem pedido real hoje)
+  loja                       VARCHAR(200),
+  -- ON DELETE SET NULL (não CASCADE) DE PROPÓSITO nas duas FKs abaixo: são
+  -- só um LINK SUPLEMENTAR (auditoria/"conjunto de pedidos relacionado"),
+  -- nunca a identidade do recebimento (isso é empresa_id+marketplace+
+  -- referencia_externa, ver UNIQUE abaixo). Se a conta ML ou o pedido forem
+  -- removidos/ressincronizados (ex: reseed de teste, reset de conta),
+  -- CASCADE apagaria o recebimento e destruiria o status/conciliação já
+  -- confirmado (RECEBIDO) sem nenhuma razão financeira — SET NULL preserva
+  -- a linha; a materialização seguinte religa pedido_id ao pedido novo.
+  conta_ml_id                INTEGER REFERENCES ml_contas(id) ON DELETE SET NULL,
+  pedido_id                  INTEGER REFERENCES ml_pedidos(id) ON DELETE SET NULL,
+  referencia_externa         VARCHAR(60) NOT NULL,   -- ml_order_id, em texto
+  pack_id                    VARCHAR(60),            -- ml_pedidos.pack_id quando existir — "conjunto de pedidos" relacionado
+  data_venda                 TIMESTAMPTZ,
+  valor_bruto                NUMERIC(12,2),
+  taxas_descontos            NUMERIC(12,2),
+  valor_liquido_esperado     NUMERIC(12,2),
+  -- Datas/valores REAIS de liberação/recebimento — sempre NULL até uma
+  -- fonte real existir (a API do Mercado Livre usada aqui não retorna
+  -- isso — ver lib/recebimentosMl.js) ou até a conciliação/ação manual
+  -- preencher. Nunca uma data/valor inventado.
+  data_prevista_liberacao    DATE,
+  data_efetiva_liberacao     DATE,
+  valor_recebido             NUMERIC(12,2),
+  data_efetiva_recebimento   DATE,
+  status                     VARCHAR(20) NOT NULL DEFAULT 'a_receber', -- a_receber | disponivel | recebido
+  origem_confirmacao         VARCHAR(20),  -- NULL | manual | conciliacao_extrato — nunca afirma "recebido" sem dizer como se sabe
+  created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (status IN ('a_receber','disponivel','recebido')),
+  UNIQUE (empresa_id, marketplace, referencia_externa)
+);
+CREATE INDEX IF NOT EXISTS idx_recebimentos_marketplace_empresa_status ON recebimentos_marketplace(empresa_id, status);
+
+-- Conta bancária cadastrada pelo usuário — só o necessário pra separar
+-- extratos de contas diferentes por empresa/CNPJ (empresa_id já garante o
+-- CNPJ, ver tabela empresas). Nenhum dado sensível de conta é obrigatório.
+CREATE TABLE IF NOT EXISTS contas_bancarias (
+  id            SERIAL PRIMARY KEY,
+  empresa_id    INTEGER NOT NULL REFERENCES empresas(id),
+  nome          VARCHAR(120) NOT NULL,  -- apelido, ex: "Banco X - Conta Corrente"
+  banco         VARCHAR(120),
+  agencia       VARCHAR(20),
+  numero_conta  VARCHAR(30),
+  ativa         BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, nome)
+);
+
+-- Um "lote" de importação de extrato = 1 arquivo = 1 linha aqui. A
+-- planilha em si NUNCA é armazenada (pedido explícito do usuário: "não
+-- armazene a planilha de maneira insegura se ela não for necessária depois
+-- da importação") — só o necessário pra manter o histórico pedido: nome do
+-- arquivo, contagens, quem importou, status.
+CREATE TABLE IF NOT EXISTS extrato_importacoes (
+  id                    SERIAL PRIMARY KEY,
+  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
+  conta_bancaria_id     INTEGER NOT NULL REFERENCES contas_bancarias(id),
+  nome_arquivo          VARCHAR(255) NOT NULL,
+  formato               VARCHAR(10) NOT NULL,  -- xlsx | csv
+  mapeamento_colunas    JSONB,                 -- mapeamento usado nesta importação (auditoria/reuso)
+  total_movimentacoes   INTEGER NOT NULL DEFAULT 0,  -- linhas encontradas na planilha
+  total_novas           INTEGER NOT NULL DEFAULT 0,  -- efetivamente inseridas
+  total_duplicadas      INTEGER NOT NULL DEFAULT 0,  -- já existiam (hash igual) — nunca duplicadas
+  total_entradas        NUMERIC(14,2),
+  total_saidas          NUMERIC(14,2),
+  status                VARCHAR(20) NOT NULL DEFAULT 'concluida', -- concluida | erro
+  importado_por         VARCHAR(200),
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Cada movimentação bancária individual. `hash_dedup` é a chave de
+-- deduplicação segura pedida pelo usuário ("a mesma planilha importada duas
+-- vezes NÃO pode duplicar as movimentações"): hash determinístico de
+-- (conta_bancaria_id, data, valor, tipo, descrição, documento) — a mesma
+-- linha da mesma planilha (ou de uma planilha sobreposta, ex: extrato
+-- semanal com 2 dias repetidos da semana anterior) gera sempre o mesmo
+-- hash, então o UNIQUE + ON CONFLICT DO NOTHING garante, no próprio banco
+-- (não só na aplicação), que ela nunca é inserida duas vezes — mesmo
+-- padrão já usado em despesas_fixas/contas_pagar (idx_contas_pagar_despesa_fixa_vencimento).
+CREATE TABLE IF NOT EXISTS extrato_movimentos (
+  id                    SERIAL PRIMARY KEY,
+  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
+  conta_bancaria_id     INTEGER NOT NULL REFERENCES contas_bancarias(id),
+  importacao_id         INTEGER NOT NULL REFERENCES extrato_importacoes(id),
+  data                  DATE NOT NULL,
+  descricao             TEXT,
+  documento             VARCHAR(100),
+  valor                 NUMERIC(14,2) NOT NULL,  -- sempre positivo — `tipo` diz a direção
+  tipo                  VARCHAR(10) NOT NULL,    -- entrada | saida
+  saldo_apos            NUMERIC(14,2),           -- saldo informado pelo banco após o movimento, só quando a planilha traz essa coluna
+  hash_dedup            VARCHAR(64) NOT NULL,
+  -- Conciliação: aponta pra UM dos 3 tipos de referência possíveis —
+  -- referência polimórfica simples (sem FK de banco, Postgres não suporta
+  -- FK condicional a mais de uma tabela) — mesmo espírito de simplicidade
+  -- já usado em `categoria`/`origem` texto livre no resto do sistema. Nunca
+  -- lida direto: sempre através de lib/conciliacaoBancaria.js.
+  status_conciliacao    VARCHAR(20) NOT NULL DEFAULT 'nao_conciliado', -- nao_conciliado | conciliado | ignorado
+  conciliado_com_tipo   VARCHAR(30),   -- recebimento_marketplace | conta_receber | conta_pagar
+  conciliado_com_id     INTEGER,
+  conciliado_em         TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (tipo IN ('entrada','saida')),
+  CHECK (status_conciliacao IN ('nao_conciliado','conciliado','ignorado')),
+  UNIQUE (conta_bancaria_id, hash_dedup)
+);
+CREATE INDEX IF NOT EXISTS idx_extrato_movimentos_empresa_data ON extrato_movimentos(empresa_id, data);
+CREATE INDEX IF NOT EXISTS idx_extrato_movimentos_status ON extrato_movimentos(empresa_id, status_conciliacao);

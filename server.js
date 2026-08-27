@@ -35,11 +35,21 @@ const iaGestoraRouter = require('./routes/iaGestora');
 const performanceAnunciosRouter = require('./routes/performanceAnuncios');
 const visitasConversaoRouter = require('./routes/visitasConversao');
 const margemAnuncioRouter = require('./routes/margemAnuncio');
+const contasBancariasRouter = require('./routes/contasBancarias');
+const extratoBancarioRouter = require('./routes/extratoBancario');
+const conciliacaoRouter = require('./routes/conciliacao');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+// Limite padrão do express.json() é 100kb — pequeno demais pra planilha de
+// extrato bancário enviada em base64 (Passo 2 da tarefa "Recebimentos +
+// Fluxo de Caixa + IA Gestora", 27/08/2026). Sem multipart/multer no
+// projeto (ver package.json), o arquivo viaja como base64 dentro do JSON
+// (routes/extratoBancario.js) — por isso o limite sobe pra 20mb, suficiente
+// pra um extrato semanal (centenas de linhas) sem abrir margem exagerada.
+// Nenhuma outra rota muda de comportamento com isso.
+app.use(express.json({ limit: '20mb' }));
 
 // Healthcheck simples (útil para o provedor de hospedagem verificar o serviço)
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -72,6 +82,9 @@ app.use('/api/ia-gestora', iaGestoraRouter);
 app.use('/api/performance-anuncios', performanceAnunciosRouter);
 app.use('/api/visitas-conversao', visitasConversaoRouter);
 app.use('/api/margem-anuncio', margemAnuncioRouter);
+app.use('/api/contas-bancarias', contasBancariasRouter);
+app.use('/api/extrato', extratoBancarioRouter);
+app.use('/api/conciliacao', conciliacaoRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
