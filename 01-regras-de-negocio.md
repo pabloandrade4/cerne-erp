@@ -389,7 +389,7 @@ junto da nova).
   Livre** — pedido explícito do usuário para primeiro visualizar
   corretamente os anúncios, antes de qualquer edição.
 
-## Produto base / SKU de venda / Multiplicador (DEPRECIADO para fins de estoque desde 26/08/2026; REATIVADO em 25/08/2026 para Relatórios)
+## Produto base / SKU de venda / Multiplicador / Mapa de Produtos (DEPRECIADO para fins de estoque desde 26/08/2026; REATIVADO em 25/08/2026 para Relatórios; tela de gestão própria desde 27/08/2026)
 - Este conceito (produto físico real por trás de vários SKUs/kits do
   Mercado Livre, com um multiplicador de conversão) foi criado só pra
   alimentar a tela Estoque de uma etapa anterior. Desde 26/08/2026 a tela
@@ -401,9 +401,17 @@ junto da nova).
   seção "Relatórios" acima. Um vínculo salvo aqui (`produto_base_skus`)
   continua sendo a fonte que vale quando existe; sem ele, o relatório usa
   o mesmo padrão de leitura de SKU já usado nas sugestões desta tela
-  (`lib/skuProdutoBase.js`). Ainda não existe uma tela de gestão desses
-  vínculos no menu — a API (`routes/produtosBase.js`) já permite
-  cadastrar/corrigir, mas sem interface (ver `06-proximos-passos.md`).
+  (`lib/skuProdutoBase.js`).
+- **Desde 27/08/2026 existe uma tela de gestão própria** ("Mapa de
+  Produtos", em Cadastros) — antes só a API permitia
+  cadastrar/corrigir. `produtos_base` ganhou `medida` e `categoria`
+  (campos estruturados, opcionais); tabela nova `produto_base_aliases`
+  guarda apelidos em linguagem natural para um produto físico (ex:
+  "aquela 16x11x6"), sempre cadastrados manualmente nesta etapa — é a
+  base estrutural para a IA Gestora futuramente identificar um produto
+  citado numa conversa (ver `docs/PROPOSTA-contexto-negocio-ia-gestora.md`),
+  mas a IA ainda não grava nem lê apelidos automaticamente. Ver
+  `03-funcionalidades.md` para o detalhe completo da tela.
 - **O SKU original recebido do Mercado Livre nunca é alterado** — nem no
   pedido, nem em lugar nenhum, então nada nesta descontinuação afeta
   cálculo de venda/margem/DRE (que nunca dependeram de produto base).

@@ -2,6 +2,79 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-27 (41) — Mapa de Produtos: medida/categoria/aliases + tela de gestão (Etapa (a) da proposta de contexto de negócio da IA)
+- **Contexto:** primeira etapa aprovada de
+  `docs/PROPOSTA-contexto-negocio-ia-gestora.md` (arquitetura de "IA
+  Gestora que conhece o negócio", apresentada em 27/08/2026 e aprovada
+  pelo usuário na sequência — "vamos seguir sua orientação pode
+  prosseguir"). Ordem de implementação escolhida (recomendação própria,
+  aprovada): (a) mapa de produtos + aliases + tela; (b) camada de
+  contexto + raio-X + ferramenta de identificação de produto; (c) regras
+  de negócio; (d) tarefas ligadas ao Radar; (e) WhatsApp, só depois do
+  usuário escolher o provedor. Esta entrada cobre só a etapa (a).
+- **Gap corrigido:** `produtos_base`/`produto_base_skus` já tinham uma API
+  REST completa (`routes/produtosBase.js`) mas nenhuma tela consumia essa
+  API (confirmado por grep em `public/index.html` antes de começar) — só
+  era possível cadastrar/corrigir o vínculo SKU → produto físico via
+  chamada HTTP manual. Essa etapa fecha esse gap.
+- **Schema (`db/schema.sql`):** `produtos_base` ganhou `medida VARCHAR(100)`
+  e `categoria VARCHAR(100)` (ambos opcionais, texto livre — mesmo padrão
+  já usado em `contas_pagar.categoria`). Tabela nova
+  `produto_base_aliases` (`id, empresa_id, produto_base_id, alias,
+  origem 'manual'|'ia_sugerido', created_at`, `UNIQUE (empresa_id,
+  alias)`, `ON DELETE CASCADE` em `produto_base_id`) — apelidos em
+  linguagem natural para um produto físico ("aquela 16x11x6", "caixa
+  pequena"); pré-requisito para a futura ferramenta de IA
+  `identificar_produto_fisico` (etapa (b), ainda não implementada) —
+  nesta etapa é só CRUD manual pela tela, a IA não grava aqui ainda.
+- **Backend (`server/routes/produtosBase.js` estendido):**
+  `medida`/`categoria` no `POST /`/`PUT /:id` e no `serializeProdutoBase`;
+  `GET /` passou a buscar também por medida (`search`); `GET
+  /categorias-sugeridas` (novo — categorias já usadas por esta empresa,
+  distinct, para autocompletar a tela); CRUD completo de apelidos: `GET
+  /aliases` (filtra por `produtoBaseId`/`search`), `POST /aliases`
+  (aceita `produtoBaseId` existente ou `codigoProdutoBase` pra criar o
+  produto base na hora, mesmo padrão já usado em `POST /vinculos`), `PUT
+  /aliases/:id`, `DELETE /aliases/:id`.
+- **Bug de roteamento descoberto e corrigido (`server/server.js`):** o
+  `express` "-stub" deste ambiente de desenvolvimento faz correspondência
+  de prefixo por STRING pura em `app.use(caminho, ...)`, sem checar limite
+  de segmento — uma chamada a `/api/produtos-base/categorias-sugeridas`
+  (e, na prática, qualquer chamada a `/api/produtos-base` sem subcaminho)
+  caía no router errado (montado em `/api/produtos`, registrado antes)
+  quando o texto do caminho batia por prefixo simples (`'produtos-base'`
+  começa com `'produtos'`) — confirmado ao vivo, com o log mostrando
+  `SELECT * FROM produtos WHERE id = '-base'`. **Não afeta produção** (o
+  Express real resolve por segmento de caminho, não por string) — mesma
+  categoria do já documentado stub de `pg` que não preenche `rowCount`
+  (ver `docs/05-problemas-conhecidos.md`). Corrigido registrando os
+  prefixos mais específicos (`/api/produtos-base`, `/api/estoque-full`,
+  `/api/estoque-produto-base`) antes dos mais genéricos
+  (`/api/produtos`, `/api/estoque`) em `server.js` — inofensivo em
+  qualquer versão do Express, blinda o ambiente de dev. Coberto por um
+  teste de regressão dedicado (ver abaixo).
+- **Frontend (`server/public/index.html`):** página nova "Mapa de
+  Produtos" (Cadastros, ícone de vínculo), módulo `window.MapaProdutos`
+  com 3 sub-abas: **Produtos físicos** (tabela com código/nome/medida/
+  categoria/custo/apelidos/status, modal de criar/editar, ativar/
+  desativar); **Vínculos de SKU** (tabela de vínculos já salvos + painel
+  de "SKUs vendidos sem vínculo" com sugestão automática vinda de vendas
+  reais — botão "Aceitar" grava direto, botão "Vincular" abre o modal
+  pré-preenchido — mesma lógica de `resolverProdutosBasePorSku`, só
+  exposta numa tela agora); **Apelidos** (lista com filtro por produto e
+  busca, modal de criar/editar/remover). Reaproveita 100% os componentes
+  visuais já existentes (`.seg`, `.data-table`, `.modal-*`, `.toast`) —
+  nenhum componente novo de CSS.
+- **Testes:** `test/produtosBase.test.js` (novo, 17 casos, sobe servidor
+  HTTP real com os routers `produtos`+`produtos-base` **na mesma ordem
+  corrigida de `server.js`** de propósito — é um teste de regressão para
+  o bug de roteamento acima, não só um teste de CRUD). Suíte completa:
+  368/368 (era 351/351 antes desta etapa).
+- **Fora do escopo desta etapa (fica pra (b)/(c)):** ferramenta de IA
+  `identificar_produto_fisico`, a IA gravar alias sugerido (`ia_sugerido`)
+  sozinha, camada de contexto de negócio, regras de negócio declaradas,
+  raio-X da empresa, tarefas, WhatsApp.
+
 ## 2026-08-27 (40) — Recebimentos + Fluxo de Caixa + IA Gestora (importação de extrato e conciliação)
 - **Pedido do usuário, em 3 passos, restrito a este escopo:** (1) organizar
   os recebimentos dos marketplaces em status financeiros claros, pra a IA

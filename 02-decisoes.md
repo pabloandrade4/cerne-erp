@@ -3,6 +3,92 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-27 (41) — Mapa de Produtos: medida/categoria/aliases + tela de gestão
+
+- **Auditoria antes de arquitetura, arquitetura antes de código.** Pedido
+  explícito do usuário ("REQUISITO CENTRAL — A IA GESTORA PRECISA
+  CONHECER MEU NEGÓCIO"): antes de escrever qualquer linha de código, foi
+  produzida uma auditoria completa do que já existe (5 sub-agentes em
+  paralelo, cobrindo produtos/vendas/estoque/financeiro/IA) e uma proposta
+  de arquitetura (`docs/PROPOSTA-contexto-negocio-ia-gestora.md`), só
+  depois disso — com aprovação explícita do usuário ("vamos seguir sua
+  orientação pode prosseguir") — a implementação começou. Isso evitou
+  reconstruir do zero coisas que já existiam bem desenhadas (ex: a
+  resolução SKU→produto físico já existia e é reaproveitada, não refeita).
+
+- **Estender `produtos_base`, nunca criar uma tabela paralela.** `medida`
+  e `categoria` viraram colunas na tabela já existente (não uma nova
+  "ficha técnica" separada) porque já existe uma linha por produto físico
+  ali — mesmo raciocínio já usado antes pro campo `custo`. Evita o
+  problema de duas tabelas precisarem ficar sincronizadas.
+
+- **Apelidos em tabela própria (`produto_base_aliases`), não uma coluna de
+  array/texto em `produtos_base`.** Um produto pode ter vários apelidos
+  (times diferentes chamam a mesma caixa de nomes diferentes) e cada
+  apelido precisa ser editável/removível individualmente com sua própria
+  data de criação e origem (manual vs sugerido pela IA) — uma tabela
+  relacional com `UNIQUE (empresa_id, alias)` modela isso corretamente e
+  já garante, no próprio banco, que dois produtos da mesma empresa nunca
+  disputam o mesmo apelido.
+
+- **Por que a IA ainda não grava alias sozinha nesta etapa.** A proposta
+  aprovada permite `origem = 'ia_sugerido'` no schema desde já (pra não
+  precisar de outra migração na etapa (b)), mas a ferramenta de IA que
+  geraria isso (`identificar_produto_fisico`) é da etapa (b), ainda não
+  implementada — nesta etapa o campo `origem` só é preenchido com
+  `'manual'`, sempre via tela. Confirmação explícita antes de qualquer
+  escrita automática é uma regra dura do pedido original, não uma
+  preferência de estilo.
+
+- **Nenhum "delete" físico de produto base ou vínculo — só apelido tem
+  DELETE de verdade.** Segue o padrão já estabelecido no resto do projeto
+  (ativar/desativar, nunca excluir um cadastro com histórico associado).
+  Apelido é diferente: não é um registro histórico, é só "como alguém
+  chama a coisa" — remover não perde informação de negócio, então o
+  `DELETE /aliases/:id` é uma exclusão física mesmo, sem soft-delete.
+
+- **Categorias sugeridas vêm dos dados já cadastrados (`DISTINCT`), não de
+  uma lista fixa.** Ao contrário de `contas_pagar.categoria`
+  (`CATEGORIAS_SUGERIDAS` hardcoded — faz sentido lá porque categoria
+  financeira é genérica entre empresas), categoria de produto físico varia
+  demais de negócio pra negócio pra uma lista genérica ajudar; melhor
+  reaproveitar o que a própria empresa já digitou antes.
+
+- **Bug de roteamento do `express` "-stub" — corrigido reordenando, não
+  reescrevendo o stub.** Descoberto ao vivo durante o smoke-test manual: o
+  `express` instalado neste ambiente de desenvolvimento (marcado
+  "-stub" no `package.json`, mesma categoria do `pg` stub já documentado)
+  faz `app.use('/api/produtos', ...)` também "casar" com
+  `/api/produtos-base/...` por comparação de prefixo em string pura, sem
+  checar limite de segmento — o Express real (produção) não tem esse
+  problema. A correção escolhida foi só reordenar os `app.use(...)` em
+  `server.js` (prefixo mais específico primeiro) em vez de tentar
+  consertar o pacote stub (que não é usado em produção, então corrigi-lo
+  não traria benefício real e arriscaria mascarar outras diferenças do
+  stub) — zero risco, funciona em qualquer versão do Express, e blindou de
+  brinde as mesmas rotas de Estoque Full/Estoque Produto Base que tinham a
+  mesma vulnerabilidade de ordem (não foi pedido, mas era o mesmo bug,
+  barato de corrigir, e deixá-lo lá seria uma armadilha conhecida e
+  ignorada).
+
+- **Teste de regressão específico para o bug de roteamento.**
+  `test/produtosBase.test.js` monta os routers `produtos`+`produtos-base`
+  na MESMA ordem corrigida de `server.js` de propósito (não uma ordem
+  arbitrária) — assim, se alguém reverter a ordem em `server.js` no
+  futuro, o teste falha imediatamente em vez de o bug ressurgir
+  silenciosamente só em produção com o Express de verdade (onde,
+  ironicamente, o bug nem se manifestaria — o teste protege contra a
+  ordem errada em si, que é a prática correta independente do stub).
+
+- **Verificação:** suíte completa 368/368 (era 351/351) rodada após a
+  mudança, mais smoke-test manual via `curl` cobrindo toda a superfície
+  nova (criar/buscar/editar/desativar produto base, criar/editar/remover
+  vínculo — incluindo criação automática do produto base pelo
+  `codigoProdutoBase`, criar/editar/remover apelido, validações de campo
+  obrigatório) contra um servidor real, antes de escrever os testes
+  automatizados — mesma disciplina "provar ao vivo antes de confiar só no
+  teste" já usada nas etapas financeiras anteriores.
+
 ## 2026-08-27 (40) — Recebimentos + Fluxo de Caixa + IA Gestora (importação de extrato e conciliação)
 
 - **Contexto:** o usuário pediu, em 3 passos e restrito só a este escopo,

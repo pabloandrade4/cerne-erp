@@ -672,18 +672,28 @@ cada uma e o status (em desenvolvimento / concluída).
   conciliação automática de recebimento (Shopee ainda não tem
   recebimentos organizados, ver item acima).
 
-## Produto base + SKU de venda + Multiplicador
+## Produto base + SKU de venda + Multiplicador + Mapa de Produtos (tela de gestão, medida/categoria/aliases — 27/08/2026)
 - **Status:** concluído e **testado em produção** (deploy `ml15`, com dados
-  reais da conta "PFEMBALAGEMS").
+  reais da conta "PFEMBALAGEMS"). Ganhou tela própria em 27/08/2026 (antes
+  só existia como API).
 - **O que é:** resolve o problema de um mesmo produto físico ser vendido em
   vários "kits" diferentes no Mercado Livre (ex.: `25CX-19X12X12`,
   `50CX-19X12X12`, `75CX-19X12X12`, `100CX-19X12X12` são todos o mesmo
-  produto físico `CX-19X12X12`, em quantidades diferentes por kit). Três
-  peças novas no banco:
-  - `produtos_base` — o produto físico real (o que fica no Galpão).
+  produto físico `CX-19X12X12`, em quantidades diferentes por kit). Peças
+  no banco:
+  - `produtos_base` — o produto físico real (o que fica no Galpão), com
+    `medida` (ex: "16X11X6") e `categoria` (texto livre com sugestões
+    baseadas no que a própria empresa já cadastrou) desde 27/08/2026.
   - `produto_base_skus` — o vínculo entre um SKU vendido/armazenado e um
     produto base, com um `multiplicador` (quantas unidades físicas aquele
     SKU representa) e uma `origem` (`manual` ou `automatico`).
+  - `produto_base_aliases` (novo, 27/08/2026) — apelidos em linguagem
+    natural para um produto físico ("aquela 16x11x6", "caixa pequena"),
+    com `origem` (`manual` ou `ia_sugerido` — este último ainda não é
+    gravado por nenhuma ferramenta de IA, é preparação de schema para a
+    próxima etapa). Pré-requisito para a IA Gestora conseguir identificar
+    um produto citado por apelido numa conversa (etapa futura, ver
+    `docs/PROPOSTA-contexto-negocio-ia-gestora.md`).
   - Interpretação automática (`server/lib/skuProdutoBase.js`) sugere
     produto base + multiplicador a partir do padrão "dígitos no início do
     SKU" (`100CX-19X12X12` → multiplicador 100, código `CX-19X12X12`) —
@@ -696,16 +706,30 @@ cada uma e o status (em desenvolvimento / concluída).
     vendida × multiplicador`, somada por produto base. SKU sem vínculo
     salvo nunca é somado como se fosse zero ou inventado — fica separado
     em `pendentes`.
+- **Tela "Mapa de Produtos" (Cadastros, 27/08/2026):** antes só existia a
+  API — cadastrar/corrigir um vínculo exigia chamada HTTP manual. Três
+  sub-abas: **Produtos físicos** (tabela código/nome/medida/categoria/
+  custo/quantidade de apelidos/status, criar/editar, ativar/desativar);
+  **Vínculos de SKU** (vínculos já salvos + painel "SKUs vendidos sem
+  vínculo" — lista de verdade, vinda de pedidos reais, com sugestão
+  automática já calculada; um clique aceita a sugestão ou abre o modal pra
+  vincular manualmente); **Apelidos** (lista com filtro por produto e
+  busca, criar/editar/remover).
 - **Onde está:** `server/db/schema.sql` (tabelas), `server/lib/skuProdutoBase.js`
   (sugestão automática), `server/lib/produtoBaseConversao.js` (conversão
   compartilhada), `server/routes/produtosBase.js` (API: CRUD de produto
-  base, CRUD de vínculos, sugestões de vínculo a partir dos pedidos reais,
+  base incl. medida/categoria, CRUD de vínculos, sugestões de vínculo a
+  partir dos pedidos reais, CRUD de apelidos, categorias sugeridas,
   conversão de uma venda ou de um pedido específico para quantidade
-  física).
-- **O que falta:** nada — este conceito foi **descontinuado para fins de
-  estoque** em 26/08/2026 (ver seção "Estoque / Estoque Full" abaixo e
-  `02-decisoes.md` (20)). As tabelas e a API (`routes/produtosBase.js`)
-  continuam existindo, só não são mais lidas por nenhuma tela.
+  física), `server/public/index.html` (`window.MapaProdutos`).
+- **O que falta:** a ferramenta de IA `identificar_produto_fisico`
+  (linguagem natural → produto físico, usando código/medida/apelidos) e a
+  IA gravar um `alias` sugerido sozinha (sempre com confirmação do
+  usuário) — próxima etapa da proposta de contexto de negócio, ainda não
+  implementada. Para fins de **estoque exibido em tela**, este conceito
+  continua **descontinuado** desde 26/08/2026 (ver seção "Estoque /
+  Estoque Full" abaixo e `02-decisoes.md` (20)) — a tela de Estoque usa
+  `ml_estoque_itens` diretamente, não este mapa.
 
 ## Estoque / Estoque Full — Mercado Livre como fonte oficial (26/08/2026)
 - **Status:** concluído e testado localmente (Postgres real + servidor

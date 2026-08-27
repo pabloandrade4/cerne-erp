@@ -945,6 +945,34 @@ desenvolvimento, para não serem esquecidas.
   `rows.length` — nunca `rowCount` — quando o código roda (ou pode rodar)
   contra este ambiente de teste.
 
+## Este ambiente de desenvolvimento também tem um `express` de teste que roteia por prefixo de string, não por segmento de caminho (27/08/2026)
+- Descoberto ao vivo durante o desenvolvimento da tela "Mapa de Produtos"
+  (`docs/PROPOSTA-contexto-negocio-ia-gestora.md`, etapa (a)): o pacote
+  `express` instalado neste sandbox (`node_modules/express`, versão
+  reportada `"4.19.2-stub"`) é, como o `pg` acima, um stub deste ambiente
+  — e o `app.use(caminho, router)` dele faz correspondência de PREFIXO POR
+  STRING pura, sem checar se o próximo caractere é uma barra (limite de
+  segmento). Isso significa que uma rota montada em `/api/produtos`
+  também "casa" com qualquer caminho que **comece com esse texto**,
+  inclusive `/api/produtos-base/...` — uma chamada real a
+  `GET /api/produtos-base/categorias-sugeridas` caiu no router errado
+  (`routes/produtos.js`, montado antes) e tentou
+  `SELECT * FROM produtos WHERE id = '-base'` (log real, capturado durante
+  o smoke-test manual). **Não afeta produção** — o Express real resolve
+  `app.use()` por segmento de caminho, então `/api/produtos` nunca
+  intercepta `/api/produtos-base` de verdade; é a mesma categoria do stub
+  de `pg` documentado logo acima (nunca usado no deploy real). Corrigido
+  em `server.js` registrando os prefixos mais específicos
+  (`/api/produtos-base`, `/api/estoque-full`, `/api/estoque-produto-base`)
+  antes dos mais genéricos (`/api/produtos`, `/api/estoque`) — inofensivo
+  em qualquer versão do Express, e blinda o ambiente de dev contra o mesmo
+  problema nas outras rotas com o mesmo padrão de nome. Padrão de correção
+  para qualquer rota nova nesse formato (`/api/<algo>` e
+  `/api/<algo>-<sufixo>` coexistindo): sempre registrar o `app.use()` do
+  caminho mais específico/comprido primeiro em `server.js`. Coberto por um
+  teste de regressão dedicado (`test/produtosBase.test.js`, monta os dois
+  routers na mesma ordem de `server.js` de propósito).
+
 ## Extrato bancário importado: sem tela de detalhe por movimentação nem estorno de importação (27/08/2026)
 - A tela Fluxo de Caixa mostra o **histórico de importações agregado**
   (arquivo, conta, data, contagens, quem importou, status), mas não existe

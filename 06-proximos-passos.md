@@ -1,5 +1,39 @@
 # Próximos Passos
 
+- **Concluído em 27/08/2026 — Proposta de arquitetura "IA Gestora que
+  conhece o negócio" aprovada; Etapa (a) implementada — Mapa de Produtos
+  (medida/categoria/aliases + tela de gestão) (testado: Postgres real,
+  368/368 testes automatizados no projeto (era 351/351) + smoke-test
+  manual via `curl` cobrindo toda a superfície nova — ver
+  `04-alteracoes.md` (41) e `02-decisoes.md` (41)).** Depois da auditoria
+  completa do código real (`docs/PROPOSTA-contexto-negocio-ia-gestora.md`)
+  e aprovação do usuário ("vamos seguir sua orientação pode prosseguir"),
+  a Etapa (a) da ordem proposta foi concluída: `produtos_base` ganhou
+  `medida`/`categoria`, tabela nova `produto_base_aliases`, API estendida
+  (`routes/produtosBase.js`), e a tela "Mapa de Produtos" — fechando o gap
+  crítico identificado na auditoria (API completa, zero UI). De brinde, um
+  bug de roteamento do `express`-stub deste ambiente de dev foi encontrado
+  e corrigido (ver `05-problemas-conhecidos.md`). **Falta (próximas
+  etapas da proposta, na ordem aprovada):**
+  1. **Etapa (b)** — camada de contexto de negócio
+     (`server/lib/ia/contextoNegocio.js`), função de raio-X da empresa
+     (compondo `painelVisaoGeral`) e a ferramenta de IA
+     `identificar_produto_fisico` (linguagem natural → produto físico,
+     usando código/medida/apelidos já cadastrados na Etapa (a));
+  2. **Etapa (c)** — regras de negócio declaradas pelo usuário
+     (`regras_negocio_ia`), sempre com confirmação explícita antes de
+     gravar;
+  3. **Etapa (d)** — tabela `tarefas` ligada ao Radar já existente (alerta
+     → tarefa, sempre por ação explícita, nunca automática por padrão);
+  4. **Etapa (e)** — integração de WhatsApp, bloqueada até o usuário
+     escolher o provedor (Meta Cloud API / Twilio / Z-API / outro) e
+     fornecer as credenciais — mesma pendência de padrão já usada pra
+     `IA_API_KEY`;
+  5. **se o usuário quiser** (não pedido ainda): a IA passar a sugerir
+     apelidos automaticamente (`origem: 'ia_sugerido'`, sempre com
+     confirmação) a partir de padrões percebidos em conversas reais — o
+     schema já suporta, só falta a ferramenta.
+
 - **Concluído em 27/08/2026 — Recebimentos + Fluxo de Caixa + IA Gestora:
   organização de recebimentos, importação de extrato bancário com
   conciliação, e 3 ferramentas novas somente leitura pra IA (testado:
