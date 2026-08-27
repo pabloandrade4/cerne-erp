@@ -524,10 +524,57 @@ só como histórico).
 _(sem regras registradas ainda)_
 
 ## Contas a receber
-_(sem regras registradas ainda)_
+- Desde 27/08/2026, uma conta a receber também pode virar **recebida**
+  através da **conciliação bancária** (Fluxo de Caixa > Importar extrato,
+  ver seção **Fluxo de Caixa** abaixo) — além do botão manual "Marcar como
+  recebido" que já existia. Os dois caminhos usam a mesma trava atômica
+  (`status <> 'recebido'` no próprio UPDATE), então nunca fica "recebida
+  duas vezes" nem some o valor duas vezes no Fluxo de Caixa.
 
-## Recebimentos dos marketplaces
-_(sem regras registradas ainda)_
+## Recebimentos dos marketplaces (reorganizado em 27/08/2026)
+- Cada recebimento de marketplace (hoje: só Mercado Livre — Shopee ainda
+  não tem essa integração) tem **3 status financeiros bem separados,
+  nunca confundidos**:
+  - **A RECEBER** — a venda já aconteceu (pagamento aprovado no
+    marketplace), mas o dinheiro ainda não está disponível em lugar
+    nenhum.
+  - **DISPONÍVEL** — o marketplace já liberou o dinheiro (ex: saiu do
+    "saldo a liberar" e foi para o "saldo disponível" dele), mas isso
+    **não significa, ainda, que o valor foi confirmado no banco da
+    empresa**.
+  - **RECEBIDO** — o valor foi efetivamente identificado no extrato
+    bancário importado (conciliação, ver **Fluxo de Caixa** abaixo) ou
+    confirmado manualmente pelo usuário nesta própria tela. **Nunca**
+    chamado de "recebido no banco" só porque o marketplace marcou como
+    liberado — só uma fonte confiável (extrato bancário ou confirmação
+    manual explícita do usuário) muda um recebimento pra este status.
+- Guardado por recebimento, quando o dado está disponível: empresa/CNPJ,
+  marketplace, loja, referência externa (número do pedido), pedido
+  relacionado (e o "pacote"/conjunto de pedidos, quando o marketplace
+  agrupa mais de um pedido numa mesma remessa), valor bruto, taxas/
+  descontos, valor líquido esperado, data da venda, data prevista de
+  liberação, data efetiva de liberação, data efetiva de recebimento (só
+  quando confirmada) e o status. **Limitação conhecida:** a API do
+  Mercado Livre não devolve data de liberação/repasse nos dados que o ERP
+  já sincroniza — por isso a previsão de liberação nasce sempre em branco
+  e só existe quando o próprio usuário a informa manualmente (vendo no
+  painel do marketplace); ver `05-problemas-conhecidos.md`.
+- **Nunca duplica.** Cada recebimento é identificado, de forma única, por
+  empresa + marketplace + referência externa (número do pedido) — reler os
+  mesmos pedidos de novo (o que acontece toda vez que a tela é aberta)
+  nunca cria uma segunda linha nem apaga status/datas/valor já confirmados
+  manualmente ou por conciliação.
+- Visões disponíveis, sempre atuais (não dependem do período selecionado
+  no cabeçalho): recebido hoje, recebido neste mês, total ainda a receber,
+  a receber atrasado (previsão de liberação já vencida), a receber nos
+  próximos 7/15/30 dias, a receber sem nenhuma previsão de liberação
+  informada, e os mesmos números agrupados por marketplace e por loja.
+- Ações manuais disponíveis na tela (sempre avançando o status, nunca
+  voltando): marcar como disponível, definir/editar a previsão de
+  liberação, e marcar como recebido (pedindo o valor e a data reais). Um
+  recebimento já **recebido** não aceita mais nenhuma dessas ações — nem
+  manual nem via conciliação — sem primeiro reabrir o status (o que este
+  ERP não oferece, de propósito: recebido é definitivo).
 
 ## Despesas Fixas (25/08/2026)
 - Uma despesa fixa é um **molde** de despesa recorrente da empresa
@@ -550,27 +597,98 @@ _(sem regras registradas ainda)_
   se ela nunca gerou nenhuma conta (senão, o caminho é desativar, pra não
   perder o histórico).
 
-## Fluxo de Caixa (25/08/2026)
+## Fluxo de Caixa (25/08/2026; importação de extrato e conciliação bancária em 27/08/2026)
 - Visão diária do caixa, sempre separando **REALIZADO** (o que já
-  aconteceu: conta paga, conta recebida) de **PROJETADO** (o que está
-  previsto: conta pendente, despesa fixa ainda não gerada). Um valor
-  previsto **nunca** é tratado como dinheiro já disponível.
+  aconteceu: conta paga, conta recebida, recebimento de marketplace
+  confirmado) de **PROJETADO** (o que está previsto: conta pendente,
+  despesa fixa ainda não gerada, recebimento de marketplace ainda "a
+  receber"/"disponível"). Um valor previsto **nunca** é tratado como
+  dinheiro já disponível.
 - Fórmula mostrada ao usuário: saldo inicial/atual **+** contas a receber
   **+** recebimentos previstos dos marketplaces **−** contas a pagar
   **−** despesas fixas previstas **=** saldo projetado.
 - **Saldo inicial é sempre informado pelo usuário** — o ERP não tem
-  integração bancária real, então nunca calcula ou inventa esse número
-  sozinho. Sem essa informação, os campos de saldo aparecem como "não
-  informado", nunca um valor incorreto.
+  integração bancária real (o extrato importado por planilha, ver abaixo,
+  não é a mesma coisa que uma integração ao vivo), então nunca calcula ou
+  inventa esse número sozinho. Sem essa informação, os campos de saldo
+  aparecem como "não informado", nunca um valor incorreto.
 - **Nunca contar a mesma saída duas vezes.** Se uma despesa fixa já gerou
   uma conta a pagar, o Fluxo de Caixa considera esse valor **uma única
   vez** (pela conta a pagar) — nunca soma de novo como "despesa fixa
   prevista" por cima.
+- **Nunca contar o mesmo recebimento de marketplace duas vezes (regra
+  central de 27/08/2026).** Um recebimento com status "a receber" ou
+  "disponível" entra em "entradas previstas"; no exato momento em que ele
+  vira "recebido" (manualmente ou por conciliação do extrato), some do
+  previsto e passa a entrar em "realizado" na data efetiva de recebimento
+  — nunca as duas colunas ao mesmo tempo, nunca uma soma escondida.
 - Períodos disponíveis: 7, 15 ou 30 dias, este mês, próximo mês ou período
   personalizado — sempre olhando pra FRENTE a partir de hoje (diferente do
   período do cabeçalho do sistema, que olha pra trás).
 - O filtro de empresa do cabeçalho funciona nesta tela e em Despesas
   Fixas.
+
+### Importação de extrato bancário e conciliação (27/08/2026)
+- **Objetivo do usuário:** conseguir importar semanalmente o extrato do
+  banco (planilha) e, a partir dele, o ERP entender o que **realmente**
+  entrou/saiu do banco — sem nunca misturar isso com o que o marketplace
+  apenas *disse* que ia pagar.
+- **Contas bancárias** são um cadastro simples (nome/apelido, banco,
+  agência, número da conta) por empresa — não existe integração bancária
+  real nenhuma (Open Finance, extrato ao vivo etc.); servem só para
+  separar extratos de contas/empresas diferentes.
+- **Formatos aceitos:** XLSX e CSV. Como bancos diferentes usam colunas
+  diferentes, existe uma etapa de **mapeamento de colunas** (data,
+  descrição/histórico, documento, entrada, saída, valor, saldo) — o ERP
+  tenta identificar sozinho pelo nome das colunas e o usuário pode
+  corrigir manualmente antes de continuar.
+- **Sempre mostra uma prévia antes de gravar qualquer coisa** — quantas
+  movimentações foram encontradas, quanto em entradas, quanto em saídas, e
+  quantas já existiam (duplicadas) — só grava de fato quando o usuário
+  confirma essa prévia.
+- **A mesma planilha importada duas vezes nunca duplica.** Cada
+  movimentação recebe um identificador determinístico (conta bancária +
+  data + valor + tipo + descrição + documento) e o próprio banco de dados
+  garante que a mesma combinação nunca é gravada duas vezes — reimportar a
+  mesma planilha (ou uma planilha com linhas repetidas de uma importação
+  anterior) só adiciona o que é realmente novo.
+- **A planilha em si nunca é armazenada.** Só as movimentações já
+  estruturadas (data, descrição, valor, tipo) e um resumo da importação
+  (nome do arquivo, contagens, quem importou, quando) ficam salvos — os
+  bytes do arquivo enviado nunca chegam a tocar o banco de dados.
+- **Conciliação é sempre uma sugestão, nunca automática.** Depois de
+  importado, o ERP tenta relacionar cada movimentação de entrada com um
+  recebimento de marketplace ou uma conta a receber em aberto (e cada
+  movimentação de saída com uma conta a pagar em aberto) — mas isso
+  aparece na tela como **"Possível conciliação encontrada"**, e só é
+  efetivada quando o usuário confirma explicitamente qual candidato está
+  certo. **Critério de sugestão:** o valor bate (até R$ 0,01 de
+  diferença, tolerância de arredondamento) — isso é obrigatório. A
+  proximidade de data entre a movimentação e o candidato **nunca**
+  elimina uma sugestão (o marketplace pode liberar dinheiro dias depois da
+  venda, sem data prevista conhecida) — ela só ordena as sugestões (mais
+  perto da data primeiro).
+- **Quando confirmado, o valor previsto SOME e vira realizado — nunca os
+  dois ao mesmo tempo.** Se R$ 8.420 estava previsto (recebimento "a
+  receber"/"disponível", ou conta a receber pendente) e o extrato confirma
+  esse valor, o Fluxo de Caixa passa a mostrar R$ 8.420 como realizado, e
+  para de contá-lo como previsto — nunca soma os dois.
+- **A conciliação nunca conta pra trás.** Um movimento do extrato só pode
+  ser conciliado uma vez; um recebimento/conta só pode receber uma
+  conciliação (trava atômica no próprio banco, cobre também o caso de duas
+  conciliações concorrentes tentando confirmar o mesmo alvo ao mesmo
+  tempo — a segunda sempre falha com um aviso claro, nunca duplica).
+- Um movimento do extrato que não corresponde a nada rastreado no ERP (ex:
+  tarifa bancária, transferência entre contas próprias) pode ser marcado
+  como **"ignorado"** — isso só tira ele da lista de pendências de
+  conciliação, nunca muda nenhum recebimento/conta.
+- **Histórico de importações** fica sempre visível na tela: arquivo, data
+  da importação, conta bancária, quantidade de movimentações (novas e
+  duplicadas), quem importou e o status.
+- Realizado (no Fluxo de Caixa) e Recebido (na tela Recebimentos) passam a
+  refletir o que o extrato bancário confirma, sempre que uma conciliação é
+  confirmada — sem nenhuma fórmula financeira nova, sem alterar cálculo de
+  margem nem nenhuma outra regra já validada.
 
 ## Custos
 - **Desde 24/08/2026, custo por SKU e alíquota de imposto são cadastrados
@@ -957,6 +1075,24 @@ número estimado.**
   Mercado Livre está performando melhor — e uma central de "quais
   problemas precisam da minha atenção" (mesmos alertas de Visão Geral >
   Alertas & IA).
+- **Recebimentos de marketplace, fluxo de caixa detalhado e extrato
+  bancário importado (27/08/2026), sempre SOMENTE LEITURA.** A IA passou a
+  enxergar os dados organizados no Passo 1/2 desta tarefa (recebimentos
+  com os 3 status, extrato bancário importado, conciliação) para responder
+  com precisão perguntas como "quanto já recebi hoje/este mês", "quanto
+  ainda tenho para receber", "quanto o Mercado Livre ainda vai me pagar",
+  "quanto entrou realmente no banco esta semana", "existe recebimento
+  atrasado", "qual a diferença entre o que o marketplace disse que ia
+  pagar e o que realmente entrou no banco" e "analise o extrato que
+  importei esta semana". **Ela SEMPRE diferencia RECEBIDO/REALIZADO de A
+  RECEBER/PREVISTO** nessas respostas — nunca confunde os dois. Continua
+  sem nenhuma permissão de escrita sobre esses dados: não pode excluir
+  movimentação, marcar pagamento como realizado, conciliar automaticamente
+  sem confirmação do usuário, pagar conta, alterar saldo nem modificar
+  nenhum dado financeiro — só analisa e recomenda. Os números que ela
+  devolve vêm das mesmas funções que alimentam as telas Recebimentos e
+  Fluxo de Caixa (nunca uma segunda conta paralela), então nunca divergem
+  do que a tela mostra.
 
 ### Radar da IA — acompanhamento contínuo em segundo plano (25/08/2026)
 - **A IA Gestora deixa de depender só de pergunta.** Além do chat, um

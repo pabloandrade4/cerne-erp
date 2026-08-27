@@ -102,11 +102,16 @@ cada uma e o status (em desenvolvimento / concluída).
   ainda); um plano de contas de verdade para "categoria" (mesma pendência
   já registrada em Contas a Pagar/Contas a Receber).
 
-## Fluxo de Caixa (evolução diária do caixa, REALIZADO x PROJETADO — 25/08/2026)
+## Fluxo de Caixa (evolução diária do caixa, REALIZADO x PROJETADO — 25/08/2026; importação de extrato bancário e conciliação em 27/08/2026, ver seção própria abaixo)
 - **Status:** concluído, testado localmente (Postgres local, chamadas HTTP
   diretas ao servidor real + suíte automatizada — `test/fluxoCaixa.test.js`,
   8 casos, incluindo o teste central de não-duplicação). Ainda não testado
-  num navegador real nem ao vivo em produção.
+  num navegador real nem ao vivo em produção. **27/08/2026:** ganhou
+  importação de extrato bancário e conciliação (nova seção "Importação de
+  extrato bancário e conciliação", logo abaixo de "Recebimentos") — o
+  bucket REALIZADO agora também inclui recebimentos de marketplace
+  confirmados por conciliação, sempre substituindo (nunca somando) o
+  previsto correspondente.
 - **O que é:** tela com a evolução diária do caixa, sempre separando o que
   já ACONTECEU (realizado) do que é só PREVISTO (projetado) — nunca trata
   um recebimento previsto como dinheiro já disponível. Cards no topo:
@@ -205,8 +210,13 @@ cada uma e o status (em desenvolvimento / concluída).
   mês) e quais anúncios têm melhor/pior resultado real depois do Ads;
   contas a pagar/receber (em aberto, vencendo hoje, vencendo nos próximos
   7 dias, vencidas/atrasadas) e fluxo de caixa (sempre separando o que já
-  ACONTECEU do que é só PREVISTO — nunca um saldo bancário projetado, que
-  o ERP não tem como calcular); a DRE completa linha a linha; compras do
+  ACONTECEU do que é só PREVISTO); **recebimentos de marketplace (recebido
+  hoje/mês, ainda a receber, atrasado), o Fluxo de Caixa detalhado da
+  página dedicada (saldo atual/projetado, entradas/saídas previstas por
+  marketplace) e análise do extrato bancário importado numa semana
+  (entradas, saídas, principais movimentações, fora do normal,
+  conciliados/não identificados — 27/08/2026, sempre distinguindo
+  RECEBIDO/REALIZADO de A RECEBER/PREVISTO)**; a DRE completa linha a linha; compras do
   período por fornecedor; quantas notas fiscais estão pendentes/emitidas;
   comparação com o período anterior de mesma duração; dinheiro parado em
   estoque; **projeção de faturamento, margem/lucro, quantidade de pedidos
@@ -229,8 +239,11 @@ cada uma e o status (em desenvolvimento / concluída).
   com a API de Mensagens da Anthropic — sem SDK novo, `fetch` nativo),
   `server/lib/ia/providers/index.js` (registro de provedor/modelo,
   trocável por variável de ambiente sem mexer no resto), `server/lib/ia/
-  ferramentas.js` (catálogo de 21 ferramentas, incluindo `projecao_mes` e
-  `apresentar_analise` — cada uma uma casca fina sobre uma função já
+  ferramentas.js` (catálogo de **25 ferramentas** — 21 + `projecao_mes`/
+  `apresentar_analise` já existentes + 3 novas de 27/08/2026:
+  `recebimentos_marketplace_resumo`, `fluxo_de_caixa_detalhado`,
+  `extrato_bancario_analise`, sempre somente leitura, ver
+  `04-alteracoes.md` (40) — cada uma uma casca fina sobre uma função já
   existente do ERP, exceto `apresentar_analise`, que não toca o banco),
   `server/lib/compras.js` e `server/lib/ia/baseConhecimento.js` (módulos
   de apoio — ver `02-decisoes.md` (27)), `server/lib/ia/orchestrator.js`
@@ -580,29 +593,84 @@ cada uma e o status (em desenvolvimento / concluída).
   manual, por pedido explícito do usuário ("allowing manual entry
   initially").
 
-## Recebimentos (conciliação de repasse de marketplace)
-- **Status:** concluído, testado localmente (servidor real + Postgres local
-  + navegador via Playwright, com os 11 pedidos reais da conta
-  "PFEMBALAGEMS"). Ainda não testado ao vivo em produção.
-- **O que é:** tela somente leitura mostrando os pedidos com pagamento
-  aprovado no período (Mercado Livre, único marketplace integrado hoje),
-  com valor bruto, taxas/descontos (comissão + frete do vendedor +
-  desconto do cupom) e valor líquido esperado pelo ERP. **Não inventa
-  data nem valor de recebimento**: como a integração atual não traz esse
-  dado da API do Mercado Livre, "previsão de liberação", "valor
-  recebido" e "data do recebimento" aparecem sempre como "Informação não
-  disponível", e o status sempre como "A liberar" — pronta para, no
-  futuro, comparar o valor que o ERP esperava receber com o valor que o
-  marketplace realmente repassou assim que a API trouxer esse dado.
-  Filtro de empresa/período do header funciona nesta tela.
-- **Onde está:** `server/lib/recebimentosMl.js`, `server/routes/recebimentos.js`,
-  `server/public/index.html` (módulo `window.Recebimentos`). Sem tabela
-  própria no banco — calculada ao vivo a partir de `lib/relatorioVendas.js`
-  (mesma fonte já usada por Pedidos/Visão Geral/Financeiro).
-- **O que falta:** dado real de liberação/repasse do Mercado Livre (não
-  disponível na integração atual — ver `05-problemas-conhecidos.md`);
-  marketplaces além do Mercado Livre (Shopee etc., fora do escopo desta
-  etapa).
+## Recebimentos (status financeiro de repasse de marketplace + conciliação — reorganizado 27/08/2026)
+- **Status:** concluído. Testado com Postgres local + suíte automatizada
+  (`test/financeiro.test.js`, `test/extratoBancario.test.js`,
+  `test/fluxoCaixa.test.js` — 351/351 testes do projeto passando) e
+  verificação manual ao vivo via HTTP contra um servidor real (empresa
+  900, dados reais da conta "PFEMBALAGEMS"): importar extrato, reimportar
+  sem duplicar, conciliar um recebimento real e confirmar que o status e
+  os resumos atualizam sem duplicar valor. Ainda não testado num
+  navegador real nem ao vivo em produção.
+- **O que é:** tela com os recebimentos de marketplace (hoje: só Mercado
+  Livre) organizados por **3 status financeiros bem separados** — A
+  RECEBER (venda aprovada, dinheiro ainda não disponível), DISPONÍVEL (o
+  marketplace liberou, mas ainda não confirmado no banco) e RECEBIDO
+  (confirmado no extrato bancário importado, via conciliação, ou marcado
+  manualmente). Cards de KPI sempre atuais (independem do período do
+  cabeçalho): recebido hoje, recebido no mês, total a receber, atrasado
+  (previsão de liberação vencida), a receber nos próximos 7/15/30 dias,
+  sem previsão de liberação informada — e os mesmos números agrupados por
+  marketplace e por loja. Ações manuais por linha: marcar como
+  disponível, definir/editar a previsão de liberação (o marketplace não
+  informa essa data pela API — só o usuário, vendo no painel dele), e
+  marcar como recebido (pedindo valor e data). Filtro de empresa/período
+  do header funciona nesta tela (o período filtra a tabela por data da
+  venda; os cards de resumo são sempre atuais).
+- **Onde está:** `server/lib/recebimentosMl.js` (persistência/materialização
+  + resumo + ações manuais), `server/routes/recebimentos.js`,
+  `server/public/index.html` (módulo `window.Recebimentos`). Agora com
+  tabela própria (`recebimentos_marketplace`, upsert a cada leitura a
+  partir de `lib/relatorioVendas.js` — mesma fonte de sempre, nenhuma
+  fórmula financeira nova) para poder guardar um status que persiste e
+  para a conciliação bancária (ver abaixo) ter uma linha real pra apontar.
+- **O que falta:** dado real de liberação/repasse do Mercado Livre pela
+  própria API (não disponível na integração atual — só manual, ver
+  `05-problemas-conhecidos.md`); marketplaces além do Mercado Livre
+  (Shopee etc., fora do escopo desta etapa).
+
+## Importação de extrato bancário e conciliação (Fluxo de Caixa — 27/08/2026)
+- **Status:** concluído. Mesmo nível de teste do item acima —
+  `test/extratoBancario.test.js` cobre os 3 primeiros cenários
+  obrigatórios do usuário (importar planilha, reimportar sem duplicar,
+  conciliar recebimento + conta a receber); `test/fluxoCaixa.test.js` tem
+  um teste de regressão dedicado provando que previsto vira realizado sem
+  duplicar. Verificado também via `curl` contra um servidor real com dados
+  reais (ver `04-alteracoes.md` (40)).
+- **O que é:** dentro da tela Fluxo de Caixa, um botão "Importar extrato
+  bancário" abre um assistente de 3 etapas: 1) escolher a conta bancária
+  (cadastro simples, pode criar uma nova ali mesmo) e enviar o arquivo
+  (XLSX ou CSV); 2) revisar o mapeamento de colunas — o ERP tenta
+  identificar sozinho (data, descrição, documento, entrada, saída, valor,
+  saldo), o usuário pode corrigir; 3) conferir a prévia (quantas
+  movimentações, quanto em entradas/saídas, quantas já existiam) e
+  confirmar — nada é gravado antes dessa confirmação. **A mesma planilha
+  importada duas vezes nunca duplica** (identificador determinístico por
+  movimentação, garantido no próprio banco). **A planilha em si nunca é
+  armazenada** — só as movimentações estruturadas.
+  Depois de importado, a tela mostra: **Histórico de importações**
+  (arquivo, conta, data, quantidade de movimentações/novas/duplicadas,
+  quem importou, status) e **Sugestões de conciliação** — o ERP tenta
+  relacionar cada movimentação de entrada com um recebimento de
+  marketplace ou conta a receber (e cada saída com uma conta a pagar) cujo
+  valor bate, mostrando "Possível conciliação encontrada" — o usuário
+  confirma (ou ignora) cada uma; nada é conciliado sozinho. Ao confirmar,
+  o recebimento/conta vira "recebido"/"pago" e o valor que estava
+  PREVISTO no Fluxo de Caixa passa a ser REALIZADO — nunca soma os dois.
+- **Onde está:** `server/lib/contasBancarias.js`, `extratoBancario.js`,
+  `conciliacaoBancaria.js` (novos), `server/lib/fluxoCaixa.js` (corrigido
+  pra nunca contar um recebimento de marketplace em previsto e realizado
+  ao mesmo tempo), `server/routes/contasBancarias.js`, `extratoBancario.js`,
+  `conciliacao.js` (novos), `server/public/index.html` (módulo
+  `window.FluxoCaixa`, estendido). Ver `02-decisoes.md` (40) e
+  `04-alteracoes.md` (40).
+- **O que falta:** o histórico de importações não tem uma tela pra ver as
+  movimentações individuais de uma importação específica (só o resumo
+  agregado); nenhuma exportação/estorno de uma importação feita por
+  engano (hoje, se algo for importado errado, precisa de intervenção
+  direta no banco); marketplaces além do Mercado Livre nos candidatos de
+  conciliação automática de recebimento (Shopee ainda não tem
+  recebimentos organizados, ver item acima).
 
 ## Produto base + SKU de venda + Multiplicador
 - **Status:** concluído e **testado em produção** (deploy `ml15`, com dados

@@ -3,6 +3,36 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Estoque Full: sem detalhe de "em trânsito/aguardando conferência"; sem UI para cadastrar Produto Base; estoque compartilhado entre variações nunca deduplicado (26/08/2026)
+- **Estoque "em trânsito/aguardando conferência" não é consultável pelo
+  ERP.** A chamada usada hoje (`GET /inventories/{id}/stock/fulfillment`,
+  em `lib/mlFull.js`) só retorna `available_quantity`/`total` — nenhum
+  campo de "em trânsito" é parseado ou armazenado em lugar nenhum do
+  código. As ferramentas da IA Gestora (`estoque_valor_parado`/
+  `estoque_fisico_detalhado`, ver `02-decisoes.md` (39)) avisam disso
+  explicitamente ("Ainda não consigo consultar o estoque em trânsito pelo
+  ERP.") em vez de fingir que o dado existe — mas continuam respondendo
+  normalmente sobre o Full já disponível/recebido.
+- **`produtos_base`/`produto_base_skus` têm API pronta mas NENHUMA tela no
+  front-end.** `server/routes/produtosBase.js` já expõe CRUD completo
+  (produto base, vínculo de SKU, sugestões de vínculo por heurística) mas
+  não existe nenhum `fetch` pra essas rotas em `public/index.html` — é uma
+  funcionalidade orfã, acessível só via API/banco direto. Isso importa
+  porque, desde a correção (39), é exatamente essa tabela que alimenta o
+  custo físico do Estoque Full na IA Gestora — hoje, cadastrar/corrigir um
+  custo ou vínculo de SKU exige acesso direto ao banco, não uma tela do
+  ERP.
+- **Estoque Full compartilhado entre variações de um mesmo anúncio nunca é
+  deduplicado.** Quando um anúncio Full tem múltiplas variações,
+  `lib/mlEstoque.js#processarItem` consulta a quantidade Full usando o
+  `inventory_id` de nível de ANÚNCIO (não um `inventory_id` por variação)
+  dentro do laço de variações — toda linha de variação daquele anúncio
+  grava a MESMA quantidade Full. Como `ml_estoque_itens` não guarda o
+  `inventory_id`, não é possível deduplicar isso de forma confiável sem
+  alterar o módulo de sincronização (decisão registrada em
+  `02-decisoes.md` (39): a IA Gestora soma exatamente as mesmas linhas que
+  a tela Estoque Full já mostra, pra nunca divergir da tela).
+
 ## Análise por Anúncio: formato real da resposta da API de Visitas/imagem/Ads não verificado contra uma resposta real (ambiente sem saída de rede pro Mercado Livre); teste `financeiro.test.js` (26/08/2026, atualizado 26/08/2026 à tarde)
 - **RESOLVIDO em 26/08/2026 à tarde:** as 3 telas estavam fora do ar em
   produção (erro "Não foi possível carregar") por um deploy manual
@@ -216,7 +246,7 @@ desenvolvimento, para não serem esquecidas.
   ele aparece à parte, em "SKUs sem produto base identificado", nunca
   entra em nenhum grupo nem no total de caixas físicas.
 
-## IA Gestora: falta só uma IA_API_KEY de produção válida (28/08/2026, revisado em 25/08/2026 duas vezes)
+## IA Gestora: falta só uma IA_API_KEY de produção válida (28/08/2026, revisado em 25/08/2026 duas vezes e em 27/08/2026)
 - Ao ativar a IA Gestora (ver `04-alteracoes.md` (22) e `02-decisoes.md`
   (22)), o laço de ferramentas inteiro (pergunta → executar ferramenta →
   responder) foi testado de ponta a ponta com um **provedor de IA FALSO**
@@ -298,6 +328,21 @@ desenvolvimento, para não serem esquecidas.
   pode selecionar qualquer empresa ativa no cabeçalho, igual ao resto do
   ERP (nenhuma tela do sistema tem "usuário X só vê empresa Y"). Ver a
   entrada de baixo, "IA Gestora: login não cobre permissão por empresa".
+- **Revisão de 27/08/2026 (3 ferramentas novas — recebimentos de
+  marketplace, fluxo de caixa detalhado, extrato bancário — ver
+  `02-decisoes.md` (40) e `04-alteracoes.md` (40)):** mesmo bloqueio de
+  sempre, sem novidade — falta só a `IA_API_KEY` de produção. Os 3
+  cenários obrigatórios de teste que envolviam perguntar à IA em português
+  ("Quanto já recebi este mês?", "Quanto ainda tenho para receber?",
+  "Como fica meu fluxo de caixa nos próximos 30 dias?") **não puderam ser
+  reproduzidos como uma conversa real** nesta sessão pelo mesmo motivo.
+  Verificado no nível da FERRAMENTA (chamando `executarFerramenta`
+  diretamente, o mesmo dispatch que o orquestrador usaria) e comparado
+  número a número contra as funções que alimentam as próprias telas
+  Recebimentos e Fluxo de Caixa — garante que os DADOS que a IA vai
+  receber batem exatamente com as telas; não prova, sozinho, que o modelo
+  escolhe a ferramenta certa pra cada uma dessas 3 perguntas em produção
+  (só testável com a chave real configurada).
 - **Revisão de 25/08/2026 (nova ferramenta `projecao_mes` — ver
   `02-decisoes.md` (28)):** mesmo bloqueio de sempre, sem novidade — falta
   só a `IA_API_KEY` de produção. A projeção de faturamento/margem/pedidos/
@@ -464,21 +509,28 @@ desenvolvimento, para não serem esquecidas.
   mostra que está faltando. Resolve sozinho conforme o usuário cadastra o
   custo de cada SKU em Produtos — não exige nenhuma mudança na DRE.
 
-## Recebimentos: API do Mercado Livre não traz data de liberação nem valor repassado (24/08/2026)
+## Recebimentos: API do Mercado Livre não traz data de liberação nem valor repassado (24/08/2026; contornado parcialmente em 27/08/2026)
 - Ao ativar a tela Recebimentos (ver `04-alteracoes.md` (16) e
   `02-decisoes.md` (15)), foi confirmado por consulta direta ao banco de
   produção (Supabase) que o payload de pagamento salvo pela sincronização
   atual (`raw_pagamento`) não tem nenhum campo de data de liberação do
   dinheiro nem de valor efetivamente repassado — só dados da venda/
-  pagamento em si (aprovação, valor, taxas). Por isso os campos "previsão
-  de liberação", "valor recebido" e "data do recebimento" aparecem sempre
-  como "Informação não disponível" (nunca um valor inventado ou
-  estimado), e o status sempre como "A liberar". **Não é um bug** — é o
-  reflexo real do que a integração hoje entrega. A tela já está pronta
-  para, quando essa informação existir (endpoint de liberação do Mercado
-  Pago, ou um webhook de repasse), passar a mostrar e comparar valor
-  esperado x valor realmente recebido, sem precisar mudar o desenho da
-  tela — só preencher esses campos com dado real.
+  pagamento em si (aprovação, valor, taxas). **Não é um bug** — é o
+  reflexo real do que a integração hoje entrega.
+- **27/08/2026:** como o Passo 1/2 da tarefa de Recebimentos + Fluxo de
+  Caixa + IA Gestora precisava desses recortes "a receber nos próximos
+  7/15/30 dias", foi adicionado um campo **manual** de previsão de
+  liberação (o usuário informa, vendo no próprio painel do marketplace) —
+  continua nunca vindo automaticamente da API do Mercado Livre. Um
+  recebimento sem essa data informada aparece separado, em "sem previsão
+  de liberação informada" (nunca escondido dentro de um recorte de dias,
+  nunca uma data inventada). Valor recebido e data de recebimento
+  continuam vindo só de duas fontes reais: confirmação manual do usuário,
+  ou conciliação contra o extrato bancário importado (ver
+  `03-funcionalidades.md` — seção "Importação de extrato bancário e
+  conciliação"). A tela continua pronta para, quando existir um endpoint
+  de liberação real do Mercado Pago/webhook de repasse, passar a
+  preencher esse campo automaticamente sem precisar mudar o desenho.
 
 ## Correção de margem (24/08/2026): premissa não confirmada com o usuário sobre quem paga o cupom (Bug 3)
 - O Bug 3 (ver `04-alteracoes.md` (15)) trata `payments[].coupon_amount`
@@ -870,3 +922,46 @@ desenvolvimento, para não serem esquecidas.
   servidor Express localmente neste ambiente — os testes de código
   precisam ser feitos de outras formas (ex: testar a lógica isolada, testar
   o SQL direto no Postgres, ou testar direto na URL publicada).
+
+## Este ambiente de desenvolvimento tem um `pg` de teste que não preenche `rowCount` em INSERT/UPDATE sem RETURNING (27/08/2026)
+- Descoberto durante o desenvolvimento da importação de extrato bancário
+  (`lib/extratoBancario.js#confirmarImportacao`): o pacote `pg` instalado
+  neste sandbox (`node_modules/pg/index.js`) é um **stub documentado**
+  ("8.12.0-stub", comentário no próprio arquivo dizendo que "nunca é usado
+  em produção") que executa cada query chamando `psql` por fora, em vez de
+  implementar o protocolo real do Postgres — e esse stub nunca preenche
+  `rowCount`/`command` em um INSERT/UPDATE/DELETE sem `RETURNING` (só
+  `{rows: []}` volta). Um código que confiasse em `rowCount` pra saber se
+  um `INSERT ... ON CONFLICT DO NOTHING` realmente inseriu uma linha nova
+  reportaria "0 inseridas" mesmo quando a inserção funcionou de verdade —
+  foi exatamente esse sintoma (prévia mostrando `totalNovas: 0` numa
+  importação genuinamente nova, confirmado com uma consulta direta ao
+  banco provando que os dados TINHAM sido inseridos) que revelou o
+  problema. **Não afeta produção** — o deploy real carrega o `pg` de
+  verdade (dependência do `package.json`, nunca este arquivo stub). Padrão
+  de correção (já usado antes em `lib/despesasFixas.js`, replicado aqui em
+  `lib/extratoBancario.js`): sempre adicionar `RETURNING id` (ou
+  equivalente) num INSERT/UPDATE que precisa confirmar sucesso, e checar
+  `rows.length` — nunca `rowCount` — quando o código roda (ou pode rodar)
+  contra este ambiente de teste.
+
+## Extrato bancário importado: sem tela de detalhe por movimentação nem estorno de importação (27/08/2026)
+- A tela Fluxo de Caixa mostra o **histórico de importações agregado**
+  (arquivo, conta, data, contagens, quem importou, status), mas não existe
+  ainda uma tela pra abrir uma importação específica e ver cada
+  movimentação individual que ela trouxe — só é possível pelas Sugestões
+  de conciliação (que mostram os movimentos ainda não conciliados) ou
+  direto no banco (`extrato_movimentos`).
+- Não existe "desfazer importação" — se o usuário importar a planilha
+  errada (ex: mês errado, conta bancária errada), não há um botão pra
+  reverter em massa; a correção hoje precisa de intervenção direta no
+  banco, ou (quando o caso for só movimentos não conciliados ainda)
+  marcar cada um como "ignorado" um a um.
+- As sugestões de conciliação são exibidas **uma conta bancária por vez**
+  (`GET /api/conciliacao/sugestoes` exige `contaBancariaId`) — com mais de
+  uma conta bancária cadastrada, o usuário precisa trocar o seletor da
+  seção "Sugestões de conciliação" pra ver as pendências de cada conta;
+  não existe uma visão consolidada de todas as contas ao mesmo tempo.
+- Nenhum desses pontos foi pedido explicitamente pelo usuário nesta etapa
+  (só os 3 passos descritos em `04-alteracoes.md` (40)) — registrados aqui
+  como possíveis próximos passos, não como bugs.

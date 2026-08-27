@@ -1,5 +1,35 @@
 # Próximos Passos
 
+- **Concluído em 27/08/2026 — Recebimentos + Fluxo de Caixa + IA Gestora:
+  organização de recebimentos, importação de extrato bancário com
+  conciliação, e 3 ferramentas novas somente leitura pra IA (testado:
+  Postgres real, 351/351 testes automatizados no projeto + verificação
+  manual ao vivo via `curl` reproduzindo os 4 primeiros cenários
+  obrigatórios contra dados reais da empresa 900 — ver
+  `04-alteracoes.md` (40) e `02-decisoes.md` (40)).** Os 3 passos pedidos
+  foram implementados e testados de ponta a ponta na lógica de backend e
+  na tela (frontend em `server/public/index.html`, módulos
+  `window.Recebimentos` e `window.FluxoCaixa`). **Falta:**
+  1. **confirmar ao vivo em produção depois do deploy** — importar uma
+     planilha real de extrato bancário (a planilha de verdade do usuário,
+     não o CSV sintético usado nos testes) e conferir visualmente o
+     assistente de importação, o histórico e o painel de sugestões de
+     conciliação num navegador real;
+  2. testar as 3 perguntas obrigatórias em português ("Quanto já recebi
+     este mês?", "Quanto ainda tenho para receber?", "Como fica meu fluxo
+     de caixa nos próximos 30 dias?") numa conversa real assim que
+     `IA_API_KEY` estiver configurada em produção (ver
+     `05-problemas-conhecidos.md`) — hoje só verificado no nível da
+     ferramenta, sem o modelo de verdade;
+  3. **se o usuário quiser** (não pedido nesta etapa): uma tela de
+     detalhe por movimentação dentro de uma importação específica, um
+     jeito de estornar/desfazer uma importação feita por engano, e uma
+     visão consolidada de sugestões de conciliação somando todas as
+     contas bancárias de uma vez (hoje é uma conta por vez) — ver
+     `05-problemas-conhecidos.md`;
+  4. recebimentos de marketplace continuam só Mercado Livre — Shopee
+     entraria numa etapa própria, se e quando o usuário pedir.
+
 - **Concluído em 26/08/2026 — Análise ganha 3 abas: Performance de
   Anúncios, Visitas e Conversão, Margem por Anúncio (testado: Postgres
   real com dados de vendas reais da empresa 900 + Playwright para as 3

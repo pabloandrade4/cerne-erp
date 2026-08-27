@@ -3,6 +3,352 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-08-27 (40) — Recebimentos + Fluxo de Caixa + IA Gestora (importação de extrato e conciliação)
+
+- **Contexto:** o usuário pediu, em 3 passos e restrito só a este escopo,
+  que o ERP passasse a responder corretamente "quanto já recebi" e
+  "quanto ainda tenho para receber", conseguisse importar semanalmente o
+  extrato bancário por planilha, e desse essa informação (só leitura) pra
+  IA Gestora — sempre distinguindo o que o marketplace *disse* que ia
+  pagar do que *realmente* entrou no banco.
+
+- **3 status financeiros em vez de um "recebido" só (Passo 1).** A decisão
+  central foi nunca deixar "o marketplace liberou" e "confirmado no
+  banco" compartilharem o mesmo rótulo — daí `a_receber` / `disponivel` /
+  `recebido`, cada um só avançando pro próximo nunca voltando. Isso
+  também define a fronteira exata de quem pode marcar "recebido": só o
+  usuário (manual) ou a conciliação bancária confirmada — nunca o próprio
+  marketplace/sincronização.
+
+- **Materializar em tabela própria em vez de calcular na hora.** Os
+  recebimentos antes eram calculados sob demanda a partir de
+  `ml_pedidos`, sem nenhuma linha própria — funcionava pra exibir, mas não
+  dava pra guardar um status que persiste entre leituras (a conciliação
+  bancária, no Passo 2, precisa de uma linha real pra apontar e
+  atualizar). Escolhido o padrão "materializar na leitura" (upsert a cada
+  consulta, janela de 400 dias) em vez de um job de sincronização
+  separado — os pedidos já estão sincronizados em `ml_pedidos`
+  (`lib/mlSync.js`, intocado), então isso só reorganiza dado que já
+  existe, sem nenhuma chamada nova à API do Mercado Livre. O upsert nunca
+  sobrescreve status/datas efetivas/valor recebido — só os campos
+  derivados do pedido (valor bruto, taxas, líquido esperado) — pra
+  materializar de novo nunca desfazer uma conciliação já confirmada.
+
+- **FK `ON DELETE SET NULL`, não `CASCADE`, pra `conta_ml_id`/`pedido_id`
+  em `recebimentos_marketplace`.** O padrão mais comum no resto do
+  projeto pra FK de `pedido_id` é `CASCADE`. Aqui a escolha foi deliberada
+  e diferente: a identidade de um recebimento é `empresa_id + marketplace
+  + referencia_externa`, não o `pedido_id` — esses dois campos são só
+  vínculos supletivos. `CASCADE` apagaria silenciosamente a conciliação
+  já confirmada (status, valor recebido, data) se um pedido fosse
+  reinserido num reseed de teste ou removido por qualquer motivo — bug
+  real encontrado durante o desenvolvimento (quebrou um teste
+  pré-existente que reseeda `ml_pedidos`), corrigido com essa escolha em
+  vez de simplesmente "religar" a FK do jeito de sempre. Ver
+  `04-alteracoes.md` (40).
+
+- **Extrato: 2 chamadas (prévia, depois confirmar) em vez de 1, pra nunca
+  guardar a planilha.** Pedido explícito do usuário: "não armazene a
+  planilha de maneira insegura se não for necessária depois". A solução
+  foi um design sem estado no servidor entre as duas chamadas —
+  `POST /preview` lê e devolve os movimentos já estruturados (bem menor
+  que o arquivo original) pro navegador, e `POST /confirmar` recebe esses
+  mesmos movimentos de volta (nunca reenvia nem reprocessa o arquivo). Os
+  bytes da planilha nunca tocam o banco de dados em nenhum momento — só
+  passam pela memória da requisição de preview.
+
+- **Upload em base64 dentro do JSON, sem multer/multipart.** Não existe
+  biblioteca de upload multipart disponível neste ambiente (mesma
+  limitação de sempre, ver `05-problemas-conhecidos.md`) — decisão
+  simples: o arquivo viaja como string base64 dentro do corpo JSON. Único
+  efeito colateral: precisou subir o limite do `express.json()` de 100kb
+  (padrão) pra 20mb (`server.js`) — generoso o bastante pra uma planilha
+  semanal de extrato, mas não ilimitado.
+
+- **Hash de deduplicação em vez de comparar linha a linha.** Pedido
+  explícito: "a mesma planilha importada duas vezes não pode duplicar".
+  Em vez de alguma lógica de comparação em memória (frágil, e não
+  garantida sob duas requisições concorrentes), a decisão foi um hash
+  determinístico (conta bancária + data + valor + tipo + descrição +
+  documento, tudo normalizado) com `UNIQUE(conta_bancaria_id,hash_dedup)`
+  + `ON CONFLICT DO NOTHING` no schema — a garantia de não duplicar mora
+  no banco de dados, não na aplicação, então nem uma corrida entre duas
+  importações simultâneas da mesma planilha consegue furar essa regra.
+
+- **Conciliação: valor é obrigatório, data só ordena — nunca o contrário.**
+  Cogitado (e descartado) um critério que também exigisse a data do
+  movimento perto da data prevista de liberação/vencimento. Descartado
+  porque o Mercado Livre não informa data de liberação pra maioria dos
+  recebimentos (ver `05-problemas-conhecidos.md`) — um critério de data
+  obrigatório deixaria a maior parte das conciliações reais sem nenhuma
+  sugestão. Decisão: valor batendo (± R$0,01) é o único filtro
+  obrigatório; diferença de data só ordena as sugestões (mais perto
+  primeiro) e é mostrada pro usuário decidir — nunca elimina um
+  candidato. Sempre uma sugestão, nunca automática — pedido explícito do
+  usuário ("conciliar automaticamente sem regra segura" está na lista do
+  que a IA e o sistema NÃO podem fazer sozinhos).
+
+- **Ferramenta nova `fluxo_de_caixa_detalhado`, em vez de alterar a
+  `fluxo_de_caixa` existente.** A ferramenta `fluxo_de_caixa` já era usada
+  e validada (lê `lib/visaoGeralPainel.js#fluxoDeCaixa`, uma versão mais
+  simples, sempre `saldoProjetado: null`). O Fluxo de Caixa "de verdade"
+  (a página dedicada, com saldo inicial e extrato) vive em
+  `lib/fluxoCaixa.js#gerarFluxoDeCaixa` — uma implementação
+  deliberadamente separada, com seu próprio sistema de período
+  (7d/15d/30d/mes/proximoMes — sempre olhando pra frente, diferente do
+  período do cabeçalho). Em vez de reescrever a ferramenta antiga (risco
+  de regressão numa ferramenta já validada) ou fazer a IA usar dois
+  vocabulários de período incompatíveis debaixo do mesmo nome, a decisão
+  foi uma ferramenta nova, com nome diferente e parâmetro `periodoChave`
+  próprio — a IA passa a ter as duas visões disponíveis, sem risco pra
+  quem já dependia da antiga.
+
+- **Verificação dos cenários 5-7 no nível de ferramenta, não numa conversa
+  real.** Este ambiente de desenvolvimento não tem `IA_API_KEY`
+  configurada (mesma limitação já documentada), então não há como rodar
+  uma pergunta real em português contra o provedor de IA aqui. A
+  verificação foi feita chamando `executarFerramenta` diretamente (o
+  mesmo dispatch que o orquestrador usa) e comparando o resultado, número
+  a número, contra as funções-fonte que alimentam as telas Recebimentos e
+  Fluxo de Caixa — garante que a ferramenta nunca inventa/diverge, mesmo
+  sem testar a geração de texto do modelo em si.
+
+## 2026-08-26 (39) — IA Gestora: corrigir a análise do Estoque Full (matéria-prima/valor a custo)
+
+- **Contexto:** o usuário perguntou à IA Gestora "quanto tenho no Full em
+  matéria-prima/valor de estoque" — ela respondeu que o ERP tinha 733
+  unidades disponíveis no Full, mas não conseguiu calcular o valor em R$ e
+  mandou o usuário consultar o painel do Mercado Livre. Pedido explícito de
+  3 passos: (1) uma fonte de dados correta do Estoque Full pra IA, com
+  conversão de kit pra unidade física; (2) dar essa consulta pra IA
+  Gestora, com formato de resposta específico; (3) separar Full disponível
+  de Full "em trânsito", e nunca misturar o valor de Estoque normal com o
+  de Estoque Full num único total.
+
+- **Causa raiz encontrada (não só o sintoma relatado):** a ferramenta
+  `estoque_valor_parado` (lib/ia/ferramentas.js) somava quantidade de
+  ANÚNCIO × `produtos.custo` por SKU exato — nunca convertia kit em
+  unidade física (um anúncio "100CX-20X20X20" tem 1 unidade disponível =
+  100 caixas físicas) e nunca separava Full de fora do Full no resultado.
+  Além disso, dois textos que a própria IA pode citar afirmavam que esse
+  agrupamento "não existe" — `lib/ia/baseConhecimento.js` (tema `estoque`)
+  e o system prompt em `lib/ia/orchestrator.js` ("SOBRE LIMITAÇÕES
+  CONHECIDAS") — ambos desatualizados desde que o Relatório de Produtos >
+  "Por Caixa" ganhou essa conversão (ver entrada mais antiga sobre
+  `resolverProdutosBasePorSku`). Isso explica por completo o
+  comportamento relatado: a IA "sabia" (pelo próprio texto que consulta)
+  que aquele agrupamento não existia, então deflectia pro painel do
+  Mercado Livre em vez de tentar montar a conta.
+
+- **Passo 1 — fonte de dados (`lib/estoqueFisico.js`, novo módulo):** lê
+  exatamente a mesma tabela que as telas Estoque e Estoque Full leem
+  (`ml_estoque_itens`, nunca a API do Mercado Livre ao vivo) — garante que
+  os números da IA batem exatamente com as duas telas, sem precisar de uma
+  segunda sincronização. A conversão kit → produto físico reaproveita, sem
+  nenhuma lógica nova, a MESMA regra normalizada já usada pelo Relatório de
+  Produtos > "Por Caixa": `resolverProdutosBasePorSku`
+  (lib/relatoriosAgregados.js) — vínculo salvo em `produto_base_skus` tem
+  prioridade; sem vínculo, interpreta o padrão do próprio texto do SKU
+  (dígitos no início = multiplicador); SKU que não segue nenhum padrão
+  nunca é chutado, fica em "sem produto base identificado".
+
+- **Custo usado: `produtos_base.custo`, nunca `produtos.custo`.** O ERP
+  tinha duas tabelas de custo completamente desconectadas:
+  `produtos.custo` (custo por SKU/kit EXATO, usado hoje em toda margem de
+  venda — lib/relatorioVendas.js) e `produtos_base.custo` (custo por
+  unidade FÍSICA do produto base, cadastrado numa API já pronta —
+  routes/produtosBase.js — mas sem NENHUMA tela no front-end usando essa
+  API). Como o pedido era "custo unitário da caixa", usar `produtos.custo`
+  seria semanticamente errado (é o custo do kit inteiro, não da unidade
+  física) — `produtos_base.custo`, junto com o `codigoBase` já resolvido
+  pela regra acima, é a fonte certa. **Limitação transparente:** como não
+  existe tela para cadastrar `produtos_base`/vínculos hoje, a mensagem "X
+  unidades sem custo cadastrado" pode não ter, ainda, um lugar óbvio no
+  sistema pra o usuário resolver — reportado ao usuário na entrega, não é
+  uma correção coberta por esta tarefa (só os 3 passos pedidos).
+
+- **Passo 2 — ferramentas da IA:** `estoque_valor_parado` foi reescrita
+  para usar `lib/estoqueFisico.js` e devolver SEMPRE
+  `valorEstoqueNormal`/`valorEstoqueFull`/`valorTotal` separados (nunca um
+  total único), além de `unidadesFisicas(Fora)DoFull` e as duas pendências
+  desonestas nunca escondidas: `unidadesSemCustoCadastrado` (mensagem
+  exata pedida pelo usuário: "X unidades não entraram no cálculo porque o
+  produto está sem custo cadastrado.") e `unidadesSemProdutoBaseIdentificado`.
+  Nova ferramenta `estoque_fisico_detalhado` (com `escopo`
+  full/fora_do_full/ambos, filtro `produtoBase` por texto e `limite`)
+  responde "quantas caixas físicas tenho no Full", "quanto tenho da caixa
+  20x20x20" e "quais produtos representam mais dinheiro" — a mesma fonte,
+  sem cálculo novo. As duas ganharam adaptador em `lib/ia/estrutura.js`
+  (`adEstoqueValorParado`/`adEstoqueFisicoDetalhado`) pra virar card
+  visual com KPIs/tabela/gráfico quando o modelo chamar
+  `apresentar_analise`, no formato pedido (Valor total a custo, Unidades
+  físicas, tabela Produto/Unidades físicas/Custo unitário/Valor em
+  estoque).
+
+- **Passo 3 — Full disponível x em trânsito, nunca bloquear a resposta:**
+  as duas ferramentas sempre devolvem o campo fixo
+  `emTransitoOuAguardandoConferencia`/`fullEmTransitoOuAguardandoConferencia`
+  = "Ainda não consigo consultar o estoque em trânsito pelo ERP." (a API
+  do Mercado Livre usada hoje — `GET /inventories/{id}/stock/fulfillment`
+  — não tem esse detalhamento em lugar nenhum do código) — mas a resposta
+  sobre o Full JÁ DISPONÍVEL nunca é bloqueada por causa disso. Textos
+  atualizados pra parar de afirmar que o agrupamento "não existe":
+  `baseConhecimento.js` (tema `estoque`) e a linha "SOBRE LIMITAÇÕES
+  CONHECIDAS" do system prompt (`orchestrator.js`) — e uma nova seção
+  "SOBRE ESTOQUE E ESTOQUE FULL" foi adicionada ao system prompt
+  instruindo explicitamente a IA a nunca mais responder "confira no painel
+  do Mercado Livre" pra essas perguntas.
+
+- **Decisão deliberada de NÃO deduplicar estoque compartilhado:**
+  investigado `lib/mlEstoque.js` — quando um anúncio Full tem múltiplas
+  variações, a quantidade Full (que é de nível de ANÚNCIO, não de
+  variação) é gravada igual em cada linha de variação, e
+  `ml_estoque_itens` não guarda o `inventory_id` do Mercado Livre — não dá
+  pra deduplicar de forma confiável sem mexer no módulo de sincronização
+  (fora do escopo desta tarefa). Decisão: `lib/estoqueFisico.js` soma
+  exatamente as MESMAS linhas que a tela Estoque Full já mostra — o
+  requisito do usuário de "os valores da IA precisam bater exatamente com
+  as páginas Estoque e Estoque Full" pesa mais do que uma correção que
+  mudaria esse número por conta própria. Documentado como limitação
+  conhecida (ver docs/05-problemas-conhecidos.md).
+
+- **Testes:** `test/iaFerramentas.test.js` ganhou seed de
+  `produtos_base`/`produto_base_skus` pra empresa de teste (970) — um
+  vínculo salvo (SKU-IA-NORMAL → PB-NORMAL, com custo) e dois produtos
+  base resolvidos por heurística de SKU no Full (CX-20X20X20 com custo,
+  CX-16X11X8 sem custo, pra testar a mensagem de pendência). O teste antigo
+  de `estoque_valor_parado` (que somava por `produtos.custo`) foi
+  reescrito pra validar a nova conta (`produtos_base.custo` + conversão
+  física), e 5 testes novos cobrem `estoque_fisico_detalhado` (escopo,
+  filtro por produto, "nenhum resultado encontrado", ranking). 335/335
+  testes passando.
+
+- **Não alterado:** nenhum outro módulo/tela — só
+  `lib/estoqueFisico.js` (novo), `lib/ia/ferramentas.js`,
+  `lib/ia/estrutura.js`, `lib/ia/baseConhecimento.js`,
+  `lib/ia/orchestrator.js` e `test/iaFerramentas.test.js`.
+
+## 2026-08-26 (38) — Visão Geral: reconstrução real da camada visual (2ª correção)
+
+- **Contexto:** o usuário avaliou a entrega (37) e disse explicitamente que
+  ainda preservava demais a composição visual antiga — pediu para NÃO usar
+  o layout atual como base e reconstruir de verdade o HTML/CSS da Visão
+  Geral, reaproveitando só dado/API/cálculo/função. Mandou uma 2ª imagem de
+  referência com o mesmo objetivo das entradas (36)/(37): SOMENTE visual,
+  SOMENTE esta tela, nunca inventar número.
+
+- **O que mudou de verdade (não é só recolorir):** toda classe CSS usada
+  pelos cards da Visão Geral foi trocada por um conjunto novo e isolado
+  (prefixo `ov2-`) — as classes antigas compartilhadas `.kpi-hero`/
+  `.kpi-sec` (usadas por Pedidos, IA Gestora e outras 5+ telas) não são
+  mais usadas aqui, então nada nelas foi tocado e nenhuma outra tela é
+  afetada. Kit visual novo: cards "hero" com gradiente radial sutil na cor
+  do indicador, ícone grande em badge arredondado, rótulo em caixa alta;
+  sparkline virou área preenchida com gradiente (função nova
+  `sparklineAreaSVG`, substitui a antiga `sparklineSVG` que só desenhava
+  uma linha fina) ocupando a largura toda da base do card; indicadores
+  secundários em 7 colunas ocupando 100% da largura; "Saúde da operação"
+  saiu de uma grade 3x1 de retângulos e virou uma fileira de chips
+  circulares (ícone num círculo colorido + valor + rótulo + status),
+  igual à composição da referência; "Resumo da IA" ganhou um botão CTA
+  cheio (cor roxa, "Ver insights completos"/"Abrir IA Gestora") fixado no
+  rodapé do card em vez de um link de texto discreto; o gráfico principal
+  cresceu de 200px pra 340px de altura e a proporção da linha 3 foi
+  ajustada pra ~72%/28% (antes 2fr/1fr ≈ 67%/33%), reaproveitando a mesma
+  função `chartHTML` só com `heightPx` maior — nenhum cálculo novo.
+
+- **"vs. período anterior" continua omitido, agora com um motivo mais
+  investigado:** antes de decidir omitir de novo, conferido
+  `lib/periodo.js` (`calcularPeriodo`) — o endpoint só aceita períodos
+  nomeados fixos (hoje/ontem/7d/30d/mes), não um intervalo de datas
+  arbitrário. Ou seja, não dá pra pedir "o período imediatamente anterior"
+  chamando a mesma rota de novo sem uma mudança de backend (aceitar
+  desde/ate customizados) — o que é exatamente o tipo de mudança que o
+  usuário pediu pra NÃO fazer. Mantido de fora, por decisão consciente e
+  não por preguiça de checar.
+
+- **Indicadores secundários também sem delta "↑ X%":** mesma razão do
+  ponto acima — só existiria com uma segunda consulta ao período anterior,
+  que não é possível sem mudar o backend. Adaptado: os 7 cards mostram só
+  ícone/rótulo/valor (e a nota de pendência quando aplicável), sem a linha
+  de variação percentual que aparece na referência.
+
+- **Função morta removida:** `statusText()` e `secCardHTML()` (específicas
+  do módulo Overview) ficaram sem nenhum uso depois da entrada (37) e
+  foram removidas nesta — não afetam nenhuma outra tela (cada módulo desta
+  página tem sua própria cópia dessas funções, por convenção já registrada
+  do projeto).
+
+## 2026-08-26 (37) — Reorganização visual da Visão Geral (correção pontual)
+
+- **Contexto:** depois da entrada (36), o usuário mandou uma nova imagem de
+  referência e disse explicitamente que a Visão Geral (única tela desta
+  correção) ainda não estava parecida com ela — pediu para reorganizar a
+  composição (não só recolorir), mantendo regra idêntica à (36): SOMENTE
+  visual, reaproveitar os mesmos dados/serviços, nunca inventar número, e
+  adaptar ou omitir indicador da referência que ainda não tem dado real.
+  Nenhuma outra tela foi tocada.
+
+- **Estrutura refeita em 4 linhas**, dentro do mesmo módulo `Overview`
+  (`server/public/index.html`), reaproveitando os mesmos dois fetches que a
+  tela já fazia (`resumo-vendas` e `visao-geral/painel` — nenhuma chamada
+  nova, nenhuma rota nova):
+  1. 3 KPIs "hero" grandes (Faturamento, Margem de contribuição R$ e %) —
+     maiores, com ícone, cor própria e nota descritiva.
+  2. 7 KPIs secundários compactos, ocupando toda a largura (Pedidos, Taxas,
+     Frete do vendedor, Imposto, Custo dos produtos, A receber, A pagar).
+  3. Gráfico "Faturamento x Margem de contribuição" (mesmo componente de
+     sempre, agora ocupando ~2/3 da largura) ao lado de "Atenção hoje" (o
+     mesmo painel de alertas reais que já existia, só reposicionado e
+     renomeado — a função por trás, `alertsPanelHTML`, é usada só nesta
+     tela, então renomear o título não afeta nenhuma outra página).
+  4. "Saúde da operação" (novo painel, métricas explicadas abaixo) ao lado
+     de "Resumo da IA" (reaproveita o mesmo `painel.radar` que já existia,
+     resumido numa frase gerada a partir das contagens reais retornadas
+     pela API, nunca um texto solto da IA nem um número inventado).
+
+- **Painéis antigos dobrados dentro da nova estrutura, não apagados sem
+  motivo:** "A receber"/"A pagar" (antes um mini-painel "Fluxo de caixa")
+  viraram 2 dos 7 cards secundários, mesmo dado (`painel.fluxoCaixa`).
+  "Conexões & empresas" virou 1 chip de "Sincronização" dentro de "Saúde da
+  operação", mesmo cálculo (`painel.conexoes`). Só 2 painéis saíram sem
+  substituto direto: "Evolução diária" (duplicava o gráfico principal com
+  os mesmos dados) e "Por marketplace" (o dado continua disponível em
+  Relatórios e Performance de Anúncios) — nenhum dos dois envolvia dado ou
+  cálculo que deixou de existir no sistema, só deixou de aparecer nesta
+  tela específica.
+
+- **Mini gráfico/tendência e "vs. período anterior" nos cards hero:** a
+  referência pede os dois "quando houver dado". `resumo-vendas` não
+  calcula comparação com período anterior — omitido (nenhum cálculo novo
+  criado). A tendência (sparkline) já tinha dado disponível: a mesma série
+  diária (`serieDiaria`) que o gráfico principal já usa — soma de exibição
+  no navegador, sem chamada nova. Com poucos dias de dado no período (caso
+  comum em empresa de teste), a sparkline não aparece (guard explícito
+  para menos de 2 pontos) em vez de desenhar uma linha falsa.
+
+- **"Saúde da operação" não tem os mesmos indicadores da referência**
+  (nível de serviço, entrega no prazo, avaliação, giro de estoque — nenhum
+  desses existe no sistema hoje). Adaptado para 3 métricas com dado real:
+  Taxa de cancelamento e % de pedidos com margem calculada (soma de
+  exibição sobre `resumo-vendas`, mesmo princípio já usado em outras
+  telas) e Sincronização (reaproveita `painel.conexoes`).
+
+- **Texto de estado vazio encurtado nos cards compactos:** o texto padrão
+  "Pendente — N pedidos sem essa informação" (função `statusText`, mantida
+  intacta para quem já a usa) estourava a largura dos cards compactos e
+  quebrava o alinhamento da linha. Nos cards novos (hero e secundários) o
+  valor mostra só "Pendente"/"Sem dados" e o detalhe ("N pedidos
+  pendentes") foi para a nota abaixo do card — mesmo padrão de
+  nota+valor-curto já usado hoje na tela de Pedidos para o mesmo tipo de
+  dado ausente.
+
+- **Nenhuma contagem tipo "12 alertas" por card foi inventada** no painel
+  "Atenção hoje": conferido em `lib/visaoGeralPainel.js` que `gerarAlertas`
+  não retorna um número separado por tipo, só o texto do alerta — em vez
+  de tentar extrair número de dentro do texto (frágil), o painel de
+  alertas foi reaproveitado sem alteração de lógica, só reposicionado.
+
 ## 2026-08-26 (36) — Redesign visual: onde a linha "só visual" foi traçada
 
 - **Regra usada em toda decisão desta sessão:** o usuário pediu

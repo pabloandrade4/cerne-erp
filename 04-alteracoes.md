@@ -2,6 +2,340 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-27 (40) — Recebimentos + Fluxo de Caixa + IA Gestora (importação de extrato e conciliação)
+- **Pedido do usuário, em 3 passos, restrito a este escopo:** (1) organizar
+  os recebimentos dos marketplaces em status financeiros claros, pra a IA
+  conseguir responder "quanto já recebi"/"quanto ainda tenho pra receber";
+  (2) importar semanalmente o extrato bancário (XLSX/CSV) no Fluxo de
+  Caixa, com prévia, deduplicação garantida e conciliação (sugestão, nunca
+  automática) contra recebimentos de marketplace/contas a receber/contas a
+  pagar, sem nunca contar previsto+realizado ao mesmo tempo; (3) dar essa
+  informação pra IA Gestora, só leitura. Nenhum outro módulo foi alterado.
+
+### Passo 1 — Recebimentos dos marketplaces
+- **Tabela nova `recebimentos_marketplace`** (`db/schema.sql`) — antes os
+  recebimentos eram calculados na hora, sem nenhuma linha própria no
+  banco; agora são persistidos (upsert, nunca duplica — identidade única
+  por empresa+marketplace+referência externa), com 3 status bem
+  separados: `a_receber`, `disponivel`, `recebido` (nunca chama de
+  "recebido no banco" só porque o marketplace marcou como liberado). FKs
+  `conta_ml_id`/`pedido_id` deliberadamente `ON DELETE SET NULL` (não
+  CASCADE) — são vínculos supletivos, não a identidade da linha; CASCADE
+  apagaria conciliação já confirmada num reseed/exclusão de pedido.
+- **`server/lib/recebimentosMl.js` reescrito.** `materializarRecebimentos`
+  faz upsert dos pedidos elegíveis dos últimos 400 dias a cada leitura
+  (nunca sobrescreve status/datas efetivas/valor recebido já confirmados).
+  Funções novas: `listarRecebimentosMl` (lista persistida, substitui o
+  cálculo na hora), `listarRecebimentosMlRecebidosNoPeriodo` (usada pelo
+  Fluxo de Caixa pra jogar o valor no bucket certo do dia), `resumo
+  RecebimentosMarketplace` (recebido hoje/mês, a receber total/atrasado/7/
+  15/30 dias, sem previsão de liberação, por marketplace, por loja —
+  sempre atual, independe do período do cabeçalho), `marcarComoDisponivel`
+  /`marcarComoRecebido`/`definirPrevisaoLiberacao` (ações manuais, sempre
+  avançando o status, nunca voltando) e `marcarComoRecebidoPorConciliacao`
+  (usada só pela conciliação bancária do Passo 2). Função pura legada
+  `serializeRecebimento` preservada intocada (ainda usada por
+  `visaoGeralPainel.js#resumoRecebimentos`, que alimenta a ferramenta JÁ
+  VALIDADA da IA `fluxo_de_caixa`) — **bug encontrado e corrigido:**
+  `serializeRecebimento` estava definida mas não exportada, o que quebrava
+  essa cadeia inteira (só apareceu ao rodar a suíte completa, não só os
+  testes da área nova).
+- **`server/routes/recebimentos.js`:** `GET /` (lista, já existia) +
+  `GET /resumo` (novo) + `PATCH /:id/disponivel`, `PATCH /:id/recebido`,
+  `PATCH /:id/previsao-liberacao` (as 3 únicas formas de mudar status por
+  aqui — a IA nunca chama essas rotas, conciliação usa a função de
+  banco diretamente com sua própria confirmação).
+- **Frontend (`server/public/index.html`, módulo `window.Recebimentos`
+  reescrito):** cards de KPI sempre atuais (recebido hoje/mês, a receber
+  total/atrasado, a receber 7/15/30 dias, sem previsão), tabelas "Por
+  marketplace" e "Por loja", `STATUS_LABEL` atualizado pros 3 status novos
+  (`a_liberar`/`divergente` antigos não existem mais), e botões de ação
+  por linha (marcar disponível, definir previsão de liberação, marcar
+  como recebido — com modal pedindo valor e data quando aplicável).
+
+### Passo 2 — Importação de extrato bancário + conciliação
+- **Tabelas novas:** `contas_bancarias` (cadastro simples por empresa),
+  `extrato_importacoes` (histórico — arquivo, contagens, quem importou,
+  status; nunca guarda o arquivo em si), `extrato_movimentos`
+  (movimentação estruturada — data, descrição, documento, valor, tipo,
+  status de conciliação; `UNIQUE (conta_bancaria_id, hash_dedup)` garante
+  a deduplicação no próprio banco).
+- **`server/lib/contasBancarias.js` (novo):** CRUD mínimo
+  (`listarContasBancarias`, `criarContaBancaria`, `buscarPorId`,
+  `inativar`).
+- **`server/lib/extratoBancario.js` (novo, ~430 linhas) — núcleo do Passo
+  2.** Lê XLSX (`exceljs`) e CSV (parser leve escrito na mão — sem
+  dependência nova, `;` ou `,` detectado automaticamente, aspas escapadas,
+  BOM removido); sugere mapeamento de colunas por palavra-chave
+  normalizada (sem acento/maiúscula); `parseData`/`parseValorMonetario`
+  cobrem formatos brasileiros (`DD/MM/YYYY`, `1.234,56`, número de série
+  do Excel, negativo entre parênteses/com sinal antes ou depois). Hash de
+  deduplicação: SHA256 de conta bancária + data + valor + tipo + descrição
+  + documento normalizados. Fluxo em 2 chamadas, exatamente como pedido:
+  `previsualizarImportacao` (lê, mapeia, calcula prévia — **nunca grava
+  nada**) e `confirmarImportacao` (grava, usando os movimentos já
+  calculados na prévia — nunca reprocessa/reenvia o arquivo). **A planilha
+  em si nunca é persistida** — só passa pela memória da requisição.
+- **`server/lib/conciliacaoBancaria.js` (novo).** `sugerirConciliacoes`
+  busca candidatos (recebimento de marketplace ou conta a receber, para
+  entradas; conta a pagar, para saídas) com valor batendo em até R$ 0,01 —
+  único filtro obrigatório; diferença de data só ordena (nunca elimina um
+  candidato, marketplaces liberam dinheiro em datas imprevisíveis).
+  `confirmarConciliacao` — sempre uma ação explícita do usuário, nunca
+  automática — faz, numa única transação: marca o movimento como
+  conciliado + muda o status do alvo pra recebido/pago (previsto SOME,
+  vira realizado, nunca os dois somados). `ignorarMovimento` só tira da
+  lista de pendências, nunca muda recebimento/conta nenhuma.
+- **Funções aditivas novas em `lib/contasReceber.js` e
+  `lib/contasPagar.js`:** `marcarComoRecebidoPorConciliacao`/
+  `marcarComoPagoPorConciliacao` — usam transação do caller, guarda
+  atômica `WHERE status NOT IN (...)` no próprio UPDATE (cobre corrida
+  entre duas conciliações tentando confirmar o mesmo alvo).
+- **`server/lib/fluxoCaixa.js` — corrigido o double-count (o requisito
+  central do Passo 2).** Antes, `gerarFluxoDeCaixa` somava TODO
+  recebimento de marketplace do período de venda como "previsto",
+  independente do status — quando um virava "recebido" (via conciliação),
+  contava nos dois lados ao mesmo tempo. Agora busca separado: recebimentos
+  ainda não recebidos (por data de venda) vão pro previsto;
+  recebimentos com status `recebido` dentro do período (por data efetiva
+  de recebimento, via `listarRecebimentosMlRecebidosNoPeriodo`) são
+  somados no mapa diário de REALIZADO. Testado com um teste de regressão
+  dedicado que prova que previsto cai exatamente o valor X e realizado
+  sobe exatamente X (nunca os dois, nunca nenhum).
+- **`server/routes/contasBancarias.js`, `extratoBancario.js`,
+  `conciliacao.js` (novas)** — registradas em `server.js`, junto com
+  `express.json({ limit: '20mb' })` (o arquivo viaja em base64 dentro do
+  corpo JSON — não existe biblioteca de multipart/multer disponível neste
+  ambiente).
+- **Frontend (`server/public/index.html`, módulo `window.FluxoCaixa`
+  estendido):** novo botão "Importar extrato bancário" (ao lado de
+  "Definir saldo inicial") abre um wizard de 3 etapas — 1) conta bancária
+  (com opção de cadastrar uma nova ali mesmo) + arquivo; 2) revisão do
+  mapeamento de colunas sugerido (editável); 3) prévia (movimentações
+  encontradas, novas, duplicadas, entradas, saídas) com confirmação
+  explícita antes de gravar. Página ganhou também "Histórico de
+  importações" (arquivo, conta, data, contagens, quem importou, status) e
+  "Sugestões de conciliação" (por conta bancária, com botão "Confirmar"
+  por candidato e "Ignorar" por movimento) — nenhuma conciliação acontece
+  sem clique explícito do usuário.
+
+### Passo 3 — IA Gestora (somente leitura)
+- **3 ferramentas novas em `lib/ia/ferramentas.js`** (registradas logo
+  depois da já validada `fluxo_de_caixa`, que continua intocada):
+  `recebimentos_marketplace_resumo` (mesmos números da tela Recebimentos),
+  `fluxo_de_caixa_detalhado` (lê `lib/fluxoCaixa.js#gerarFluxoDeCaixa`,
+  não a versão simples — nome deliberadamente diferente da ferramenta
+  antiga pra nunca confundir as duas; parâmetro próprio `periodoChave`
+  com o mesmo vocabulário de período do Fluxo de Caixa — 7d/15d/30d/mes/
+  proximoMes — nunca o período backward-looking do cabeçalho) e
+  `extrato_bancario_analise` (entradas/saídas do extrato importado numa
+  semana, principais movimentações, fora do normal — detecção simples por
+  desvio da mediana —, recebimentos conciliados/não identificados,
+  evolução do saldo). As 3 adicionam adaptador visual em
+  `lib/ia/estrutura.js` (cards com KPIs/tabela quando o modelo chama
+  `apresentar_analise`) e entradas na base de conhecimento interna
+  (`lib/ia/baseConhecimento.js`) e no system prompt
+  (`lib/ia/orchestrator.js` — instruído a sempre diferenciar
+  RECEBIDO/REALIZADO de A RECEBER/PREVISTO nas respostas). Nenhuma rota de
+  escrita foi exposta à IA — as 3 são só leitura, mesma disciplina das
+  ferramentas já existentes.
+- **Sem mudança na arquitetura de despacho** — `FERRAMENTAS_SCHEMA` já era
+  passada genericamente pro provedor de IA (sem allowlist fixa no código),
+  então as ferramentas novas ficaram disponíveis automaticamente.
+
+### Testes e verificação
+- **Testes automatizados novos/estendidos:** `test/extratoBancario.test.js`
+  (novo — cobre os cenários 1-3 obrigatórios: importar planilha, reimportar
+  sem duplicar, conciliar recebimento de marketplace + conta a receber),
+  `test/financeiro.test.js` (ações manuais de recebimento + resumo),
+  `test/fluxoCaixa.test.js` (regressão do double-count previsto/
+  realizado), `test/iaFerramentas.test.js` (5 testes novos comparando as 3
+  ferramentas novas número-a-número contra as funções-fonte que alimentam
+  as telas). **Suíte completa: 351/351 passando.**
+- **Bug de FK corrigido durante o desenvolvimento:** a nova tabela
+  `recebimentos_marketplace` com FK padrão (não `ON DELETE SET NULL`) pra
+  `ml_pedidos`/`ml_contas` quebrou um teste PRÉ-EXISTENTE, já validado
+  (`test/relatorioVendas.integration.test.js`, "Teste 6 — idempotência",
+  que reseeda apagando e reinserindo `ml_pedidos`) — exatamente o tipo de
+  regressão que o usuário pediu pra evitar. Corrigido mudando as FKs pra
+  `ON DELETE SET NULL` (`db/schema.sql` + `ALTER TABLE` aplicado no banco
+  de desenvolvimento já existente).
+- **Verificação manual ao vivo (além dos testes automatizados):** os 4
+  primeiros cenários obrigatórios foram reproduzidos via `curl` contra um
+  servidor real (empresa 900) — importar planilha CSV, reimportar a mesma
+  planilha (0 novas, 100% duplicadas), conciliar um recebimento real do
+  Mercado Livre (valor batendo com um movimento do extrato) e confirmar
+  que o recebimento virou "recebido" com `origemConfirmacao:
+  "conciliacao_extrato"`, sem duplicar o valor no resumo. Dados de teste
+  revertidos ao final (recebimento voltou pra `a_receber`, conta bancária
+  e movimentos de teste apagados).
+- **Cenários 5-7 (perguntas em português pra IA)** foram verificados no
+  nível da ferramenta (`executarFerramenta`, comparado número-a-número
+  contra as funções que alimentam as próprias telas financeiras — ver
+  `test/iaFerramentas.test.js`), não numa conversa real de ponta a ponta:
+  este ambiente de desenvolvimento não tem `IA_API_KEY` configurada (ver
+  `05-problemas-conhecidos.md`), então não existe acesso ao provedor de IA
+  aqui. O despacho de ferramentas é genérico (sem allowlist), então o
+  comportamento em produção (com a chave configurada) depende só do
+  modelo escolher a ferramenta certa — o que o system prompt em
+  `lib/ia/orchestrator.js` já instrui.
+- **Bug encontrado durante o desenvolvimento, específico deste ambiente de
+  teste:** `lib/extratoBancario.js#confirmarImportacao` inicialmente usava
+  `rowCount` pra saber se um `INSERT ... ON CONFLICT DO NOTHING` realmente
+  inseriu — o `pg` deste sandbox é um stub que nunca preenche `rowCount`
+  em DML sem `RETURNING` (só existe pra rodar testes aqui, nunca vai pro
+  deploy). Corrigido adicionando `RETURNING id` e checando `rows.length`,
+  mesmo padrão já usado em `lib/despesasFixas.js`.
+
+### Arquivos tocados (só os 3 passos — nenhum outro módulo alterado)
+`server/db/schema.sql`; `server/lib/recebimentosMl.js`,
+`contasBancarias.js` (novo), `extratoBancario.js` (novo),
+`conciliacaoBancaria.js` (novo), `contasReceber.js`, `contasPagar.js`,
+`fluxoCaixa.js`; `server/routes/recebimentos.js`, `contasBancarias.js`
+(novo), `extratoBancario.js` (novo), `conciliacao.js` (novo),
+`server.js`; `server/lib/ia/ferramentas.js`, `estrutura.js`,
+`baseConhecimento.js`, `orchestrator.js`; `server/public/index.html`
+(módulos `Recebimentos` e `FluxoCaixa`); `server/test/extratoBancario.
+test.js` (novo), `financeiro.test.js`, `fluxoCaixa.test.js`,
+`iaFerramentas.test.js`.
+
+## 2026-08-26 (39) — IA Gestora: corrigir a análise do Estoque Full (matéria-prima/valor a custo)
+- **Pedido do usuário:** a IA Gestora não conseguiu dizer quanto o Estoque
+  Full vale em R$ ("matéria-prima") e mandou o usuário conferir no painel
+  do Mercado Livre — pedido explícito de 3 passos (fonte de dados correta
+  com conversão de kit para unidade física; dar essa consulta pra IA; e
+  separar Full disponível de Full "em trânsito", com Estoque normal e
+  Estoque Full sempre financeiramente separados).
+- **Arquivo novo:** `server/lib/estoqueFisico.js` — lê a mesma tabela das
+  telas Estoque/Estoque Full (`ml_estoque_itens`, nunca a API do Mercado
+  Livre ao vivo, pra os números baterem exatamente) e reaproveita, sem
+  nenhuma lógica nova, a mesma regra de conversão kit→físico do Relatório
+  de Produtos > "Por Caixa" (`resolverProdutosBasePorSku`, em
+  `lib/relatoriosAgregados.js`). Custo usado: `produtos_base.custo` (custo
+  por unidade FÍSICA do produto base) — nunca `produtos.custo` (custo por
+  SKU/kit exato, usado só na margem de venda) e nunca o preço de venda.
+- **`server/lib/ia/ferramentas.js`:** `estoque_valor_parado` reescrita —
+  agora devolve sempre `valorEstoqueNormal`/`valorEstoqueFull`/`valorTotal`
+  separados (nunca um total único sem explicar a divisão), unidades físicas
+  de cada lado, e as pendências nunca escondidas: quantas unidades ficaram
+  sem custo cadastrado (com a mensagem exata pedida pelo usuário) e quantas
+  sem produto base identificado. Ferramenta nova `estoque_fisico_detalhado`
+  (parâmetros `escopo`/`produtoBase`/`limite`) responde "quantas caixas
+  físicas tenho no Full", "quanto tenho da caixa 20x20x20" e "quais
+  produtos representam mais dinheiro no Full/estoque". As duas sempre
+  devolvem o aviso fixo "Ainda não consigo consultar o estoque em trânsito
+  pelo ERP." sem nunca bloquear a resposta sobre o Full já disponível.
+- **`server/lib/ia/estrutura.js`:** dois adaptadores novos
+  (`adEstoqueValorParado`/`adEstoqueFisicoDetalhado`) — quando o modelo
+  chamar `apresentar_analise`, essas ferramentas agora também viram card
+  visual (KPIs "Valor total a custo"/"Unidades físicas" + tabela
+  Produto/Unidades físicas/Custo unitário/Valor em estoque), no formato
+  pedido pelo usuário.
+- **`server/lib/ia/baseConhecimento.js` e `server/lib/ia/orchestrator.js`:**
+  removida a afirmação desatualizada de que "não existe agrupamento de
+  estoque por caixa/produto físico" (tema `estoque` da documentação
+  interna e a linha "SOBRE LIMITAÇÕES CONHECIDAS" do system prompt) — essa
+  frase era a causa provável da IA deflectir pro painel do Mercado Livre.
+  Nova seção "SOBRE ESTOQUE E ESTOQUE FULL" no system prompt instrui
+  explicitamente a nunca mais responder "confira no painel do Mercado
+  Livre" pra pergunta que o ERP já sabe responder.
+- **Decisão registrada, não é bug:** nenhuma deduplicação própria de
+  estoque compartilhado entre variações de um mesmo anúncio Full — os
+  números somam exatamente as mesmas linhas que a tela Estoque Full já
+  mostra hoje (ver docs/02-decisoes.md (39) e
+  docs/05-problemas-conhecidos.md).
+- **Limitação observada (fora do escopo dos 3 passos, reportada ao
+  usuário):** não existe hoje nenhuma tela para cadastrar `produtos_base`/
+  vínculos de SKU — a API já existe (`server/routes/produtosBase.js`) mas
+  não tem UI. Enquanto isso, "sem custo cadastrado"/"sem produto base
+  identificado" só podem ser corrigidos via banco/API direta.
+- **Testes:** `server/test/iaFerramentas.test.js` — seed de
+  `produtos_base`/`produto_base_skus` na empresa de teste (970), teste de
+  `estoque_valor_parado` reescrito pra nova metodologia, 5 testes novos
+  para `estoque_fisico_detalhado`. **Confirmado ao final:** único módulo
+  tocado foi o de Estoque/IA Gestora (`server/lib/estoqueFisico.js`,
+  `server/lib/ia/ferramentas.js`, `server/lib/ia/estrutura.js`,
+  `server/lib/ia/baseConhecimento.js`, `server/lib/ia/orchestrator.js`,
+  `server/test/iaFerramentas.test.js`) — nenhum outro arquivo mudou (mtime
+  inalterado). Suite completa: **335/335 testes passando** (331 antes + 4
+  líquidos novos).
+- **Limitação do ambiente de teste:** a tabela `ml_estoque_itens` está
+  vazia neste sandbox (sem `ML_TOKEN_KEY` configurada, sem sincronização
+  real) — a verificação numérica de ponta a ponta foi feita via os testes
+  automatizados com dado seedado, não via uma pergunta real na tela da IA
+  Gestora.
+
+## 2026-08-26 (38) — Visão Geral: reconstrução real da camada visual (2ª correção, só esta tela)
+- **Pedido do usuário:** a entrega (37) ainda preservava demais a
+  composição visual antiga — pediu explicitamente para NÃO usar o layout
+  atual como base e reconstruir de verdade o HTML/CSS da Visão Geral,
+  reaproveitando só dado/API/cálculo. **Único arquivo alterado:**
+  `server/public/index.html`. **Confirmado ao final:** `server/routes/`,
+  `server/lib/` e `server/db/` sem nenhuma mudança (mtime inalterado);
+  Pedidos e Financeiro re-testados visualmente (tema escuro e claro) e
+  continuam idênticos a antes. Suite completa: **331/331 testes
+  passando**.
+- **Kit visual novo e isolado (prefixo de classe `ov2-`):** os cards da
+  Visão Geral pararam de usar as classes compartilhadas `.kpi-hero`/
+  `.kpi-sec` (usadas por Pedidos, IA Gestora e outras telas) — nada nelas
+  foi tocado, então nenhuma outra tela é afetada por este redesenho. Cards
+  "hero": gradiente radial na cor do indicador, ícone grande em badge
+  arredondado, rótulo em caixa alta, e uma nova sparkline em área
+  preenchida (função `sparklineAreaSVG`, substitui `sparklineSVG`) na base
+  do card. Indicadores secundários: 7 colunas ocupando 100% da largura.
+  "Saúde da operação": de uma grade 3x1 de retângulos para uma fileira de
+  chips circulares (ícone em círculo + valor + rótulo + status). "Resumo
+  da IA": botão CTA cheio (roxo, "Ver insights completos"/"Abrir IA
+  Gestora") fixado no rodapé do card. Gráfico principal: 200px → 340px de
+  altura, proporção da linha "gráfico + Atenção hoje" ajustada para
+  ~72%/28% — tudo reaproveitando as mesmas funções de sempre
+  (`chartHTML` só com `heightPx` maior), nenhum cálculo novo.
+- **"vs. período anterior" e delta "↑X%" nos secundários seguem fora, por
+  decisão investigada:** conferido `lib/periodo.js` — o endpoint só aceita
+  períodos nomeados fixos (hoje/ontem/7d/30d/mes), não um intervalo
+  arbitrário, então calcular "o período anterior" exigiria uma mudança de
+  backend (aceitar desde/ate customizados) que o usuário pediu para não
+  fazer. Detalhado em `02-decisoes.md` (38).
+- Removidas as funções `statusText()` e `secCardHTML()` do módulo
+  Overview, sem uso depois desta reorganização (não afetam nenhuma outra
+  tela — cada módulo tem sua própria cópia dessas funções).
+
+## 2026-08-26 (37) — Reorganização visual da Visão Geral (correção pontual, só esta tela)
+- **Pedido do usuário:** a entrega (36) não deixou a Visão Geral parecida com
+  a nova imagem de referência enviada — pediu para reorganizar SOMENTE essa
+  tela (nenhuma outra), reaproveitando os mesmos dados/serviços, sem
+  inventar número para preencher o layout. **Único arquivo alterado:**
+  `server/public/index.html` (só CSS novo e as funções de render do módulo
+  `Overview`). **Confirmado ao final:** `server/routes/`, `server/lib/` e
+  `server/db/` sem nenhuma mudança (mtime inalterado); páginas Pedidos e
+  Financeiro re-testadas visualmente e continuam idênticas a antes. Suite
+  completa: **331/331 testes passando**.
+- **Nova estrutura em 4 linhas:** (1) 3 KPIs "hero" grandes — Faturamento,
+  Margem de contribuição R$ e % — com ícone, valor grande, mini
+  sparkline (quando há ≥2 dias de dado na série já carregada) e nota
+  contextual; (2) 7 KPIs secundários compactos distribuídos na largura
+  toda — Pedidos, Taxas/comissões, Frete do vendedor, Imposto, Custo dos
+  produtos, A receber, A pagar; (3) gráfico "Faturamento x Margem de
+  contribuição" ocupando ~2/3 da largura ao lado do painel "Atenção hoje"
+  (mesmos alertas reais de sempre, só reposicionado/renomeado); (4)
+  "Saúde da operação" (3 métricas novas calculadas sobre dado já existente:
+  taxa de cancelamento, % de pedidos com margem calculada, sincronização
+  empresas/ML/Shopee) ao lado de "Resumo da IA" (frase gerada a partir das
+  contagens reais do Radar da IA, mais os até 2 itens mais recentes).
+- **Nenhum dado novo, nenhuma rota nova:** os dois fetches que a tela já
+  fazia (`GET /api/relatorios/resumo-vendas` e `GET /api/visao-geral/painel`)
+  continuam sendo os únicos. "A receber"/"A pagar" e "Sincronização"
+  reaproveitam painéis que existiam antes (Fluxo de caixa, Conexões &
+  empresas) só reposicionados. Dois painéis sem substituto direto ficaram
+  de fora por decisão explícita ("adapte ou omita"): "Evolução diária"
+  (duplicava o gráfico principal) e "Por marketplace" (dado segue
+  disponível em Relatórios/Performance de Anúncios) — motivo detalhado na
+  entrada (37) de `02-decisoes.md`.
+- **Correção de layout:** texto de estado vazio "Pendente — N pedidos sem
+  essa informação" estourava a largura dos cards compactos e quebrava o
+  alinhamento da linha; agora esses cards mostram só "Pendente"/"Sem
+  dados" com o detalhe na notinha abaixo, mesmo padrão já usado em Pedidos.
+
 ## 2026-08-26 (36) — Redesign visual do ERP (dark premium) — só layout/CSS, nenhuma regra de negócio tocada
 - **Pedido do usuário:** aplicar o novo design visual (5 imagens de
   referência: Pedidos, IA Gestora, Financeiro, Visão Geral, Performance de
