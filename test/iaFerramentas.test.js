@@ -28,6 +28,10 @@ const { listarNotasFiscais } = require('../lib/notasFiscais');
 const { TEMAS } = require('../lib/ia/baseConhecimento');
 const { calcularPeriodo, diaBRT } = require('../lib/periodo');
 const { round2 } = require('../lib/resultadoVenda');
+const recebimentosMl = require('../lib/recebimentosMl');
+const { gerarFluxoDeCaixa } = require('../lib/fluxoCaixa');
+const extratoBancario = require('../lib/extratoBancario');
+const contasBancarias = require('../lib/contasBancarias');
 
 describe('ia/ferramentas — catálogo (sem banco)', () => {
   test('FERRAMENTAS_SCHEMA nunca vaza o handler (só name/description/input_schema)', () => {
@@ -96,6 +100,8 @@ describe(
       await pool.query('DELETE FROM ml_estoque_itens WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM ml_contas WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM produtos WHERE empresa_id = $1', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM produto_base_skus WHERE empresa_id = $1', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM produtos_base WHERE empresa_id = $1', [EMPRESA_IA_ID]);
 
       // Conta a pagar VENCIDA (saldo em aberto — não depende do período).
       await pool.query(
@@ -115,6 +121,12 @@ describe(
          VALUES ($1,$1,970000001,'LOJA IA TESTE','x','x', now() + interval '6 hours', 'ativa')`,
         [EMPRESA_IA_ID]
       );
+      // O SKU do item Full segue o padrão heurístico de kit
+      // (dígitos no início = multiplicador — lib/skuProdutoBase.js) usado por
+      // resolverProdutosBasePorSku/lib/estoqueFisico.js: '10CX-20X20X20' = 1
+      // anúncio representa 10 caixas físicas 'CX-20X20X20'; '5CX-16X11X8' = 5
+      // caixas físicas 'CX-16X11X8' (produto base propositalmente SEM custo
+      // cadastrado, pra testar a mensagem "sem custo cadastrado" no Full).
       await pool.query(
         `INSERT INTO ml_estoque_itens
            (conta_ml_id, empresa_id, tipo, ml_item_id, ml_variation_id, titulo, sku, loja, status, quantidade, pendente, motivo_pendencia, recurso_usado)
@@ -122,13 +134,39 @@ describe(
            ($1,$1,'proprio','MLB970-0',NULL,'Item zerado','SKU-IA-ZERADO','LOJA IA TESTE','active',0,FALSE,NULL,'available_quantity'),
            ($1,$1,'proprio','MLB970-1',NULL,'Item estoque baixo','SKU-IA-BAIXO','LOJA IA TESTE','active',2,FALSE,NULL,'available_quantity'),
            ($1,$1,'proprio','MLB970-2',NULL,'Item estoque normal','SKU-IA-NORMAL','LOJA IA TESTE','active',300,FALSE,NULL,'available_quantity'),
-           ($1,$1,'full','MLB970-3',NULL,'Item Full','SKU-IA-FULL','LOJA IA TESTE','active',50,FALSE,NULL,'inventory_id')`,
+           ($1,$1,'full','MLB970-3',NULL,'Item Full (caixa 20x20x20)','10CX-20X20X20','LOJA IA TESTE','active',50,FALSE,NULL,'inventory_id'),
+           ($1,$1,'full','MLB970-4',NULL,'Item Full (caixa 16x11x8, sem custo)','5CX-16X11X8','LOJA IA TESTE','active',20,FALSE,NULL,'inventory_id')`,
         [EMPRESA_IA_ID]
       );
 
-      // Produto com custo cadastrado pro SKU "SKU-IA-NORMAL" (300 unidades em
-      // estoque acima) — usado por estoque_valor_parado (300 × 10 = 3000) e
-      // como item de uma compra (compras_resumo).
+      // Produto base físico ligado por VÍNCULO SALVO ao SKU "SKU-IA-NORMAL"
+      // (300 unidades em estoque acima, multiplicador 1, COM custo
+      // cadastrado) — usado por estoque_valor_parado/estoque_fisico_detalhado
+      // (Passo 1 da correção "IA Gestora: Estoque Full", ver
+      // docs/02-decisoes.md). Os dois produtos base do Full acima (heurística
+      // de SKU, sem vínculo salvo) também são cadastrados aqui: CX-20X20X20
+      // com custo, CX-16X11X8 propositalmente SEM custo.
+      const { rows: pbRows } = await pool.query(
+        `INSERT INTO produtos_base (empresa_id, codigo, nome, ativo, custo) VALUES
+           ($1,'PB-NORMAL','Produto base teste IA (normal)',TRUE,12.00),
+           ($1,'CX-20X20X20','Caixa 20x20x20',TRUE,0.91),
+           ($1,'CX-16X11X8','Caixa 16x11x8',TRUE,NULL)
+         RETURNING id, codigo`,
+        [EMPRESA_IA_ID]
+      );
+      const pbNormalId = pbRows.find((r) => r.codigo === 'PB-NORMAL').id;
+      await pool.query(
+        `INSERT INTO produto_base_skus (empresa_id, sku, produto_base_id, multiplicador, origem) VALUES ($1,'SKU-IA-NORMAL',$2,1,'manual')`,
+        [EMPRESA_IA_ID, pbNormalId]
+      );
+
+      // Produto (tabela `produtos`, custo por SKU EXATO — usado só pra
+      // margem de venda em outro lugar do sistema, nunca mais pelo cálculo de
+      // estoque físico da IA) com o MESMO SKU "SKU-IA-NORMAL", custo
+      // DIFERENTE (10.00) do produto base acima (12.00) — prova de que
+      // estoque_valor_parado/estoque_fisico_detalhado usam produtos_base.custo,
+      // nunca produtos.custo. Também usado como item de uma compra
+      // (compras_resumo).
       const { rows: produtoRows } = await pool.query(
         `INSERT INTO produtos (empresa_id, nome, sku, custo, ativo) VALUES ($1,'Produto teste IA','SKU-IA-NORMAL',10.00,TRUE) RETURNING id`,
         [EMPRESA_IA_ID]
@@ -167,6 +205,8 @@ describe(
       await pool.query('DELETE FROM ml_estoque_itens WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM ml_contas WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM produtos WHERE empresa_id = $1', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM produto_base_skus WHERE empresa_id = $1', [EMPRESA_IA_ID]);
+      await pool.query('DELETE FROM produtos_base WHERE empresa_id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_IA_ID]);
       await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_SEM_CONTA_ID]);
       await pool.end();
@@ -273,8 +313,8 @@ describe(
       assert.equal(resultado.foraDoFull.anunciosComEstoqueZerado, 1);
       assert.equal(resultado.foraDoFull.anunciosComEstoqueMuitoBaixo, 1);
       assert.equal(resultado.foraDoFull.unidadesDisponiveis, 302); // 0 + 2 + 300
-      assert.equal(resultado.full.totalAnuncios, 1);
-      assert.equal(resultado.full.unidadesDisponiveis, 50);
+      assert.equal(resultado.full.totalAnuncios, 2);
+      assert.equal(resultado.full.unidadesDisponiveis, 70); // 50 + 20 (quantidade de ANÚNCIO/kit, não física — ver estoque_valor_parado/estoque_fisico_detalhado)
     });
 
     test('empresa sem nenhum pedido no período: resumo_vendas nunca inventa (temPedidoNoPeriodo=false, valores null com 0 pendências)', async () => {
@@ -337,12 +377,78 @@ describe(
       }
     });
 
-    test('estoque_valor_parado: só soma quantidade × custo dos SKUs com produto cadastrado (300 × 10 = 3000), resto fica de fora', async () => {
+    // Cenário completo da correção "IA Gestora: Estoque Full" (ver
+    // docs/02-decisoes.md): SKU-IA-NORMAL (fora do Full, 300 un.) tem vínculo
+    // salvo pro produto base PB-NORMAL (multiplicador 1, custo R$12,00) =
+    // 300 × 12 = R$3.600,00. SKU-IA-BAIXO/SKU-IA-ZERADO (fora do Full) não
+    // têm produto base — ficam em "sem produto base identificado" (2
+    // unidades, do SKU-IA-BAIXO). No Full: '10CX-20X20X20' (50 kits × 10 =
+    // 500 caixas físicas, custo R$0,91) = R$455,00; '5CX-16X11X8' (20 kits ×
+    // 5 = 100 caixas físicas, SEM custo cadastrado) fica de fora do valor
+    // mas conta como "unidade sem custo". Nunca usa produtos.custo (que tem
+    // um valor DIFERENTE, 10.00, pro mesmo SKU-IA-NORMAL — prova de que a
+    // fonte certa, produtos_base.custo, é a usada).
+    test('estoque_valor_parado: valor FÍSICO a custo (produtos_base), Full e fora do Full sempre separados, pendências nunca escondidas', async () => {
       const ctx = criarContexto({ empresaId: EMPRESA_IA_ID, periodoChave: 'hoje' });
       const resultado = await executarFerramenta('estoque_valor_parado', {}, ctx);
-      assert.equal(resultado.valorParadoEmEstoque.valor, 3000);
-      assert.equal(resultado.itensConsiderados, 1);
-      assert.equal(resultado.itensSemSkuOuCustoCadastrado, 3); // zerado, baixo e full não têm produto cadastrado
+
+      assert.equal(resultado.valorEstoqueNormal.valor, 3600);
+      assert.equal(resultado.valorEstoqueFull.valor, 455);
+      assert.equal(resultado.valorTotal.valor, 4055); // 3600 + 455 — nunca um total único sem explicar a divisão
+      assert.equal(resultado.unidadesFisicasForaDoFull, 300);
+      assert.equal(resultado.unidadesFisicasFull, 600); // 500 (CX-20X20X20) + 100 (CX-16X11X8) — unidade física conhecida mesmo sem custo
+      assert.equal(resultado.unidadesSemCustoCadastrado, 100); // as 100 caixas físicas de CX-16X11X8
+      assert.equal(resultado.unidadesSemProdutoBaseIdentificado, 2); // SKU-IA-BAIXO
+      assert.equal(resultado.emTransitoOuAguardandoConferencia, 'Ainda não consigo consultar o estoque em trânsito pelo ERP.');
+      assert.match(resultado.observacao, /100 unidades não entraram no cálculo porque o produto está sem custo cadastrado\./);
+      assert.match(resultado.observacao, /2 unidades não entraram no cálculo porque o SKU não pôde ser identificado a um produto base\./);
+    });
+
+    test('estoque_fisico_detalhado: escopo "full" (padrão) — caixas físicas e valor por produto, ranking por valor', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_IA_ID, periodoChave: 'hoje' });
+      const resultado = await executarFerramenta('estoque_fisico_detalhado', {}, ctx);
+
+      assert.equal(resultado.escopo, 'full');
+      assert.equal(resultado.marketplace, 'Mercado Livre');
+      assert.equal(resultado.foraDoFull, undefined);
+      assert.equal(resultado.fullEmTransitoOuAguardandoConferencia, 'Ainda não consigo consultar o estoque em trânsito pelo ERP.');
+      assert.equal(resultado.full.valorTotalACusto, 455);
+      assert.equal(resultado.full.unidadesFisicas, 600);
+      assert.equal(resultado.full.produtos.length, 2);
+      // Ordenado por valor em estoque — CX-20X20X20 (455) antes de CX-16X11X8 (sem custo, tratado como 0 no ranking).
+      assert.equal(resultado.full.produtos[0].produto, 'CX-20X20X20');
+      assert.equal(resultado.full.produtos[0].unidadesFisicas, 500);
+      assert.equal(resultado.full.produtos[0].custoUnitario, 0.91);
+      assert.equal(resultado.full.produtos[0].valorEmEstoque, 455);
+      assert.equal(resultado.full.produtos[1].produto, 'CX-16X11X8');
+      assert.equal(resultado.full.produtos[1].valorEmEstoque, null);
+    });
+
+    test('estoque_fisico_detalhado: produtoBase filtra por texto (ex: "20x20x20" encontra "CX-20X20X20")', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_IA_ID, periodoChave: 'hoje' });
+      const resultado = await executarFerramenta('estoque_fisico_detalhado', { produtoBase: '20x20x20' }, ctx);
+      assert.equal(resultado.full.produtos.length, 1);
+      assert.equal(resultado.full.produtos[0].produto, 'CX-20X20X20');
+      assert.equal(resultado.full.produtos[0].unidadesFisicas, 500);
+      assert.equal(resultado.full.produtos[0].valorEmEstoque, 455);
+    });
+
+    test('estoque_fisico_detalhado: produtoBase sem nenhum resultado explica o motivo, nunca inventa', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_IA_ID, periodoChave: 'hoje' });
+      const resultado = await executarFerramenta('estoque_fisico_detalhado', { produtoBase: 'produto-que-nao-existe' }, ctx);
+      assert.equal(resultado.full.produtos.length, 0);
+      assert.match(resultado.observacao, /Nenhum produto físico encontrado com "produto-que-nao-existe"/);
+    });
+
+    test('estoque_fisico_detalhado: escopo "ambos" separa Full de fora do Full, limite corta o ranking', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_IA_ID, periodoChave: 'hoje' });
+      const resultado = await executarFerramenta('estoque_fisico_detalhado', { escopo: 'ambos', limite: 1 }, ctx);
+      assert.equal(resultado.full.produtos.length, 1);
+      assert.equal(resultado.full.produtos[0].produto, 'CX-20X20X20');
+      assert.equal(resultado.foraDoFull.produtos.length, 1);
+      assert.equal(resultado.foraDoFull.produtos[0].produto, 'PB-NORMAL');
+      assert.equal(resultado.foraDoFull.produtos[0].valorEmEstoque, 3600);
+      assert.equal(resultado.foraDoFull.valorTotalACusto, 3600);
     });
 
     test('ads_desempenho: empresa sem nenhuma conta do Mercado Livre conectada devolve disponivel=false/motivo=sem_conta (sem tentar rede)', async () => {
@@ -548,6 +654,95 @@ describe(
       const rMes = await executarFerramenta('projecao_mes', { metrica: 'faturamento' }, ctxMes);
       assert.deepEqual(rHoje.faturamentoRealizadoNoMesAteHoje, rMes.faturamentoRealizadoNoMesAteHoje);
       assert.equal(rHoje.mesReferencia, rMes.mesReferencia);
+    });
+
+    // Passo 3 (27/08/2026) — Recebimentos + Fluxo de Caixa + IA Gestora,
+    // SOMENTE LEITURA. Mesmo espírito das demais: comparar NÚMERO A NÚMERO
+    // contra a mesma função de origem que a tela usa.
+    test('recebimentos_marketplace_resumo bate com recebimentosMl.resumoRecebimentosMarketplace', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: '30d' });
+      const esperado = await recebimentosMl.resumoRecebimentosMarketplace(EMPRESA_REAL_ID);
+      const resultado = await executarFerramenta('recebimentos_marketplace_resumo', {}, ctx);
+
+      assert.equal(resultado.recebidoHoje.valor, esperado.recebidoHoje);
+      assert.equal(resultado.recebidoEsteMes.valor, esperado.recebidoMes);
+      assert.equal(resultado.aReceberTotal.valor, esperado.aReceberTotal);
+      assert.equal(resultado.aReceberAtrasado.valor, esperado.aReceberAtrasado);
+      assert.equal(resultado.aReceberProximos7Dias.valor, esperado.aReceberProximos7Dias);
+      assert.equal(resultado.aReceberSemPrevisaoDeLiberacaoInformada.quantidade, esperado.aReceberSemPrevisaoDeLiberacao.quantidade);
+      assert.deepEqual(resultado.porMarketplace.map((m) => m.marketplace), esperado.porMarketplace.map((m) => m.marketplace));
+    });
+
+    test('fluxo_de_caixa_detalhado bate com lib/fluxoCaixa.js#gerarFluxoDeCaixa (não com a ferramenta simples "fluxo_de_caixa")', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: '30d' });
+      const esperado = await gerarFluxoDeCaixa({ empresaId: EMPRESA_REAL_ID, periodoChave: '30d' });
+      const resultado = await executarFerramenta('fluxo_de_caixa_detalhado', { periodoChave: '30d' }, ctx);
+
+      assert.equal(resultado.periodo, esperado.periodo.label);
+      assert.equal(resultado.realizadoNoPeriodo.entradas.valor, esperado.realizadoNoPeriodo.entradas);
+      assert.equal(resultado.realizadoNoPeriodo.saidas.valor, esperado.realizadoNoPeriodo.saidas);
+      assert.equal(resultado.saidasPrevistas.valor, esperado.cards.saidasPrevistas);
+      assert.equal(resultado.entradasPrevistas.recebimentosMarketplacesPrevistos.valor, esperado.recebimentosMarketplaces.total);
+      assert.equal(resultado.entradasPrevistas.recebimentosMarketplacesPrevistos.quantidadePedidos, esperado.recebimentosMarketplaces.quantidade);
+      // Sem saldo inicial informado pra esta empresa neste teste — nunca inventa saldo.
+      if (!esperado.saldoInicial) {
+        assert.equal(resultado.saldoAtual.disponivel, false);
+        assert.equal(resultado.saldoProjetado.disponivel, false);
+      }
+    });
+
+    test('fluxo_de_caixa_detalhado: periodoChave inválido cai no padrão (30d), nunca quebra', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: '30d' });
+      const resultado = await executarFerramenta('fluxo_de_caixa_detalhado', { periodoChave: 'periodo-que-nao-existe' }, ctx);
+      assert.equal(resultado.periodo, 'Próximos 30 dias');
+    });
+
+    describe('extrato_bancario_analise (extrato bancário importado)', () => {
+      let contaBancariaId;
+      let pool;
+
+      before(async () => {
+        pool = require('../db/pool');
+        const conta = await contasBancarias.criarContaBancaria({ empresaId: EMPRESA_REAL_ID, nome: '[TESTE AUTOMATIZADO] IA Extrato' });
+        contaBancariaId = conta.conta.id;
+        const hoje = diaBRT(new Date());
+        await extratoBancario.confirmarImportacao({
+          empresaId: EMPRESA_REAL_ID, contaBancariaId, nomeArquivo: 'teste-ia.csv', formato: 'csv', mapeamento: {},
+          movimentos: [
+            { data: hoje, descricao: 'PIX TESTE IA 1', documento: 'IA001', valor: 500, tipo: 'entrada', saldoApos: 1500 },
+            { data: hoje, descricao: 'PIX TESTE IA 2', documento: 'IA002', valor: 40, tipo: 'entrada', saldoApos: 1540 },
+            { data: hoje, descricao: 'PAGAMENTO TESTE IA', documento: 'IA003', valor: 60, tipo: 'saida', saldoApos: 1480 },
+          ],
+        });
+      });
+
+      after(async () => {
+        if (contaBancariaId) {
+          await pool.query('DELETE FROM extrato_movimentos WHERE conta_bancaria_id = $1', [contaBancariaId]);
+          await pool.query('DELETE FROM extrato_importacoes WHERE conta_bancaria_id = $1', [contaBancariaId]);
+          await pool.query('DELETE FROM contas_bancarias WHERE id = $1', [contaBancariaId]);
+        }
+      });
+
+      test('resume entradas/saídas/conciliação do extrato importado, sem inventar números', async () => {
+        const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'hoje' });
+        const resultado = await executarFerramenta('extrato_bancario_analise', { contaBancariaId }, ctx);
+
+        assert.equal(resultado.temMovimentacaoNoPeriodo, true);
+        assert.equal(resultado.quantidadeMovimentacoes, 3);
+        assert.equal(resultado.totalEntradas.valor, 540);
+        assert.equal(resultado.totalSaidas.valor, 60);
+        assert.equal(resultado.naoIdentificados.quantidade, 3, 'nenhum foi conciliado ainda');
+        assert.equal(resultado.recebimentosConciliados.quantidade, 0);
+        assert.equal(resultado.evolucaoSaldoBancario.disponivel, true);
+        assert.equal(resultado.evolucaoSaldoBancario.fim.valor, 1480);
+      });
+
+      test('sem movimentação no período informado, devolve temMovimentacaoNoPeriodo=false (nunca inventa dado)', async () => {
+        const ctx = criarContexto({ empresaId: EMPRESA_SEM_CONTA_ID, periodoChave: 'hoje' });
+        const resultado = await executarFerramenta('extrato_bancario_analise', {}, ctx);
+        assert.equal(resultado.temMovimentacaoNoPeriodo, false);
+      });
     });
   }
 );

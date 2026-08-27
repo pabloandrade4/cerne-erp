@@ -385,6 +385,86 @@
   .kpi-hero-value .neg{ color:var(--danger); }
   .kpi-hero-value .pos{ color:var(--success); }
 
+  /* ---- Visão Geral — camada visual dedicada (26/08/2026, reconstrução
+     pedida pelo usuário pra ficar próxima da 2ª referência enviada:
+     cards hero com gradiente/glow + selo grande + sparkline preenchida,
+     indicadores secundários em largura total, "Saúde da operação" em
+     chips circulares numa fileira, "Resumo da IA" com CTA). Prefixo
+     "ov2-" isolado — nenhuma outra tela usa essas classes. Só
+     layout/CSS, nenhum dado novo, nenhuma rota nova; ver
+     docs/02-decisoes.md (38). ---- */
+  .ov2-hero-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  @media (max-width:900px){ .ov2-hero-grid{ grid-template-columns:1fr; } }
+  .ov2-hero{
+    position:relative; overflow:hidden;
+    background:linear-gradient(160deg, var(--tint-wash,var(--copper-wash)) 0%, var(--surface-2) 50%);
+    border:1px solid var(--border); border-radius:20px;
+    padding:22px 24px 20px; box-shadow:var(--shadow-sm);
+  }
+  .ov2-hero::after{
+    content:''; position:absolute; top:-55%; right:-18%; width:230px; height:230px; border-radius:50%;
+    background:radial-gradient(circle, var(--tint-soft,var(--copper-soft)) 0%, transparent 70%);
+    pointer-events:none;
+  }
+  .ov2-hero-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; position:relative; }
+  .ov2-hero-icon{
+    width:46px; height:46px; border-radius:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    background:var(--tint-soft,var(--copper-soft)); color:var(--tint,var(--copper));
+  }
+  .ov2-hero-icon svg{ width:22px; height:22px; }
+  .ov2-hero-label{ font-size:11.5px; color:var(--text-muted); font-weight:700; text-transform:uppercase; letter-spacing:.055em; margin-top:16px; position:relative; }
+  .ov2-hero-value{ font-family:"Archivo",sans-serif; font-size:32px; font-weight:800; letter-spacing:-.6px; line-height:1.15; margin-top:5px; position:relative; color:var(--text); }
+  .ov2-hero-value .dash{ color:var(--text-faint); font-weight:700; font-size:21px; }
+  .ov2-hero-value .pos{ color:var(--success); }
+  .ov2-hero-value .neg{ color:var(--danger); }
+  .ov2-hero-note{ font-size:11.5px; color:var(--text-faint); margin-top:5px; position:relative; min-height:15px; }
+  .ov2-hero-spark{ margin:14px -2px -2px; height:44px; position:relative; color:var(--tint,var(--copper)); }
+  .ov2-hero-spark svg{ width:100%; height:100%; display:block; overflow:visible; }
+
+  /* ---- Linha 2 — 7 indicadores secundários, largura total ---- */
+  .ov2-sec-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:10px; }
+  @media (max-width:1400px){ .ov2-sec-grid{ grid-template-columns:repeat(4,1fr); } }
+  @media (max-width:900px){ .ov2-sec-grid{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:520px){ .ov2-sec-grid{ grid-template-columns:1fr; } }
+  .ov2-sec{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:13px 14px; }
+  .ov2-sec-icon{
+    width:30px; height:30px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+    background:var(--tint-soft,var(--teal-soft)); color:var(--tint,var(--teal));
+  }
+  .ov2-sec-icon svg{ width:15px; height:15px; }
+  .ov2-sec-label{ font-size:10.5px; color:var(--text-faint); font-weight:600; margin-top:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ov2-sec-value{ font-family:"Archivo",sans-serif; font-size:17px; font-weight:800; letter-spacing:-.2px; color:var(--text); margin-top:2px; }
+  .ov2-sec-value .dash{ color:var(--text-faint); }
+  .ov2-sec-note{ font-size:10px; color:var(--text-faint); margin-top:3px; }
+
+  /* ---- Linha 3 — gráfico grande (~72%) + "Atenção hoje" (~28%), mesma altura ---- */
+  .ov2-row-chart{ display:grid; grid-template-columns:2.6fr 1fr; gap:16px; align-items:stretch; }
+  @media (max-width:1050px){ .ov2-row-chart{ grid-template-columns:1fr; } }
+  .ov2-row-chart .chart-card{ height:100%; }
+  .ov2-attention-panel .panel{ height:100%; display:flex; flex-direction:column; }
+  .ov2-attention-panel .panel > div:last-child{ overflow-y:auto; flex:1; min-height:0; }
+
+  /* ---- Linha 4 — Saúde da operação (chips em fileira) + Resumo da IA ---- */
+  .ov2-row-bottom{ display:grid; grid-template-columns:1.05fr 1fr; gap:16px; align-items:stretch; }
+  @media (max-width:1000px){ .ov2-row-bottom{ grid-template-columns:1fr; } }
+  .ov2-health-row{ display:flex; gap:8px; padding:4px 18px 20px; flex-wrap:wrap; }
+  .ov2-health-chip{ flex:1 1 0; min-width:110px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; padding:6px 4px; }
+  .ov2-health-ring{ width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:var(--tint-soft,var(--teal-soft)); color:var(--tint,var(--teal)); }
+  .ov2-health-ring svg{ width:19px; height:19px; }
+  .ov2-health-value{ font-family:"Archivo",sans-serif; font-size:16px; font-weight:800; color:var(--text); }
+  .ov2-health-label{ font-size:10px; color:var(--text-faint); font-weight:600; line-height:1.3; }
+  .ov2-health-status{ font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.03em; color:var(--tint); }
+
+  .ov2-ia-card{ display:flex; flex-direction:column; height:100%; }
+  .ov2-ia-summary{ padding:2px 18px 10px; font-size:13px; color:var(--text-muted); line-height:1.65; }
+  .ov2-ia-summary strong{ color:var(--text); }
+  .ov2-ia-item{ margin:0 18px; padding:10px 0; border-top:1px solid var(--border); }
+  .ov2-ia-item-title{ font-size:12.5px; font-weight:700; color:var(--text); }
+  .ov2-ia-item-body{ font-size:12px; color:var(--text-muted); margin-top:3px; line-height:1.5; }
+  .ov2-ia-cta-wrap{ padding:14px 18px 18px; margin-top:auto; }
+  .ov2-ia-cta{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:11px 16px; border-radius:12px; background:var(--purple); color:#fff; font-weight:700; font-size:13px; text-decoration:none; transition:opacity .15s; }
+  .ov2-ia-cta:hover{ opacity:.88; }
+
   /* ---- Gráfico simples (SVG, sem lib externa) ---- */
   .simple-chart-svg{ width:100%; display:block; overflow:visible; }
   .simple-chart-xlabels{ display:grid; margin-top:6px; }
@@ -1033,6 +1113,7 @@
     eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
     trash:'<path d="M5 7h14"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6.5 7 7.3 19a2 2 0 0 0 2 1.8h5.4a2 2 0 0 0 2-1.8L17.5 7"/><path d="M10 11v6M14 11v6"/>',
     download:'<path d="M12 3v12M7 10.5 12 15.5 17 10.5"/><path d="M4.5 19h15"/>',
+    upload:'<path d="M12 21V9M7 13.5 12 8.5 17 13.5"/><path d="M4.5 19h15"/>',
     logOut:'<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M15 16l4-4-4-4"/><path d="M19 12H9"/>',
   };
   function svg(name, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" '+(extra||'')+'>'+(ICON[name]||'')+'</svg>'; }
@@ -1195,6 +1276,7 @@
     } else if(id === 'fixedExpenses'){
       inner += '<button class="primary-btn enabled" id="btnNewDespesaFixa" type="button">'+svg('plus')+'<span>Nova despesa fixa</span></button>';
     } else if(id === 'cashFlow'){
+      inner += '<button class="ghost-btn" id="btnImportarExtrato" type="button" style="cursor:pointer;opacity:1;">'+svg('upload')+'<span>Importar extrato bancário</span></button>';
       inner += '<button class="ghost-btn" id="btnSaldoInicialFluxoCaixa" type="button" style="cursor:pointer;opacity:1;">'+svg('wallet')+'<span>Definir saldo inicial</span></button>';
     } else if(id !== 'overview' && !REAL_MODULES.includes(id)){
       inner += '<button class="primary-btn" disabled>'+svg('plus')+'<span>'+(p.action||'Em breve')+'</span></button>';
@@ -2020,65 +2102,113 @@
         : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);';
     }
 
-    function heroCardHTML(k){
-      return '<div class="kpi-hero" style="'+tintVars(k.tint)+'">'
-        + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
-        + '<div class="kpi-hero-label">'+k.label+'</div>'
-        + '<div class="kpi-hero-value">'+k.valueHtml+'</div>'
-        + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+k.note+'</span></div>'
-        + '</div>';
-    }
-    function secCardHTML(k){
-      return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
-        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
-        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div>'
-        + (k.subNote ? '<div class="kpi-sec-note">'+k.subNote+'</div>' : '')
-        + '</div></div>';
+    // Mini gráfico de tendência (sparkline) dentro de cada KPI em destaque —
+    // reaproveita a MESMA série diária (serieDiaria) já buscada pra montar o
+    // gráfico principal abaixo, nunca um segundo cálculo. "values" é uma
+    // lista de números reais já prontos (um por dia); dias sem dado válido
+    // pra esse indicador (ex.: faturamento zerado ao calcular a margem %)
+    // são descartados antes de chegar aqui — nunca interpolados/inventados.
+    let ov2SparkIdSeq = 0;
+    function sparklineAreaSVG(values){
+      if(!values || values.length < 2) return '';
+      const W = 300, H = 44, pad = 3;
+      const maxV = Math.max(...values), minV = Math.min(...values);
+      const range = (maxV - minV) || 1;
+      const stepX = (W - pad*2) / (values.length - 1);
+      const yFor = v => pad + (H - pad*2) * (1 - (v - minV) / range);
+      const pts = values.map((v,i) => [pad + i*stepX, yFor(v)]);
+      const line = pts.map((p,i) => (i===0?'M':'L') + p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(' ');
+      const area = line + ' L' + pts[pts.length-1][0].toFixed(2) + ',' + (H-pad) + ' L' + pts[0][0].toFixed(2) + ',' + (H-pad) + ' Z';
+      const gid = 'ov2Spark' + (ov2SparkIdSeq++);
+      return '<div class="ov2-hero-spark">'
+        + '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'
+          + '<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1">'
+            + '<stop offset="0%" stop-color="currentColor" stop-opacity="0.32"/>'
+            + '<stop offset="100%" stop-color="currentColor" stop-opacity="0"/>'
+          + '</linearGradient></defs>'
+          + '<path d="'+area+'" fill="url(#'+gid+')" stroke="none"/>'
+          + '<path d="'+line+'" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>'
+        + '</svg></div>';
     }
 
-    // valorObj = { valor, pendentes } vindo de resumo-vendas. hasOrders = há pedido
-    // (não cancelado) no período — decide entre "Sem dados" (nada no período) e
-    // "Pendente" (tem pedido, mas falta essa informação em algum deles).
-    function statusText(hasOrders, pendentes){
-      if(hasOrders && pendentes>0) return pendentes===1 ? 'Pendente — 1 pedido sem essa informação' : 'Pendente — '+pendentes+' pedidos sem essa informação';
-      return 'Sem dados';
-    }
+    // ---- Linha 1 — KPIs principais em destaque (Faturamento, Margem R$,
+    // Margem %), com mini gráfico de tendência quando há série diária.
+    // "vs. período anterior" da referência foi OMITIDO de propósito:
+    // /api/relatorios/resumo-vendas não calcula comparação com o período
+    // anterior — mostrar isso exigiria inventar um número (ver
+    // docs/02-decisoes.md (37)).
+    function heroKpisHTML(resumo, moeda, hasOrders, serieDiaria){
+      const serie = serieDiaria || [];
+      const spFaturamento = sparklineAreaSVG(serie.map(d => d.faturamento));
+      const spMargem = sparklineAreaSVG(serie.map(d => d.margemContribuicao));
+      const spMargemPct = sparklineAreaSVG(serie.filter(d => d.faturamento > 0).map(d => (d.margemContribuicao / d.faturamento) * 100));
 
-    function kpisHTML(resumo, moeda, hasOrders){
+      const pendCurta = (pendentes) => hasOrders ? '<span class="dash">Pendente</span>' : '<span class="dash">Sem dados</span>';
+      const pendNota = (label, pendentes) => pendentes>0 ? (pendentes===1?'1 pedido sem '+label:pendentes+' pedidos sem '+label) : null;
       const heroes = [
-        { label:'Faturamento', icon:'barChart', tint:'copper', note:'Bruto no período (vendas não canceladas)',
-          valueHtml: resumo.faturamento.valor!==null ? escapeHtml(money(resumo.faturamento.valor, moeda)) : '<span class="dash">'+statusText(hasOrders,resumo.faturamento.pendentes)+'</span>' },
-        { label:'Margem de contribuição (R$)', icon:'wallet', tint: resumo.margemContribuicao.valor===null ? 'muted' : (resumo.margemContribuicao.valor>=0?'success':'danger'),
-          note:'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto',
+        { label:'Faturamento', icon:'barChart', tint:'copper', spark: spFaturamento,
+          note: resumo.faturamento.valor!==null ? 'Bruto no período (vendas não canceladas)' : (pendNota('essa informação', resumo.faturamento.pendentes) || 'Bruto no período (vendas não canceladas)'),
+          valueHtml: resumo.faturamento.valor!==null ? escapeHtml(money(resumo.faturamento.valor, moeda)) : pendCurta(resumo.faturamento.pendentes) },
+        { label:'Margem de contribuição (R$)', icon:'wallet', tint: resumo.margemContribuicao.valor===null ? 'muted' : (resumo.margemContribuicao.valor>=0?'success':'danger'), spark: spMargem,
+          note: resumo.margemContribuicao.valor!==null ? 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto' : (pendNota('custo cadastrado', resumo.margemContribuicao.pendentes) || 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto'),
           valueHtml: resumo.margemContribuicao.valor!==null
             ? '<span class="'+(resumo.margemContribuicao.valor>=0?'pos':'neg')+'">'+escapeHtml(moneySigned(resumo.margemContribuicao.valor, moeda))+'</span>'
-            : '<span class="dash">'+statusText(hasOrders,resumo.margemContribuicao.pendentes)+'</span>' },
-        { label:'Margem de contribuição (%)', icon:'percent', tint: resumo.margemPercentual===null ? 'muted' : (resumo.margemPercentual>=0?'success':'danger'),
-          note:'Margem de contribuição sobre o faturamento',
+            : pendCurta(resumo.margemContribuicao.pendentes) },
+        { label:'Margem de contribuição (%)', icon:'percent', tint: resumo.margemPercentual===null ? 'muted' : (resumo.margemPercentual>=0?'success':'danger'), spark: spMargemPct,
+          note: resumo.margemPercentual!==null ? 'Margem de contribuição sobre o faturamento' : (pendNota('custo cadastrado', resumo.margemContribuicao.pendentes) || 'Margem de contribuição sobre o faturamento'),
           valueHtml: resumo.margemPercentual!==null
             ? '<span class="'+(resumo.margemPercentual>=0?'pos':'neg')+'">'+escapeHtml(pctFmt(resumo.margemPercentual))+'</span>'
-            : '<span class="dash">'+statusText(hasOrders,resumo.margemContribuicao.pendentes)+'</span>' },
+            : pendCurta(resumo.margemContribuicao.pendentes) },
       ];
+      return '<div class="ov2-hero-grid">' + heroes.map(k =>
+        '<div class="ov2-hero" style="'+tintVars(k.tint)+'">'
+          + '<div class="ov2-hero-top"><div class="ov2-hero-icon">'+svg(k.icon)+'</div></div>'
+          + '<div class="ov2-hero-label">'+k.label+'</div>'
+          + '<div class="ov2-hero-value">'+k.valueHtml+'</div>'
+          + '<div class="ov2-hero-note">'+k.note+'</div>'
+          + (k.spark || '')
+        + '</div>'
+      ).join('') + '</div>';
+    }
 
+    // ---- Linha 2 — indicadores secundários compactos (pedido explícito:
+    // Pedidos, Taxas/comissões, Frete do vendedor, Imposto, Custo dos
+    // produtos, A receber, A pagar). "A receber"/"A pagar" reaproveitam
+    // painel.fluxoCaixa — mesmo dado que a tela de Financeiro já mostra,
+    // nenhum cálculo novo. Cancelados/Descontos (que também são reais)
+    // continuam disponíveis em Pedidos e DRE — só não repetidos aqui, pra
+    // seguir a lista exata pedida.
+    function secondaryKpisHTML(resumo, moeda, hasOrders, painel, painelError){
       function secMoneyCard(label, icon, obj){
+        const pendNote = obj.pendentes>0 ? (obj.pendentes===1?'1 pedido pendente':obj.pendentes+' pedidos pendentes') : null;
         return { label, icon, tint:'muted',
-          valueHtml: obj.valor!==null ? escapeHtml(money(obj.valor, moeda)) : '<span class="dash">'+statusText(hasOrders,obj.pendentes)+'</span>',
-          subNote: obj.valor!==null && obj.pendentes>0 ? (obj.pendentes===1?'1 pedido pendente':obj.pendentes+' pedidos pendentes') : null };
+          valueHtml: obj.valor!==null ? escapeHtml(money(obj.valor, moeda)) : '<span class="dash">'+(hasOrders?'Pendente':'Sem dados')+'</span>',
+          subNote: obj.valor!==null ? (obj.pendentes>0 ? pendNote : null) : pendNote };
+      }
+      const fluxoCaixa = painel ? painel.fluxoCaixa : null;
+      function fluxoCard(label, icon, valor){
+        return { label, icon, tint:'muted',
+          valueHtml: painelError ? '<span class="dash">Não foi possível carregar</span>'
+            : (valor===undefined ? '<span class="dash">Carregando…</span>'
+              : (valor===null ? '<span class="dash">Sem dados</span>' : escapeHtml(money(valor, moeda)))) };
       }
       const secs = [
         { label:'Pedidos no período', icon:'bag', tint:'teal', valueHtml: String(resumo.qtdPedidos) },
-        { label:'Pedidos cancelados', icon:'x', tint: resumo.cancelados.quantidade>0 ? 'warning' : 'muted',
-          valueHtml: String(resumo.cancelados.quantidade),
-          subNote: resumo.cancelados.quantidade>0 ? ('não entram nos valores acima'+(resumo.cancelados.valor!==null?(' · '+money(resumo.cancelados.valor,moeda)):'')) : null },
-        secMoneyCard('Descontos (cupom)', 'tag', resumo.desconto),
         secMoneyCard('Taxas/comissões', 'receipt', resumo.tarifas),
         secMoneyCard('Frete do vendedor', 'truck', resumo.freteVendedor),
         secMoneyCard('Imposto', 'fileText', resumo.imposto),
         secMoneyCard('Custo dos produtos', 'box', resumo.custoProduto),
+        fluxoCard('A receber', 'arrowDownCircle', fluxoCaixa ? fluxoCaixa.contasAReceber.totalAReceber : undefined),
+        fluxoCard('A pagar', 'arrowUpCircle', fluxoCaixa ? fluxoCaixa.contasAPagar.totalAPagar : undefined),
       ];
-
-      return '<div class="kpi-hero-grid">' + heroes.map(heroCardHTML).join('') + '</div>'
-        + '<div class="kpi-sec-grid" style="margin-top:10px;">' + secs.map(secCardHTML).join('') + '</div>';
+      return '<div class="ov2-sec-grid">' + secs.map(k =>
+        '<div class="ov2-sec" style="'+tintVars(k.tint)+'">'
+          + '<div class="ov2-sec-icon">'+svg(k.icon)+'</div>'
+          + '<div class="ov2-sec-label">'+k.label+'</div>'
+          + '<div class="ov2-sec-value">'+k.valueHtml+'</div>'
+          + (k.subNote ? '<div class="ov2-sec-note">'+k.subNote+'</div>' : '')
+        + '</div>'
+      ).join('') + '</div>';
     }
 
     // ---- Gráfico: Faturamento x Margem de contribuição por dia (SVG simples) ----
@@ -2141,7 +2271,7 @@
 
     function chartCardHTML(data){
       const serie = data ? data.serieDiaria : [];
-      return '<div class="chart-card" style="margin-bottom:14px;">'
+      return '<div class="chart-card" style="margin-bottom:0;">'
         + '<div class="chart-card-head">'
           + '<div class="panel-title"><span class="panel-title-ic">'+svg('lineChart')+'</span>Faturamento x Margem de contribuição</div>'
           + '<div class="chart-legend">'
@@ -2150,121 +2280,8 @@
             + '<span class="panel-note">'+(data?escapeHtml(data.periodo.label):'')+'</span>'
           + '</div>'
         + '</div>'
-        + chartHTML(serie, 'BRL')
+        + chartHTML(serie, 'BRL', { heightPx: 340 })
         + (serie.length ? '<div class="field-hint" style="margin-top:8px;">Dias com pedido sem custo de SKU cadastrado somam só a margem já conhecida daquele dia — nunca um valor estimado.</div>' : '')
-      + '</div>';
-    }
-
-    // ---- Evolução diária (mini) + Por marketplace + Fluxo de caixa ----
-    // Ativados em 26/08/2026 (Passo 1 e Passo 2 do pedido do usuário).
-    // Evolução diária reaproveita a MESMA série (serieDiaria) do gráfico
-    // principal acima — nunca um segundo cálculo, só um recorte compacto.
-    // Por marketplace e Fluxo de caixa vêm de /api/visao-geral/painel (ver
-    // lib/visaoGeralPainel.js) — carregado em paralelo, com erro isolado do
-    // resto da tela.
-    function painelCardShell(icon, titulo, bodyHtml){
-      return '<div class="chart-card">'
-        + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg(icon)+'</span>'+titulo+'</div></div>'
-        + bodyHtml
-      + '</div>';
-    }
-
-    function painelCarregandoHTML(){ return '<div class="chart-canvas h-sm"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>'; }
-    function painelErroHTML(){ return '<div class="chart-canvas h-sm">'+chartEmptyState('alertCircle','Não foi possível carregar.')+'</div>'; }
-
-    function evolucaoDiariaMiniHTML(data){
-      const serie = data ? data.serieDiaria : [];
-      return painelCardShell('activity', 'Evolução diária', chartHTML(serie, 'BRL', {
-        heightPx: 150, emptyClass: 'h-sm',
-        emptyMsg: 'Sem dados no período selecionado.',
-      }));
-    }
-
-    function porMarketplaceHTML(painel, painelError){
-      let body;
-      if(painelError) body = painelErroHTML();
-      else if(!painel) body = painelCarregandoHTML();
-      else {
-        const linhas = painel.porCanal.linhas;
-        body = !linhas.length
-          ? '<div class="chart-canvas h-sm">'+chartEmptyState('donut','Sem vendas no período selecionado.')+'</div>'
-          : '<div>' + linhas.map(l => (
-              '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div>'
-                + '<div class="conn-name">'+escapeHtml(l.canal)+'</div>'
-                + '<div class="conn-sub">'+l.qtdPedidos+' pedido'+(l.qtdPedidos===1?'':'s')+(l.participacaoPercentual!==null?(' · '+pctFmt(l.participacaoPercentual)+' do faturamento'):'')+'</div>'
-              + '</div></div>'
-              + '<span class="conn-status">'+(l.faturamento.valor!==null ? escapeHtml(money(l.faturamento.valor,'BRL')) : '<span class="dash">Pendente</span>')+'</span></div>'
-            )).join('') + '</div>';
-      }
-      return painelCardShell('donut', 'Por marketplace', body);
-    }
-
-    function fluxoDeCaixaHTML(painel, painelError){
-      let body;
-      if(painelError) body = painelErroHTML();
-      else if(!painel) body = painelCarregandoHTML();
-      else {
-        const fc = painel.fluxoCaixa;
-        function linha(label, valor, hint){
-          return '<div class="bd-row"><span class="bd-label">'+label+(hint?(' <span style="font-size:10px;color:var(--text-faint);">('+hint+')</span>'):'')+'</span>'
-            + '<span class="bd-value">'+(valor!==null?escapeHtml(money(valor,'BRL')):'<span class="dash">Sem dados</span>')+'</span></div>';
-        }
-        body = linha('Contas a receber (em aberto)', fc.contasAReceber.totalAReceber)
-          + linha('Contas a pagar (em aberto)', fc.contasAPagar.totalAPagar)
-          + linha('Recebimentos do Mercado Livre (líquido esperado)', fc.recebimentosMl.valorLiquidoEsperado, fc.recebimentosMl.pendentes>0 ? (fc.recebimentosMl.pendentes+' pendente(s)') : null)
-          + '<div class="bd-row"><span class="bd-label">Saldo projetado</span><span class="bd-value"><span class="dash">Indisponível — sem saldo bancário cadastrado</span></span></div>';
-      }
-      return painelCardShell('swap', 'Fluxo de caixa', body);
-    }
-
-    function secondaryChartsHTML(data, painel, painelError){
-      return '<div class="grid-3" style="margin-bottom:14px;">'
-        + evolucaoDiariaMiniHTML(data)
-        + porMarketplaceHTML(painel, painelError)
-        + fluxoDeCaixaHTML(painel, painelError)
-      + '</div>';
-    }
-
-    // ---- Conexões & Empresas (real, 26/08/2026 — Passo 2) ----
-    function connectionsPanelHTML(painel, painelError){
-      if(painelError){
-        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('link')+'</span>Conexões & empresas</div></div>'
-          + '<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar.</p></div>';
-      }
-      if(!painel){
-        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('link')+'</span>Conexões & empresas</div></div>'
-          + '<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
-      }
-      const c = painel.conexoes;
-      const ml = c.mercadoLivre;
-      const mlStatusLabel = ml.contasConectadas===0 ? 'Nenhuma conta conectada'
-        : ml.status==='ativa' ? 'Conectada'
-        : ml.status==='erro' ? 'Erro na conexão'
-        : 'Desconectada';
-      const mlDotStyle = ml.status==='ativa' ? ' style="background:var(--success)"' : ml.status==='erro' ? ' style="background:var(--danger)"' : '';
-      const ultimaSinc = fmtDateTime(ml.ultimaSincronizacao);
-      // Shopee (25/08/2026) — mesmo padrão do Mercado Livre acima, agora
-      // com dado real (c.shopee deixou de ser hardcoded em 0/desconectado).
-      // "última sinc." não se aplica ainda: esta etapa só conecta a loja,
-      // pedidos da Shopee ainda não são importados (nunca inventamos essa data).
-      const shopee = c.shopee;
-      const shopeeStatusLabel = shopee.contasConectadas===0 ? 'Nenhuma conta conectada'
-        : shopee.status==='ativa' ? 'Conectada'
-        : shopee.status==='erro' ? 'Erro na conexão'
-        : 'Desconectada';
-      const shopeeDotStyle = shopee.status==='ativa' ? ' style="background:var(--success)"' : shopee.status==='erro' ? ' style="background:var(--danger)"' : '';
-      const conectados = (c.empresas.total>0?1:0) + (ml.contasConectadas>0?1:0) + (shopee.contasConectadas>0?1:0);
-      const pct = Math.round((conectados/3)*100);
-
-      return '<div class="panel">'
-        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('link')+'</span>Conexões & empresas</div><span class="panel-note">'+conectados+' de 3 conectadas</span></div>'
-        + '<div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div>'
-        + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('building')+'</span><div><div class="conn-name">Empresas cadastradas</div><div class="conn-sub">'+(c.empresas.total>0?'Cadastro ativo no ERP':'Nenhuma empresa cadastrada ainda')+'</div></div></div>'
-          + '<span class="conn-status"><span class="dot"'+(c.empresas.total>0?' style="background:var(--success)"':'')+'></span>'+c.empresas.total+' empresa'+(c.empresas.total===1?'':'s')+'</span></div>'
-        + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div><div class="conn-name">Mercado Livre</div><div class="conn-sub">'+(ml.contasConectadas>0 ? (mlStatusLabel+(ultimaSinc?(' · última sinc. '+ultimaSinc):'')) : 'Conecte para sincronizar pedidos')+'</div></div></div>'
-          + '<span class="conn-status"><span class="dot"'+mlDotStyle+'></span>'+ml.contasConectadas+' conta'+(ml.contasConectadas===1?'':'s')+'</span></div>'
-        + '<div class="conn-row"><div class="conn-row-left"><span class="conn-ic">'+svg('store')+'</span><div><div class="conn-name">Shopee</div><div class="conn-sub">'+(shopee.contasConectadas>0 ? shopeeStatusLabel : 'Conecte em Marketplaces')+'</div></div></div>'
-          + '<span class="conn-status"><span class="dot"'+shopeeDotStyle+'></span>'+shopee.contasConectadas+' loja'+(shopee.contasConectadas===1?'':'s')+'</span></div>'
       + '</div>';
     }
 
@@ -2273,11 +2290,11 @@
 
     function alertsPanelHTML(painel, painelError){
       if(painelError){
-        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Alertas & IA</div></div>'
+        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Atenção hoje</div></div>'
           + '<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar os alertas.</p></div>';
       }
       if(!painel){
-        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Alertas & IA</div></div>'
+        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Atenção hoje</div></div>'
           + '<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
       }
       const alertas = painel.alertas;
@@ -2294,63 +2311,100 @@
         : '<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('checkCircle')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">Nenhum alerta no momento — tudo certo com os dados sincronizados.</p></div>';
 
       return '<div class="panel">'
-        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Alertas & IA</div>'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Atenção hoje</div>'
           + (alertas.length ? '<span class="panel-note">'+alertas.length+' alerta'+(alertas.length===1?'':'s')+'</span>' : '<span class="status-chip" style="color:var(--success);background:var(--success-soft);">'+svg('checkCircle')+'Tudo certo</span>')
         + '</div>'
         + '<div>' + body + '</div>'
       + '</div>';
     }
 
-    // Radar da IA (25/08/2026) — puramente ADITIVO: nunca troca nada da
-    // alertsPanelHTML acima (regras já existentes, calculadas na hora a
-    // cada requisição). Isto aqui só EXIBE o que o ciclo automático em
-    // segundo plano (server/lib/ia/radarScheduler.js) já persistiu no
-    // Postgres — nenhuma análise nova acontece ao carregar esta tela.
-    const RADAR_SEVERIDADE_COR = { critico:'danger', atencao:'warning', oportunidade:'success', informativo:'teal' };
-    const RADAR_SEVERIDADE_EMOJI = { critico:'🔴', atencao:'🟠', oportunidade:'🟢', informativo:'🔵' };
-    const RADAR_SEVERIDADE_LABEL = { critico:'Crítico', atencao:'Atenção', oportunidade:'Oportunidades', informativo:'Informativo' };
+    // ---- "Saúde da operação" (26/08/2026 — reorganização visual) ----
+    // 3 indicadores reais, cada um "soma de exibição" (razão entre números
+    // que o backend já retorna, documentado abaixo) — nunca nível de
+    // serviço/entrega/avaliação/giro de estoque, porque essa telemetria não
+    // existe hoje na integração (ver docs/02-decisoes.md (37) — "adapte ou
+    // omita" o indicador da referência que ainda não tem dado real).
+    function healthPanelHTML(resumo, painel, painelError){
+      const totalBruto = resumo.qtdPedidos + resumo.cancelados.quantidade;
+      const taxaCancelamento = totalBruto > 0 ? (resumo.cancelados.quantidade / totalBruto) * 100 : null;
+      const margemPendentes = resumo.margemContribuicao.pendentes || 0;
+      const margemCompletaPct = resumo.qtdPedidos > 0 ? ((resumo.qtdPedidos - margemPendentes) / resumo.qtdPedidos) * 100 : null;
 
-    function radarPanelHTML(painel, painelError){
-      if(painelError) return ''; // já mostrado pela alertsPanelHTML acima — não duplica o erro
+      let sincronizacaoValueHtml = '<span class="dash">Carregando…</span>';
+      if(painelError) sincronizacaoValueHtml = '<span class="dash">Indisponível</span>';
+      else if(painel){
+        const c = painel.conexoes;
+        const conectados = (c.empresas.total>0?1:0) + (c.mercadoLivre.contasConectadas>0?1:0) + (c.shopee.contasConectadas>0?1:0);
+        sincronizacaoValueHtml = conectados+'/3';
+      }
+
+      const chips = [
+        { label:'Taxa de cancelamento', icon:'x', tint: taxaCancelamento===null ? 'muted' : (taxaCancelamento>10 ? 'danger' : taxaCancelamento>0 ? 'warning' : 'success'),
+          valueHtml: taxaCancelamento===null ? '<span class="dash">Sem dados</span>' : escapeHtml(pctFmt(taxaCancelamento)),
+          status: taxaCancelamento===null ? null : (taxaCancelamento>10?'Alta':taxaCancelamento>0?'Atenção':'Excelente') },
+        { label:'Pedidos com margem calculada', icon:'wallet', tint: margemCompletaPct===null ? 'muted' : (margemCompletaPct>=90 ? 'success' : margemCompletaPct>=50 ? 'warning' : 'danger'),
+          valueHtml: margemCompletaPct===null ? '<span class="dash">Sem dados</span>' : escapeHtml(pctFmt(margemCompletaPct)),
+          status: margemCompletaPct===null ? null : (margemCompletaPct>=90?'Excelente':margemCompletaPct>=50?'Incompleto':'Baixo') },
+        { label:'Sincronização empresas/ML/Shopee', icon:'link', tint:'teal', valueHtml: sincronizacaoValueHtml, status:null },
+      ];
+
+      return '<div class="panel">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Saúde da operação</div></div>'
+        + '<div class="ov2-health-row">' + chips.map(c =>
+            '<div class="ov2-health-chip" style="'+tintVars(c.tint)+'">'
+              + '<div class="ov2-health-ring">'+svg(c.icon)+'</div>'
+              + '<div class="ov2-health-value">'+c.valueHtml+'</div>'
+              + '<div class="ov2-health-label">'+c.label+'</div>'
+              + (c.status ? '<div class="ov2-health-status">'+c.status+'</div>' : '')
+            + '</div>'
+          ).join('') + '</div>'
+      + '</div>';
+    }
+
+    // ---- "Resumo da IA" (26/08/2026 — reorganização visual) ----
+    // Usa a MESMA estrutura do Radar da IA já existente (painel.radar,
+    // GET /radar-resumo em segundo plano — nunca dispara uma análise nova
+    // ao abrir esta tela). A frase-resumo só soma as contagens reais
+    // (radar.contagem) já calculadas pelo backend; os itens mostrados são
+    // os do próprio radar.resumoHoje, sem reescrever nem resumir o texto.
+    const RADAR_SEVERIDADE_COR = { critico:'danger', atencao:'warning', oportunidade:'success', informativo:'teal' };
+
+    function iaSummaryPanelHTML(painel, painelError){
+      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Resumo da IA</div></div>';
+      const ctaAbrir = '<div class="ov2-ia-cta-wrap"><a href="#" class="ov2-ia-cta alert-row" data-page="alerts">'+svg('sparkle')+'Abrir IA Gestora</a></div>';
+      if(painelError){
+        return '<div class="panel ov2-ia-card">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;padding:0 18px 16px;">Não foi possível carregar.</p></div>';
+      }
       if(!painel){
-        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Radar da IA</div></div>'
-          + '<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+        return '<div class="panel ov2-ia-card">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
       }
       const radar = painel.radar;
       if(!radar){
-        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Radar da IA</div></div>'
-          + '<p style="font-size:12px;color:var(--muted);margin:0;">'+escapeHtml(painel.radarError || 'O Radar da IA ainda não rodou o primeiro ciclo — ele roda automaticamente em segundo plano, sem precisar desta tela aberta.')+'</p></div>';
+        return '<div class="panel ov2-ia-card">'+head+'<p class="ov2-ia-summary">'+escapeHtml(painel.radarError || 'O Radar da IA ainda não rodou o primeiro ciclo — ele roda automaticamente em segundo plano, sem precisar desta tela aberta.')+'</p>'+ctaAbrir+'</div>';
       }
 
-      const chips = ['critico','atencao','oportunidade','informativo'].map(sev => {
-        const n = radar.contagem[sev] || 0;
-        const cor = RADAR_SEVERIDADE_COR[sev];
-        return '<span class="status-chip" style="color:var(--'+cor+');background:var(--'+cor+'-soft);margin-right:6px;">'+RADAR_SEVERIDADE_EMOJI[sev]+' '+n+' '+RADAR_SEVERIDADE_LABEL[sev]+'</span>';
+      const contagem = radar.contagem || {};
+      const partes = [];
+      if(contagem.critico) partes.push('<strong>'+contagem.critico+'</strong> crítico'+(contagem.critico===1?'':'s'));
+      if(contagem.atencao) partes.push('<strong>'+contagem.atencao+'</strong> de atenção');
+      if(contagem.oportunidade) partes.push('<strong>'+contagem.oportunidade+'</strong> oportunidade'+(contagem.oportunidade===1?'':'s'));
+      const fraseResumo = partes.length
+        ? partes.join(', ') + ' identificado'+(partes.length===1 && (contagem.critico===1||contagem.atencao===1||contagem.oportunidade===1)?'':'s')+' pelo Radar da IA.'
+        : 'Nada exigindo atenção agora — o Radar continua acompanhando em segundo plano.';
+
+      const itens = (radar.resumoHoje || []).slice(0, 2).map(r => {
+        const cor = RADAR_SEVERIDADE_COR[r.severidade] || 'teal';
+        return '<div class="ov2-ia-item"><div class="ov2-ia-item-title" style="color:var(--'+cor+');">'+r.emoji+' '+escapeHtml(r.titulo)+'</div>'
+          + '<div class="ov2-ia-item-body">'+escapeHtml(r.oQueRecomenda || r.oQueAconteceu || '')+'</div></div>';
       }).join('');
 
-      const resumo = radar.resumoHoje || [];
-      const listaHTML = resumo.length
-        ? resumo.map(r => {
-            const cor = RADAR_SEVERIDADE_COR[r.severidade] || 'teal';
-            return '<div class="conn-row alert-row" data-page="'+escapeHtml(r.pagina || '')+'" style="cursor:'+(r.pagina?'pointer':'default')+';">'
-              + '<div class="conn-row-left"><span class="conn-ic" style="color:var(--'+cor+');">'+r.emoji+'</span><div>'
-                + '<div class="conn-name">'+escapeHtml(r.titulo)+'</div>'
-                + '<div class="conn-sub">'+escapeHtml(r.oQueAconteceu||'')+'</div>'
-                + (r.oQueRecomenda ? '<div class="conn-sub" style="margin-top:2px;"><strong>IA recomenda:</strong> '+escapeHtml(r.oQueRecomenda)+'</div>' : '')
-              + '</div></div>'
-              + (r.pagina ? '<span class="conn-status">'+svg('link')+'</span>' : '')
-            + '</div>';
-          }).join('')
-        : '<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('checkCircle')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">Nada exigindo atenção agora — o Radar continua acompanhando em segundo plano.</p></div>';
-
       const atualizadoEmFmt = fmtDateTime(radar.ultimaExecucaoEm);
-      const atualizadoNota = atualizadoEmFmt ? '<span class="panel-note">atualizado '+atualizadoEmFmt+'</span>' : '';
 
-      return '<div class="panel">'
-        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Radar da IA</div>'+atualizadoNota+'</div>'
-        + '<div style="padding:2px 16px 12px;">'+chips+'</div>'
-        + '<div class="section-label" style="padding:0 16px;"><span>O que precisa da minha atenção hoje</span></div>'
-        + '<div>' + listaHTML + '</div>'
+      return '<div class="panel ov2-ia-card">'
+        + head
+        + '<p class="ov2-ia-summary">'+fraseResumo+(atualizadoEmFmt?' <span style="color:var(--text-faint);">Atualizado '+escapeHtml(atualizadoEmFmt)+'.</span>':'')+'</p>'
+        + itens
+        + '<div class="ov2-ia-cta-wrap"><a href="#" class="ov2-ia-cta alert-row" data-page="alerts">Ver insights completos<span style="display:inline-flex;">→</span></a></div>'
       + '</div>';
     }
 
@@ -2377,19 +2431,21 @@
         const resumo = state.data.resumo;
         const hasOrders = resumo.qtdPedidos > 0;
         html += sectionLabel('Indicadores principais — '+state.data.periodo.label)
-          + kpisHTML(resumo, 'BRL', hasOrders)
+          + heroKpisHTML(resumo, 'BRL', hasOrders, state.data.serieDiaria)
+          + secondaryKpisHTML(resumo, 'BRL', hasOrders, state.painel, state.painelError)
           + sectionLabel('Desempenho')
-          + chartCardHTML(state.data)
-          + secondaryChartsHTML(state.data, state.painel, state.painelError)
+          + '<div class="ov2-row-chart">'
+            + chartCardHTML(state.data)
+            + '<div class="ov2-attention-panel">'+alertsPanelHTML(state.painel, state.painelError)+'</div>'
+          + '</div>'
           + sectionLabel('Status da operação')
-          + '<div class="grid-2">' + connectionsPanelHTML(state.painel, state.painelError) + alertsPanelHTML(state.painel, state.painelError) + '</div>'
-          + radarPanelHTML(state.painel, state.painelError);
+          + '<div class="ov2-row-bottom">' + healthPanelHTML(resumo, state.painel, state.painelError) + iaSummaryPanelHTML(state.painel, state.painelError) + '</div>';
       }
 
       root.innerHTML = html;
 
       root.querySelectorAll('.alert-row').forEach(el => {
-        el.addEventListener('click', () => { const page = el.dataset.page; if(page) navigate(page); });
+        el.addEventListener('click', (e) => { e.preventDefault(); const page = el.dataset.page; if(page) navigate(page); });
       });
     }
 
@@ -5338,43 +5394,73 @@
     window.ContasReceber = { load };
   })();
 
-  /* ================= RECEBIMENTOS — repasses do Mercado Livre (somente leitura) =================
-     Ativado em 24/08/2026. Diferente de Contas a Receber: aqui os dados vêm
-     REAIS da sincronização do Mercado Livre (ver lib/recebimentosMl.js) —
-     nenhum cadastro manual nesta etapa. Data de liberação, valor e data de
-     recebimento reais ainda não vêm da API — mostrados como "Informação
-     não disponível" (nunca inventados), preparando o terreno para a
-     conciliação futura (valor esperado x valor repassado) pedida pelo
-     usuário. */
+  /* ================= RECEBIMENTOS — repasses de marketplace =================
+     Ativado em 24/08/2026, reescrito no Passo 1 da tarefa "Recebimentos +
+     Fluxo de Caixa + IA Gestora" (27/08/2026, ver docs/04-alteracoes.md).
+     Agora com 3 status financeiros bem separados (A RECEBER, DISPONÍVEL,
+     RECEBIDO — nunca chamado de "recebido no banco" só porque o
+     marketplace liberou, ver lib/recebimentosMl.js) e um resumo SEMPRE
+     atual (recebido hoje/mês, a receber total/7/15/30 dias, por
+     marketplace/loja, GET /api/recebimentos/resumo) — independente do
+     período do header. As 3 ações manuais (marcar disponível/recebido,
+     definir previsão de liberação) são as ÚNICAS formas de mudar o status
+     por aqui; a conciliação automática do extrato bancário (Fluxo de
+     Caixa → Importar extrato) é o outro caminho, sempre com confirmação
+     explícita do usuário lá. */
   (function(){
-    const state = { loading:false, error:null, recebimentos:[] };
+    const state = { loading:false, error:null, recebimentos:[], resumo:null, resumoLoading:false };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '<span class="dash">Informação não disponível</span>' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
-    function fmtDate(iso){ if(!iso) return '<span class="dash">Informação não disponível</span>'; try{ return new Date(iso).toLocaleDateString('pt-BR'); }catch(e){ return '<span class="dash">Informação não disponível</span>'; } }
-    const STATUS_LABEL = { a_liberar:'A liberar', disponivel:'Disponível', recebido:'Recebido', divergente:'Divergente' };
+    function moneyKpi(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '<span class="dash">Informação não disponível</span>'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '<span class="dash">Informação não disponível</span>'; } }
+    function hojeBRT(){
+      const BRT_OFFSET_MS = 3*60*60*1000;
+      const brt = new Date(Date.now() - BRT_OFFSET_MS);
+      const p = n => String(n).padStart(2,'0');
+      return brt.getUTCFullYear()+'-'+p(brt.getUTCMonth()+1)+'-'+p(brt.getUTCDate());
+    }
+    const STATUS_LABEL = { a_receber:'A receber', disponivel:'Disponível', recebido:'Recebido' };
     function statusChipStyle(status){
-      const cor = status==='recebido' ? 'success' : status==='divergente' ? 'danger' : status==='disponivel' ? 'teal' : 'warning';
+      const cor = status==='recebido' ? 'success' : status==='disponivel' ? 'teal' : 'warning';
       return 'color:var(--'+cor+');background:var(--'+cor+'-soft);';
     }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+    function secCardHTML(k){
+      return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
+        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div></div></div>';
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
 
-    async function api(path){
-      const res = await fetch('/api/recebimentos'+path);
+    async function api(path, opts){
+      const res = await fetch('/api/recebimentos'+path, { headers:{'Content-Type':'application/json'}, ...opts });
       let body = null; try{ body = await res.json(); }catch(e){}
-      if(!res.ok) throw new Error((body&&body.error)||'Falha na requisição.');
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
     }
 
     async function loadRecebimentos(){
       const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ state.recebimentos=[]; state.loading=false; render(); return; }
-      state.loading = true; state.error = null; render();
+      if(!filtro.empresaId){ state.recebimentos=[]; state.resumo=null; state.loading=false; render(); return; }
+      state.loading = true; state.resumoLoading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
-        const data = await api('?'+params.toString());
+        const [data, resumoData] = await Promise.all([
+          api('?'+params.toString()),
+          api('/resumo?empresaId='+filtro.empresaId),
+        ]);
         state.recebimentos = data.recebimentos;
+        state.resumo = resumoData.resumo;
       }catch(err){ state.error = err.message || 'Não foi possível carregar os recebimentos.'; }
-      finally{ state.loading = false; render(); }
+      finally{ state.loading = false; state.resumoLoading = false; render(); }
     }
 
     function load(){ loadRecebimentos(); }
@@ -5384,6 +5470,32 @@
       if(page && page.classList.contains('active')) loadRecebimentos();
       else render();
     });
+
+    function kpisHTML(r){
+      const linha1 = [
+        { label:'Recebido hoje', icon:'checkCircle', tint:'success', valueHtml: moneyKpi(r.recebidoHoje) },
+        { label:'Recebido este mês', icon:'checkCircle', tint:'success', valueHtml: moneyKpi(r.recebidoMes) },
+        { label:'Ainda a receber', icon:'arrowDownCircle', tint:'copper', valueHtml: moneyKpi(r.aReceberTotal) },
+        { label:'Atrasado (previsão vencida)', icon:'alertCircle', tint: r.aReceberAtrasado>0?'danger':'muted', valueHtml: moneyKpi(r.aReceberAtrasado) },
+      ];
+      const linha2 = [
+        { label:'A receber — próx. 7 dias', icon:'clock', tint:'warning', valueHtml: moneyKpi(r.aReceberProximos7Dias) },
+        { label:'A receber — próx. 15 dias', icon:'clock', tint:'warning', valueHtml: moneyKpi(r.aReceberProximos15Dias) },
+        { label:'A receber — próx. 30 dias', icon:'clock', tint:'warning', valueHtml: moneyKpi(r.aReceberProximos30Dias) },
+        { label:'Sem previsão de liberação', icon:'alertCircle', tint:'muted', valueHtml: moneyKpi(r.aReceberSemPrevisaoDeLiberacao.valor) + (r.aReceberSemPrevisaoDeLiberacao.quantidade ? ' <span class="di-sub" style="display:inline;">('+r.aReceberSemPrevisaoDeLiberacao.quantidade+')</span>' : '') },
+      ];
+      return '<div class="kpi-sec-grid" style="margin-bottom:10px;">' + linha1.map(secCardHTML).join('') + '</div>'
+        + '<div class="kpi-sec-grid" style="margin-bottom:14px;">' + linha2.map(secCardHTML).join('') + '</div>';
+    }
+
+    function breakdownTableHTML(titulo, icone, linhas, chaveLabel){
+      if(!linhas.length) return '';
+      return '<div class="table-card" style="flex:1;min-width:280px;"><div class="chart-card-head" style="padding:14px 16px 0;">'
+          + '<div class="panel-title"><span class="panel-title-ic">'+svg(icone)+'</span>'+titulo+'</div></div>'
+        + '<div class="table-wrap"><table class="data-table"><thead><tr><th>'+chaveLabel+'</th><th>Recebido</th><th>A receber</th></tr></thead><tbody>'
+        + linhas.map(l => '<tr><td>'+escapeHtml(l[chaveLabel==='Marketplace'?'marketplace':'loja']||'—')+'</td><td class="mono">'+money(l.recebido)+'</td><td class="mono">'+money(l.aReceber)+'</td></tr>').join('')
+        + '</tbody></table></div></div>';
+    }
 
     function render(){
       const root = document.getElementById('recebimentosRoot');
@@ -5397,7 +5509,16 @@
         return;
       }
 
-      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:720px;">Esta tela mostra os pedidos com pagamento aprovado do Mercado Livre no período selecionado. Data de liberação, valor recebido e data de recebimento ainda não são retornados pela API nesta integração — aparecem como "Informação não disponível" (nunca um valor inventado) até que essa fonte real exista. Preparado para, no futuro, comparar o valor que o ERP esperava receber com o valor que o marketplace realmente repassou.</div>';
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:820px;">Os cards abaixo são sempre atuais (independem do período selecionado no topo). A tabela mostra os pedidos com pagamento aprovado no período selecionado. "A receber" e "Disponível" ainda não são dinheiro confirmado no banco — só viram "Recebido" quando você confirma manualmente aqui ou quando o extrato bancário importado confirma o valor (Fluxo de Caixa → Importar extrato).</div>';
+
+      if(state.resumo && !state.resumoLoading) html += kpisHTML(state.resumo);
+
+      if(state.resumo && (state.resumo.porMarketplace.length || state.resumo.porLoja.length)){
+        html += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;">'
+          + breakdownTableHTML('Por marketplace', 'store', state.resumo.porMarketplace, 'Marketplace')
+          + breakdownTableHTML('Por loja', 'building', state.resumo.porLoja, 'Loja')
+        + '</div>';
+      }
 
       if(state.loading || filtro.loadingEmpresas){
         html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando recebimentos…</span></div></div>';
@@ -5407,10 +5528,10 @@
       } else if(!state.recebimentos.length){
         html += '<div class="empty-panel"><div class="empty-icon">'+svg('swap')+'</div>'
           + '<h2>Nenhum recebimento no período</h2>'
-          + '<p class="lead">Não há pedidos com pagamento aprovado do Mercado Livre no período e empresa selecionados.</p></div>';
+          + '<p class="lead">Não há pedidos com pagamento aprovado no período e empresa selecionados.</p></div>';
       } else {
         html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Loja</th><th>Pedido</th><th>Data da venda</th><th>Valor bruto</th><th>Taxas/descontos</th><th>Líquido esperado</th><th>Previsão de liberação</th><th>Recebido</th><th>Data recebimento</th><th>Status</th>'
+          + '<th>Loja</th><th>Pedido</th><th>Data da venda</th><th>Valor bruto</th><th>Taxas/descontos</th><th>Líquido esperado</th><th>Previsão de liberação</th><th>Recebido</th><th>Data recebimento</th><th>Status</th><th></th>'
           + '</tr></thead><tbody>'
           + state.recebimentos.map(r => '<tr>'
             + '<td>'+escapeHtml(r.loja||'—')+'</td>'
@@ -5422,12 +5543,125 @@
             + '<td class="tab-nums">'+fmtDate(r.dataPrevistaLiberacao)+'</td>'
             + '<td class="mono">'+money(r.valorRecebido)+'</td>'
             + '<td class="tab-nums">'+fmtDate(r.dataRecebimento)+'</td>'
-            + '<td><span class="status-chip" style="'+statusChipStyle(r.status)+'">'+(STATUS_LABEL[r.status]||r.status)+'</span></td>'
+            + '<td><span class="status-chip" style="'+statusChipStyle(r.status)+'">'+(STATUS_LABEL[r.status]||r.status)+'</span>'
+              + (r.status==='recebido' && r.origemConfirmacao ? '<div class="di-sub">'+(r.origemConfirmacao==='conciliacao_extrato'?'via conciliação do extrato':'confirmado manualmente')+'</div>' : '')+'</td>'
+            + '<td><div class="row-actions">'
+              + (r.status==='a_receber' ? '<button class="row-ic-btn" data-disponivel="'+r.id+'" title="Marcar como disponível (marketplace já liberou)" type="button">'+svg('arrowDownCircle')+'</button>' : '')
+              + (r.status!=='recebido' ? '<button class="row-ic-btn" data-previsao="'+r.id+'" title="Definir previsão de liberação" type="button">'+svg('clock')+'</button>' : '')
+              + (r.status!=='recebido' ? '<button class="row-ic-btn success" data-recebido="'+r.id+'" title="Marcar como recebido (confirmado no banco)" type="button">'+svg('check')+'</button>' : '')
+            + '</div></td>'
           + '</tr>').join('')
           + '</tbody></table></div></div>';
       }
 
       root.innerHTML = html;
+
+      root.querySelectorAll('[data-disponivel]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{ await api('/'+b.dataset.disponivel+'/disponivel', { method:'PATCH', body: JSON.stringify({ dataEfetivaLiberacao: hojeBRT() }) }); toast('Recebimento marcado como disponível.'); loadRecebimentos(); }
+        catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+      root.querySelectorAll('[data-recebido]').forEach(b=> b.addEventListener('click', ()=>{
+        const rec = state.recebimentos.find(r=>String(r.id)===b.dataset.recebido);
+        if(rec) abrirModalRecebido(rec);
+      }));
+      root.querySelectorAll('[data-previsao]').forEach(b=> b.addEventListener('click', ()=>{
+        const rec = state.recebimentos.find(r=>String(r.id)===b.dataset.previsao);
+        if(rec) abrirModalPrevisao(rec);
+      }));
+    }
+
+    function abrirModalRecebido(rec){
+      const modalRoot = document.getElementById('modalRoot');
+      const hoje = hojeBRT();
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card" style="max-width:480px;">'
+          + '<div class="modal-head"><div class="modal-title">Marcar como recebido</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">Pedido '+escapeHtml(rec.pedidoRef)+' ('+escapeHtml(rec.marketplace)+(rec.loja?' — '+escapeHtml(rec.loja):'')+'). Confirme só quando o valor realmente entrou no banco — se você importou o extrato bancário, prefira conciliar por lá em vez de confirmar aqui manualmente.</div>'
+          + '<form id="recForm">'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Valor recebido</label><input type="text" inputmode="decimal" id="fValorRecebido" value="'+(rec.valorLiquidoEsperado!==null?String(rec.valorLiquidoEsperado).replace('.',','):'')+'">'
+                + '<div class="field-error" id="eValorRecebido" style="display:none;"></div></div>'
+              + '<div class="field narrow"><label>Data do recebimento</label><input type="date" id="fDataRecebido" value="'+hoje+'">'
+                + '<div class="field-error" id="eDataRecebido" style="display:none;"></div></div>'
+            + '</div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Confirmar recebido</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+
+      document.getElementById('recForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eValorRecebido','eDataRecebido'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+        const payload = {
+          valorRecebido: Number(document.getElementById('fValorRecebido').value.replace(',','.')),
+          dataEfetivaRecebimento: document.getElementById('fDataRecebido').value,
+        };
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          await api('/'+rec.id+'/recebido', { method:'PATCH', body: JSON.stringify(payload) });
+          close();
+          toast('Recebimento confirmado.');
+          loadRecebimentos();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors && err.errors.valorRecebido){ const el=document.getElementById('eValorRecebido'); el.textContent=err.errors.valorRecebido; el.style.display='block'; }
+          else toast(err.message, 'error');
+        }
+      });
+    }
+
+    function abrirModalPrevisao(rec){
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card" style="max-width:440px;">'
+          + '<div class="modal-head"><div class="modal-title">Definir previsão de liberação</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">Pedido '+escapeHtml(rec.pedidoRef)+'. O marketplace não informa essa data pela API — informe aqui só quando souber pelo painel dele; usada nos recortes "a receber nos próximos 7/15/30 dias".</div>'
+          + '<form id="prevForm">'
+            + '<div class="field"><label>Data prevista de liberação</label><input type="date" id="fDataPrevista" value="'+(rec.dataPrevistaLiberacao||'')+'">'
+              + '<div class="field-error" id="eDataPrevista" style="display:none;"></div></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Salvar previsão</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+
+      document.getElementById('prevForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const el = document.getElementById('eDataPrevista'); el.style.display='none'; el.textContent='';
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          await api('/'+rec.id+'/previsao-liberacao', { method:'PATCH', body: JSON.stringify({ dataPrevistaLiberacao: document.getElementById('fDataPrevista').value }) });
+          close();
+          toast('Previsão de liberação salva.');
+          loadRecebimentos();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors && err.errors.dataPrevistaLiberacao){ el.textContent=err.errors.dataPrevistaLiberacao; el.style.display='block'; }
+          else toast(err.message, 'error');
+        }
+      });
     }
 
     window.Recebimentos = { load };
@@ -5754,7 +5988,15 @@
       ['7d','7 dias'], ['15d','15 dias'], ['30d','30 dias'],
       ['mes','Este mês'], ['proximoMes','Próximo mês'], ['personalizado','Personalizado'],
     ];
-    const state = { loading:false, error:null, periodoChave:'30d', desdePersonalizado:null, atePersonalizado:null, dados:null };
+    const state = {
+      loading:false, error:null, periodoChave:'30d', desdePersonalizado:null, atePersonalizado:null, dados:null,
+      // Extrato bancário / conciliação (Passo 2, 27/08/2026, ver docs/04-alteracoes.md).
+      contasBancarias:[], contaBancariaFiltro:null,
+      importacoes:[], importacoesLoading:false,
+      sugestoes:[], sugestoesLoading:false, sugestoesError:null,
+    };
+    const CAMPOS_MAPEAVEIS = ['data','descricao','documento','entrada','saida','valor','saldo'];
+    const CAMPO_LABEL = { data:'Data', descricao:'Descrição/histórico', documento:'Documento', entrada:'Entrada', saida:'Saída', valor:'Valor', saldo:'Saldo' };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -5786,6 +6028,74 @@
       if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
     }
+    async function apiExtrato(path, opts){
+      const res = await fetch('/api/extrato'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+    // Chamada "crua" pra /api/extrato/preview: MESMO quando a resposta vem
+    // com erro (400 — ex: coluna de data não identificada), o backend
+    // devolve colunas/mapeamentoSugerido junto (ver lib/extratoBancario.js#
+    // previsualizarImportacao) — o wizard precisa disso pra montar a etapa
+    // de mapeamento manual, então essa função nunca lança em cima de um 400,
+    // só em falha de rede/parse real.
+    async function apiPreviewCru(payload){
+      const res = await fetch('/api/extrato/preview', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!body) throw new Error('Falha na requisição.');
+      return body;
+    }
+    async function apiConciliacao(path, opts){
+      const res = await fetch('/api/conciliacao'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+    async function apiContasBancarias(path, opts){
+      const res = await fetch('/api/contas-bancarias'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+
+    // ---- extrato bancário: contas, histórico de importações, sugestões de conciliação ----
+    async function carregarContasBancarias(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.contasBancarias = []; state.contaBancariaFiltro = null; return; }
+      try{
+        const data = await apiContasBancarias('?empresaId='+filtro.empresaId);
+        state.contasBancarias = data.contas;
+        if(!state.contaBancariaFiltro || !data.contas.some(c=>String(c.id)===String(state.contaBancariaFiltro))){
+          state.contaBancariaFiltro = data.contas.length ? data.contas[0].id : null;
+        }
+      }catch(err){ /* silencioso — não trava o resto da página por causa da lista de contas */ }
+    }
+    async function carregarImportacoes(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.importacoes = []; return; }
+      state.importacoesLoading = true;
+      try{
+        const data = await apiExtrato('/importacoes?empresaId='+filtro.empresaId);
+        state.importacoes = data.importacoes;
+      }catch(err){ /* silencioso */ }
+      finally{ state.importacoesLoading = false; }
+    }
+    async function carregarSugestoes(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId || !state.contaBancariaFiltro){ state.sugestoes = []; state.sugestoesError = null; return; }
+      state.sugestoesLoading = true; state.sugestoesError = null;
+      try{
+        const data = await apiConciliacao('/sugestoes?empresaId='+filtro.empresaId+'&contaBancariaId='+state.contaBancariaFiltro);
+        state.sugestoes = data.sugestoes;
+      }catch(err){ state.sugestoesError = err.message || 'Não foi possível carregar as sugestões de conciliação.'; }
+      finally{ state.sugestoesLoading = false; }
+    }
+    async function carregarExtratoEConciliacao(){
+      await carregarContasBancarias();
+      await Promise.all([ carregarImportacoes(), carregarSugestoes() ]);
+      render();
+    }
 
     async function loadFluxo(){
       const filtro = window.CerneFiltro.state;
@@ -5806,11 +6116,12 @@
       if(!state.desdePersonalizado) state.desdePersonalizado = hojeBRT();
       if(!state.atePersonalizado) state.atePersonalizado = hojeBRT();
       loadFluxo();
+      carregarExtratoEConciliacao();
     }
 
     window.CerneFiltro.onChange(()=>{
       const page = document.getElementById('page-cashFlow');
-      if(page && page.classList.contains('active')) loadFluxo();
+      if(page && page.classList.contains('active')){ loadFluxo(); carregarExtratoEConciliacao(); }
       else render();
     });
 
@@ -5932,6 +6243,86 @@
         + '</tbody></table></div></div>';
     }
 
+    // ---- extrato bancário: seletor de conta + histórico de importações + sugestões de conciliação ----
+    function fmtDateHora(iso){ if(!iso) return '—'; try{ const d = new Date(iso); return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return '—'; } }
+    const STATUS_IMPORTACAO_LABEL = { concluida:'Concluída', erro:'Erro' };
+
+    function importacoesHistoricoHTML(){
+      let html = '<div class="table-card" style="margin-bottom:14px;"><div class="chart-card-head" style="padding:14px 16px 0;">'
+        + '<div class="panel-title"><span class="panel-title-ic">'+svg('inbox')+'</span>Histórico de importações de extrato</div></div>';
+      if(state.importacoesLoading){
+        html += '<div class="table-skel"><span class="spin"></span><span>Carregando histórico…</span></div></div>';
+        return html;
+      }
+      if(!state.importacoes.length){
+        html += '<div class="field-hint" style="padding:0 16px 16px;">Nenhuma planilha importada ainda. Use "Importar extrato bancário" no topo da página.</div></div>';
+        return html;
+      }
+      const contaNome = id => { const c = state.contasBancarias.find(x=>String(x.id)===String(id)); return c ? c.nome : '—'; };
+      html += '<div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Arquivo</th><th>Conta bancária</th><th>Data da importação</th><th>Movimentações</th><th>Novas</th><th>Duplicadas (ignoradas)</th><th>Entradas</th><th>Saídas</th><th>Quem importou</th><th>Status</th>'
+        + '</tr></thead><tbody>'
+        + state.importacoes.map(i => '<tr>'
+          + '<td class="mono">'+escapeHtml(i.nomeArquivo||'—')+'</td>'
+          + '<td>'+escapeHtml(contaNome(i.contaBancariaId))+'</td>'
+          + '<td class="tab-nums">'+fmtDateHora(i.criadoEm)+'</td>'
+          + '<td class="mono">'+(i.totalMovimentacoes ?? '—')+'</td>'
+          + '<td class="mono">'+(i.totalNovas ?? '—')+'</td>'
+          + '<td class="mono">'+(i.totalDuplicadas ?? '—')+'</td>'
+          + '<td class="mono">'+money(i.totalEntradas)+'</td>'
+          + '<td class="mono">'+money(i.totalSaidas)+'</td>'
+          + '<td>'+escapeHtml(i.importadoPor||'—')+'</td>'
+          + '<td><span class="status-chip" style="'+(i.status==='concluida'?'color:var(--success);background:var(--success-soft);':'color:var(--danger);background:var(--danger-soft);')+'">'+(STATUS_IMPORTACAO_LABEL[i.status]||i.status)+'</span></td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+      return html;
+    }
+
+    function sugestoesConciliacaoHTML(){
+      let html = '<div class="chart-card" style="margin-bottom:14px;">'
+        + '<div class="chart-card-head">'
+          + '<div class="panel-title"><span class="panel-title-ic">'+svg('link')+'</span>Sugestões de conciliação</div>'
+          + '<div class="chart-legend"><select id="fcContaBancariaConc" style="max-width:260px;">'
+              + (state.contasBancarias.length ? state.contasBancarias.map(c=>'<option value="'+c.id+'"'+(String(c.id)===String(state.contaBancariaFiltro)?' selected':'')+'>'+escapeHtml(c.nome)+'</option>').join('') : '<option value="">Nenhuma conta bancária cadastrada</option>')
+            + '</select></div>'
+        + '</div>';
+      if(!state.contasBancarias.length){
+        html += '<div class="field-hint" style="padding:0 16px 16px;">Cadastre uma conta bancária (botão "Importar extrato bancário" → "Nova conta bancária") para ver sugestões de conciliação.</div></div>';
+        return html;
+      }
+      html += '<div class="field-hint" style="margin:0 16px 12px;">O ERP nunca concilia sozinho — cada sugestão abaixo precisa da sua confirmação. O critério é o valor bater (±R$0,01); a data só ordena, nunca descarta uma sugestão.</div>';
+      if(state.sugestoesLoading){
+        html += '<div class="table-skel"><span class="spin"></span><span>Carregando sugestões…</span></div></div>';
+      } else if(state.sugestoesError){
+        html += '<div class="field-hint" style="color:var(--danger);padding:0 16px 16px;">'+escapeHtml(state.sugestoesError)+'</div></div>';
+      } else if(!state.sugestoes.length){
+        html += '<div class="field-hint" style="padding:0 16px 16px;">Nenhuma sugestão pendente para esta conta — todos os movimentos de entrada/saída já foram conciliados, ignorados, ou não há candidato com valor batendo.</div></div>';
+      } else {
+        html += '<div class="table-wrap" style="padding:0 16px 16px;">' + state.sugestoes.map((s,si) => {
+          const m = s.movimento;
+          return '<div class="table-card" style="margin-bottom:10px;"><div style="padding:12px 14px;">'
+            + '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
+              + '<div><strong>'+escapeHtml(m.descricao||'(sem descrição)')+'</strong><div class="di-sub">Extrato — '+fmtDate(m.data)+' — '+(m.tipo==='entrada'?'Entrada':'Saída')+' — <span class="mono">'+money(m.valor)+'</span></div></div>'
+              + '<button class="row-ic-btn" data-ignorar="'+m.id+'" title="Ignorar este movimento (não corresponde a nada rastreado)" type="button">'+svg('x')+'</button>'
+            + '</div>'
+            + s.candidatos.map(c => '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
+                + '<div><span class="status-chip" style="color:var(--teal);background:var(--teal-soft);margin-right:8px;">Possível conciliação encontrada</span>'
+                  + escapeHtml(c.descricao)+' — <span class="mono">'+money(c.valor)+'</span>'
+                  + (c.dataReferencia ? ' — <span class="di-sub" style="display:inline;">'+fmtDate(c.dataReferencia)+(c.diferencaDias!==null?' ('+c.diferencaDias+'d de diferença)':'')+'</span>' : '')
+                + '</div>'
+                + '<button class="btn-secondary" data-confirmar-movimento="'+m.id+'" data-confirmar-tipo="'+c.tipo+'" data-confirmar-alvo="'+c.id+'" type="button" style="white-space:nowrap;">'+svg('check')+'<span>Confirmar</span></button>'
+              + '</div>').join('')
+          + '</div></div>';
+        }).join('') + '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function extratoSectionHTML(){
+      return importacoesHistoricoHTML() + sugestoesConciliacaoHTML();
+    }
+
     function periodoSeletorHTML(){
       let html = '<div class="toolbar"><div class="seg" id="fcSeg">'
         + PERIODO_OPCOES.map(function(par){ return '<button data-periodo="'+par[0]+'" class="'+(state.periodoChave===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
@@ -5975,6 +6366,8 @@
           + tabelaDiariaHTML(state.dados);
       }
 
+      html += extratoSectionHTML();
+
       root.innerHTML = html;
 
       const seg = document.getElementById('fcSeg');
@@ -5988,6 +6381,34 @@
         loadFluxo();
       });
       root.querySelectorAll('.chart-empty [disabled]').forEach(b=> { b.disabled=false; b.style.cursor='pointer'; b.style.opacity='1'; b.addEventListener('click', abrirModalSaldoInicial); });
+
+      const contaConc = document.getElementById('fcContaBancariaConc');
+      if(contaConc) contaConc.addEventListener('change', async ()=>{
+        state.contaBancariaFiltro = contaConc.value || null;
+        state.sugestoesLoading = true; render();
+        await carregarSugestoes();
+        render();
+      });
+      root.querySelectorAll('[data-ignorar]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{
+          await apiConciliacao('/'+b.dataset.ignorar+'/ignorar', { method:'PATCH' });
+          toast('Movimento marcado como ignorado.');
+          await carregarSugestoes(); render();
+        }catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
+      root.querySelectorAll('[data-confirmar-movimento]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{
+          await apiConciliacao('/confirmar', { method:'POST', body: JSON.stringify({
+            movimentoId: b.dataset.confirmarMovimento, tipo: b.dataset.confirmarTipo, alvoId: b.dataset.confirmarAlvo,
+          }) });
+          toast('Conciliação confirmada — previsto virou realizado.');
+          await carregarSugestoes();
+          loadFluxo();
+          render();
+        }catch(err){ toast(err.message,'error'); b.disabled = false; }
+      }));
     }
 
     function abrirModalSaldoInicial(){
@@ -6051,8 +6472,228 @@
       });
     }
 
+    // ---- wizard: Importar extrato bancário (Passo 2, 27/08/2026) ----
+    // 3 etapas exatamente como pedido: 1) conta bancária + arquivo; 2)
+    // mapeamento de colunas (sugerido automaticamente, editável); 3) prévia
+    // (quantas movimentações, quanto em entradas/saídas, quantas já
+    // existiam) — só grava de fato quando o usuário confirma a prévia. O
+    // arquivo nunca é enviado pra lugar nenhum além desta requisição: o
+    // conteúdo base64 fica só na memória do navegador durante o wizard.
+    function abrirModalImportarExtrato(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ toast('Selecione uma empresa primeiro.', 'error'); return; }
+      const modalRoot = document.getElementById('modalRoot');
+      const wiz = {
+        step: 'conta', contaBancariaId: state.contaBancariaFiltro || null,
+        nomeArquivo: null, formato: null, conteudoBase64: null,
+        colunas: [], mapeamento: null, resultadoPreview: null,
+        mostrarNovaConta: false, carregando: false, erro: null,
+      };
+
+      function close(){ modalRoot.innerHTML = ''; }
+
+      function headHTML(subtitulo){
+        return '<div class="modal-head"><div class="modal-title">Importar extrato bancário</div>'
+          + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+subtitulo+'</div>';
+      }
+
+      function stepContaHTML(){
+        let html = headHTML('Etapa 1 de 3 — conta bancária e arquivo. Selecione a conta e envie o extrato semanal (XLSX ou CSV). A planilha em si nunca é armazenada — só as movimentações estruturadas.');
+        html += '<div class="field"><label>Conta bancária</label>'
+          + '<select id="wConta">'
+            + '<option value="">Selecione…</option>'
+            + state.contasBancarias.map(c=>'<option value="'+c.id+'"'+(String(c.id)===String(wiz.contaBancariaId)?' selected':'')+'>'+escapeHtml(c.nome)+(c.banco?' — '+escapeHtml(c.banco):'')+'</option>').join('')
+          + '</select><div class="field-error" id="eConta" style="display:none;"></div></div>';
+        html += '<button type="button" class="ghost-btn" id="wToggleNovaConta" style="cursor:pointer;opacity:1;margin:2px 0 14px;">'+svg('plus')+'<span>Nova conta bancária</span></button>';
+        if(wiz.mostrarNovaConta){
+          html += '<div class="table-card" style="padding:12px;margin-bottom:14px;">'
+            + '<div class="field"><label>Nome/apelido</label><input type="text" id="wNovaContaNome" placeholder="Ex: Banco X - Conta Corrente"><div class="field-error" id="eNovaContaNome" style="display:none;"></div></div>'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Banco <span class="opt">(opcional)</span></label><input type="text" id="wNovaContaBanco"></div>'
+              + '<div class="field narrow"><label>Número da conta <span class="opt">(opcional)</span></label><input type="text" id="wNovaContaNumero"></div>'
+            + '</div>'
+            + '<button type="button" class="btn-secondary" id="wSalvarNovaConta">'+svg('check')+'<span>Salvar conta bancária</span></button>'
+          + '</div>';
+        }
+        html += '<div class="field"><label>Arquivo do extrato (.xlsx ou .csv)</label><input type="file" id="wArquivo" accept=".xlsx,.csv"><div class="field-error" id="eArquivo" style="display:none;"></div></div>';
+        if(wiz.erro) html += '<div class="field-error" style="display:block;margin-bottom:10px;">'+escapeHtml(wiz.erro)+'</div>';
+        html += '<div class="modal-actions"><button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+          + '<button type="button" class="btn-primary" id="wAvancar1" '+(wiz.carregando?'disabled':'')+'>'+(wiz.carregando?'<span class="spin"></span>':svg('chevDown'))+'<span>'+(wiz.carregando?'Lendo planilha…':'Avançar')+'</span></button></div>';
+        return html;
+      }
+
+      function stepMapeamentoHTML(){
+        let html = headHTML('Etapa 2 de 3 — confira o mapeamento de colunas. O ERP tenta identificar sozinho; ajuste o que estiver errado antes de gerar a prévia.');
+        if(wiz.erro) html += '<div class="field-error" style="display:block;margin-bottom:10px;">'+escapeHtml(wiz.erro)+'</div>';
+        html += '<div class="table-wrap" style="margin-bottom:14px;"><table class="data-table"><thead><tr><th>Campo</th><th>Coluna na planilha</th></tr></thead><tbody>'
+          + CAMPOS_MAPEAVEIS.map(campo => '<tr><td>'+CAMPO_LABEL[campo]+(campo==='data'?' *':'')+'</td><td>'
+            + '<select data-campo-map="'+campo+'">'
+              + '<option value="">— não usar —</option>'
+              + wiz.colunas.map((c,i)=>'<option value="'+i+'"'+(wiz.mapeamento && String(wiz.mapeamento[campo])===String(i)?' selected':'')+'>'+escapeHtml(c||('Coluna '+(i+1)))+'</option>').join('')
+            + '</select></td></tr>').join('')
+          + '</tbody></table></div>';
+        html += '<div class="field-hint" style="margin-bottom:14px;">* Data é obrigatória. Informe as colunas de Entrada/Saída OU uma única coluna de Valor (nesse caso o ERP identifica o sinal automaticamente).</div>';
+        html += '<div class="modal-actions"><button type="button" class="btn-secondary" id="wVoltar2">Voltar</button>'
+          + '<button type="button" class="btn-primary" id="wGerarPrevia" '+(wiz.carregando?'disabled':'')+'>'+(wiz.carregando?'<span class="spin"></span>':svg('activity'))+'<span>'+(wiz.carregando?'Gerando prévia…':'Gerar prévia')+'</span></button></div>';
+        return html;
+      }
+
+      function stepPreviaHTML(){
+        const r = wiz.resultadoPreview.resumo;
+        let html = headHTML('Etapa 3 de 3 — confirme a prévia antes de importar. Nada é gravado até você confirmar.');
+        html += '<div class="kpi-sec-grid" style="margin-bottom:14px;">'
+          + secCardHTMLLocal({ label:'Movimentações encontradas', icon:'inbox', tint:'teal', valueHtml: String(r.totalMovimentacoes) })
+          + secCardHTMLLocal({ label:'Novas (serão importadas)', icon:'checkCircle', tint:'success', valueHtml: String(r.totalNovas) })
+          + secCardHTMLLocal({ label:'Já existentes (duplicadas)', icon:'refreshCw', tint:'muted', valueHtml: String(r.totalDuplicadas) })
+          + secCardHTMLLocal({ label:'Entradas', icon:'arrowDownCircle', tint:'success', valueHtml: money(r.totalEntradas) })
+          + secCardHTMLLocal({ label:'Saídas', icon:'arrowUpCircle', tint:'copper', valueHtml: money(r.totalSaidas) })
+        + '</div>';
+        if(r.totalDuplicadas > 0) html += '<div class="field-hint" style="margin-bottom:14px;">'+r.totalDuplicadas+' movimentação(ões) já existe(m) nesta conta bancária (mesma data, valor, tipo, descrição e documento) — não serão importadas de novo, mesma planilha nunca duplica.</div>';
+        if(wiz.resultadoPreview.linhasComErro && wiz.resultadoPreview.linhasComErro.length) html += '<div class="field-hint" style="margin-bottom:14px;color:var(--danger);">'+wiz.resultadoPreview.linhasComErro.length+' linha(s) da planilha não puderam ser lidas e serão ignoradas (ex: data ou valor inválido).</div>';
+        if(wiz.erro) html += '<div class="field-error" style="display:block;margin-bottom:10px;">'+escapeHtml(wiz.erro)+'</div>';
+        html += '<div class="modal-actions"><button type="button" class="btn-secondary" id="wVoltar3">Voltar</button>'
+          + '<button type="button" class="btn-primary" id="wConfirmar" '+(wiz.carregando||!r.totalNovas?'disabled':'')+'>'+(wiz.carregando?'<span class="spin"></span>':svg('check'))+'<span>'+(wiz.carregando?'Importando…':(r.totalNovas?'Confirmar importação':'Nada novo pra importar'))+'</span></button></div>';
+        return html;
+      }
+      function secCardHTMLLocal(k){
+        return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
+          + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
+          + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div></div></div>';
+      }
+
+      function renderWizard(){
+        const html = wiz.step==='conta' ? stepContaHTML() : wiz.step==='mapeamento' ? stepMapeamentoHTML() : stepPreviaHTML();
+        modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card" style="max-width:620px;">'+html+'</div></div>';
+        const overlay = document.getElementById('modalOverlay');
+        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+        const btnClose = document.getElementById('modalClose'); if(btnClose) btnClose.addEventListener('click', close);
+        const btnCancel = document.getElementById('modalCancel'); if(btnCancel) btnCancel.addEventListener('click', close);
+
+        if(wiz.step === 'conta'){
+          const toggle = document.getElementById('wToggleNovaConta');
+          if(toggle) toggle.addEventListener('click', ()=>{ wiz.mostrarNovaConta = !wiz.mostrarNovaConta; renderWizard(); });
+          const salvarConta = document.getElementById('wSalvarNovaConta');
+          if(salvarConta) salvarConta.addEventListener('click', async ()=>{
+            const nome = document.getElementById('wNovaContaNome').value.trim();
+            const eNome = document.getElementById('eNovaContaNome'); eNome.style.display='none';
+            if(!nome){ eNome.textContent='Informe um nome pra esta conta.'; eNome.style.display='block'; return; }
+            salvarConta.disabled = true;
+            try{
+              const data = await apiContasBancarias('', { method:'POST', body: JSON.stringify({
+                empresaId: filtro.empresaId, nome,
+                banco: document.getElementById('wNovaContaBanco').value,
+                numeroConta: document.getElementById('wNovaContaNumero').value,
+              }) });
+              state.contasBancarias.push(data.conta);
+              wiz.contaBancariaId = data.conta.id;
+              wiz.mostrarNovaConta = false;
+              toast('Conta bancária criada.');
+              renderWizard();
+            }catch(err){
+              salvarConta.disabled = false;
+              if(err.errors && err.errors.nome){ eNome.textContent = err.errors.nome; eNome.style.display='block'; }
+              else toast(err.message, 'error');
+            }
+          });
+          document.getElementById('wAvancar1').addEventListener('click', async ()=>{
+            ['eConta','eArquivo'].forEach(id=>{ const el=document.getElementById(id); if(el){ el.style.display='none'; } });
+            wiz.erro = null;
+            const contaSel = document.getElementById('wConta').value;
+            const arquivoInput = document.getElementById('wArquivo');
+            const arquivo = arquivoInput.files && arquivoInput.files[0];
+            if(!contaSel){ const el=document.getElementById('eConta'); el.textContent='Selecione a conta bancária.'; el.style.display='block'; return; }
+            if(!arquivo){ const el=document.getElementById('eArquivo'); el.textContent='Selecione o arquivo do extrato.'; el.style.display='block'; return; }
+            const nomeMinusculo = arquivo.name.toLowerCase();
+            const formato = nomeMinusculo.endsWith('.csv') ? 'csv' : nomeMinusculo.endsWith('.xlsx') ? 'xlsx' : null;
+            if(!formato){ const el=document.getElementById('eArquivo'); el.textContent='Formato não suportado — use .xlsx ou .csv.'; el.style.display='block'; return; }
+            wiz.contaBancariaId = contaSel;
+            wiz.nomeArquivo = arquivo.name;
+            wiz.formato = formato;
+            wiz.carregando = true; renderWizard();
+            try{
+              const conteudoBase64 = await new Promise((resolve, reject)=>{
+                const reader = new FileReader();
+                reader.onload = ()=> resolve(String(reader.result).split(',').pop());
+                reader.onerror = ()=> reject(new Error('Não foi possível ler o arquivo.'));
+                reader.readAsDataURL(arquivo);
+              });
+              wiz.conteudoBase64 = conteudoBase64;
+              const resultado = await apiPreviewCru({ empresaId: filtro.empresaId, contaBancariaId: wiz.contaBancariaId, nomeArquivo: wiz.nomeArquivo, formato: wiz.formato, conteudoBase64 });
+              if(resultado.errors){
+                wiz.colunas = resultado.colunas || [];
+                wiz.mapeamento = resultado.mapeamentoSugerido || null;
+                wiz.erro = resultado.errors.arquivo || resultado.errors.mapeamento || 'Não foi possível processar o arquivo.';
+                wiz.carregando = false;
+                if(!wiz.colunas.length){ renderWizard(); return; }
+                wiz.step = 'mapeamento'; renderWizard(); return;
+              }
+              wiz.colunas = resultado.colunas;
+              wiz.mapeamento = resultado.mapeamentoSugerido;
+              wiz.resultadoPreview = resultado;
+              wiz.erro = null;
+              wiz.carregando = false;
+              wiz.step = 'previa';
+              renderWizard();
+            }catch(err){
+              wiz.carregando = false;
+              wiz.erro = err.message || 'Não foi possível ler o arquivo.';
+              renderWizard();
+            }
+          });
+        } else if(wiz.step === 'mapeamento'){
+          document.getElementById('wVoltar2').addEventListener('click', ()=>{ wiz.step='conta'; wiz.erro=null; renderWizard(); });
+          document.getElementById('wGerarPrevia').addEventListener('click', async ()=>{
+            const mapeamento = {};
+            document.querySelectorAll('[data-campo-map]').forEach(sel=>{ const v = sel.value; mapeamento[sel.dataset.campoMap] = v===''? null : Number(v); });
+            wiz.mapeamento = mapeamento;
+            wiz.carregando = true; wiz.erro = null; renderWizard();
+            try{
+              const resultado = await apiPreviewCru({ empresaId: filtro.empresaId, contaBancariaId: wiz.contaBancariaId, nomeArquivo: wiz.nomeArquivo, formato: wiz.formato, conteudoBase64: wiz.conteudoBase64, mapeamento });
+              wiz.carregando = false;
+              if(resultado.errors){
+                wiz.erro = resultado.errors.arquivo || resultado.errors.mapeamento || 'Não foi possível gerar a prévia.';
+                renderWizard(); return;
+              }
+              wiz.resultadoPreview = resultado;
+              wiz.step = 'previa';
+              renderWizard();
+            }catch(err){
+              wiz.carregando = false;
+              wiz.erro = err.message || 'Não foi possível gerar a prévia.';
+              renderWizard();
+            }
+          });
+        } else if(wiz.step === 'previa'){
+          document.getElementById('wVoltar3').addEventListener('click', ()=>{ wiz.step='mapeamento'; wiz.erro=null; renderWizard(); });
+          const btnConfirmar = document.getElementById('wConfirmar');
+          if(btnConfirmar) btnConfirmar.addEventListener('click', async ()=>{
+            wiz.carregando = true; wiz.erro = null; renderWizard();
+            try{
+              await apiExtrato('/confirmar', { method:'POST', body: JSON.stringify({
+                empresaId: filtro.empresaId, contaBancariaId: wiz.contaBancariaId, nomeArquivo: wiz.nomeArquivo, formato: wiz.formato,
+                mapeamento: wiz.mapeamento, movimentos: wiz.resultadoPreview.movimentos, importadoPor: 'Pablo',
+              }) });
+              close();
+              toast('Extrato importado com sucesso.');
+              state.contaBancariaFiltro = wiz.contaBancariaId;
+              await carregarExtratoEConciliacao();
+            }catch(err){
+              wiz.carregando = false;
+              wiz.erro = err.message || 'Não foi possível confirmar a importação.';
+              renderWizard();
+            }
+          });
+        }
+      }
+
+      renderWizard();
+    }
+
     const btnSaldo = document.getElementById('btnSaldoInicialFluxoCaixa');
     if(btnSaldo) btnSaldo.addEventListener('click', abrirModalSaldoInicial);
+    const btnImportarExtrato = document.getElementById('btnImportarExtrato');
+    if(btnImportarExtrato) btnImportarExtrato.addEventListener('click', abrirModalImportarExtrato);
 
     window.FluxoCaixa = { load };
   })();

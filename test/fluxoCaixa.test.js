@@ -14,16 +14,18 @@ const EMPRESA_ID = 900;
 const PREFIXO_TESTE = '[TESTE AUTOMATIZADO]';
 
 describe('Fluxo de Caixa — 25/08/2026', { skip: !TEM_BANCO && 'defina DATABASE_URL apontando pra um Postgres de teste já seedado' }, () => {
-  let fluxoCaixa, despesasFixas, contasPagar, contasReceber, pool;
+  let fluxoCaixa, despesasFixas, contasPagar, contasReceber, recebimentosMl, pool;
   const idsDespesas = [];
   const idsContasPagar = [];
   const idsContasReceber = [];
+  let recebimentoMlRestaurar = null; // { id, statusOriginal } — recebimento de marketplace usado no teste de conciliação, restaurado no after()
 
   before(async () => {
     fluxoCaixa = require('../lib/fluxoCaixa');
     despesasFixas = require('../lib/despesasFixas');
     contasPagar = require('../lib/contasPagar');
     contasReceber = require('../lib/contasReceber');
+    recebimentosMl = require('../lib/recebimentosMl');
     pool = require('../db/pool');
   });
 
@@ -32,6 +34,14 @@ describe('Fluxo de Caixa — 25/08/2026', { skip: !TEM_BANCO && 'defina DATABASE
     await pool.query(`DELETE FROM contas_receber WHERE empresa_id = $1 AND descricao LIKE $2`, [EMPRESA_ID, PREFIXO_TESTE + '%']);
     await pool.query(`DELETE FROM despesas_fixas WHERE empresa_id = $1 AND descricao LIKE $2`, [EMPRESA_ID, PREFIXO_TESTE + '%']);
     await pool.query(`DELETE FROM fluxo_caixa_saldo_inicial WHERE empresa_id = $1`, [EMPRESA_ID]);
+    if (recebimentoMlRestaurar) {
+      // devolve o recebimento de marketplace usado no teste ao estado original —
+      // é dado real sincronizado (não criado pelo teste), não pode ficar sujo pra outros testes.
+      await pool.query(
+        `UPDATE recebimentos_marketplace SET status=$1, valor_recebido=NULL, data_efetiva_recebimento=NULL, origem_confirmacao=NULL, updated_at=now() WHERE id=$2`,
+        [recebimentoMlRestaurar.statusOriginal, recebimentoMlRestaurar.id]
+      );
+    }
     await pool.end();
   });
 
@@ -137,6 +147,44 @@ describe('Fluxo de Caixa — 25/08/2026', { skip: !TEM_BANCO && 'defina DATABASE
       assert.ok(diaFuturo, 'o dia daqui a 3 dias precisa estar dentro da série de 7 dias');
       assert.ok(diaFuturo.projetado.entradas >= 222, 'a conta a receber futura precisa contar como PROJETADO, nunca REALIZADO');
       assert.equal(diaFuturo.realizado.entradas, 0, 'dia futuro não pode ter nada REALIZADO ainda');
+    });
+  });
+
+  describe('recebimento de marketplace: PREVISTO vira REALIZADO sem duplicar (regra mais importante do Passo 2)', () => {
+    test('marcar um recebimento ML como recebido tira o valor de "previsto" e soma exatamente uma vez em "realizado"', async () => {
+      const hoje = despesasFixas.hojeBRT();
+
+      // Pega um recebimento real (sincronizado) ainda 'a_receber' pra usar no teste.
+      const { rows } = await pool.query(
+        `SELECT id, valor_liquido_esperado, status FROM recebimentos_marketplace WHERE empresa_id = $1 AND status = 'a_receber' AND valor_liquido_esperado IS NOT NULL ORDER BY id LIMIT 1`,
+        [EMPRESA_ID]
+      );
+      assert.ok(rows.length, 'precisa existir ao menos um recebimento ML "a_receber" com valor calculável nos dados de teste (real-orders.json)');
+      const alvo = rows[0];
+      recebimentoMlRestaurar = { id: alvo.id, statusOriginal: alvo.status };
+      const valor = Number(alvo.valor_liquido_esperado);
+
+      // ANTES: aparece como PREVISTO (recebimentosMarketplaces.total inclui esse valor).
+      const antes = await fluxoCaixa.gerarFluxoDeCaixa({ empresaId: EMPRESA_ID, periodoChave: 'personalizado', desde: '2026-01-01', ate: hoje });
+      const previstoAntes = antes.recebimentosMarketplaces.total;
+      const realizadoEntradasAntes = antes.realizadoNoPeriodo.entradas;
+      assert.ok(previstoAntes >= valor - 0.01, 'o valor precisa estar contado em "previsto" antes da conciliação');
+
+      // Concilia: marca como recebido HOJE.
+      const marcado = await recebimentosMl.marcarComoRecebido(alvo.id, { dataEfetivaRecebimento: hoje, valorRecebido: valor });
+      assert.equal(marcado.errors, undefined);
+      assert.equal(marcado.recebimento.status, 'recebido');
+
+      // DEPOIS: some de "previsto" e aparece em "realizado" — exatamente uma vez, nunca as duas coisas.
+      const depois = await fluxoCaixa.gerarFluxoDeCaixa({ empresaId: EMPRESA_ID, periodoChave: 'personalizado', desde: '2026-01-01', ate: hoje });
+      assert.equal(depois.recebimentosMarketplaces.total, round2(previstoAntes - valor), '"previsto" tem que cair exatamente o valor conciliado — nunca ficar duplicado');
+      assert.equal(depois.realizadoNoPeriodo.entradas, round2(realizadoEntradasAntes + valor), '"realizado" tem que subir exatamente o valor conciliado — R$X previsto vira R$X realizado, nunca R$2X');
+
+      const diaHoje = depois.serieDiaria.find((d) => d.dia === hoje);
+      assert.ok(diaHoje, 'hoje precisa estar dentro do período personalizado do teste');
+      assert.ok(diaHoje.realizado.entradas >= valor - 0.01, 'o valor conciliado precisa aparecer no dia de hoje da série REALIZADO');
+
+      function round2(n) { return Math.round(n * 100) / 100; }
     });
   });
 });
