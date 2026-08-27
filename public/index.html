@@ -1281,7 +1281,7 @@
       inner += '<button class="primary-btn enabled" id="btnNewDespesaFixa" type="button">'+svg('plus')+'<span>Nova despesa fixa</span></button>';
     } else if(id === 'cashFlow'){
       inner += '<button class="ghost-btn" id="btnImportarExtrato" type="button" style="cursor:pointer;opacity:1;">'+svg('upload')+'<span>Importar extrato bancário</span></button>';
-      inner += '<button class="ghost-btn" id="btnSaldoInicialFluxoCaixa" type="button" style="cursor:pointer;opacity:1;">'+svg('wallet')+'<span>Definir saldo inicial</span></button>';
+      inner += '<button class="ghost-btn" id="btnSaldoInicialFluxoCaixa" type="button" style="cursor:pointer;opacity:1;">'+svg('wallet')+'<span>Saldo inicial por conta</span></button>';
     } else if(id !== 'overview' && !REAL_MODULES.includes(id)){
       inner += '<button class="primary-btn" disabled>'+svg('plus')+'<span>'+(p.action||'Em breve')+'</span></button>';
     }
@@ -6658,8 +6658,21 @@
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    // ETAPA 3 (27/08/2026): o saldo pode vir `null` por dois motivos bem
+    // diferentes — nenhuma conta bancária cadastrada, ou alguma conta ativa
+    // ainda sem saldo inicial informado (o consolidado NUNCA soma parcial
+    // fingindo ser o total da empresa, ver lib/fluxoCaixa.js). O texto muda
+    // conforme o motivo, pra sempre deixar claro o que falta fazer.
+    const MOTIVO_SALDO_INDISPONIVEL_LABEL = {
+      sem_conta_bancaria_cadastrada: 'Cadastre uma conta bancária',
+      saldo_inicial_pendente_em_alguma_conta: 'Configure o saldo inicial das contas bancárias',
+      sem_saldo_inicial_informado: 'Saldo inicial não informado',
+    };
     function moneyOuIndisponivel(campo){
-      if(!campo || campo.valor===null || campo.valor===undefined) return '<span class="dash" title="Informe o saldo inicial para calcular">Não informado</span>';
+      if(!campo || campo.valor===null || campo.valor===undefined){
+        const texto = MOTIVO_SALDO_INDISPONIVEL_LABEL[campo && campo.motivo] || 'Não informado';
+        return '<span class="dash" title="'+escapeHtml(texto)+'">'+escapeHtml(texto)+'</span>';
+      }
       return money(campo.valor);
     }
     function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
@@ -6849,15 +6862,29 @@
         + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
       + '</div>';
     }
+    // ETAPA 3 (27/08/2026, ver docs/04-alteracoes.md): cards reorganizados
+    // pra deixar REALIZADO (extrato bancário — aconteceu de verdade) e
+    // PREVISTO (contas a pagar/receber pendentes) sempre visualmente
+    // separados, nunca somados por engano. "Transferências internas" só
+    // aparece quando existe alguma no período (dinheiro que só mudou de
+    // conta própria — nunca entra nos indicadores operacionais acima).
     function cardsHTML(dados){
       const c = dados.cards;
       const items = [
-        { label:'Saldo atual', icon:'wallet', tint: c.saldoAtual.valor===null?'muted':(c.saldoAtual.valor>=0?'success':'danger'), valueHtml: moneyOuIndisponivel(c.saldoAtual), note:'Hoje, a partir do saldo inicial informado' },
-        { label:'Entradas previstas', icon:'arrowDownCircle', tint:'success', valueHtml: money(c.entradasPrevistas), note:'A receber no período selecionado — ainda não é dinheiro disponível' },
-        { label:'Saídas previstas', icon:'arrowUpCircle', tint:'copper', valueHtml: money(c.saidasPrevistas), note:'Contas a pagar + despesas fixas previstas no período' },
-        { label:'Saldo projetado', icon:'activity', tint: (c.saldoProjetado.valor===null?'muted':(c.saldoProjetado.valor>=0?'success':'danger')), valueHtml: moneyOuIndisponivel(c.saldoProjetado), note:'Saldo estimado ao final do período — nunca dinheiro garantido' },
+        { label:'Saldo atual', icon:'wallet', tint: c.saldoAtual.valor===null?'muted':(c.saldoAtual.valor>=0?'success':'danger'), valueHtml: moneyOuIndisponivel(c.saldoAtual), note:'Agora, somando todas as contas bancárias ativas com saldo inicial configurado' },
+        { label:'Entradas realizadas', icon:'arrowDownCircle', tint:'success', valueHtml: money(c.entradasRealizadas), note:'Já caiu no banco no período — conciliado ou não' },
+        { label:'Saídas realizadas', icon:'arrowUpCircle', tint:'copper', valueHtml: money(c.saidasRealizadas), note:'Já saiu do banco no período — conciliado ou não' },
+        { label:'Resultado realizado', icon:'activity', tint: c.resultadoRealizado>=0?'success':'danger', valueHtml: money(c.resultadoRealizado), note:'Entradas realizadas − saídas realizadas, no período' },
+        { label:'A receber', icon:'arrowDownCircle', tint:'muted', valueHtml: money(c.entradasPrevistas), note:'Contas a receber pendentes no período — ainda não é dinheiro disponível' },
+        { label:'A pagar', icon:'arrowUpCircle', tint:'muted', valueHtml: money(c.saidasPrevistas), note:'Contas a pagar + despesas fixas previstas no período' },
+        { label:'Saldo projetado', icon:'lineChart', tint: (c.saldoProjetado.valor===null?'muted':(c.saldoProjetado.valor>=0?'success':'danger')), valueHtml: moneyOuIndisponivel(c.saldoProjetado), note:'Saldo atual + entradas previstas − saídas previstas, ao final do período' },
         { label:'Contas vencidas', icon:'alertCircle', tint: c.contasVencidas>0?'danger':'muted', valueHtml: money(c.contasVencidas), note:'A pagar vencidas + a receber atrasadas (saldo em aberto, agora)' },
       ];
+      if(c.transferenciasInternas && (c.transferenciasInternas.entradas || c.transferenciasInternas.saidas)){
+        items.push({ label:'Transferências internas', icon:'refreshCw', tint:'muted',
+          valueHtml: money(c.transferenciasInternas.entradas) + ' <span class="di-sub" style="display:inline;">recebida(s)</span> / ' + money(c.transferenciasInternas.saidas) + ' <span class="di-sub" style="display:inline;">enviada(s)</span>',
+          note:'Dinheiro que só mudou de conta própria — nunca entra em entradas/saídas realizadas acima' });
+      }
       return '<div class="kpi-hero-grid">' + items.map(cardHTML).join('') + '</div>';
     }
 
@@ -6868,7 +6895,7 @@
       return '<div class="chart-card" style="margin-bottom:14px;">'
         + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('barChart')+'</span>Como o saldo projetado é calculado</div></div>'
         + '<div class="formula-box">'
-          + linha('Saldo inicial / atual', moneyOuIndisponivel(f.saldoInicialOuAtual))
+          + linha('Saldo atual', moneyOuIndisponivel(f.saldoInicialOuAtual))
           + linha('Contas a receber (no período)', money(f.contasAReceber), '+')
           + linha('Recebimentos previstos dos marketplaces', money(f.recebimentosPrevistosMarketplaces), '+')
           + linha('Contas a pagar (no período)', money(f.contasAPagar), '−')
@@ -6879,6 +6906,34 @@
           + (dados.recebimentosMarketplaces && dados.recebimentosMarketplaces.quantidade ? (' ('+dados.recebimentosMarketplaces.quantidade+' pedido(s) no período.)') : '')
         + '</div>'
       + '</div>';
+    }
+
+    // ---- saldo por conta bancária (ETAPA 3, 27/08/2026) ----
+    // Saldo inicial agora é POR CONTA (nunca mais um valor único da
+    // empresa) — cada conta ativa aparece aqui, com o saldo inicial que foi
+    // informado (se já foi) e o saldo atual calculado a partir dele. Uma
+    // conta sem saldo inicial some do CONSOLIDADO do card "Saldo atual" (ver
+    // moneyOuIndisponivel), mas continua aparecendo aqui pra deixar claro o
+    // que falta configurar.
+    function saldoPorContaHTML(dados){
+      const lista = dados.saldosPorConta;
+      if(!lista) return ''; // null só quando a consulta já é escopada a UMA conta (não é o caso desta tela)
+      let html = '<div class="table-card" style="margin-bottom:14px;"><div class="chart-card-head" style="padding:14px 16px 0;">'
+        + '<div class="panel-title"><span class="panel-title-ic">'+svg('wallet')+'</span>Saldo por conta bancária</div></div>';
+      if(!lista.length){
+        html += '<div class="field-hint" style="padding:0 16px 16px;">Cadastre uma conta bancária (botão "Importar extrato bancário" → "Nova conta bancária") para configurar o saldo inicial.</div></div>';
+        return html;
+      }
+      html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Conta</th><th>Saldo inicial</th><th>Referência</th><th>Saldo atual</th><th></th></tr></thead><tbody>'
+        + lista.map(c => '<tr>'
+            + '<td>'+escapeHtml(c.nome)+'</td>'
+            + '<td class="mono">'+(c.saldoInicial ? money(c.saldoInicial.valor) : '<span class="dash">Não configurado</span>')+'</td>'
+            + '<td class="tab-nums">'+(c.saldoInicial ? fmtDate(c.saldoInicial.referenciaEm) : '—')+'</td>'
+            + '<td class="mono">'+(c.saldo===null?'<span class="dash">Indisponível</span>':money(c.saldo))+'</td>'
+            + '<td><button class="row-ic-btn" data-config-saldo-conta="'+c.contaBancariaId+'" title="Configurar saldo inicial desta conta" type="button">'+svg('edit')+'</button></td>'
+          + '</tr>').join('')
+        + '</tbody></table></div></div>';
+      return html;
     }
 
     // ---- gráfico: evolução do saldo de caixa (REALIZADO sólido, PROJETADO tracejado) ----
@@ -7086,6 +7141,7 @@
         try{
           html += cardsHTML(state.dados)
             + formulaHTML(state.dados)
+            + saldoPorContaHTML(state.dados)
             + chartCardHTML(state.dados)
             + tabelaDiariaHTML(state.dados);
         }catch(errRender){
@@ -7118,7 +7174,8 @@
         state.atePersonalizado = document.getElementById('fcAte').value || hojeBRT();
         loadFluxo();
       });
-      root.querySelectorAll('.chart-empty [disabled]').forEach(b=> { b.disabled=false; b.style.cursor='pointer'; b.style.opacity='1'; b.addEventListener('click', abrirModalSaldoInicial); });
+      root.querySelectorAll('.chart-empty [disabled]').forEach(b=> { b.disabled=false; b.style.cursor='pointer'; b.style.opacity='1'; b.addEventListener('click', ()=>abrirModalSaldoInicial()); });
+      root.querySelectorAll('[data-config-saldo-conta]').forEach(b=> b.addEventListener('click', ()=> abrirModalSaldoInicial(b.dataset.configSaldoConta)));
 
       const contaConc = document.getElementById('fcContaBancariaConc');
       if(contaConc) contaConc.addEventListener('change', async ()=>{
@@ -7150,65 +7207,94 @@
       }));
     }
 
-    function abrirModalSaldoInicial(){
+    // ETAPA 3 (27/08/2026): saldo inicial passou a ser POR CONTA BANCÁRIA
+    // (nunca mais um valor único da empresa — ver lib/fluxoCaixa.js). O
+    // modal agora sempre pede qual conta, e busca o saldo já configurado
+    // pra ela (se houver) pra preencher o formulário. `contaBancariaIdPreselecionada`
+    // vem de cada botão de editar na lista "Saldo por conta"; sem ela, usa a
+    // conta do filtro de conciliação (ou a primeira da lista) como ponto de partida.
+    function abrirModalSaldoInicial(contaBancariaIdPreselecionada){
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ toast('Selecione uma empresa primeiro.', 'error'); return; }
+      if(!state.contasBancarias.length){ toast('Cadastre uma conta bancária primeiro (botão "Importar extrato bancário" → "Nova conta bancária").', 'error'); return; }
       const modalRoot = document.getElementById('modalRoot');
       const hoje = hojeBRT();
-      const atual = state.dados && state.dados.saldoInicial;
-      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
-        + '<div class="modal-card" style="max-width:520px;">'
-          + '<div class="modal-head"><div class="modal-title">Definir saldo inicial</div>'
-            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
-          + '<div class="modal-sub">Informado por você — o ERP não tem integração bancária, então nunca calcula esse número sozinho. A partir daqui, o Fluxo de Caixa soma o que já foi realmente pago/recebido e o que está previsto.</div>'
-          + '<form id="fcSaldoForm">'
-            + '<div class="inline-form" style="margin-top:0;">'
-              + '<div class="field narrow"><label>Valor do saldo</label><input type="text" inputmode="decimal" id="fSaldoValor" placeholder="Ex: 15000,00" value="'+(atual?String(atual.valor).replace('.',','):'')+'">'
-                + '<div class="field-error" id="eSaldoValor" style="display:none;"></div></div>'
-              + '<div class="field narrow"><label>Data de referência</label><input type="date" id="fSaldoData" value="'+(atual?atual.dataReferencia:hoje)+'">'
-                + '<div class="field-error" id="eSaldoData" style="display:none;"></div></div>'
-            + '</div>'
-            + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fSaldoObs" placeholder="Ex: extrato do banco X em '+hoje+'" value="'+(atual&&atual.observacao?escapeHtml(atual.observacao):'')+'"></div>'
-            + '<div class="modal-actions">'
-              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
-              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Salvar saldo inicial</span></button>'
-            + '</div>'
-          + '</form>'
-        + '</div>'
-      + '</div>';
 
-      const overlay = document.getElementById('modalOverlay');
-      const close = ()=> modalRoot.innerHTML = '';
-      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
-      document.getElementById('modalClose').addEventListener('click', close);
-      document.getElementById('modalCancel').addEventListener('click', close);
+      function contaSelecionadaAtual(){
+        const sel = document.getElementById('fSaldoConta');
+        return sel ? sel.value : (contaBancariaIdPreselecionada || state.contaBancariaFiltro || state.contasBancarias[0].id);
+      }
+      function saldoConfiguradoDe(contaId){
+        const lista = (state.dados && state.dados.saldosPorConta) || [];
+        const entry = lista.find(c => String(c.contaBancariaId) === String(contaId));
+        return entry && entry.saldoInicial ? entry.saldoInicial : null;
+      }
 
-      document.getElementById('fcSaldoForm').addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        ['eSaldoValor','eSaldoData'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
-        const payload = {
-          empresaId: filtro.empresaId,
-          valor: Number(document.getElementById('fSaldoValor').value.replace(',','.')),
-          dataReferencia: document.getElementById('fSaldoData').value,
-          observacao: document.getElementById('fSaldoObs').value,
-        };
-        const saveBtn = document.getElementById('modalSave');
-        saveBtn.disabled = true;
-        try{
-          await api('/saldo-inicial', { method:'POST', body: JSON.stringify(payload) });
-          close();
-          toast('Saldo inicial salvo.');
-          loadFluxo();
-        }catch(err){
-          saveBtn.disabled = false;
-          if(err.errors){
-            if(err.errors.valor){ const el=document.getElementById('eSaldoValor'); el.textContent=err.errors.valor; el.style.display='block'; }
-            if(err.errors.dataReferencia){ const el=document.getElementById('eSaldoData'); el.textContent=err.errors.dataReferencia; el.style.display='block'; }
-          } else {
-            toast(err.message, 'error');
+      function renderForm(){
+        const contaId = contaSelecionadaAtual();
+        const atual = saldoConfiguradoDe(contaId);
+        modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+          + '<div class="modal-card" style="max-width:520px;">'
+            + '<div class="modal-head"><div class="modal-title">Saldo inicial da conta</div>'
+              + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+            + '<div class="modal-sub">Informado por você — o ERP não tem integração bancária, então nunca calcula esse número sozinho. Representa o saldo da conta IMEDIATAMENTE ANTES do primeiro movimento considerado (a partir da data de referência, tudo que passar no extrato desta conta soma em cima dele).</div>'
+            + '<form id="fcSaldoForm">'
+              + '<div class="field"><label>Conta bancária</label><select id="fSaldoConta">'
+                + state.contasBancarias.map(c=>'<option value="'+c.id+'"'+(String(c.id)===String(contaId)?' selected':'')+'>'+escapeHtml(c.nome)+(c.banco?' — '+escapeHtml(c.banco):'')+'</option>').join('')
+              + '</select></div>'
+              + '<div class="inline-form" style="margin-top:0;">'
+                + '<div class="field narrow"><label>Valor do saldo</label><input type="text" inputmode="decimal" id="fSaldoValor" placeholder="Ex: 15000,00" value="'+(atual?String(atual.valor).replace('.',','):'')+'">'
+                  + '<div class="field-error" id="eSaldoValor" style="display:none;"></div></div>'
+                + '<div class="field narrow"><label>Data de referência</label><input type="date" id="fSaldoData" value="'+(atual?String(atual.referenciaEm).slice(0,10):hoje)+'">'
+                  + '<div class="field-error" id="eSaldoData" style="display:none;"></div></div>'
+              + '</div>'
+              + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fSaldoObs" placeholder="Ex: extrato do banco X em '+hoje+'" value="'+(atual&&atual.observacao?escapeHtml(atual.observacao):'')+'"></div>'
+              + '<div class="modal-actions">'
+                + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+                + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Salvar saldo inicial</span></button>'
+              + '</div>'
+            + '</form>'
+          + '</div>'
+        + '</div>';
+
+        const overlay = document.getElementById('modalOverlay');
+        const close = ()=> modalRoot.innerHTML = '';
+        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+        document.getElementById('modalClose').addEventListener('click', close);
+        document.getElementById('modalCancel').addEventListener('click', close);
+        document.getElementById('fSaldoConta').addEventListener('change', renderForm); // troca de conta -> repopula com o saldo já salvo dela, se houver
+
+        document.getElementById('fcSaldoForm').addEventListener('submit', async (e)=>{
+          e.preventDefault();
+          ['eSaldoValor','eSaldoData'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+          const payload = {
+            empresaId: filtro.empresaId,
+            contaBancariaId: document.getElementById('fSaldoConta').value,
+            valor: Number(document.getElementById('fSaldoValor').value.replace(',','.')),
+            dataReferencia: document.getElementById('fSaldoData').value,
+            observacao: document.getElementById('fSaldoObs').value,
+          };
+          const saveBtn = document.getElementById('modalSave');
+          saveBtn.disabled = true;
+          try{
+            await api('/saldo-inicial-conta', { method:'POST', body: JSON.stringify(payload) });
+            close();
+            toast('Saldo inicial da conta salvo.');
+            loadFluxo();
+          }catch(err){
+            saveBtn.disabled = false;
+            if(err.errors){
+              if(err.errors.valor){ const el=document.getElementById('eSaldoValor'); el.textContent=err.errors.valor; el.style.display='block'; }
+              if(err.errors.dataReferencia){ const el=document.getElementById('eSaldoData'); el.textContent=err.errors.dataReferencia; el.style.display='block'; }
+              if(err.errors.contaBancariaId) toast(err.errors.contaBancariaId, 'error');
+            } else {
+              toast(err.message, 'error');
+            }
           }
-        }
-      });
+        });
+      }
+
+      renderForm();
     }
 
     // ---- wizard: Importar extrato bancário (Passo 2, 27/08/2026) ----

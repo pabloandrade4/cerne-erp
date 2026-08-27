@@ -1170,3 +1170,67 @@ CREATE TABLE IF NOT EXISTS produto_base_aliases (
   UNIQUE (empresa_id, alias)
 );
 CREATE INDEX IF NOT EXISTS idx_produto_base_aliases_produto ON produto_base_aliases(produto_base_id);
+
+-- ============================================================
+-- Etapa 3: Fluxo de Caixa — REALIZADO passa a vir de extrato_movimentos,
+-- saldo inicial por conta bancária, transferências internas (27/08/2026)
+-- ============================================================
+-- Decisão do usuário (ver docs/02-decisoes.md e docs/04-alteracoes.md):
+-- REALIZADO do Fluxo de Caixa deixa de vir de contas_pagar.status='pago' /
+-- contas_receber.status='recebido' / recebimentos_marketplace, e passa a
+-- vir SEMPRE de extrato_movimentos (dinheiro que passou de verdade pelo
+-- banco) — conciliado ou não. contas_pagar/contas_receber/
+-- recebimentos_marketplace continuam existindo e continuam importantes,
+-- só que exclusivamente para o PREVISTO (e para conciliação/comparação) —
+-- nunca mais como fonte alternativa do mesmo dinheiro já realizado (ver
+-- lib/fluxoCaixa.js).
+
+-- `fluxo_caixa_saldo_inicial` (a tabela antiga, só por empresa_id) é
+-- PRESERVADA sem nenhuma alteração — vira só um registro legado/histórico,
+-- nunca mais lida pela fórmula nova (nenhum valor é migrado/distribuído
+-- automaticamente entre contas — o usuário pediu explicitamente pra nunca
+-- inventar uma composição bancária que não existe de verdade). Tabela nova,
+-- separada, pro saldo inicial POR CONTA BANCÁRIA:
+--   - UNIQUE (conta_bancaria_id): só existe UM saldo inicial "atual" por
+--     conta (mesmo espírito do UPSERT ON CONFLICT (empresa_id) já usado na
+--     tabela legada) — nunca dois valores conflitantes pra mesma conta.
+--   - `referencia_em` (TIMESTAMPTZ, não só DATE): semântica EXPLÍCITA e
+--     não-ambígua (pedido do usuário) — representa o instante
+--     "00:00:00 do dia de referência, horário de Brasília", ou seja,
+--     IMEDIATAMENTE ANTES do primeiro movimento daquele dia. Como
+--     extrato_movimentos.data é granularidade de DIA (bancos não entregam
+--     horário nesses extratos), a fórmula soma movimentos com
+--     `data >= data_civil(referencia_em)` — o próprio dia de referência
+--     entra na soma (porque o saldo informado é ANTES dos movimentos
+--     daquele dia, nunca depois) — isso nunca conta nenhum movimento duas
+--     vezes: um movimento datado do dia de referência nunca está embutido
+--     no valor de `valor` (que é sempre "o saldo antes de qualquer
+--     movimento considerado pelo ERP"). Ver saldoContaEm() em
+--     lib/fluxoCaixa.js — a regra fica só ali, um único lugar.
+CREATE TABLE IF NOT EXISTS fluxo_caixa_saldo_inicial_conta (
+  id                  SERIAL PRIMARY KEY,
+  empresa_id          INTEGER NOT NULL REFERENCES empresas(id),
+  conta_bancaria_id   INTEGER NOT NULL REFERENCES contas_bancarias(id),
+  valor               NUMERIC(14,2) NOT NULL,
+  referencia_em       TIMESTAMPTZ NOT NULL,
+  observacao          TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (conta_bancaria_id)
+);
+
+-- Transferência entre contas da MESMA empresa (ex: Nubank -> Mercado
+-- Pago): dois movimentos reais no extrato (uma saída numa conta, uma
+-- entrada na outra) que não representam receita/despesa operacional.
+-- `categoria` é texto livre (mesmo padrão de contas_pagar.categoria) —
+-- 'transferencia_interna' é o único valor com significado especial pro
+-- cálculo (exclui o movimento dos indicadores de entradas/saídas
+-- REALIZADAS, mas NUNCA do saldo da conta — o dinheiro saiu/entrou de
+-- verdade daquela conta específica). `transferencia_par_id` liga os dois
+-- lados quando identificados. Pedido explícito do usuário: NUNCA
+-- classificar automaticamente só por valor/data batendo — sempre exige
+-- confirmação explícita (mesma UI de sugestão+confirmação da conciliação,
+-- ainda não construída nesta etapa — só o suporte de modelagem).
+ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS categoria VARCHAR(100);
+ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS transferencia_par_id INTEGER REFERENCES extrato_movimentos(id);
+CREATE INDEX IF NOT EXISTS idx_extrato_movimentos_conta_data ON extrato_movimentos(conta_bancaria_id, data);
