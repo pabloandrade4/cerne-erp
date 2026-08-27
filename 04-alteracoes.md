@@ -2,6 +2,72 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-27 (44) — ETAPA 3: REALIZADO do Fluxo de Caixa passa a vir do extrato bancário, saldo por conta, transferências internas
+- **Contexto:** aprovado pelo usuário depois de uma revisão técnica prévia
+  (perguntas A-L + diagrama, entregues no chat) e de uma especificação
+  detalhada de 22 pontos com decisões exatas de modelagem, semântica do
+  saldo inicial e 14 cenários de teste obrigatórios. Mudança de
+  arquitetura: o REALIZADO do Fluxo de Caixa deixa de vir de
+  `contas_pagar.status='pago'`/`contas_receber.status='recebido'`/
+  `recebimentos_marketplace` e passa a vir **sempre** de
+  `extrato_movimentos` (dinheiro que passou de verdade pelo banco,
+  conciliado ou não). Essas três fontes continuam existindo e continuam
+  importantes — só que exclusivamente para o PREVISTO e para
+  conciliação/comparação, nunca mais para o realizado. **A DRE não foi
+  tocada** (ponto 21 do pedido) — mudança exclusiva do Fluxo de Caixa.
+- **`server/db/schema.sql`:** nova tabela
+  `fluxo_caixa_saldo_inicial_conta` (saldo inicial POR conta bancária,
+  `UNIQUE(conta_bancaria_id)`) — a tabela antiga `fluxo_caixa_saldo_inicial`
+  (só por empresa) foi **preservada intacta**, nunca mais lida pela
+  fórmula nova, só como histórico/legado. `extrato_movimentos` ganhou
+  `categoria` e `transferencia_par_id` (suporte a transferência interna
+  entre contas da própria empresa) e um índice em
+  `(conta_bancaria_id, data)`.
+- **`server/lib/fluxoCaixa.js` (reescrito):** REALIZADO e PREVISTO agora
+  são fontes DISJUNTAS por construção — nunca a mesma query, nunca risco
+  de somar os dois. Novas funções: `buscarSaldoInicialConta`/
+  `definirSaldoInicialConta` (por conta), `saldoContaEm` (saldo de uma
+  conta num dia — ver semântica abaixo), `saldosPorContaEDaEmpresaEm`
+  (lista por conta + consolidado, nunca inventa soma parcial),
+  `realizadoPorDia` (soma diária do extrato — a única fonte do realizado,
+  nunca filtra por status de conciliação), `transferenciasInternasNoPeriodo`
+  e `classificarComoTransferenciaInterna` (classificação SEMPRE manual —
+  nenhuma detecção automática por valor/data existe nesta etapa, só o
+  suporte de modelagem pedido). `gerarFluxoDeCaixa` ganhou o parâmetro
+  opcional `contaBancariaId` (escopa realizado/saldo a uma conta; o
+  previsto continua sempre em nível de empresa — `contas_pagar`/
+  `contas_receber` não têm coluna de conta bancária hoje, ver riscos).
+- **`server/routes/fluxoCaixa.js`:** novas rotas `POST`/`GET
+  /saldo-inicial-conta` e `POST /transferencia-interna`; `GET /` passa a
+  aceitar `contaBancariaId` opcional. As rotas legadas `/saldo-inicial`
+  continuam funcionando (histórico).
+- **`server/public/index.html` (módulo `window.FluxoCaixa`):** cards
+  reorganizados (Saldo atual, Entradas realizadas, Saídas realizadas,
+  Resultado realizado, A receber, A pagar, Saldo projetado, Contas
+  vencidas, e Transferências internas quando há alguma no período — nunca
+  infla entradas/saídas realizadas). Nova seção "Saldo por conta bancária"
+  (lista cada conta ativa com saldo inicial/atual, e um botão de editar por
+  linha). Modal "Definir saldo inicial" reescrito: agora sempre pede a
+  conta bancária (troca de conta recarrega o formulário com o que já
+  estava salvo pra ela) e grava em `/saldo-inicial-conta`. Uma conta ativa
+  sem saldo inicial faz o consolidado da empresa aparecer como "Configure o
+  saldo inicial das contas bancárias" — nunca um número inventado —
+  enquanto entradas/saídas/previsto continuam sempre calculáveis.
+- **Testado (Postgres local, `node --test`):** 15 testes automatizados
+  dedicados (`server/test/fluxoCaixa.test.js`, empresa de teste 975) cobrindo
+  os 14 cenários pedidos — resultado completo na entrega feita no chat
+  (migrações, exemplos por conta/consolidado, prova de não duplicidade,
+  riscos). Suíte completa do projeto: **392/392 passando, 0 falhas**
+  (nenhuma regressão). Durante os testes foram corrigidos dois bugs nos
+  próprios testes (não no código de produção): uma ordem de `DELETE` que
+  violava FK na limpeza de uma suíte antiga, e contas bancárias
+  compartilhadas entre testes numerados que contaminavam valores absolutos
+  esperados — corrigido isolando cada teste numérico em sua própria conta
+  bancária dedicada, sempre inativada ao final para não vazar no
+  consolidado de outros testes.
+- **Pendente de aprovação explícita do usuário antes de iniciar (ETAPA
+  4):** importação de boletos/contas a pagar via CSV/XLSX.
+
 ## 2026-08-27 (43) — Fluxo de Caixa travado em "Carregando..." — diagnóstico + ETAPA 2 (correção do carregamento infinito + seleção de conta)
 - **Contexto:** bug relatado pelo usuário após importar um extrato real do
   Nubank (45 movimentos) — a tela de Fluxo de Caixa ficava presa pra
