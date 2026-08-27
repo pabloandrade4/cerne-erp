@@ -1111,3 +1111,48 @@ CREATE TABLE IF NOT EXISTS extrato_movimentos (
 );
 CREATE INDEX IF NOT EXISTS idx_extrato_movimentos_empresa_data ON extrato_movimentos(empresa_id, data);
 CREATE INDEX IF NOT EXISTS idx_extrato_movimentos_status ON extrato_movimentos(empresa_id, status_conciliacao);
+
+-- ============================================================
+-- Etapa: Mapa de produtos — medida/categoria + aliases (27/08/2026)
+-- ============================================================
+--
+-- Primeira etapa da proposta "IA Gestora que conhece o negócio"
+-- (docs/PROPOSTA-contexto-negocio-ia-gestora.md, aprovada 27/08/2026):
+-- estende `produtos_base` (que já modela o produto físico de verdade, ver
+-- comentário acima) com dois campos estruturados que hoje só existem
+-- embutidos em texto no `codigo`, e cria uma tabela nova para os apelidos
+-- em linguagem natural que o usuário usa pra se referir a um produto físico
+-- ("aquela 16x11x6", "caixa pequena") — pré-requisito para a futura
+-- ferramenta de IA `identificar_produto_fisico` (etapa seguinte da
+-- proposta, ainda não implementada).
+
+-- `medida`: dimensão do produto físico (ex: "16X11X6"), texto livre —
+-- mesmo espírito de `categoria` abaixo, sem tabela de domínio fixa, porque
+-- o projeto não tem hoje uma lista fechada de medidas possíveis.
+ALTER TABLE produtos_base ADD COLUMN IF NOT EXISTS medida VARCHAR(100);
+
+-- `categoria`: texto livre com sugestões (autocompletar no front, não um
+-- ENUM/tabela separada) — mesmo padrão já usado em
+-- contas_pagar.categoria/despesas_fixas.categoria.
+ALTER TABLE produtos_base ADD COLUMN IF NOT EXISTS categoria VARCHAR(100);
+
+-- Apelidos em linguagem natural para um produto físico. Um mesmo produto
+-- pode ter vários aliases (o usuário pode chamar a mesma caixa de nomes
+-- diferentes em conversas diferentes); um alias pertence a um único
+-- produto base (não faz sentido o mesmo texto apontar pra dois produtos
+-- físicos ao mesmo tempo dentro da mesma empresa — se acontecer, é o
+-- usuário quem decide qual vínculo corrigir, nunca a aplicação escolhendo
+-- sozinha). `origem = 'ia_sugerido'` marca um alias que a IA percebeu num
+-- padrão de conversa e sugeriu salvar — só é gravado depois de confirmação
+-- explícita do usuário (nunca automático), exatamente como um alias
+-- `manual` cadastrado direto na tela.
+CREATE TABLE IF NOT EXISTS produto_base_aliases (
+  id               SERIAL PRIMARY KEY,
+  empresa_id       INTEGER NOT NULL REFERENCES empresas(id),
+  produto_base_id  INTEGER NOT NULL REFERENCES produtos_base(id) ON DELETE CASCADE,
+  alias            VARCHAR(200) NOT NULL,
+  origem           VARCHAR(20) NOT NULL DEFAULT 'manual', -- 'manual' | 'ia_sugerido'
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, alias)
+);
+CREATE INDEX IF NOT EXISTS idx_produto_base_aliases_produto ON produto_base_aliases(produto_base_id);

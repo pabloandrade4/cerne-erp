@@ -60,14 +60,27 @@ app.use('/api/integracoes/shopee', shopeeRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api', custosRouter);
 app.use('/api/relatorios', relatoriosRouter);
+// `/api/produtos-base` e `/api/estoque-*` ficam ANTES de `/api/produtos`/
+// `/api/estoque` de propósito (27/08/2026): o `express` "-stub" deste
+// ambiente de desenvolvimento faz correspondência de prefixo por STRING
+// pura em `app.use(caminho, ...)`, sem checar limite de segmento — ou
+// seja, uma rota montada em '/api/produtos' também "casa" com
+// '/api/produtos-base/...' (o texto começa com 'produtos'), roteando a
+// requisição pro router errado (confirmado ao vivo: uma chamada a
+// /api/produtos-base/categorias-sugeridas caiu em routes/produtos.js e
+// tentou `SELECT * FROM produtos WHERE id = '-base'`). O Express real
+// (produção) não tem esse problema — resolve por segmento de caminho —
+// mas registrar o prefixo mais específico primeiro é inofensivo em
+// qualquer versão e blinda o ambiente de dev contra o mesmo bug em outras
+// rotas parecidas. Ver docs/05-problemas-conhecidos.md.
+app.use('/api/produtos-base', produtosBaseRouter);
 app.use('/api/produtos', produtosRouter);
 app.use('/api/fornecedores', fornecedoresRouter);
 app.use('/api/anuncios', anunciosRouter);
-app.use('/api/estoque', estoqueRouter);
 app.use('/api/estoque-full', estoqueFullRouter);
-app.use('/api/compras', comprasRouter);
-app.use('/api/produtos-base', produtosBaseRouter);
 app.use('/api/estoque-produto-base', estoqueProdutoBaseRouter);
+app.use('/api/estoque', estoqueRouter);
+app.use('/api/compras', comprasRouter);
 app.use('/api/contas-pagar', contasPagarRouter);
 app.use('/api/contas-receber', contasReceberRouter);
 app.use('/api/recebimentos', recebimentosRouter);
