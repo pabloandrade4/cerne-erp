@@ -1133,6 +1133,8 @@
         bullets:['Múltiplas contas do Mercado Livre','Múltiplas lojas da Shopee','Status de sincronização por conta','Taxas e regras específicas de cada canal'] },
       { id:'products', title:'Produtos', icon:'box', action:'Novo produto', desc:'Cadastro de produtos: nome, SKU, custo e status — e a alíquota de imposto da empresa. Usados no cálculo de margem das vendas (Pedidos, Visão Geral, Financeiro e Relatórios); a margem não aparece aqui.',
         bullets:['Ficha técnica e custo do produto','Variações e SKUs','Vínculo com anúncios do ML e Shopee','Curva ABC de vendas'] },
+      { id:'productMap', title:'Mapa de Produtos', icon:'link', action:'Novo produto base', desc:'O modelo físico de verdade por trás dos SKUs vendidos (ex: uma caixa "16x11x6" vendida em kits de 1, 10 ou 100 unidades) — medida, categoria, apelidos em linguagem natural e o vínculo SKU → produto físico usado no estoque e na IA Gestora.',
+        bullets:['Produto físico com medida e categoria','Vínculo SKU de venda → produto físico (com multiplicador de kit)','Apelidos em linguagem natural ("aquela 16x11x6")','Base para a IA identificar produtos citados em conversa'] },
       { id:'anuncios', title:'Anúncios', icon:'tag', action:'Atualizar', desc:'Anúncios reais das contas do Mercado Livre conectadas — título, SKU, loja, preço, estoque, status e tipo.',
         bullets:['Sincronizado ao vivo com o Mercado Livre','SKU, preço e estoque de cada anúncio','Vínculo com a loja/conta conectada','Edição de preço e estoque (próxima etapa)'] },
       { id:'suppliers', title:'Fornecedores', icon:'truck', action:'Novo fornecedor', desc:'Cadastro de fornecedores, condições comerciais e histórico de compras.',
@@ -1253,7 +1255,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','reports','iaGestora'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','productMap','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','reports','iaGestora'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1261,6 +1263,8 @@
       inner += '<button class="primary-btn enabled" id="btnNewProduto" type="button">'+svg('plus')+'<span>Novo produto</span></button>';
     } else if(id === 'suppliers'){
       inner += '<button class="primary-btn enabled" id="btnNewFornecedor" type="button">'+svg('plus')+'<span>Novo fornecedor</span></button>';
+    } else if(id === 'productMap'){
+      inner += '<button class="primary-btn enabled" id="btnNewProdutoBase" type="button">'+svg('plus')+'<span>Novo produto base</span></button>';
     } else if(id === 'anuncios'){
       inner += '<button class="primary-btn enabled" id="btnRefreshAnuncios" type="button">'+svg('refreshCw')+'<span>Atualizar</span></button>';
     } else if(id === 'stock'){
@@ -1290,6 +1294,7 @@
     else if(id === 'orders'){ inner += '<div id="pedidosRoot"></div>'; }
     else if(id === 'finance'){ inner += '<div id="financeRoot"></div>'; }
     else if(id === 'products'){ inner += '<div id="produtosRoot"></div>'; }
+    else if(id === 'productMap'){ inner += '<div id="mapaProdutosRoot"></div>'; }
     else if(id === 'suppliers'){ inner += '<div id="fornecedoresRoot"></div>'; }
     else if(id === 'anuncios'){ inner += '<div id="anunciosRoot"></div>'; }
     else if(id === 'stock'){ inner += '<div id="estoqueRoot"></div>'; }
@@ -1336,6 +1341,7 @@
     if(id === 'orders' && window.Pedidos) window.Pedidos.load();
     if(id === 'finance' && window.Financeiro) window.Financeiro.load();
     if(id === 'products' && window.Produtos) window.Produtos.load();
+    if(id === 'productMap' && window.MapaProdutos) window.MapaProdutos.load();
     if(id === 'suppliers' && window.Fornecedores) window.Fornecedores.load();
     if(id === 'anuncios' && window.Anuncios) window.Anuncios.load();
     if(id === 'stock' && window.Estoque) window.Estoque.load();
@@ -4196,6 +4202,658 @@
     document.getElementById('btnNewFornecedor').addEventListener('click', ()=> openModal());
 
     window.Fornecedores = { load };
+  })();
+
+  /* ================= MAPA DE PRODUTOS (27/08/2026) =================
+     Primeira etapa da proposta "IA Gestora que conhece o negócio"
+     (docs/PROPOSTA-contexto-negocio-ia-gestora.md): tela de gestão para
+     `produtos_base`/`produto_base_skus`/`produto_base_aliases` — que já
+     tinham API completa (routes/produtosBase.js) mas nenhuma UI (gap
+     crítico identificado na auditoria). Três sub-abas: o produto físico em
+     si (código/nome/medida/categoria/custo), o vínculo SKU de venda →
+     produto físico (com sugestões automáticas vindas de vendas reais) e os
+     apelidos em linguagem natural (pré-requisito para a futura ferramenta
+     de IA `identificar_produto_fisico` — ainda não implementada). */
+  (function(){
+    const state = {
+      empresas:[], empresaId:null, loadingEmpresas:false,
+      view: 'produtos', // 'produtos' | 'vinculos' | 'aliases'
+      produtos: { items:[], loading:false, error:null, status:'todos', search:'' },
+      vinculos: { items:[], loading:false, error:null, sugestoes:[], loadingSugestoes:false, errorSugestoes:null },
+      aliases: { items:[], loading:false, error:null, filtroProdutoBaseId:'', filtroTexto:'' },
+    };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDate(iso){ try{ return new Date(iso).toLocaleDateString('pt-BR'); }catch(e){ return '—'; } }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+    function errorPanelHTML(msg, retryId){
+      return '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+        + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(msg)+'</p>'
+        + '<button class="ghost-btn" id="'+retryId+'" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+    }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function api(path, opts){
+      const res = await fetch('/api/produtos-base'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+
+    async function loadProdutos(){
+      state.produtos.loading = true; state.produtos.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: state.empresaId });
+        if(state.produtos.status !== 'todos') params.set('status', state.produtos.status);
+        if(state.produtos.search.trim()) params.set('search', state.produtos.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.produtos.items = data.produtosBase;
+      }catch(err){ state.produtos.error = err.message || 'Não foi possível carregar os produtos base.'; }
+      finally{ state.produtos.loading = false; render(); }
+    }
+
+    async function loadVinculos(){
+      state.vinculos.loading = true; state.vinculos.error = null; render();
+      try{
+        const data = await api('/vinculos?empresaId='+state.empresaId, { method:'GET' });
+        state.vinculos.items = data.vinculos;
+      }catch(err){ state.vinculos.error = err.message || 'Não foi possível carregar os vínculos.'; }
+      finally{ state.vinculos.loading = false; render(); }
+    }
+
+    async function loadSugestoes(){
+      state.vinculos.loadingSugestoes = true; state.vinculos.errorSugestoes = null; render();
+      try{
+        const data = await api('/vinculos/sugestoes?empresaId='+state.empresaId, { method:'GET' });
+        state.vinculos.sugestoes = data.sugestoes;
+      }catch(err){ state.vinculos.errorSugestoes = err.message || 'Não foi possível carregar as sugestões.'; }
+      finally{ state.vinculos.loadingSugestoes = false; render(); }
+    }
+
+    async function loadAliases(){
+      state.aliases.loading = true; state.aliases.error = null; render();
+      try{
+        const data = await api('/aliases?empresaId='+state.empresaId, { method:'GET' });
+        state.aliases.items = data.aliases;
+      }catch(err){ state.aliases.error = err.message || 'Não foi possível carregar os apelidos.'; }
+      finally{ state.aliases.loading = false; render(); }
+    }
+
+    async function loadTudo(){
+      await Promise.all([loadProdutos(), loadVinculos(), loadSugestoes(), loadAliases()]);
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadTudo(); else render();
+    }
+
+    async function aceitarSugestao(sku){
+      const sug = state.vinculos.sugestoes.find(function(s){ return s.sku === sku; });
+      if(!sug || !sug.sugestao) return;
+      try{
+        const payload = { empresaId: state.empresaId, sku: sug.sku, multiplicador: sug.sugestao.multiplicador, origem:'automatico' };
+        if(sug.sugestao.produtoBaseExistenteId) payload.produtoBaseId = sug.sugestao.produtoBaseExistenteId;
+        else payload.codigoProdutoBase = sug.sugestao.codigoBase;
+        await api('/vinculos', { method:'POST', body: JSON.stringify(payload) });
+        toast('Sugestão aceita — vínculo criado.');
+        loadProdutos(); loadVinculos(); loadSugestoes();
+      }catch(err){ toast(err.message || 'Não foi possível aceitar a sugestão.', 'error'); }
+    }
+
+    /* ---------- RENDER ---------- */
+    function render(){
+      const root = document.getElementById('mapaProdutosRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('link')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de mapear produtos.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="mpEmpresaSelect">'
+          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>'
+        + '<div class="seg" id="mpViewSeg">'
+          + [['produtos','Produtos físicos'],['vinculos','Vínculos de SKU'],['aliases','Apelidos']].map(function(par){ return '<button data-view="'+par[0]+'" class="'+(state.view===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+      + '</div>';
+
+      html += state.view==='produtos' ? produtosViewHTML() : state.view==='vinculos' ? vinculosViewHTML() : aliasesViewHTML();
+
+      root.innerHTML = html;
+      wireCommon();
+      if(state.view==='produtos') wireProdutosView();
+      else if(state.view==='vinculos') wireVinculosView();
+      else wireAliasesView();
+    }
+
+    function produtosViewHTML(){
+      let html = '<div class="toolbar" style="margin-top:0;">'
+        + '<div class="seg" id="mpStatusSeg">'
+          + [['todos','Todos'],['ativos','Ativos'],['inativos','Inativos']].map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.produtos.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="mpProdutosSearch" placeholder="Buscar por código, nome ou medida" value="'+state.produtos.search.replace(/"/g,'&quot;')+'"></div>'
+      + '</div>';
+
+      if(state.produtos.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando produtos base…</span></div></div>';
+      } else if(state.produtos.error){
+        html += errorPanelHTML(state.produtos.error, 'mpProdutosRetry');
+      } else if(!state.produtos.items.length){
+        const filtrado = !!(state.produtos.search || state.produtos.status!=='todos');
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('link')+'</div>'
+          + '<h2>Nenhum produto base encontrado</h2>'
+          + '<p class="lead">'+(filtrado ? 'Nenhum produto base corresponde ao filtro atual.' : 'Cadastre o primeiro produto físico (código, medida, categoria) desta empresa — é o que a IA e o estoque físico usam por trás de cada SKU vendido.')+'</p>'
+          + (filtrado ? '' : '<button class="primary-btn enabled" id="mpEmptyNew" type="button">'+svg('plus')+'<span>Cadastrar produto base</span></button>')
+        + '</div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Código</th><th>Nome</th><th>Medida</th><th>Categoria</th><th>Custo</th><th>Apelidos</th><th>Status</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.produtos.items.map(function(pb){
+              const aliasesCount = state.aliases.items.filter(function(a){ return a.produtoBaseId===pb.id; }).length;
+              return '<tr class="'+(pb.ativo?'':'inactive')+'">'
+                + '<td class="mono">'+escapeHtml(pb.codigo)+'</td>'
+                + '<td>'+escapeHtml(pb.nome||'—')+'</td>'
+                + '<td>'+escapeHtml(pb.medida||'—')+'</td>'
+                + '<td>'+escapeHtml(pb.categoria||'—')+'</td>'
+                + '<td class="mono">'+money(pb.custo)+'</td>'
+                + '<td><button class="ghost-btn" data-ver-aliases="'+pb.id+'" type="button" style="cursor:pointer;opacity:1;padding:5px 10px;">'+(aliasesCount||'—')+'</button></td>'
+                + '<td>'+(pb.ativo ? '<span class="badge-status on"><span class="dot"></span>Ativo</span>' : '<span class="badge-status off"><span class="dot"></span>Inativo</span>')+'</td>'
+                + '<td><div class="row-actions">'
+                  + '<button class="row-ic-btn" data-edit-produto="'+pb.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
+                  + '<button class="row-ic-btn '+(pb.ativo?'danger':'success')+'" data-toggle-produto="'+pb.id+'" data-next="'+(!pb.ativo)+'" title="'+(pb.ativo?'Desativar':'Ativar')+'" type="button">'+svg('power')+'</button>'
+                + '</div></td>'
+              + '</tr>';
+            }).join('')
+          + '</tbody></table></div></div>';
+      }
+      return html;
+    }
+
+    function vinculosViewHTML(){
+      let html = '<div class="toolbar" style="margin-top:0; justify-content:flex-end;">'
+        + '<button class="ghost-btn" id="mpNewVinculo" type="button" style="cursor:pointer;opacity:1;">'+svg('plus')+'<span>Novo vínculo manual</span></button>'
+      + '</div>';
+
+      html += '<div class="table-card" style="margin-bottom:16px;">'
+        + '<div style="padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">'
+          + '<div><div style="font-weight:700; font-size:13px;">SKUs vendidos sem vínculo</div>'
+          + '<div style="font-size:11.5px; color:var(--text-faint); margin-top:2px;">SKUs que já apareceram em pedidos reais desta empresa mas ainda não têm produto físico vinculado.</div></div>'
+          + '<button class="ghost-btn" id="mpSugestoesRetry" type="button" style="cursor:pointer;opacity:1;">'+svg('refreshCw')+'<span>Atualizar</span></button>'
+        + '</div>';
+
+      if(state.vinculos.loadingSugestoes){
+        html += '<div class="table-skel" style="padding:16px;"><span class="spin"></span><span>Carregando sugestões…</span></div>';
+      } else if(state.vinculos.errorSugestoes){
+        html += '<div style="padding:16px; color:var(--danger); font-size:12.5px;">'+escapeHtml(state.vinculos.errorSugestoes)+'</div>';
+      } else if(!state.vinculos.sugestoes.length){
+        html += '<div style="padding:16px; color:var(--text-faint); font-size:12.5px;">Nenhum SKU pendente — todo SKU que já vendeu tem um produto físico vinculado.</div>';
+      } else {
+        html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>SKU</th><th>Vendas</th><th>Sugestão automática</th><th></th></tr></thead><tbody>'
+          + state.vinculos.sugestoes.map(function(s){
+              const sug = s.sugestao;
+              const sugTxt = sug ? (sug.multiplicador+'x '+escapeHtml(sug.codigoBase)+(sug.produtoBaseExistenteId ? ' (produto já existe)' : ' (produto novo)')) : 'Sem padrão reconhecível — vincular manualmente';
+              return '<tr>'
+                + '<td class="mono">'+escapeHtml(s.sku)+'</td>'
+                + '<td>'+s.ocorrencias+'</td>'
+                + '<td>'+sugTxt+'</td>'
+                + '<td><div class="row-actions">'
+                  + (sug ? '<button class="ghost-btn" data-aceitar-sugestao="'+escapeHtml(s.sku)+'" type="button" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Aceitar</span></button>' : '')
+                  + '<button class="ghost-btn" data-vincular-manual="'+escapeHtml(s.sku)+'" type="button" style="cursor:pointer;opacity:1;">'+svg('link')+'<span>Vincular</span></button>'
+                + '</div></td>'
+              + '</tr>';
+            }).join('')
+          + '</tbody></table></div>';
+      }
+      html += '</div>';
+
+      if(state.vinculos.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando vínculos…</span></div></div>';
+      } else if(state.vinculos.error){
+        html += errorPanelHTML(state.vinculos.error, 'mpVinculosRetry');
+      } else if(!state.vinculos.items.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('link')+'</div>'
+          + '<h2>Nenhum vínculo cadastrado</h2>'
+          + '<p class="lead">Vincule um SKU de venda a um produto físico — pela sugestão automática acima ou manualmente.</p>'
+          + '<button class="primary-btn enabled" id="mpEmptyNewVinculo" type="button">'+svg('plus')+'<span>Novo vínculo</span></button>'
+        + '</div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>SKU</th><th>Produto base</th><th>Multiplicador</th><th>Origem</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.vinculos.items.map(function(v){
+              return '<tr>'
+                + '<td class="mono">'+escapeHtml(v.sku)+'</td>'
+                + '<td>'+escapeHtml(v.produtoBaseCodigo)+(v.produtoBaseNome?' — '+escapeHtml(v.produtoBaseNome):'')+'</td>'
+                + '<td class="mono">'+v.multiplicador+'x</td>'
+                + '<td>'+(v.origem==='automatico' ? '<span class="badge-status off">Automático</span>' : '<span class="badge-status on">Manual</span>')+'</td>'
+                + '<td><div class="row-actions">'
+                  + '<button class="row-ic-btn" data-edit-vinculo="'+v.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
+                  + '<button class="row-ic-btn danger" data-del-vinculo="'+v.id+'" title="Remover" type="button">'+svg('trash')+'</button>'
+                + '</div></td>'
+              + '</tr>';
+            }).join('')
+          + '</tbody></table></div></div>';
+      }
+      return html;
+    }
+
+    function aliasesViewHTML(){
+      const produtoOptions = state.produtos.items.map(function(pb){
+        return '<option value="'+pb.id+'"'+(String(pb.id)===String(state.aliases.filtroProdutoBaseId)?' selected':'')+'>'+escapeHtml(pb.codigo)+(pb.nome?' — '+escapeHtml(pb.nome):'')+'</option>';
+      }).join('');
+
+      let html = '<div class="toolbar" style="margin-top:0;">'
+        + '<div class="empresa-picker" style="margin-bottom:0; max-width:260px;"><select id="mpAliasProdutoFiltro">'
+          + '<option value="">Todos os produtos</option>' + produtoOptions
+        + '</select></div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="mpAliasSearch" placeholder="Buscar apelido" value="'+String(state.aliases.filtroTexto||'').replace(/"/g,'&quot;')+'"></div>'
+        + '<button class="ghost-btn" id="mpNewAlias" type="button" style="cursor:pointer;opacity:1; margin-left:auto;">'+svg('plus')+'<span>Novo apelido</span></button>'
+      + '</div>';
+
+      if(state.aliases.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando apelidos…</span></div></div>';
+        return html;
+      }
+      if(state.aliases.error){
+        html += errorPanelHTML(state.aliases.error, 'mpAliasesRetry');
+        return html;
+      }
+
+      const filtroTexto = String(state.aliases.filtroTexto||'').toLowerCase().trim();
+      const filtrados = state.aliases.items.filter(function(a){
+        if(state.aliases.filtroProdutoBaseId && String(a.produtoBaseId)!==String(state.aliases.filtroProdutoBaseId)) return false;
+        if(filtroTexto && a.alias.toLowerCase().indexOf(filtroTexto)===-1 && (a.produtoBaseCodigo||'').toLowerCase().indexOf(filtroTexto)===-1) return false;
+        return true;
+      });
+
+      if(!filtrados.length){
+        const filtrado = !!(state.aliases.filtroTexto || state.aliases.filtroProdutoBaseId);
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
+          + '<h2>Nenhum apelido encontrado</h2>'
+          + '<p class="lead">'+(filtrado ? 'Nenhum apelido corresponde ao filtro atual.' : 'Cadastre como você costuma chamar cada produto físico — a IA usa isso pra entender referências como "aquela 16x11x6".')+'</p>'
+          + (filtrado ? '' : '<button class="primary-btn enabled" id="mpEmptyNewAlias" type="button">'+svg('plus')+'<span>Cadastrar apelido</span></button>')
+        + '</div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Apelido</th><th>Produto base</th><th>Origem</th><th>Criado em</th><th></th>'
+          + '</tr></thead><tbody>'
+          + filtrados.map(function(a){
+              return '<tr>'
+                + '<td>'+escapeHtml(a.alias)+'</td>'
+                + '<td class="mono">'+escapeHtml(a.produtoBaseCodigo)+(a.produtoBaseNome?' — '+escapeHtml(a.produtoBaseNome):'')+'</td>'
+                + '<td>'+(a.origem==='ia_sugerido' ? '<span class="badge-status off">Sugerido pela IA</span>' : '<span class="badge-status on">Manual</span>')+'</td>'
+                + '<td>'+fmtDate(a.criadoEm)+'</td>'
+                + '<td><div class="row-actions">'
+                  + '<button class="row-ic-btn" data-edit-alias="'+a.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
+                  + '<button class="row-ic-btn danger" data-del-alias="'+a.id+'" title="Remover" type="button">'+svg('trash')+'</button>'
+                + '</div></td>'
+              + '</tr>';
+            }).join('')
+          + '</tbody></table></div></div>';
+      }
+      return html;
+    }
+
+    /* ---------- WIRING ---------- */
+    function wireCommon(){
+      const sel = document.getElementById('mpEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadTudo(); });
+      const seg = document.getElementById('mpViewSeg');
+      if(seg) seg.querySelectorAll('button').forEach(function(b){ b.addEventListener('click', function(){ state.view = b.dataset.view; render(); }); });
+    }
+
+    function wireProdutosView(){
+      const statusSeg = document.getElementById('mpStatusSeg');
+      if(statusSeg) statusSeg.querySelectorAll('button').forEach(function(b){ b.addEventListener('click', function(){ state.produtos.status = b.dataset.status; loadProdutos(); }); });
+      const search = document.getElementById('mpProdutosSearch');
+      if(search) search.addEventListener('input', function(){
+        state.produtos.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadProdutos, 300);
+      });
+      const retry = document.getElementById('mpProdutosRetry');
+      if(retry) retry.addEventListener('click', loadProdutos);
+      const emptyNew = document.getElementById('mpEmptyNew');
+      if(emptyNew) emptyNew.addEventListener('click', ()=> openModalProdutoBase());
+      document.querySelectorAll('[data-edit-produto]').forEach(function(b){ b.addEventListener('click', function(){
+        const pb = state.produtos.items.find(function(x){ return String(x.id)===b.dataset.editProduto; });
+        openModalProdutoBase(pb);
+      }); });
+      document.querySelectorAll('[data-toggle-produto]').forEach(function(b){ b.addEventListener('click', async function(){
+        const id = b.dataset.toggleProduto, next = b.dataset.next === 'true';
+        b.disabled = true;
+        try{
+          await api('/'+id+'/status', { method:'PATCH', body: JSON.stringify({ ativo: next }) });
+          toast(next ? 'Produto base ativado.' : 'Produto base desativado.');
+          loadProdutos();
+        }catch(err){ toast(err.message, 'error'); b.disabled = false; }
+      }); });
+      document.querySelectorAll('[data-ver-aliases]').forEach(function(b){ b.addEventListener('click', function(){
+        state.view = 'aliases';
+        state.aliases.filtroProdutoBaseId = b.dataset.verAliases;
+        render();
+      }); });
+    }
+
+    function wireVinculosView(){
+      const retrySug = document.getElementById('mpSugestoesRetry');
+      if(retrySug) retrySug.addEventListener('click', loadSugestoes);
+      const retry = document.getElementById('mpVinculosRetry');
+      if(retry) retry.addEventListener('click', loadVinculos);
+      const newBtn = document.getElementById('mpNewVinculo');
+      if(newBtn) newBtn.addEventListener('click', ()=> openModalVinculo());
+      const emptyNew = document.getElementById('mpEmptyNewVinculo');
+      if(emptyNew) emptyNew.addEventListener('click', ()=> openModalVinculo());
+      document.querySelectorAll('[data-aceitar-sugestao]').forEach(function(b){ b.addEventListener('click', function(){ aceitarSugestao(b.dataset.aceitarSugestao); }); });
+      document.querySelectorAll('[data-vincular-manual]').forEach(function(b){ b.addEventListener('click', function(){
+        const sku = b.dataset.vincularManual;
+        const sug = state.vinculos.sugestoes.find(function(s){ return s.sku===sku; });
+        openModalVinculo(null, { sku: sku, sugestao: sug ? sug.sugestao : null });
+      }); });
+      document.querySelectorAll('[data-edit-vinculo]').forEach(function(b){ b.addEventListener('click', function(){
+        const v = state.vinculos.items.find(function(x){ return String(x.id)===b.dataset.editVinculo; });
+        openModalVinculo(v);
+      }); });
+      document.querySelectorAll('[data-del-vinculo]').forEach(function(b){ b.addEventListener('click', async function(){
+        if(!window.confirm('Remover este vínculo? O SKU volta a aparecer como pendente.')) return;
+        try{
+          await api('/vinculos/'+b.dataset.delVinculo, { method:'DELETE' });
+          toast('Vínculo removido.');
+          loadVinculos(); loadSugestoes();
+        }catch(err){ toast(err.message, 'error'); }
+      }); });
+    }
+
+    function wireAliasesView(){
+      const filtroSel = document.getElementById('mpAliasProdutoFiltro');
+      if(filtroSel) filtroSel.addEventListener('change', function(){ state.aliases.filtroProdutoBaseId = filtroSel.value; render(); });
+      const search = document.getElementById('mpAliasSearch');
+      if(search) search.addEventListener('input', function(){
+        state.aliases.filtroTexto = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(render, 200);
+      });
+      const newBtn = document.getElementById('mpNewAlias');
+      if(newBtn) newBtn.addEventListener('click', ()=> openModalAlias(null, state.aliases.filtroProdutoBaseId || null));
+      const emptyNew = document.getElementById('mpEmptyNewAlias');
+      if(emptyNew) emptyNew.addEventListener('click', ()=> openModalAlias());
+      document.querySelectorAll('[data-edit-alias]').forEach(function(b){ b.addEventListener('click', function(){
+        const a = state.aliases.items.find(function(x){ return String(x.id)===b.dataset.editAlias; });
+        openModalAlias(a);
+      }); });
+      document.querySelectorAll('[data-del-alias]').forEach(function(b){ b.addEventListener('click', async function(){
+        if(!window.confirm('Remover este apelido?')) return;
+        try{
+          await api('/aliases/'+b.dataset.delAlias, { method:'DELETE' });
+          toast('Apelido removido.');
+          loadAliases();
+        }catch(err){ toast(err.message, 'error'); }
+      }); });
+    }
+
+    /* ---------- MODAIS ---------- */
+    async function openModalProdutoBase(pb){
+      const isEdit = !!pb;
+      let categoriasSugeridas = [];
+      try{ categoriasSugeridas = (await api('/categorias-sugeridas?empresaId='+state.empresaId, { method:'GET' })).categorias; }catch(e){}
+
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar produto base':'Novo produto base')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+(isEdit?'Atualize os dados do produto físico.':'Cadastre o modelo físico real por trás dos SKUs de venda.')+'</div>'
+          + '<form id="mpForm">'
+            + '<div class="field"><label>Código</label><input type="text" id="pbCodigo" placeholder="Ex: CX-16X11X6" value="'+(isEdit?escapeHtml(pb.codigo):'')+'" maxlength="100">'
+              + '<div class="field-error" id="ePbCodigo" style="display:none;"></div></div>'
+            + '<div class="field"><label>Nome <span class="opt">(opcional)</span></label><input type="text" id="pbNome" placeholder="Nome descritivo" value="'+(isEdit?escapeHtml(pb.nome||''):'')+'" maxlength="200"></div>'
+            + '<div class="field"><label>Medida <span class="opt">(opcional)</span></label><input type="text" id="pbMedida" placeholder="Ex: 16x11x6" value="'+(isEdit?escapeHtml(pb.medida||''):'')+'" maxlength="100"></div>'
+            + '<div class="field"><label>Categoria <span class="opt">(opcional)</span></label><input type="text" id="pbCategoria" list="pbCategoriasList" placeholder="Ex: Caixas de papelão" value="'+(isEdit?escapeHtml(pb.categoria||''):'')+'" maxlength="100">'
+              + '<datalist id="pbCategoriasList">'+categoriasSugeridas.map(function(c){ return '<option value="'+escapeHtml(c)+'">'; }).join('')+'</datalist></div>'
+            + '<div class="field"><label>Custo unitário <span class="opt">(opcional)</span></label><input type="text" inputmode="decimal" id="pbCusto" placeholder="0,00" value="'+(isEdit && pb.custo!==null ? String(pb.custo).replace('.',','):'')+'">'
+              + '<div class="field-error" id="ePbCusto" style="display:none;"></div></div>'
+            + (isEdit ? '<div class="toggle-row"><div><div class="toggle-row-label">Produto ativo</div><div class="toggle-row-sub">Produtos inativos ficam ocultos nas seleções do sistema.</div></div>'
+              + '<button type="button" class="toggle '+(pb.ativo?'on':'')+'" id="pbAtivo" data-on="'+(pb.ativo?'true':'false')+'"></button></div>' : '')
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Cadastrar produto base')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+      document.getElementById('pbCodigo').focus();
+
+      const toggleBtn = document.getElementById('pbAtivo');
+      if(toggleBtn) toggleBtn.addEventListener('click', ()=>{
+        const on = toggleBtn.dataset.on !== 'true';
+        toggleBtn.dataset.on = String(on);
+        toggleBtn.classList.toggle('on', on);
+      });
+
+      document.getElementById('mpForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['ePbCodigo','ePbCusto'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+        ['pbCodigo','pbCusto'].forEach(id=> document.getElementById(id).classList.remove('invalid'));
+
+        const custoRaw = document.getElementById('pbCusto').value.trim();
+        const payload = {
+          empresaId: state.empresaId,
+          codigo: document.getElementById('pbCodigo').value,
+          nome: document.getElementById('pbNome').value,
+          medida: document.getElementById('pbMedida').value,
+          categoria: document.getElementById('pbCategoria').value,
+          custo: custoRaw ? custoRaw.replace(/\./g,'').replace(',','.') : '',
+        };
+        if(isEdit && toggleBtn) payload.ativo = toggleBtn.dataset.on === 'true';
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/'+pb.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Produto base atualizado.' : 'Produto base cadastrado.');
+          loadProdutos();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            if(err.errors.codigo){ const el=document.getElementById('ePbCodigo'); el.textContent=err.errors.codigo; el.style.display='block'; document.getElementById('pbCodigo').classList.add('invalid'); }
+            if(err.errors.custo){ const el=document.getElementById('ePbCusto'); el.textContent=err.errors.custo; el.style.display='block'; document.getElementById('pbCusto').classList.add('invalid'); }
+            if(!err.errors.codigo && !err.errors.custo) toast(err.message || 'Não foi possível salvar.', 'error');
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    function openModalVinculo(vinculo, prefill){
+      const isEdit = !!vinculo;
+      const sku = isEdit ? vinculo.sku : (prefill && prefill.sku) || '';
+      const sugestaoPreencher = !isEdit && prefill && prefill.sugestao;
+      const produtoBaseIdInicial = isEdit ? vinculo.produtoBaseId : (sugestaoPreencher && sugestaoPreencher.produtoBaseExistenteId) || '';
+      const novoCodigoInicial = (!isEdit && sugestaoPreencher && !sugestaoPreencher.produtoBaseExistenteId) ? sugestaoPreencher.codigoBase : '';
+      const multiplicadorInicial = isEdit ? vinculo.multiplicador : (sugestaoPreencher ? sugestaoPreencher.multiplicador : 1);
+      const usarNovo = !produtoBaseIdInicial && !!novoCodigoInicial;
+
+      const produtoOptions = state.produtos.items.map(function(pb){
+        return '<option value="'+pb.id+'"'+(String(pb.id)===String(produtoBaseIdInicial)?' selected':'')+'>'+escapeHtml(pb.codigo)+(pb.nome?' — '+escapeHtml(pb.nome):'')+'</option>';
+      }).join('');
+
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar vínculo':'Novo vínculo de SKU')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+(isEdit?'Corrija o produto físico e/ou o multiplicador deste SKU.':'Diga a quantas unidades do produto físico este SKU de venda corresponde.')+'</div>'
+          + '<form id="mpForm">'
+            + '<div class="field"><label>SKU</label><input type="text" id="vSku" placeholder="SKU exatamente como aparece no pedido" value="'+escapeHtml(sku)+'" maxlength="100" '+(isEdit?'disabled':'')+'>'
+              + (isEdit ? '<div class="field-hint">O SKU não pode ser alterado — remova o vínculo e crie um novo se o SKU mudou.</div>' : '<div class="field-error" id="eVSku" style="display:none;"></div>')
+            + '</div>'
+            + '<div class="field"><label>Produto base</label><select id="vProdutoBase">'
+              + '<option value="">Selecione…</option>'
+              + produtoOptions
+              + '<option value="__new__"'+(usarNovo?' selected':'')+'>+ Criar novo produto base</option>'
+            + '</select></div>'
+            + '<div class="field" id="vNovoCodigoWrap" style="'+(usarNovo?'':'display:none;')+'"><label>Código do novo produto base</label><input type="text" id="vNovoCodigo" placeholder="Ex: CX-16X11X6" value="'+escapeHtml(novoCodigoInicial)+'" maxlength="100"></div>'
+            + '<div class="field"><label>Multiplicador (unidades físicas por SKU vendido)</label><input type="text" inputmode="numeric" id="vMultiplicador" value="'+multiplicadorInicial+'">'
+              + '<div class="field-error" id="eVMultiplicador" style="display:none;"></div></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Criar vínculo')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+      const skuInput = document.getElementById('vSku');
+      (skuInput.disabled ? document.getElementById('vMultiplicador') : skuInput).focus();
+
+      const selProduto = document.getElementById('vProdutoBase');
+      const novoWrap = document.getElementById('vNovoCodigoWrap');
+      selProduto.addEventListener('change', ()=>{ novoWrap.style.display = selProduto.value==='__new__' ? '' : 'none'; });
+
+      document.getElementById('mpForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eVSku','eVMultiplicador'].forEach(id=>{ const el=document.getElementById(id); if(el){ el.style.display='none'; el.textContent=''; } });
+
+        const multiplicador = document.getElementById('vMultiplicador').value.trim();
+        const payload = { empresaId: state.empresaId, multiplicador: Number(multiplicador) };
+        if(!isEdit) payload.sku = document.getElementById('vSku').value;
+        if(selProduto.value === '__new__') payload.codigoProdutoBase = document.getElementById('vNovoCodigo').value;
+        else if(selProduto.value) payload.produtoBaseId = Number(selProduto.value);
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/vinculos/'+vinculo.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('/vinculos', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Vínculo atualizado.' : 'Vínculo criado.');
+          loadProdutos(); loadVinculos(); loadSugestoes();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            let mostrouCampo = false;
+            if(err.errors.sku){ const el=document.getElementById('eVSku'); if(el){ el.textContent=err.errors.sku; el.style.display='block'; mostrouCampo=true; } }
+            if(err.errors.multiplicador){ const el=document.getElementById('eVMultiplicador'); el.textContent=err.errors.multiplicador; el.style.display='block'; mostrouCampo=true; }
+            if(err.errors.produtoBase || err.errors.produtoBaseId){ toast(err.errors.produtoBase || err.errors.produtoBaseId, 'error'); mostrouCampo=true; }
+            if(!mostrouCampo) toast(err.message || 'Não foi possível salvar.', 'error');
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    function openModalAlias(alias, prefillProdutoBaseId){
+      const isEdit = !!alias;
+      const produtoBaseIdInicial = isEdit ? alias.produtoBaseId : (prefillProdutoBaseId || '');
+      const produtoOptions = state.produtos.items.map(function(pb){
+        return '<option value="'+pb.id+'"'+(String(pb.id)===String(produtoBaseIdInicial)?' selected':'')+'>'+escapeHtml(pb.codigo)+(pb.nome?' — '+escapeHtml(pb.nome):'')+'</option>';
+      }).join('');
+
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar apelido':'Novo apelido')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">Como você (ou a equipe) costuma chamar esse produto — usado pela IA para identificar o produto certo numa conversa.</div>'
+          + '<form id="mpForm">'
+            + '<div class="field"><label>Produto base</label><select id="aProdutoBase">'
+              + '<option value="">Selecione…</option>'
+              + produtoOptions
+            + '</select>'
+              + '<div class="field-error" id="eAProdutoBase" style="display:none;"></div></div>'
+            + '<div class="field"><label>Apelido</label><input type="text" id="aAlias" placeholder="Ex: aquela 16x11x6, caixa pequena" value="'+(isEdit?escapeHtml(alias.alias):'')+'" maxlength="200">'
+              + '<div class="field-error" id="eAAlias" style="display:none;"></div></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Cadastrar apelido')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+      document.getElementById('aAlias').focus();
+
+      document.getElementById('mpForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eAProdutoBase','eAAlias'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+
+        const produtoBaseId = document.getElementById('aProdutoBase').value;
+        if(!produtoBaseId){
+          const el=document.getElementById('eAProdutoBase'); el.textContent='Selecione o produto base.'; el.style.display='block';
+          return;
+        }
+        const payload = { empresaId: state.empresaId, produtoBaseId: Number(produtoBaseId), alias: document.getElementById('aAlias').value };
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/aliases/'+alias.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('/aliases', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Apelido atualizado.' : 'Apelido cadastrado.');
+          loadAliases();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            let mostrouCampo = false;
+            if(err.errors.alias){ const el=document.getElementById('eAAlias'); el.textContent=err.errors.alias; el.style.display='block'; mostrouCampo=true; }
+            if(err.errors.produtoBaseId){ const el=document.getElementById('eAProdutoBase'); el.textContent=err.errors.produtoBaseId; el.style.display='block'; mostrouCampo=true; }
+            if(!mostrouCampo) toast(err.message || 'Não foi possível salvar.', 'error');
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    document.getElementById('btnNewProdutoBase').addEventListener('click', ()=> openModalProdutoBase());
+
+    window.MapaProdutos = { load };
   })();
 
   /* ================= ANÚNCIOS — visualização ao vivo (Mercado Livre) =================
