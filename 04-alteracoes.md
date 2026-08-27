@@ -2,6 +2,84 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-08-27 (43) — Fluxo de Caixa travado em "Carregando..." — diagnóstico + ETAPA 2 (correção do carregamento infinito + seleção de conta)
+- **Contexto:** bug relatado pelo usuário após importar um extrato real do
+  Nubank (45 movimentos) — a tela de Fluxo de Caixa ficava presa pra
+  sempre em "Carregando fluxo de caixa...". Investigação completa (código
+  + reprodução ao vivo contra Postgres local, sem alterar nenhum dado)
+  entregue no chat antes desta etapa — nenhum código foi alterado durante
+  o diagnóstico. Resultado: **não foi possível reproduzir uma exceção**
+  isolando o cenário exato (45 movimentos sintéticos, sem saldo inicial,
+  Nubank+Mercado Pago) — `gerarFluxoDeCaixa()` respondeu normalmente. A
+  hipótese líder (não 100% confirmada — sem os logs do momento real da
+  falha) é exaustão do pool de conexões (`db/pool.js` nunca teve nenhum
+  timeout, e o ERP tem 5 rotinas em background — sync do Mercado Livre,
+  Ads, despesas fixas, radar da IA, renovação Shopee — compartilhando o
+  mesmo pool) somada a uma UI que nunca tinha um limite de tempo pra
+  requisição nem blindagem contra exceção na hora de montar o HTML — ou
+  seja, qualquer travamento (por exaustão do pool ou qualquer outra causa
+  futura) nunca aparecia como erro pro usuário, só como "Carregando..."
+  pra sempre. Aprovado pelo usuário: corrigir o sintoma agora (nunca mais
+  permitir tela travada, seja qual for a causa) mantendo a causa raiz como
+  hipótese até ter observabilidade real em produção.
+- **`server/db/pool.js`:** adicionados timeouts que não existiam
+  (`connectionTimeoutMillis: 8s`, `statement_timeout`/`query_timeout: 15s`,
+  `max: 10`, `idleTimeoutMillis: 30s`) e um listener de erro no pool (pra
+  um client ocioso com problema nunca mais derrubar o processo inteiro).
+- **`server.js`:** handler de erro central agora loga, de forma
+  estruturada (JSON: endpoint, query — onde já vêm empresaId/
+  contaBancariaId/período nas rotas GET do financeiro —, mensagem, stack),
+  todo erro 500 — sem nunca expor esse detalhe pro cliente (resposta
+  continua genérica). Adicionado `process.on('unhandledRejection'/
+  'uncaughtException')` só pra logar (nunca silenciar) — uma promise sem
+  `.catch` em qualquer lugar do sistema podia derrubar o processo Node
+  inteiro e travar TODAS as requisições em andamento, não só o Fluxo de
+  Caixa.
+- **`public/index.html` (módulo `window.FluxoCaixa`):** toda chamada
+  `fetch` (fluxo, extrato, conciliação, contas bancárias) agora tem
+  timeout de 20s via `AbortController` — se o servidor nunca responder, a
+  tela sai do "Carregando..." sozinha com uma mensagem clara em vez de
+  travar pra sempre (testado isoladamente contra um servidor que nunca
+  responde: aborta em ~800ms com timeout de teste reduzido, mensagem
+  correta). `render()` agora tem `try/catch` ao redor da montagem do HTML
+  com dados (cards/fórmula/gráfico/tabela) e da seção de extrato/
+  conciliação — nunca mais deixa `root.innerHTML` travado no esqueleto de
+  loading anterior por causa de uma exceção de template; sempre cai numa
+  tela de erro amigável (loga o detalhe real só no console, nunca esconde
+  do desenvolvedor).
+- **Seleção padrão de conta bancária corrigida (Nubank/Mercado Pago —
+  item G do diagnóstico):** a causa raiz era `carregarContasBancarias()`
+  sempre escolher `contas[0].id` de uma lista ordenada alfabeticamente por
+  `lib/contasBancarias.js` — como "Mercado Pago..." vem antes de
+  "Nubank..." no alfabeto, o seletor de conciliação voltava pra Mercado
+  Pago a cada recarregamento da página, mesmo acabando de importar pro
+  Nubank (nunca foi mistura de dado entre contas — todas as queries já
+  eram corretamente filtradas por `conta_bancaria_id`). Nova prioridade,
+  nunca mais alfabética: 1) conta já selecionada nesta sessão; 2) última
+  conta escolhida por este usuário neste navegador (`localStorage`,
+  sobrevive a recarregar a página); 3) conta da importação de extrato mais
+  recente (`extrato_importacoes` já vem `ORDER BY created_at DESC`); 4)
+  só na ausência de tudo isso, a primeira da lista. Testado isoladamente
+  com os dados reais do cenário (Mercado Pago cadastrado primeiro, import
+  feito no Nubank depois): a lógica antiga escolheria Mercado Pago
+  (`contas[0]`); a nova escolhe corretamente o Nubank.
+- **Testado:** checagem de sintaxe do `<script>` inline completo; servidor
+  local subiu normal com os novos timeouts (guarda defensiva pro `pool.on`
+  — o stub de teste `pg` deste ambiente de desenvolvimento não implementa
+  eventos, só o driver real usado em produção); regressão manual via curl
+  em `GET /api/fluxo-caixa`, `/api/contas-bancarias`, `/api/extrato/
+  importacoes` (200 OK, formato inalterado); erro proposital
+  (`empresaId=abc`) devolveu 500 genérico em ~3ms, log estruturado correto
+  no servidor, servidor continuou respondendo normalmente depois.
+- **Não validado nesta etapa:** os 45 movimentos REAIS do usuário — esta
+  sessão não tem acesso ao banco de produção, só ao Postgres local de
+  desenvolvimento. Query de validação (somente leitura) entregue no chat
+  para ser rodada com acesso real.
+- **Pendente de aprovação explícita do usuário antes de iniciar (ETAPA
+  3):** mudar a arquitetura do REALIZADO do Fluxo de Caixa para vir de
+  `extrato_movimentos` em vez de só `contas_pagar`/`contas_receber` — ver
+  revisão técnica (perguntas A-L) entregue no chat.
+
 ## 2026-08-27 (42) — Camada de contexto de negócio + raio-X da empresa + identificar_produto_fisico (Etapa (b) da proposta de contexto de negócio da IA)
 - **Contexto:** segunda etapa aprovada de
   `docs/PROPOSTA-contexto-negocio-ia-gestora.md` ("pode seguir", na
