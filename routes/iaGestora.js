@@ -85,7 +85,7 @@ router.use(exigirLogin);
 
 async function buscarConversaDoUsuario(conversaId, usuarioId) {
   const { rows } = await pool.query(
-    'SELECT id, empresa_id, usuario_id, titulo, criado_em, atualizado_em FROM ia_conversas WHERE id = $1',
+    'SELECT id, empresa_id, usuario_id, titulo, criado_em, atualizado_em, contexto_ativo FROM ia_conversas WHERE id = $1',
     [conversaId]
   );
   if (!rows.length) return null;
@@ -212,7 +212,13 @@ router.post('/perguntar', async (req, res, next) => {
       historico = msgsAnteriores.reverse();
     }
 
-    const resultado = await responderPergunta({ empresaId, periodoChave: periodo, pergunta: perguntaTexto, historico });
+    // Etapa (b) — "produto em foco" (ver lib/ia/orchestrator.js): entra na
+    // pergunta só quando já existe uma conversa com algo persistido; sai de
+    // volta em `resultado.produtoEmFoco` (igual, ou atualizado nesta mesma
+    // pergunta) — nunca lido de nenhum outro lugar (nunca do corpo da
+    // requisição, mesma disciplina já usada pro histórico).
+    const contextoAtivo = (conversa && conversa.contexto_ativo) || null;
+    const resultado = await responderPergunta({ empresaId, periodoChave: periodo, pergunta: perguntaTexto, historico, contextoAtivo });
 
     if (!conversa) {
       const tituloInicial = (resultado.estrutura && resultado.estrutura.titulo) || perguntaTexto.slice(0, 60);
@@ -235,7 +241,16 @@ router.post('/perguntar', async (req, res, next) => {
        VALUES ($1, 'assistente', $2, $3, $4, $5) RETURNING id, criado_em`,
       [conversa.id, resultado.resposta, resultado.estrutura ? JSON.stringify(resultado.estrutura) : null, JSON.stringify(resultado.ferramentasUsadas || []), resultado.aviso || null]
     );
-    await pool.query('UPDATE ia_conversas SET atualizado_em = now() WHERE id = $1', [conversa.id]);
+    // Só grava contexto_ativo quando a IA de fato identificou (ou já tinha)
+    // um produto em foco nesta pergunta — nunca apaga um foco já persistido
+    // só porque esta pergunta não tocou no assunto (ver
+    // lib/ia/orchestrator.js#produtoEmFocoAtual, que preserva o valor
+    // recebido quando nada muda).
+    if (resultado.produtoEmFoco) {
+      await pool.query('UPDATE ia_conversas SET atualizado_em = now(), contexto_ativo = $1 WHERE id = $2', [JSON.stringify(resultado.produtoEmFoco), conversa.id]);
+    } else {
+      await pool.query('UPDATE ia_conversas SET atualizado_em = now() WHERE id = $1', [conversa.id]);
+    }
 
     res.json({
       ...resultado,

@@ -715,6 +715,20 @@ CREATE TABLE IF NOT EXISTS ia_conversas (
 );
 CREATE INDEX IF NOT EXISTS idx_ia_conversas_usuario_empresa ON ia_conversas(usuario_id, empresa_id, atualizado_em DESC);
 
+-- Etapa (b) — "camada de contexto de negócio" (27/08/2026, ver
+-- docs/02-decisoes.md, tarefa "IA Gestora que conhece o negócio"). Guarda
+-- só a ÚLTIMA entidade física que a IA identificou com certeza nesta
+-- conversa (ver lib/mapaProdutos.js#identificarProdutoFisico e
+-- lib/ia/orchestrator.js), pra ela conseguir entender uma pergunta de
+-- acompanhamento como "e desse produto, quanto vendi essa semana?" sem o
+-- usuário precisar repetir o nome. Formato livre (JSONB), hoje sempre
+-- `{ tipo: 'produto_fisico', produtoBaseId, codigo, nome }` ou `null` —
+-- NUNCA uma regra de negócio nem um dado financeiro (isso é
+-- lib/ia/regrasNegocio.js, ainda não implementado), só "do que estamos
+-- falando agora". Só é escrita quando a IA identifica um produto com
+-- certeza (nunca quando fica ambíguo) — ver executarFerramenta.
+ALTER TABLE ia_conversas ADD COLUMN IF NOT EXISTS contexto_ativo JSONB;
+
 -- Mensagens de uma conversa. `estruturado` guarda o payload visual (resumo,
 -- KPIs, tabela, gráficos, insights, atenção) exatamente como foi mostrado na
 -- conversa — a mesma estrutura é reaproveitada depois pra gerar a planilha
