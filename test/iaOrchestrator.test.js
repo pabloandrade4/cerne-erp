@@ -201,5 +201,74 @@ describe(
       );
       assert.equal(provider.chamadas.length, 0);
     });
+
+    // Etapa (b) da tarefa "IA Gestora que conhece o negócio" (27/08/2026, ver
+    // docs/02-decisoes.md): "produto em foco" — ver linhaProdutoEmFoco/
+    // produtoEmFocoAtual em lib/ia/orchestrator.js.
+    describe('produto em foco (Etapa (b))', () => {
+      const EMPRESA_FOCO_ID = 974;
+      let produtoBaseId;
+
+      before(async () => {
+        await pool.query(
+          `INSERT INTO empresas (id, cnpj, razao_social, ativo) VALUES ($1,'88888888000155','EMPRESA TESTE IA FOCO',TRUE)
+           ON CONFLICT (id) DO NOTHING`,
+          [EMPRESA_FOCO_ID]
+        );
+        await pool.query('DELETE FROM produtos_base WHERE empresa_id = $1', [EMPRESA_FOCO_ID]);
+        const { rows } = await pool.query(
+          `INSERT INTO produtos_base (empresa_id, codigo, nome, ativo) VALUES ($1,'CX-FOCO-TESTE','Caixa Foco Teste',TRUE) RETURNING id`,
+          [EMPRESA_FOCO_ID]
+        );
+        produtoBaseId = rows[0].id;
+      });
+
+      after(async () => {
+        await pool.query('DELETE FROM produtos_base WHERE empresa_id = $1', [EMPRESA_FOCO_ID]);
+        await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_FOCO_ID]);
+      });
+
+      test('identificar_produto_fisico com status "identificado" vira produtoEmFoco na resposta', async () => {
+        const provider = criarProvedorFalso([
+          { conteudo: [toolUseBlock('t1', 'identificar_produto_fisico', { textoLivre: 'CX-FOCO-TESTE' })], pararPor: 'tool_use' },
+          { conteudo: [textoBlock('Encontrei o produto.')], pararPor: 'end_turn' },
+        ]);
+        const resultado = await responderPergunta({ empresaId: EMPRESA_FOCO_ID, periodoChave: '30d', pergunta: 'Quanto tenho da caixa foco teste?' }, { provider });
+        assert.ok(resultado.produtoEmFoco);
+        assert.equal(resultado.produtoEmFoco.tipo, 'produto_fisico');
+        assert.equal(resultado.produtoEmFoco.codigo, 'CX-FOCO-TESTE');
+        assert.equal(resultado.produtoEmFoco.produtoBaseId, produtoBaseId);
+      });
+
+      test('produto não encontrado NUNCA vira produtoEmFoco', async () => {
+        const provider = criarProvedorFalso([
+          { conteudo: [toolUseBlock('t1', 'identificar_produto_fisico', { textoLivre: 'produto que definitivamente não existe' })], pararPor: 'tool_use' },
+          { conteudo: [textoBlock('Não encontrei esse produto.')], pararPor: 'end_turn' },
+        ]);
+        const resultado = await responderPergunta({ empresaId: EMPRESA_FOCO_ID, periodoChave: '30d', pergunta: 'Quanto tenho de um produto qualquer?' }, { provider });
+        assert.equal(resultado.produtoEmFoco, null);
+      });
+
+      test('contextoAtivo recebido é preservado quando a pergunta não identifica nenhum produto novo', async () => {
+        const contextoAtivo = { tipo: 'produto_fisico', produtoBaseId, codigo: 'CX-FOCO-TESTE', nome: 'Caixa Foco Teste' };
+        const provider = criarProvedorFalso([{ conteudo: [textoBlock('ok')], pararPor: 'end_turn' }]);
+        const resultado = await responderPergunta({ empresaId: EMPRESA_FOCO_ID, periodoChave: '30d', pergunta: 'e quanto vendi essa semana?', contextoAtivo }, { provider });
+        assert.deepEqual(resultado.produtoEmFoco, contextoAtivo);
+      });
+
+      test('contextoAtivo recebido entra no system prompt (pra IA entender "esse produto")', async () => {
+        const contextoAtivo = { tipo: 'produto_fisico', produtoBaseId, codigo: 'CX-FOCO-TESTE', nome: 'Caixa Foco Teste' };
+        const provider = criarProvedorFalso([{ conteudo: [textoBlock('ok')], pararPor: 'end_turn' }]);
+        await responderPergunta({ empresaId: EMPRESA_FOCO_ID, periodoChave: '30d', pergunta: 'e esse produto?', contextoAtivo }, { provider });
+        assert.ok(provider.chamadas[0].system.includes('CX-FOCO-TESTE'));
+        assert.ok(provider.chamadas[0].system.includes('Produto em foco'));
+      });
+
+      test('sem contextoAtivo, o system prompt nunca menciona "Produto em foco"', async () => {
+        const provider = criarProvedorFalso([{ conteudo: [textoBlock('ok')], pararPor: 'end_turn' }]);
+        await responderPergunta({ empresaId: EMPRESA_FOCO_ID, periodoChave: '30d', pergunta: 'oi' }, { provider });
+        assert.ok(!provider.chamadas[0].system.includes('Produto em foco'));
+      });
+    });
   }
 );

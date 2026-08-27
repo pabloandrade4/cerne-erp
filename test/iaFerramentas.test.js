@@ -744,5 +744,81 @@ describe(
         assert.equal(resultado.temMovimentacaoNoPeriodo, false);
       });
     });
+
+    // Etapa (b) da tarefa "IA Gestora que conhece o negócio" (27/08/2026,
+    // ver docs/02-decisoes.md e docs/PROPOSTA-contexto-negocio-ia-gestora.md):
+    // identificar_produto_fisico (casca sobre lib/mapaProdutos.js — a lógica
+    // de busca em si já é testada número a número em
+    // test/mapaProdutos.test.js, aqui só confere o encaixe da ferramenta) e
+    // visao_geral_empresa (composição sobre lib/ia/contextoNegocio.js).
+    describe('identificar_produto_fisico / visao_geral_empresa (Etapa (b) — contexto de negócio)', () => {
+      const EMPRESA_CONTEXTO_ID = 973;
+      let poolCtx;
+      let produtoBaseId;
+
+      before(async () => {
+        poolCtx = require('../db/pool');
+        await poolCtx.query(
+          `INSERT INTO empresas (id, cnpj, razao_social, ativo) VALUES ($1,'77777777000144','EMPRESA TESTE IA CONTEXTO',TRUE)
+           ON CONFLICT (id) DO NOTHING`,
+          [EMPRESA_CONTEXTO_ID]
+        );
+        await poolCtx.query('DELETE FROM produtos_base WHERE empresa_id = $1', [EMPRESA_CONTEXTO_ID]);
+        const { rows } = await poolCtx.query(
+          `INSERT INTO produtos_base (empresa_id, codigo, nome, medida, categoria, ativo) VALUES ($1,'CX-CTX-TESTE','Caixa Contexto Teste','15X15X15','Teste Contexto',TRUE) RETURNING id`,
+          [EMPRESA_CONTEXTO_ID]
+        );
+        produtoBaseId = rows[0].id;
+      });
+
+      after(async () => {
+        await poolCtx.query('DELETE FROM produtos_base WHERE empresa_id = $1', [EMPRESA_CONTEXTO_ID]);
+        await poolCtx.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_CONTEXTO_ID]);
+      });
+
+      test('identificar_produto_fisico: encontrado — devolve o produto e explica como usar', async () => {
+        const ctx = criarContexto({ empresaId: EMPRESA_CONTEXTO_ID, periodoChave: '30d' });
+        const resultado = await executarFerramenta('identificar_produto_fisico', { textoLivre: 'CX-CTX-TESTE' }, ctx);
+        assert.equal(resultado.status, 'identificado');
+        assert.equal(resultado.produto.id, produtoBaseId);
+        assert.ok(resultado.observacao.length > 0);
+      });
+
+      test('identificar_produto_fisico: não encontrado — nunca inventa um produto', async () => {
+        const ctx = criarContexto({ empresaId: EMPRESA_CONTEXTO_ID, periodoChave: '30d' });
+        const resultado = await executarFerramenta('identificar_produto_fisico', { textoLivre: 'produto que não existe de jeito nenhum' }, ctx);
+        assert.equal(resultado.status, 'nao_encontrado');
+        assert.equal(resultado.produto, null);
+      });
+
+      test('identificar_produto_fisico: sem textoLivre, devolve erro estruturado (nunca quebra)', async () => {
+        const ctx = criarContexto({ empresaId: EMPRESA_CONTEXTO_ID, periodoChave: '30d' });
+        const resultado = await executarFerramenta('identificar_produto_fisico', {}, ctx);
+        assert.ok(resultado.erro);
+      });
+
+      test('visao_geral_empresa: composição bate número a número com painelVisaoGeral + resumoRecebimentosMarketplace (nenhum cálculo novo)', async () => {
+        const { painelVisaoGeral } = require('../lib/visaoGeralPainel');
+        const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: '30d' });
+        const esperadoPainel = await painelVisaoGeral({ empresaId: EMPRESA_REAL_ID, periodoChave: '30d' });
+        const esperadoRecebimentos = await recebimentosMl.resumoRecebimentosMarketplace(EMPRESA_REAL_ID);
+        const resultado = await executarFerramenta('visao_geral_empresa', {}, ctx);
+
+        assert.equal(resultado.vendasPorCanal.totalFaturamento.valor, esperadoPainel.porCanal.totalFaturamento);
+        assert.equal(resultado.fluxoCaixa.contasAPagar.totalAPagar, esperadoPainel.fluxoCaixa.contasAPagar.totalAPagar);
+        assert.equal(resultado.fluxoCaixa.contasAReceber.totalAReceber, esperadoPainel.fluxoCaixa.contasAReceber.totalAReceber);
+        assert.equal(resultado.conexoes.totalEmpresas, esperadoPainel.conexoes.empresas.total);
+        assert.equal(resultado.quantidadeDeAlertas, esperadoPainel.alertas.length);
+        assert.equal(resultado.recebimentosMarketplacePorStatus.aReceberTotal, esperadoRecebimentos.aReceberTotal);
+        assert.equal(resultado.recebimentosMarketplacePorStatus.recebidoHoje, esperadoRecebimentos.recebidoHoje);
+      });
+
+      test('visao_geral_empresa: nunca quebra mesmo quando o Radar falhar (mesma disciplina de painelVisaoGeral)', async () => {
+        const ctx = criarContexto({ empresaId: EMPRESA_CONTEXTO_ID, periodoChave: '30d' });
+        const resultado = await executarFerramenta('visao_geral_empresa', {}, ctx);
+        assert.ok('radarIndisponivel' in resultado);
+        assert.ok(Array.isArray(resultado.alertas));
+      });
+    });
   }
 );
