@@ -106,9 +106,45 @@ app.get('*', (req, res, next) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Handler de erro central
+// Rede de segurança de processo (diagnóstico de 27/08/2026, mesmo espírito
+// do comentário já existente em lib/syncScheduler.js): uma promise
+// rejeitada sem .catch, ou uma exceção síncrona fora de qualquer
+// try/catch, pode derrubar o processo Node INTEIRO — aí toda requisição em
+// andamento (inclusive o Fluxo de Caixa) fica pendurada pra sempre, sem
+// nenhum request handler ter chance de responder. Só loga (nunca esconde)
+// — não tenta "continuar como se nada tivesse acontecido" escondendo o
+// erro.
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandledRejection (promise sem .catch):', reason && reason.stack ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[server] uncaughtException:', err.stack || err.message);
+});
+
+// Handler de erro central — log ESTRUTURADO no servidor (endpoint, query —
+// onde já vêm empresaId/contaBancariaId/período nas rotas GET do
+// financeiro —, mensagem e stack), pra dar pra investigar de verdade
+// quando algo falhar de novo. NUNCA loga o body da requisição (pode ter
+// dado sensível/grande) e a resposta pro cliente continua genérica —
+// nunca expõe stack/detalhe interno pra fora (diagnóstico de 27/08/2026,
+// ver docs/04-alteracoes.md).
 app.use((err, req, res, next) => {
-  console.error(err);
+  // Defensivo em cada campo (req.originalUrl/req.query podem, em teoria,
+  // vir ausentes dependendo de onde o erro foi disparado) — o próprio log
+  // de diagnóstico NUNCA pode ser o motivo de uma resposta não voltar pro
+  // cliente.
+  try {
+    console.error(JSON.stringify({
+      nivel: 'error',
+      endpoint: (req && req.method || '?') + ' ' + String((req && (req.originalUrl || req.url)) || '?').split('?')[0],
+      query: (req && req.query) || {},
+      erro: (err && err.message) || String(err),
+      stack: ((err && err.stack) || '').split('\n').slice(0, 6).join(' | '),
+      em: new Date().toISOString(),
+    }));
+  } catch (logErr) {
+    console.error('[server] falha ao montar log estruturado:', logErr.message, '| erro original:', err && err.message);
+  }
   res.status(500).json({ error: 'Erro interno do servidor.' });
 });
 

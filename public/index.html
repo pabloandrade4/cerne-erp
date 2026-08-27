@@ -6680,14 +6680,33 @@
       setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
     }
 
+    // Timeout de requisição (diagnóstico de 27/08/2026 — tela de Fluxo de
+    // Caixa travando pra sempre em "Carregando...", ver docs/04-alteracoes.md):
+    // sem isso, se a requisição nunca voltar (rede, servidor sem timeout de
+    // pool/query, etc.), o fetch fica pendurado indefinidamente e a tela
+    // nunca sai do loading. Com o AbortController, depois de FETCH_TIMEOUT_MS
+    // a requisição é cancelada e vira um erro CLARO — nunca esconde o
+    // problema, só garante que ele sempre aparece pro usuário em vez de
+    // travar silenciosamente.
+    const FETCH_TIMEOUT_MS = 20000;
+    async function fetchComTimeout(url, opts){
+      const controller = new AbortController();
+      const timer = setTimeout(()=> controller.abort(), FETCH_TIMEOUT_MS);
+      try{
+        return await fetch(url, { ...opts, signal: controller.signal });
+      }catch(err){
+        if(err.name === 'AbortError') throw new Error('A requisição demorou demais para responder. Tente novamente.');
+        throw err;
+      }finally{ clearTimeout(timer); }
+    }
     async function api(path, opts){
-      const res = await fetch('/api/fluxo-caixa'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      const res = await fetchComTimeout('/api/fluxo-caixa'+path, { headers:{'Content-Type':'application/json'}, ...opts });
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
     }
     async function apiExtrato(path, opts){
-      const res = await fetch('/api/extrato'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      const res = await fetchComTimeout('/api/extrato'+path, { headers:{'Content-Type':'application/json'}, ...opts });
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
@@ -6699,34 +6718,60 @@
     // de mapeamento manual, então essa função nunca lança em cima de um 400,
     // só em falha de rede/parse real.
     async function apiPreviewCru(payload){
-      const res = await fetch('/api/extrato/preview', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const res = await fetchComTimeout('/api/extrato/preview', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!body) throw new Error('Falha na requisição.');
       return body;
     }
     async function apiConciliacao(path, opts){
-      const res = await fetch('/api/conciliacao'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      const res = await fetchComTimeout('/api/conciliacao'+path, { headers:{'Content-Type':'application/json'}, ...opts });
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
     }
     async function apiContasBancarias(path, opts){
-      const res = await fetch('/api/contas-bancarias'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      const res = await fetchComTimeout('/api/contas-bancarias'+path, { headers:{'Content-Type':'application/json'}, ...opts });
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
     }
 
     // ---- extrato bancário: contas, histórico de importações, sugestões de conciliação ----
+    // Seleção padrão de conta bancária (diagnóstico de 27/08/2026 — ver
+    // docs/04-alteracoes.md): ANTES a conta padrão era sempre
+    // `data.contas[0]` de uma lista ordenada alfabeticamente por
+    // `lib/contasBancarias.js#listarContasBancarias` — como "Mercado Pago..."
+    // vem antes de "Nubank..." no alfabeto, o seletor de conciliação sempre
+    // voltava pra Mercado Pago a cada recarregamento da página, mesmo tendo
+    // acabado de importar pro Nubank (nunca um vazamento de dado — as
+    // queries já eram corretamente filtradas por conta — só a seleção
+    // visual errada). Prioridade da nova escolha, nessa ordem:
+    //   1) a conta que o usuário já tinha selecionado NESTA sessão
+    //      (state.contaBancariaFiltro), se ainda for válida;
+    //   2) a última conta escolhida por este usuário NESTE navegador,
+    //      salva em localStorage por empresa (sobrevive a recarregar a
+    //      página — pedido explícito: "manter conta que o usuário já
+    //      selecionou");
+    //   3) a conta da importação de extrato MAIS RECENTE (nunca alfabético);
+    //   4) só na ausência de tudo isso, a primeira da lista.
+    function chaveContaBancariaPreferida(empresaId){ return 'cerneFluxoContaBancaria_'+empresaId; }
+    function salvarContaBancariaPreferida(contaId){
+      try{
+        const empresaId = window.CerneFiltro.state.empresaId;
+        if(empresaId && contaId) localStorage.setItem(chaveContaBancariaPreferida(empresaId), String(contaId));
+      }catch(e){ /* localStorage pode estar indisponível (modo privado etc.) — nunca quebra a tela por causa disso */ }
+    }
+    function lerContaBancariaPreferida(empresaId){
+      try{ return localStorage.getItem(chaveContaBancariaPreferida(empresaId)); }catch(e){ return null; }
+    }
     async function carregarContasBancarias(){
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.contasBancarias = []; state.contaBancariaFiltro = null; return; }
       try{
         const data = await apiContasBancarias('?empresaId='+filtro.empresaId);
         state.contasBancarias = data.contas;
-        if(!state.contaBancariaFiltro || !data.contas.some(c=>String(c.id)===String(state.contaBancariaFiltro))){
-          state.contaBancariaFiltro = data.contas.length ? data.contas[0].id : null;
-        }
+        // Nunca decide a conta padrão aqui — ver decidirContaBancariaFiltroPadrao(),
+        // chamada só depois que o histórico de importações também já carregou.
       }catch(err){ /* silencioso — não trava o resto da página por causa da lista de contas */ }
     }
     async function carregarImportacoes(){
@@ -6735,9 +6780,18 @@
       state.importacoesLoading = true;
       try{
         const data = await apiExtrato('/importacoes?empresaId='+filtro.empresaId);
-        state.importacoes = data.importacoes;
+        state.importacoes = data.importacoes; // já vem ORDER BY created_at DESC — [0] é a importação mais recente
       }catch(err){ /* silencioso */ }
       finally{ state.importacoesLoading = false; }
+    }
+    function decidirContaBancariaFiltroPadrao(){
+      const filtro = window.CerneFiltro.state;
+      const existe = id => state.contasBancarias.some(c=>String(c.id)===String(id));
+      if(state.contaBancariaFiltro && existe(state.contaBancariaFiltro)) return; // 1) já tem seleção válida nesta sessão — nunca sobrescreve
+      const preferida = lerContaBancariaPreferida(filtro.empresaId);
+      if(preferida && existe(preferida)){ state.contaBancariaFiltro = preferida; return; } // 2) preferência salva neste navegador
+      if(state.importacoes.length){ state.contaBancariaFiltro = state.importacoes[0].contaBancariaId; return; } // 3) conta da importação mais recente
+      state.contaBancariaFiltro = state.contasBancarias.length ? state.contasBancarias[0].id : null; // 4) último recurso
     }
     async function carregarSugestoes(){
       const filtro = window.CerneFiltro.state;
@@ -6750,8 +6804,11 @@
       finally{ state.sugestoesLoading = false; }
     }
     async function carregarExtratoEConciliacao(){
-      await carregarContasBancarias();
-      await Promise.all([ carregarImportacoes(), carregarSugestoes() ]);
+      // contas + importações primeiro (em paralelo — carregarSugestoes
+      // depende de já saber qual conta usar, decidido logo abaixo).
+      await Promise.all([ carregarContasBancarias(), carregarImportacoes() ]);
+      decidirContaBancariaFiltroPadrao();
+      await carregarSugestoes();
       render();
     }
 
@@ -7018,13 +7075,36 @@
       } else if(!state.dados){
         html += '<div class="empty-panel"><div class="empty-icon">'+svg('activity')+'</div><h2>Selecione uma empresa</h2></div>';
       } else {
-        html += cardsHTML(state.dados)
-          + formulaHTML(state.dados)
-          + chartCardHTML(state.dados)
-          + tabelaDiariaHTML(state.dados);
+        // Diagnóstico de 27/08/2026 (ver docs/04-alteracoes.md): `root.innerHTML
+        // = html` só acontece no FINAL desta função — se qualquer coisa aqui
+        // dentro lançar uma exceção, a tela ficava presa pra sempre no
+        // esqueleto de "Carregando..." do render() anterior, SEM nenhum erro
+        // visível pro usuário (só no console). Nunca mais deixamos isso
+        // acontecer: um erro de montagem agora sempre vira uma tela de erro
+        // amigável — nunca escondido (segue no console.error pra debug), mas
+        // também nunca uma tela travada silenciosamente.
+        try{
+          html += cardsHTML(state.dados)
+            + formulaHTML(state.dados)
+            + chartCardHTML(state.dados)
+            + tabelaDiariaHTML(state.dados);
+        }catch(errRender){
+          console.error('[FluxoCaixa] erro ao montar a tela com os dados recebidos:', errRender);
+          html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+            + '<h2 style="color:var(--danger);">Não foi possível exibir o fluxo de caixa</h2>'
+            + '<p class="lead">Os dados chegaram, mas houve um erro ao montar a tela. Tente novamente — se persistir, avise o suporte.</p>'
+            + '<button class="ghost-btn" id="fcRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+        }
       }
 
-      html += extratoSectionHTML();
+      try{
+        html += extratoSectionHTML();
+      }catch(errExtrato){
+        console.error('[FluxoCaixa] erro ao montar a seção de extrato/conciliação:', errExtrato);
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível exibir extrato/conciliação</h2>'
+          + '<p class="lead">Houve um erro ao montar esta seção. O resto da tela continua funcionando normalmente.</p></div>';
+      }
 
       root.innerHTML = html;
 
@@ -7043,6 +7123,7 @@
       const contaConc = document.getElementById('fcContaBancariaConc');
       if(contaConc) contaConc.addEventListener('change', async ()=>{
         state.contaBancariaFiltro = contaConc.value || null;
+        salvarContaBancariaPreferida(state.contaBancariaFiltro); // escolha explícita do usuário — vira a preferência salva (item 1 da prioridade)
         state.sugestoesLoading = true; render();
         await carregarSugestoes();
         render();
@@ -7335,6 +7416,7 @@
               close();
               toast('Extrato importado com sucesso.');
               state.contaBancariaFiltro = wiz.contaBancariaId;
+              salvarContaBancariaPreferida(wiz.contaBancariaId); // após importar, essa conta vira a preferência (sobrevive a recarregar a página)
               await carregarExtratoEConciliacao();
             }catch(err){
               wiz.carregando = false;
