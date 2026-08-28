@@ -467,6 +467,35 @@ CREATE TABLE IF NOT EXISTS contas_pagar (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+
+-- Lotes de importação de Contas a Pagar por CSV/XLSX. O lote existe só
+-- para auditoria/rastreabilidade; as contas continuam morando na MESMA
+-- tabela contas_pagar usada por lançamento manual, DRE e Fluxo de Caixa.
+CREATE TABLE IF NOT EXISTS contas_pagar_importacoes (
+  id                SERIAL PRIMARY KEY,
+  empresa_id        INTEGER NOT NULL REFERENCES empresas(id),
+  nome_arquivo      VARCHAR(255) NOT NULL,
+  total_linhas      INTEGER NOT NULL DEFAULT 0,
+  total_importadas  INTEGER NOT NULL DEFAULT 0,
+  total_ignoradas   INTEGER NOT NULL DEFAULT 0,
+  total_erros       INTEGER NOT NULL DEFAULT 0,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Metadados opcionais que podem vir da planilha. `fornecedor_nome_importado`
+-- preserva o nome quando ele ainda não existe no cadastro de fornecedores —
+-- nunca criamos fornecedor fictício sem CNPJ/CPF só para satisfazer o import.
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS fornecedor_nome_importado VARCHAR(200);
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS documento VARCHAR(100);
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS parcela VARCHAR(50);
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS data_emissao DATE;
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS forma_pagamento VARCHAR(100);
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS banco_conta VARCHAR(150);
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS valor_pago NUMERIC(12,2);
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS importacao_id INTEGER REFERENCES contas_pagar_importacoes(id);
+CREATE INDEX IF NOT EXISTS idx_contas_pagar_importacao_id ON contas_pagar(importacao_id) WHERE importacao_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_contas_pagar_empresa_vencimento_status ON contas_pagar(empresa_id, vencimento, status);
+
 -- Lançamento manual de conta a receber, por empresa. `origem` é texto livre
 -- (mesma razão de `categoria` em contas_pagar — sem plano de contas
 -- definido ainda). "Atrasado" segue a mesma regra de "Vencido" acima:
@@ -714,20 +743,6 @@ CREATE TABLE IF NOT EXISTS ia_conversas (
   atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_ia_conversas_usuario_empresa ON ia_conversas(usuario_id, empresa_id, atualizado_em DESC);
-
--- Etapa (b) — "camada de contexto de negócio" (27/08/2026, ver
--- docs/02-decisoes.md, tarefa "IA Gestora que conhece o negócio"). Guarda
--- só a ÚLTIMA entidade física que a IA identificou com certeza nesta
--- conversa (ver lib/mapaProdutos.js#identificarProdutoFisico e
--- lib/ia/orchestrator.js), pra ela conseguir entender uma pergunta de
--- acompanhamento como "e desse produto, quanto vendi essa semana?" sem o
--- usuário precisar repetir o nome. Formato livre (JSONB), hoje sempre
--- `{ tipo: 'produto_fisico', produtoBaseId, codigo, nome }` ou `null` —
--- NUNCA uma regra de negócio nem um dado financeiro (isso é
--- lib/ia/regrasNegocio.js, ainda não implementado), só "do que estamos
--- falando agora". Só é escrita quando a IA identifica um produto com
--- certeza (nunca quando fica ambíguo) — ver executarFerramenta.
-ALTER TABLE ia_conversas ADD COLUMN IF NOT EXISTS contexto_ativo JSONB;
 
 -- Mensagens de uma conversa. `estruturado` guarda o payload visual (resumo,
 -- KPIs, tabela, gráficos, insights, atenção) exatamente como foi mostrado na
@@ -988,249 +1003,3 @@ CREATE TABLE IF NOT EXISTS fluxo_caixa_saldo_inicial (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- ============================================================
--- Etapa: Recebimentos, Extrato Bancário e Conciliação (27/08/2026)
--- ============================================================
--- Pedido do usuário, em 3 passos (ver docs/02-decisoes.md): (1) organizar
--- os recebimentos de marketplace com status financeiro real; (2) importar
--- extrato bancário (XLSX/CSV) semanalmente, sem duplicar; (3) dar essa
--- leitura pra IA Gestora. Nenhuma tabela financeira já existente
--- (contas_pagar/contas_receber/ml_pedidos/fluxo_caixa_saldo_inicial) foi
--- alterada — só reaproveitadas por essas tabelas novas.
-
--- Recebimentos de marketplace — ANTES calculado só na hora (sem tabela
--- própria, ver comentário histórico acima de contas_receber), agora
--- PERSISTIDO: a conciliação bancária (extrato_movimentos, abaixo) precisa
--- de uma linha de verdade pra apontar e atualizar de status — não dá pra
--- conciliar um valor calculado on-the-fly que desaparece a cada request.
--- Nunca duplica: chave única (empresa_id, marketplace, referencia_externa).
--- Populada/atualizada por UPSERT a partir de ml_pedidos (elegíveis:
--- pagamento aprovado e não cancelado — mesmo critério de sempre, ver
--- lib/recebimentosMl.js) — nenhuma segunda fórmula financeira: valor
--- bruto/taxas/líquido esperado continuam vindo exatamente do mesmo cálculo
--- de lib/relatorioVendas.js. O UPSERT nunca sobrescreve status/datas
--- efetivas/valor recebido (só os campos calculados a partir do pedido) —
--- uma vez conciliado, a materialização seguinte não desfaz a conciliação.
-CREATE TABLE IF NOT EXISTS recebimentos_marketplace (
-  id                         SERIAL PRIMARY KEY,
-  empresa_id                 INTEGER NOT NULL REFERENCES empresas(id),
-  marketplace                VARCHAR(30) NOT NULL,   -- 'Mercado Livre' | 'Shopee' (estrutural — só ML tem pedido real hoje)
-  loja                       VARCHAR(200),
-  -- ON DELETE SET NULL (não CASCADE) DE PROPÓSITO nas duas FKs abaixo: são
-  -- só um LINK SUPLEMENTAR (auditoria/"conjunto de pedidos relacionado"),
-  -- nunca a identidade do recebimento (isso é empresa_id+marketplace+
-  -- referencia_externa, ver UNIQUE abaixo). Se a conta ML ou o pedido forem
-  -- removidos/ressincronizados (ex: reseed de teste, reset de conta),
-  -- CASCADE apagaria o recebimento e destruiria o status/conciliação já
-  -- confirmado (RECEBIDO) sem nenhuma razão financeira — SET NULL preserva
-  -- a linha; a materialização seguinte religa pedido_id ao pedido novo.
-  conta_ml_id                INTEGER REFERENCES ml_contas(id) ON DELETE SET NULL,
-  pedido_id                  INTEGER REFERENCES ml_pedidos(id) ON DELETE SET NULL,
-  referencia_externa         VARCHAR(60) NOT NULL,   -- ml_order_id, em texto
-  pack_id                    VARCHAR(60),            -- ml_pedidos.pack_id quando existir — "conjunto de pedidos" relacionado
-  data_venda                 TIMESTAMPTZ,
-  valor_bruto                NUMERIC(12,2),
-  taxas_descontos            NUMERIC(12,2),
-  valor_liquido_esperado     NUMERIC(12,2),
-  -- Datas/valores REAIS de liberação/recebimento — sempre NULL até uma
-  -- fonte real existir (a API do Mercado Livre usada aqui não retorna
-  -- isso — ver lib/recebimentosMl.js) ou até a conciliação/ação manual
-  -- preencher. Nunca uma data/valor inventado.
-  data_prevista_liberacao    DATE,
-  data_efetiva_liberacao     DATE,
-  valor_recebido             NUMERIC(12,2),
-  data_efetiva_recebimento   DATE,
-  status                     VARCHAR(20) NOT NULL DEFAULT 'a_receber', -- a_receber | disponivel | recebido
-  origem_confirmacao         VARCHAR(20),  -- NULL | manual | conciliacao_extrato — nunca afirma "recebido" sem dizer como se sabe
-  created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (status IN ('a_receber','disponivel','recebido')),
-  UNIQUE (empresa_id, marketplace, referencia_externa)
-);
-CREATE INDEX IF NOT EXISTS idx_recebimentos_marketplace_empresa_status ON recebimentos_marketplace(empresa_id, status);
-
--- Conta bancária cadastrada pelo usuário — só o necessário pra separar
--- extratos de contas diferentes por empresa/CNPJ (empresa_id já garante o
--- CNPJ, ver tabela empresas). Nenhum dado sensível de conta é obrigatório.
-CREATE TABLE IF NOT EXISTS contas_bancarias (
-  id            SERIAL PRIMARY KEY,
-  empresa_id    INTEGER NOT NULL REFERENCES empresas(id),
-  nome          VARCHAR(120) NOT NULL,  -- apelido, ex: "Banco X - Conta Corrente"
-  banco         VARCHAR(120),
-  agencia       VARCHAR(20),
-  numero_conta  VARCHAR(30),
-  ativa         BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (empresa_id, nome)
-);
-
--- Um "lote" de importação de extrato = 1 arquivo = 1 linha aqui. A
--- planilha em si NUNCA é armazenada (pedido explícito do usuário: "não
--- armazene a planilha de maneira insegura se ela não for necessária depois
--- da importação") — só o necessário pra manter o histórico pedido: nome do
--- arquivo, contagens, quem importou, status.
-CREATE TABLE IF NOT EXISTS extrato_importacoes (
-  id                    SERIAL PRIMARY KEY,
-  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
-  conta_bancaria_id     INTEGER NOT NULL REFERENCES contas_bancarias(id),
-  nome_arquivo          VARCHAR(255) NOT NULL,
-  formato               VARCHAR(10) NOT NULL,  -- xlsx | csv
-  mapeamento_colunas    JSONB,                 -- mapeamento usado nesta importação (auditoria/reuso)
-  total_movimentacoes   INTEGER NOT NULL DEFAULT 0,  -- linhas encontradas na planilha
-  total_novas           INTEGER NOT NULL DEFAULT 0,  -- efetivamente inseridas
-  total_duplicadas      INTEGER NOT NULL DEFAULT 0,  -- já existiam (hash igual) — nunca duplicadas
-  total_entradas        NUMERIC(14,2),
-  total_saidas          NUMERIC(14,2),
-  status                VARCHAR(20) NOT NULL DEFAULT 'concluida', -- concluida | erro
-  importado_por         VARCHAR(200),
-  created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Cada movimentação bancária individual. `hash_dedup` é a chave de
--- deduplicação segura pedida pelo usuário ("a mesma planilha importada duas
--- vezes NÃO pode duplicar as movimentações"): hash determinístico de
--- (conta_bancaria_id, data, valor, tipo, descrição, documento) — a mesma
--- linha da mesma planilha (ou de uma planilha sobreposta, ex: extrato
--- semanal com 2 dias repetidos da semana anterior) gera sempre o mesmo
--- hash, então o UNIQUE + ON CONFLICT DO NOTHING garante, no próprio banco
--- (não só na aplicação), que ela nunca é inserida duas vezes — mesmo
--- padrão já usado em despesas_fixas/contas_pagar (idx_contas_pagar_despesa_fixa_vencimento).
-CREATE TABLE IF NOT EXISTS extrato_movimentos (
-  id                    SERIAL PRIMARY KEY,
-  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
-  conta_bancaria_id     INTEGER NOT NULL REFERENCES contas_bancarias(id),
-  importacao_id         INTEGER NOT NULL REFERENCES extrato_importacoes(id),
-  data                  DATE NOT NULL,
-  descricao             TEXT,
-  documento             VARCHAR(100),
-  valor                 NUMERIC(14,2) NOT NULL,  -- sempre positivo — `tipo` diz a direção
-  tipo                  VARCHAR(10) NOT NULL,    -- entrada | saida
-  saldo_apos            NUMERIC(14,2),           -- saldo informado pelo banco após o movimento, só quando a planilha traz essa coluna
-  hash_dedup            VARCHAR(64) NOT NULL,
-  -- Conciliação: aponta pra UM dos 3 tipos de referência possíveis —
-  -- referência polimórfica simples (sem FK de banco, Postgres não suporta
-  -- FK condicional a mais de uma tabela) — mesmo espírito de simplicidade
-  -- já usado em `categoria`/`origem` texto livre no resto do sistema. Nunca
-  -- lida direto: sempre através de lib/conciliacaoBancaria.js.
-  status_conciliacao    VARCHAR(20) NOT NULL DEFAULT 'nao_conciliado', -- nao_conciliado | conciliado | ignorado
-  conciliado_com_tipo   VARCHAR(30),   -- recebimento_marketplace | conta_receber | conta_pagar
-  conciliado_com_id     INTEGER,
-  conciliado_em         TIMESTAMPTZ,
-  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (tipo IN ('entrada','saida')),
-  CHECK (status_conciliacao IN ('nao_conciliado','conciliado','ignorado')),
-  UNIQUE (conta_bancaria_id, hash_dedup)
-);
-CREATE INDEX IF NOT EXISTS idx_extrato_movimentos_empresa_data ON extrato_movimentos(empresa_id, data);
-CREATE INDEX IF NOT EXISTS idx_extrato_movimentos_status ON extrato_movimentos(empresa_id, status_conciliacao);
-
--- ============================================================
--- Etapa: Mapa de produtos — medida/categoria + aliases (27/08/2026)
--- ============================================================
---
--- Primeira etapa da proposta "IA Gestora que conhece o negócio"
--- (docs/PROPOSTA-contexto-negocio-ia-gestora.md, aprovada 27/08/2026):
--- estende `produtos_base` (que já modela o produto físico de verdade, ver
--- comentário acima) com dois campos estruturados que hoje só existem
--- embutidos em texto no `codigo`, e cria uma tabela nova para os apelidos
--- em linguagem natural que o usuário usa pra se referir a um produto físico
--- ("aquela 16x11x6", "caixa pequena") — pré-requisito para a futura
--- ferramenta de IA `identificar_produto_fisico` (etapa seguinte da
--- proposta, ainda não implementada).
-
--- `medida`: dimensão do produto físico (ex: "16X11X6"), texto livre —
--- mesmo espírito de `categoria` abaixo, sem tabela de domínio fixa, porque
--- o projeto não tem hoje uma lista fechada de medidas possíveis.
-ALTER TABLE produtos_base ADD COLUMN IF NOT EXISTS medida VARCHAR(100);
-
--- `categoria`: texto livre com sugestões (autocompletar no front, não um
--- ENUM/tabela separada) — mesmo padrão já usado em
--- contas_pagar.categoria/despesas_fixas.categoria.
-ALTER TABLE produtos_base ADD COLUMN IF NOT EXISTS categoria VARCHAR(100);
-
--- Apelidos em linguagem natural para um produto físico. Um mesmo produto
--- pode ter vários aliases (o usuário pode chamar a mesma caixa de nomes
--- diferentes em conversas diferentes); um alias pertence a um único
--- produto base (não faz sentido o mesmo texto apontar pra dois produtos
--- físicos ao mesmo tempo dentro da mesma empresa — se acontecer, é o
--- usuário quem decide qual vínculo corrigir, nunca a aplicação escolhendo
--- sozinha). `origem = 'ia_sugerido'` marca um alias que a IA percebeu num
--- padrão de conversa e sugeriu salvar — só é gravado depois de confirmação
--- explícita do usuário (nunca automático), exatamente como um alias
--- `manual` cadastrado direto na tela.
-CREATE TABLE IF NOT EXISTS produto_base_aliases (
-  id               SERIAL PRIMARY KEY,
-  empresa_id       INTEGER NOT NULL REFERENCES empresas(id),
-  produto_base_id  INTEGER NOT NULL REFERENCES produtos_base(id) ON DELETE CASCADE,
-  alias            VARCHAR(200) NOT NULL,
-  origem           VARCHAR(20) NOT NULL DEFAULT 'manual', -- 'manual' | 'ia_sugerido'
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (empresa_id, alias)
-);
-CREATE INDEX IF NOT EXISTS idx_produto_base_aliases_produto ON produto_base_aliases(produto_base_id);
-
--- ============================================================
--- Etapa 3: Fluxo de Caixa — REALIZADO passa a vir de extrato_movimentos,
--- saldo inicial por conta bancária, transferências internas (27/08/2026)
--- ============================================================
--- Decisão do usuário (ver docs/02-decisoes.md e docs/04-alteracoes.md):
--- REALIZADO do Fluxo de Caixa deixa de vir de contas_pagar.status='pago' /
--- contas_receber.status='recebido' / recebimentos_marketplace, e passa a
--- vir SEMPRE de extrato_movimentos (dinheiro que passou de verdade pelo
--- banco) — conciliado ou não. contas_pagar/contas_receber/
--- recebimentos_marketplace continuam existindo e continuam importantes,
--- só que exclusivamente para o PREVISTO (e para conciliação/comparação) —
--- nunca mais como fonte alternativa do mesmo dinheiro já realizado (ver
--- lib/fluxoCaixa.js).
-
--- `fluxo_caixa_saldo_inicial` (a tabela antiga, só por empresa_id) é
--- PRESERVADA sem nenhuma alteração — vira só um registro legado/histórico,
--- nunca mais lida pela fórmula nova (nenhum valor é migrado/distribuído
--- automaticamente entre contas — o usuário pediu explicitamente pra nunca
--- inventar uma composição bancária que não existe de verdade). Tabela nova,
--- separada, pro saldo inicial POR CONTA BANCÁRIA:
---   - UNIQUE (conta_bancaria_id): só existe UM saldo inicial "atual" por
---     conta (mesmo espírito do UPSERT ON CONFLICT (empresa_id) já usado na
---     tabela legada) — nunca dois valores conflitantes pra mesma conta.
---   - `referencia_em` (TIMESTAMPTZ, não só DATE): semântica EXPLÍCITA e
---     não-ambígua (pedido do usuário) — representa o instante
---     "00:00:00 do dia de referência, horário de Brasília", ou seja,
---     IMEDIATAMENTE ANTES do primeiro movimento daquele dia. Como
---     extrato_movimentos.data é granularidade de DIA (bancos não entregam
---     horário nesses extratos), a fórmula soma movimentos com
---     `data >= data_civil(referencia_em)` — o próprio dia de referência
---     entra na soma (porque o saldo informado é ANTES dos movimentos
---     daquele dia, nunca depois) — isso nunca conta nenhum movimento duas
---     vezes: um movimento datado do dia de referência nunca está embutido
---     no valor de `valor` (que é sempre "o saldo antes de qualquer
---     movimento considerado pelo ERP"). Ver saldoContaEm() em
---     lib/fluxoCaixa.js — a regra fica só ali, um único lugar.
-CREATE TABLE IF NOT EXISTS fluxo_caixa_saldo_inicial_conta (
-  id                  SERIAL PRIMARY KEY,
-  empresa_id          INTEGER NOT NULL REFERENCES empresas(id),
-  conta_bancaria_id   INTEGER NOT NULL REFERENCES contas_bancarias(id),
-  valor               NUMERIC(14,2) NOT NULL,
-  referencia_em       TIMESTAMPTZ NOT NULL,
-  observacao          TEXT,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (conta_bancaria_id)
-);
-
--- Transferência entre contas da MESMA empresa (ex: Nubank -> Mercado
--- Pago): dois movimentos reais no extrato (uma saída numa conta, uma
--- entrada na outra) que não representam receita/despesa operacional.
--- `categoria` é texto livre (mesmo padrão de contas_pagar.categoria) —
--- 'transferencia_interna' é o único valor com significado especial pro
--- cálculo (exclui o movimento dos indicadores de entradas/saídas
--- REALIZADAS, mas NUNCA do saldo da conta — o dinheiro saiu/entrou de
--- verdade daquela conta específica). `transferencia_par_id` liga os dois
--- lados quando identificados. Pedido explícito do usuário: NUNCA
--- classificar automaticamente só por valor/data batendo — sempre exige
--- confirmação explícita (mesma UI de sugestão+confirmação da conciliação,
--- ainda não construída nesta etapa — só o suporte de modelagem).
-ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS categoria VARCHAR(100);
-ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS transferencia_par_id INTEGER REFERENCES extrato_movimentos(id);
-CREATE INDEX IF NOT EXISTS idx_extrato_movimentos_conta_data ON extrato_movimentos(conta_bancaria_id, data);

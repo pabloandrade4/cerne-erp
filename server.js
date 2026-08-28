@@ -35,21 +35,11 @@ const iaGestoraRouter = require('./routes/iaGestora');
 const performanceAnunciosRouter = require('./routes/performanceAnuncios');
 const visitasConversaoRouter = require('./routes/visitasConversao');
 const margemAnuncioRouter = require('./routes/margemAnuncio');
-const contasBancariasRouter = require('./routes/contasBancarias');
-const extratoBancarioRouter = require('./routes/extratoBancario');
-const conciliacaoRouter = require('./routes/conciliacao');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Limite padrão do express.json() é 100kb — pequeno demais pra planilha de
-// extrato bancário enviada em base64 (Passo 2 da tarefa "Recebimentos +
-// Fluxo de Caixa + IA Gestora", 27/08/2026). Sem multipart/multer no
-// projeto (ver package.json), o arquivo viaja como base64 dentro do JSON
-// (routes/extratoBancario.js) — por isso o limite sobe pra 20mb, suficiente
-// pra um extrato semanal (centenas de linhas) sem abrir margem exagerada.
-// Nenhuma outra rota muda de comportamento com isso.
-app.use(express.json({ limit: '20mb' }));
+app.use(express.json({ limit: '12mb' }));
 
 // Healthcheck simples (útil para o provedor de hospedagem verificar o serviço)
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -60,27 +50,14 @@ app.use('/api/integracoes/shopee', shopeeRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api', custosRouter);
 app.use('/api/relatorios', relatoriosRouter);
-// `/api/produtos-base` e `/api/estoque-*` ficam ANTES de `/api/produtos`/
-// `/api/estoque` de propósito (27/08/2026): o `express` "-stub" deste
-// ambiente de desenvolvimento faz correspondência de prefixo por STRING
-// pura em `app.use(caminho, ...)`, sem checar limite de segmento — ou
-// seja, uma rota montada em '/api/produtos' também "casa" com
-// '/api/produtos-base/...' (o texto começa com 'produtos'), roteando a
-// requisição pro router errado (confirmado ao vivo: uma chamada a
-// /api/produtos-base/categorias-sugeridas caiu em routes/produtos.js e
-// tentou `SELECT * FROM produtos WHERE id = '-base'`). O Express real
-// (produção) não tem esse problema — resolve por segmento de caminho —
-// mas registrar o prefixo mais específico primeiro é inofensivo em
-// qualquer versão e blinda o ambiente de dev contra o mesmo bug em outras
-// rotas parecidas. Ver docs/05-problemas-conhecidos.md.
-app.use('/api/produtos-base', produtosBaseRouter);
 app.use('/api/produtos', produtosRouter);
 app.use('/api/fornecedores', fornecedoresRouter);
 app.use('/api/anuncios', anunciosRouter);
-app.use('/api/estoque-full', estoqueFullRouter);
-app.use('/api/estoque-produto-base', estoqueProdutoBaseRouter);
 app.use('/api/estoque', estoqueRouter);
+app.use('/api/estoque-full', estoqueFullRouter);
 app.use('/api/compras', comprasRouter);
+app.use('/api/produtos-base', produtosBaseRouter);
+app.use('/api/estoque-produto-base', estoqueProdutoBaseRouter);
 app.use('/api/contas-pagar', contasPagarRouter);
 app.use('/api/contas-receber', contasReceberRouter);
 app.use('/api/recebimentos', recebimentosRouter);
@@ -95,9 +72,6 @@ app.use('/api/ia-gestora', iaGestoraRouter);
 app.use('/api/performance-anuncios', performanceAnunciosRouter);
 app.use('/api/visitas-conversao', visitasConversaoRouter);
 app.use('/api/margem-anuncio', margemAnuncioRouter);
-app.use('/api/contas-bancarias', contasBancariasRouter);
-app.use('/api/extrato', extratoBancarioRouter);
-app.use('/api/conciliacao', conciliacaoRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -106,45 +80,9 @@ app.get('*', (req, res, next) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Rede de segurança de processo (diagnóstico de 27/08/2026, mesmo espírito
-// do comentário já existente em lib/syncScheduler.js): uma promise
-// rejeitada sem .catch, ou uma exceção síncrona fora de qualquer
-// try/catch, pode derrubar o processo Node INTEIRO — aí toda requisição em
-// andamento (inclusive o Fluxo de Caixa) fica pendurada pra sempre, sem
-// nenhum request handler ter chance de responder. Só loga (nunca esconde)
-// — não tenta "continuar como se nada tivesse acontecido" escondendo o
-// erro.
-process.on('unhandledRejection', (reason) => {
-  console.error('[server] unhandledRejection (promise sem .catch):', reason && reason.stack ? reason.stack : reason);
-});
-process.on('uncaughtException', (err) => {
-  console.error('[server] uncaughtException:', err.stack || err.message);
-});
-
-// Handler de erro central — log ESTRUTURADO no servidor (endpoint, query —
-// onde já vêm empresaId/contaBancariaId/período nas rotas GET do
-// financeiro —, mensagem e stack), pra dar pra investigar de verdade
-// quando algo falhar de novo. NUNCA loga o body da requisição (pode ter
-// dado sensível/grande) e a resposta pro cliente continua genérica —
-// nunca expõe stack/detalhe interno pra fora (diagnóstico de 27/08/2026,
-// ver docs/04-alteracoes.md).
+// Handler de erro central
 app.use((err, req, res, next) => {
-  // Defensivo em cada campo (req.originalUrl/req.query podem, em teoria,
-  // vir ausentes dependendo de onde o erro foi disparado) — o próprio log
-  // de diagnóstico NUNCA pode ser o motivo de uma resposta não voltar pro
-  // cliente.
-  try {
-    console.error(JSON.stringify({
-      nivel: 'error',
-      endpoint: (req && req.method || '?') + ' ' + String((req && (req.originalUrl || req.url)) || '?').split('?')[0],
-      query: (req && req.query) || {},
-      erro: (err && err.message) || String(err),
-      stack: ((err && err.stack) || '').split('\n').slice(0, 6).join(' | '),
-      em: new Date().toISOString(),
-    }));
-  } catch (logErr) {
-    console.error('[server] falha ao montar log estruturado:', logErr.message, '| erro original:', err && err.message);
-  }
+  console.error(err);
   res.status(500).json({ error: 'Erro interno do servidor.' });
 });
 

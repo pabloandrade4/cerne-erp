@@ -21,7 +21,6 @@ describe('Contas a Pagar / Contas a Receber / Recebimentos — 24/08/2026', { sk
   let fornecedorId;
   let hoje, ontem, amanha;
   const criados = { pagar: [], receber: [] };
-  let recebimentoMlRestaurar = null; // { id, statusOriginal } — ver describe "ações manuais" abaixo
 
   before(async () => {
     contasPagar = require('../lib/contasPagar');
@@ -51,14 +50,6 @@ describe('Contas a Pagar / Contas a Receber / Recebimentos — 24/08/2026', { sk
     await pool.query(`DELETE FROM contas_pagar WHERE empresa_id = $1 AND descricao LIKE $2`, [EMPRESA_ID, PREFIXO_TESTE + '%']);
     await pool.query(`DELETE FROM contas_receber WHERE empresa_id = $1 AND descricao LIKE $2`, [EMPRESA_ID, PREFIXO_TESTE + '%']);
     await pool.query(`DELETE FROM fornecedores WHERE id = $1`, [fornecedorId]);
-    if (recebimentoMlRestaurar) {
-      // devolve o recebimento ML (dado real sincronizado, não criado pelo
-      // teste) ao estado original — não pode ficar sujo pra outros testes.
-      await pool.query(
-        `UPDATE recebimentos_marketplace SET status=$1, valor_recebido=NULL, data_efetiva_recebimento=NULL, data_efetiva_liberacao=NULL, data_prevista_liberacao=NULL, origem_confirmacao=NULL, updated_at=now() WHERE id=$2`,
-        [recebimentoMlRestaurar.statusOriginal, recebimentoMlRestaurar.id]
-      );
-    }
     await pool.end();
   });
 
@@ -229,7 +220,7 @@ describe('Contas a Pagar / Contas a Receber / Recebimentos — 24/08/2026', { sk
       assert.ok(recebimentos.length > 0, 'deveria haver recebimentos reais em 23/08/2026');
       for (const r of recebimentos) {
         assert.equal(r.marketplace, 'Mercado Livre');
-        assert.equal(r.status, 'a_receber');
+        assert.equal(r.status, 'a_liberar');
         assert.equal(r.dataPrevistaLiberacao, null);
         assert.equal(r.valorRecebido, null);
         assert.equal(r.dataRecebimento, null);
@@ -249,75 +240,6 @@ describe('Contas a Pagar / Contas a Receber / Recebimentos — 24/08/2026', { sk
       assert.equal(p.valorBruto, 43);
       assert.equal(p.taxasDescontos, 10.31);
       assert.equal(p.valorLiquidoEsperado, 32.69);
-    });
-  });
-
-  describe('Recebimentos — ações manuais e resumo (Passo 1, 27/08/2026)', () => {
-    let pool;
-    before(() => { pool = require('../db/pool'); });
-
-    test('status financeiro: a_receber -> disponivel -> recebido, nunca anda pra trás, nunca sobrescreve estado mais avançado', async () => {
-      const { rows } = await pool.query(
-        `SELECT id, status FROM recebimentos_marketplace WHERE empresa_id = $1 AND status = 'a_receber' ORDER BY id LIMIT 1`,
-        [EMPRESA_ID]
-      );
-      assert.ok(rows.length, 'precisa existir um recebimento "a_receber" nos dados de teste');
-      const id = rows[0].id;
-      recebimentoMlRestaurar = { id, statusOriginal: rows[0].status };
-
-      const disp = await recebimentosMl.marcarComoDisponivel(id, { dataEfetivaLiberacao: hoje });
-      assert.equal(disp.errors, undefined);
-      assert.equal(disp.recebimento.status, 'disponivel');
-      assert.equal(disp.recebimento.dataEfetivaLiberacao, hoje);
-
-      // Não pode marcar como disponível de novo (já não está mais em "a_receber").
-      const dispDeNovo = await recebimentosMl.marcarComoDisponivel(id, {});
-      assert.ok(dispDeNovo.errors, 'não pode marcar como disponível um recebimento que já não está mais "a_receber"');
-
-      const rec = await recebimentosMl.marcarComoRecebido(id, { dataEfetivaRecebimento: hoje, valorRecebido: 99.9 });
-      assert.equal(rec.errors, undefined);
-      assert.equal(rec.recebimento.status, 'recebido');
-      assert.equal(rec.recebimento.valorRecebido, 99.9);
-      assert.equal(rec.recebimento.dataRecebimento, hoje);
-      assert.equal(rec.recebimento.origemConfirmacao, 'manual');
-
-      // Não pode marcar como recebido de novo (bloqueio de "andar pra trás"/duplicar).
-      const recDeNovo = await recebimentosMl.marcarComoRecebido(id, {});
-      assert.ok(recDeNovo.errors, 'não pode marcar como recebido um recebimento que já está recebido');
-
-      // Nem definir previsão de liberação depois de já recebido (não faz sentido).
-      const prevDepois = await recebimentosMl.definirPrevisaoLiberacao(id, amanha);
-      assert.ok(prevDepois.errors, 'não pode definir previsão de liberação depois de já recebido');
-    });
-
-    test('definirPrevisaoLiberacao só é usada pelo usuário quando o ML não informa a data (nunca inventada automaticamente)', async () => {
-      const { rows } = await pool.query(
-        `SELECT id, status FROM recebimentos_marketplace WHERE empresa_id = $1 AND status = 'a_receber' AND id != COALESCE($2, 0) ORDER BY id LIMIT 1`,
-        [EMPRESA_ID, recebimentoMlRestaurar ? recebimentoMlRestaurar.id : null]
-      );
-      assert.ok(rows.length, 'precisa existir outro recebimento "a_receber" nos dados de teste');
-      const id = rows[0].id;
-      const antes = recebimentoMlRestaurar;
-      // se o teste anterior já marcou um id pra restaurar, mantém — só adiciona este se for outro.
-
-      const result = await recebimentosMl.definirPrevisaoLiberacao(id, amanha);
-      assert.equal(result.errors, undefined);
-      assert.equal(result.recebimento.dataPrevistaLiberacao, amanha);
-      assert.equal(result.recebimento.status, 'a_receber', 'informar a previsão de liberação não muda o status');
-
-      // limpa esse segundo recebimento manualmente (não é o principal rastreado por recebimentoMlRestaurar).
-      await pool.query(`UPDATE recebimentos_marketplace SET data_prevista_liberacao = NULL, updated_at = now() WHERE id = $1`, [id]);
-      recebimentoMlRestaurar = antes;
-    });
-
-    test('resumoRecebimentosMarketplace nunca chama "recebido no banco" o que só está "disponível"/liberado pelo marketplace', async () => {
-      const resumo = await recebimentosMl.resumoRecebimentosMarketplace(EMPRESA_ID);
-      assert.equal(typeof resumo.recebidoHoje, 'number');
-      assert.equal(typeof resumo.recebidoMes, 'number');
-      assert.equal(typeof resumo.aReceberTotal, 'number');
-      assert.ok(Array.isArray(resumo.porMarketplace));
-      assert.ok(Array.isArray(resumo.porLoja));
-      assert.ok(resumo.aReceberSemPrevisaoDeLiberacao, 'precisa expor separadamente o que não tem previsão — nunca somar escondido num recorte de dias');
     });
   });
 });

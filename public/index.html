@@ -1113,7 +1113,6 @@
     eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
     trash:'<path d="M5 7h14"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6.5 7 7.3 19a2 2 0 0 0 2 1.8h5.4a2 2 0 0 0 2-1.8L17.5 7"/><path d="M10 11v6M14 11v6"/>',
     download:'<path d="M12 3v12M7 10.5 12 15.5 17 10.5"/><path d="M4.5 19h15"/>',
-    upload:'<path d="M12 21V9M7 13.5 12 8.5 17 13.5"/><path d="M4.5 19h15"/>',
     logOut:'<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M15 16l4-4-4-4"/><path d="M19 12H9"/>',
   };
   function svg(name, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" '+(extra||'')+'>'+(ICON[name]||'')+'</svg>'; }
@@ -1133,8 +1132,6 @@
         bullets:['Múltiplas contas do Mercado Livre','Múltiplas lojas da Shopee','Status de sincronização por conta','Taxas e regras específicas de cada canal'] },
       { id:'products', title:'Produtos', icon:'box', action:'Novo produto', desc:'Cadastro de produtos: nome, SKU, custo e status — e a alíquota de imposto da empresa. Usados no cálculo de margem das vendas (Pedidos, Visão Geral, Financeiro e Relatórios); a margem não aparece aqui.',
         bullets:['Ficha técnica e custo do produto','Variações e SKUs','Vínculo com anúncios do ML e Shopee','Curva ABC de vendas'] },
-      { id:'productMap', title:'Mapa de Produtos', icon:'link', action:'Novo produto base', desc:'O modelo físico de verdade por trás dos SKUs vendidos (ex: uma caixa "16x11x6" vendida em kits de 1, 10 ou 100 unidades) — medida, categoria, apelidos em linguagem natural e o vínculo SKU → produto físico usado no estoque e na IA Gestora.',
-        bullets:['Produto físico com medida e categoria','Vínculo SKU de venda → produto físico (com multiplicador de kit)','Apelidos em linguagem natural ("aquela 16x11x6")','Base para a IA identificar produtos citados em conversa'] },
       { id:'anuncios', title:'Anúncios', icon:'tag', action:'Atualizar', desc:'Anúncios reais das contas do Mercado Livre conectadas — título, SKU, loja, preço, estoque, status e tipo.',
         bullets:['Sincronizado ao vivo com o Mercado Livre','SKU, preço e estoque de cada anúncio','Vínculo com a loja/conta conectada','Edição de preço e estoque (próxima etapa)'] },
       { id:'suppliers', title:'Fornecedores', icon:'truck', action:'Novo fornecedor', desc:'Cadastro de fornecedores, condições comerciais e histórico de compras.',
@@ -1255,7 +1252,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','productMap','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','reports','iaGestora'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','reports','iaGestora'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1263,8 +1260,6 @@
       inner += '<button class="primary-btn enabled" id="btnNewProduto" type="button">'+svg('plus')+'<span>Novo produto</span></button>';
     } else if(id === 'suppliers'){
       inner += '<button class="primary-btn enabled" id="btnNewFornecedor" type="button">'+svg('plus')+'<span>Novo fornecedor</span></button>';
-    } else if(id === 'productMap'){
-      inner += '<button class="primary-btn enabled" id="btnNewProdutoBase" type="button">'+svg('plus')+'<span>Novo produto base</span></button>';
     } else if(id === 'anuncios'){
       inner += '<button class="primary-btn enabled" id="btnRefreshAnuncios" type="button">'+svg('refreshCw')+'<span>Atualizar</span></button>';
     } else if(id === 'stock'){
@@ -1274,14 +1269,16 @@
     } else if(id === 'purchases'){
       inner += '<button class="primary-btn enabled" id="btnNewCompra" type="button">'+svg('plus')+'<span>Nova compra</span></button>';
     } else if(id === 'payable'){
-      inner += '<button class="primary-btn enabled" id="btnNewContaPagar" type="button">'+svg('plus')+'<span>Nova conta a pagar</span></button>';
+      inner += '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">'
+        + '<button class="ghost-btn" id="btnImportContasPagar" type="button" style="cursor:pointer;opacity:1;">'+svg('download')+'<span>Importar planilha</span></button>'
+        + '<button class="primary-btn enabled" id="btnNewContaPagar" type="button">'+svg('plus')+'<span>Nova conta a pagar</span></button>'
+      + '</div>';
     } else if(id === 'receivable'){
       inner += '<button class="primary-btn enabled" id="btnNewContaReceber" type="button">'+svg('plus')+'<span>Nova conta a receber</span></button>';
     } else if(id === 'fixedExpenses'){
       inner += '<button class="primary-btn enabled" id="btnNewDespesaFixa" type="button">'+svg('plus')+'<span>Nova despesa fixa</span></button>';
     } else if(id === 'cashFlow'){
-      inner += '<button class="ghost-btn" id="btnImportarExtrato" type="button" style="cursor:pointer;opacity:1;">'+svg('upload')+'<span>Importar extrato bancário</span></button>';
-      inner += '<button class="ghost-btn" id="btnSaldoInicialFluxoCaixa" type="button" style="cursor:pointer;opacity:1;">'+svg('wallet')+'<span>Saldo inicial por conta</span></button>';
+      inner += '<button class="ghost-btn" id="btnSaldoInicialFluxoCaixa" type="button" style="cursor:pointer;opacity:1;">'+svg('wallet')+'<span>Definir saldo inicial</span></button>';
     } else if(id !== 'overview' && !REAL_MODULES.includes(id)){
       inner += '<button class="primary-btn" disabled>'+svg('plus')+'<span>'+(p.action||'Em breve')+'</span></button>';
     }
@@ -1294,7 +1291,6 @@
     else if(id === 'orders'){ inner += '<div id="pedidosRoot"></div>'; }
     else if(id === 'finance'){ inner += '<div id="financeRoot"></div>'; }
     else if(id === 'products'){ inner += '<div id="produtosRoot"></div>'; }
-    else if(id === 'productMap'){ inner += '<div id="mapaProdutosRoot"></div>'; }
     else if(id === 'suppliers'){ inner += '<div id="fornecedoresRoot"></div>'; }
     else if(id === 'anuncios'){ inner += '<div id="anunciosRoot"></div>'; }
     else if(id === 'stock'){ inner += '<div id="estoqueRoot"></div>'; }
@@ -1341,7 +1337,6 @@
     if(id === 'orders' && window.Pedidos) window.Pedidos.load();
     if(id === 'finance' && window.Financeiro) window.Financeiro.load();
     if(id === 'products' && window.Produtos) window.Produtos.load();
-    if(id === 'productMap' && window.MapaProdutos) window.MapaProdutos.load();
     if(id === 'suppliers' && window.Fornecedores) window.Fornecedores.load();
     if(id === 'anuncios' && window.Anuncios) window.Anuncios.load();
     if(id === 'stock' && window.Estoque) window.Estoque.load();
@@ -4204,658 +4199,6 @@
     window.Fornecedores = { load };
   })();
 
-  /* ================= MAPA DE PRODUTOS (27/08/2026) =================
-     Primeira etapa da proposta "IA Gestora que conhece o negócio"
-     (docs/PROPOSTA-contexto-negocio-ia-gestora.md): tela de gestão para
-     `produtos_base`/`produto_base_skus`/`produto_base_aliases` — que já
-     tinham API completa (routes/produtosBase.js) mas nenhuma UI (gap
-     crítico identificado na auditoria). Três sub-abas: o produto físico em
-     si (código/nome/medida/categoria/custo), o vínculo SKU de venda →
-     produto físico (com sugestões automáticas vindas de vendas reais) e os
-     apelidos em linguagem natural (pré-requisito para a futura ferramenta
-     de IA `identificar_produto_fisico` — ainda não implementada). */
-  (function(){
-    const state = {
-      empresas:[], empresaId:null, loadingEmpresas:false,
-      view: 'produtos', // 'produtos' | 'vinculos' | 'aliases'
-      produtos: { items:[], loading:false, error:null, status:'todos', search:'' },
-      vinculos: { items:[], loading:false, error:null, sugestoes:[], loadingSugestoes:false, errorSugestoes:null },
-      aliases: { items:[], loading:false, error:null, filtroProdutoBaseId:'', filtroTexto:'' },
-    };
-
-    function toast(message, type){
-      const wrap = document.getElementById('toastWrap');
-      const el = document.createElement('div');
-      el.className = 'toast ' + (type||'success');
-      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
-      wrap.appendChild(el);
-      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
-    }
-    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-    function fmtDate(iso){ try{ return new Date(iso).toLocaleDateString('pt-BR'); }catch(e){ return '—'; } }
-    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
-
-    function errorPanelHTML(msg, retryId){
-      return '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
-        + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(msg)+'</p>'
-        + '<button class="ghost-btn" id="'+retryId+'" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
-    }
-
-    async function apiEmpresasAtivas(){
-      const res = await fetch('/api/empresas?status=ativas');
-      return ((await res.json()).empresas) || [];
-    }
-    async function api(path, opts){
-      const res = await fetch('/api/produtos-base'+path, { headers:{'Content-Type':'application/json'}, ...opts });
-      let body = null; try{ body = await res.json(); }catch(e){}
-      if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
-      return body;
-    }
-
-    async function loadProdutos(){
-      state.produtos.loading = true; state.produtos.error = null; render();
-      try{
-        const params = new URLSearchParams({ empresaId: state.empresaId });
-        if(state.produtos.status !== 'todos') params.set('status', state.produtos.status);
-        if(state.produtos.search.trim()) params.set('search', state.produtos.search.trim());
-        const data = await api('?'+params.toString(), { method:'GET' });
-        state.produtos.items = data.produtosBase;
-      }catch(err){ state.produtos.error = err.message || 'Não foi possível carregar os produtos base.'; }
-      finally{ state.produtos.loading = false; render(); }
-    }
-
-    async function loadVinculos(){
-      state.vinculos.loading = true; state.vinculos.error = null; render();
-      try{
-        const data = await api('/vinculos?empresaId='+state.empresaId, { method:'GET' });
-        state.vinculos.items = data.vinculos;
-      }catch(err){ state.vinculos.error = err.message || 'Não foi possível carregar os vínculos.'; }
-      finally{ state.vinculos.loading = false; render(); }
-    }
-
-    async function loadSugestoes(){
-      state.vinculos.loadingSugestoes = true; state.vinculos.errorSugestoes = null; render();
-      try{
-        const data = await api('/vinculos/sugestoes?empresaId='+state.empresaId, { method:'GET' });
-        state.vinculos.sugestoes = data.sugestoes;
-      }catch(err){ state.vinculos.errorSugestoes = err.message || 'Não foi possível carregar as sugestões.'; }
-      finally{ state.vinculos.loadingSugestoes = false; render(); }
-    }
-
-    async function loadAliases(){
-      state.aliases.loading = true; state.aliases.error = null; render();
-      try{
-        const data = await api('/aliases?empresaId='+state.empresaId, { method:'GET' });
-        state.aliases.items = data.aliases;
-      }catch(err){ state.aliases.error = err.message || 'Não foi possível carregar os apelidos.'; }
-      finally{ state.aliases.loading = false; render(); }
-    }
-
-    async function loadTudo(){
-      await Promise.all([loadProdutos(), loadVinculos(), loadSugestoes(), loadAliases()]);
-    }
-
-    async function load(){
-      state.loadingEmpresas = true; render();
-      try{
-        state.empresas = await apiEmpresasAtivas();
-        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
-          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
-        }
-      }catch(e){ state.empresas = []; }
-      state.loadingEmpresas = false;
-      if(state.empresaId) await loadTudo(); else render();
-    }
-
-    async function aceitarSugestao(sku){
-      const sug = state.vinculos.sugestoes.find(function(s){ return s.sku === sku; });
-      if(!sug || !sug.sugestao) return;
-      try{
-        const payload = { empresaId: state.empresaId, sku: sug.sku, multiplicador: sug.sugestao.multiplicador, origem:'automatico' };
-        if(sug.sugestao.produtoBaseExistenteId) payload.produtoBaseId = sug.sugestao.produtoBaseExistenteId;
-        else payload.codigoProdutoBase = sug.sugestao.codigoBase;
-        await api('/vinculos', { method:'POST', body: JSON.stringify(payload) });
-        toast('Sugestão aceita — vínculo criado.');
-        loadProdutos(); loadVinculos(); loadSugestoes();
-      }catch(err){ toast(err.message || 'Não foi possível aceitar a sugestão.', 'error'); }
-    }
-
-    /* ---------- RENDER ---------- */
-    function render(){
-      const root = document.getElementById('mapaProdutosRoot');
-      if(!root) return;
-
-      if(!state.loadingEmpresas && !state.empresas.length){
-        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('link')+'</div>'
-          + '<h2>Nenhuma empresa ativa</h2>'
-          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de mapear produtos.</p></div>';
-        return;
-      }
-
-      let html = '<div class="toolbar">'
-        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="mpEmpresaSelect">'
-          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
-        + '</select></div>'
-        + '<div class="seg" id="mpViewSeg">'
-          + [['produtos','Produtos físicos'],['vinculos','Vínculos de SKU'],['aliases','Apelidos']].map(function(par){ return '<button data-view="'+par[0]+'" class="'+(state.view===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
-        + '</div>'
-      + '</div>';
-
-      html += state.view==='produtos' ? produtosViewHTML() : state.view==='vinculos' ? vinculosViewHTML() : aliasesViewHTML();
-
-      root.innerHTML = html;
-      wireCommon();
-      if(state.view==='produtos') wireProdutosView();
-      else if(state.view==='vinculos') wireVinculosView();
-      else wireAliasesView();
-    }
-
-    function produtosViewHTML(){
-      let html = '<div class="toolbar" style="margin-top:0;">'
-        + '<div class="seg" id="mpStatusSeg">'
-          + [['todos','Todos'],['ativos','Ativos'],['inativos','Inativos']].map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.produtos.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
-        + '</div>'
-        + '<div class="search-box">'+svg('search')+'<input type="text" id="mpProdutosSearch" placeholder="Buscar por código, nome ou medida" value="'+state.produtos.search.replace(/"/g,'&quot;')+'"></div>'
-      + '</div>';
-
-      if(state.produtos.loading){
-        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando produtos base…</span></div></div>';
-      } else if(state.produtos.error){
-        html += errorPanelHTML(state.produtos.error, 'mpProdutosRetry');
-      } else if(!state.produtos.items.length){
-        const filtrado = !!(state.produtos.search || state.produtos.status!=='todos');
-        html += '<div class="empty-panel"><div class="empty-icon">'+svg('link')+'</div>'
-          + '<h2>Nenhum produto base encontrado</h2>'
-          + '<p class="lead">'+(filtrado ? 'Nenhum produto base corresponde ao filtro atual.' : 'Cadastre o primeiro produto físico (código, medida, categoria) desta empresa — é o que a IA e o estoque físico usam por trás de cada SKU vendido.')+'</p>'
-          + (filtrado ? '' : '<button class="primary-btn enabled" id="mpEmptyNew" type="button">'+svg('plus')+'<span>Cadastrar produto base</span></button>')
-        + '</div>';
-      } else {
-        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Código</th><th>Nome</th><th>Medida</th><th>Categoria</th><th>Custo</th><th>Apelidos</th><th>Status</th><th></th>'
-          + '</tr></thead><tbody>'
-          + state.produtos.items.map(function(pb){
-              const aliasesCount = state.aliases.items.filter(function(a){ return a.produtoBaseId===pb.id; }).length;
-              return '<tr class="'+(pb.ativo?'':'inactive')+'">'
-                + '<td class="mono">'+escapeHtml(pb.codigo)+'</td>'
-                + '<td>'+escapeHtml(pb.nome||'—')+'</td>'
-                + '<td>'+escapeHtml(pb.medida||'—')+'</td>'
-                + '<td>'+escapeHtml(pb.categoria||'—')+'</td>'
-                + '<td class="mono">'+money(pb.custo)+'</td>'
-                + '<td><button class="ghost-btn" data-ver-aliases="'+pb.id+'" type="button" style="cursor:pointer;opacity:1;padding:5px 10px;">'+(aliasesCount||'—')+'</button></td>'
-                + '<td>'+(pb.ativo ? '<span class="badge-status on"><span class="dot"></span>Ativo</span>' : '<span class="badge-status off"><span class="dot"></span>Inativo</span>')+'</td>'
-                + '<td><div class="row-actions">'
-                  + '<button class="row-ic-btn" data-edit-produto="'+pb.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
-                  + '<button class="row-ic-btn '+(pb.ativo?'danger':'success')+'" data-toggle-produto="'+pb.id+'" data-next="'+(!pb.ativo)+'" title="'+(pb.ativo?'Desativar':'Ativar')+'" type="button">'+svg('power')+'</button>'
-                + '</div></td>'
-              + '</tr>';
-            }).join('')
-          + '</tbody></table></div></div>';
-      }
-      return html;
-    }
-
-    function vinculosViewHTML(){
-      let html = '<div class="toolbar" style="margin-top:0; justify-content:flex-end;">'
-        + '<button class="ghost-btn" id="mpNewVinculo" type="button" style="cursor:pointer;opacity:1;">'+svg('plus')+'<span>Novo vínculo manual</span></button>'
-      + '</div>';
-
-      html += '<div class="table-card" style="margin-bottom:16px;">'
-        + '<div style="padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">'
-          + '<div><div style="font-weight:700; font-size:13px;">SKUs vendidos sem vínculo</div>'
-          + '<div style="font-size:11.5px; color:var(--text-faint); margin-top:2px;">SKUs que já apareceram em pedidos reais desta empresa mas ainda não têm produto físico vinculado.</div></div>'
-          + '<button class="ghost-btn" id="mpSugestoesRetry" type="button" style="cursor:pointer;opacity:1;">'+svg('refreshCw')+'<span>Atualizar</span></button>'
-        + '</div>';
-
-      if(state.vinculos.loadingSugestoes){
-        html += '<div class="table-skel" style="padding:16px;"><span class="spin"></span><span>Carregando sugestões…</span></div>';
-      } else if(state.vinculos.errorSugestoes){
-        html += '<div style="padding:16px; color:var(--danger); font-size:12.5px;">'+escapeHtml(state.vinculos.errorSugestoes)+'</div>';
-      } else if(!state.vinculos.sugestoes.length){
-        html += '<div style="padding:16px; color:var(--text-faint); font-size:12.5px;">Nenhum SKU pendente — todo SKU que já vendeu tem um produto físico vinculado.</div>';
-      } else {
-        html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>SKU</th><th>Vendas</th><th>Sugestão automática</th><th></th></tr></thead><tbody>'
-          + state.vinculos.sugestoes.map(function(s){
-              const sug = s.sugestao;
-              const sugTxt = sug ? (sug.multiplicador+'x '+escapeHtml(sug.codigoBase)+(sug.produtoBaseExistenteId ? ' (produto já existe)' : ' (produto novo)')) : 'Sem padrão reconhecível — vincular manualmente';
-              return '<tr>'
-                + '<td class="mono">'+escapeHtml(s.sku)+'</td>'
-                + '<td>'+s.ocorrencias+'</td>'
-                + '<td>'+sugTxt+'</td>'
-                + '<td><div class="row-actions">'
-                  + (sug ? '<button class="ghost-btn" data-aceitar-sugestao="'+escapeHtml(s.sku)+'" type="button" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Aceitar</span></button>' : '')
-                  + '<button class="ghost-btn" data-vincular-manual="'+escapeHtml(s.sku)+'" type="button" style="cursor:pointer;opacity:1;">'+svg('link')+'<span>Vincular</span></button>'
-                + '</div></td>'
-              + '</tr>';
-            }).join('')
-          + '</tbody></table></div>';
-      }
-      html += '</div>';
-
-      if(state.vinculos.loading){
-        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando vínculos…</span></div></div>';
-      } else if(state.vinculos.error){
-        html += errorPanelHTML(state.vinculos.error, 'mpVinculosRetry');
-      } else if(!state.vinculos.items.length){
-        html += '<div class="empty-panel"><div class="empty-icon">'+svg('link')+'</div>'
-          + '<h2>Nenhum vínculo cadastrado</h2>'
-          + '<p class="lead">Vincule um SKU de venda a um produto físico — pela sugestão automática acima ou manualmente.</p>'
-          + '<button class="primary-btn enabled" id="mpEmptyNewVinculo" type="button">'+svg('plus')+'<span>Novo vínculo</span></button>'
-        + '</div>';
-      } else {
-        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>SKU</th><th>Produto base</th><th>Multiplicador</th><th>Origem</th><th></th>'
-          + '</tr></thead><tbody>'
-          + state.vinculos.items.map(function(v){
-              return '<tr>'
-                + '<td class="mono">'+escapeHtml(v.sku)+'</td>'
-                + '<td>'+escapeHtml(v.produtoBaseCodigo)+(v.produtoBaseNome?' — '+escapeHtml(v.produtoBaseNome):'')+'</td>'
-                + '<td class="mono">'+v.multiplicador+'x</td>'
-                + '<td>'+(v.origem==='automatico' ? '<span class="badge-status off">Automático</span>' : '<span class="badge-status on">Manual</span>')+'</td>'
-                + '<td><div class="row-actions">'
-                  + '<button class="row-ic-btn" data-edit-vinculo="'+v.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
-                  + '<button class="row-ic-btn danger" data-del-vinculo="'+v.id+'" title="Remover" type="button">'+svg('trash')+'</button>'
-                + '</div></td>'
-              + '</tr>';
-            }).join('')
-          + '</tbody></table></div></div>';
-      }
-      return html;
-    }
-
-    function aliasesViewHTML(){
-      const produtoOptions = state.produtos.items.map(function(pb){
-        return '<option value="'+pb.id+'"'+(String(pb.id)===String(state.aliases.filtroProdutoBaseId)?' selected':'')+'>'+escapeHtml(pb.codigo)+(pb.nome?' — '+escapeHtml(pb.nome):'')+'</option>';
-      }).join('');
-
-      let html = '<div class="toolbar" style="margin-top:0;">'
-        + '<div class="empresa-picker" style="margin-bottom:0; max-width:260px;"><select id="mpAliasProdutoFiltro">'
-          + '<option value="">Todos os produtos</option>' + produtoOptions
-        + '</select></div>'
-        + '<div class="search-box">'+svg('search')+'<input type="text" id="mpAliasSearch" placeholder="Buscar apelido" value="'+String(state.aliases.filtroTexto||'').replace(/"/g,'&quot;')+'"></div>'
-        + '<button class="ghost-btn" id="mpNewAlias" type="button" style="cursor:pointer;opacity:1; margin-left:auto;">'+svg('plus')+'<span>Novo apelido</span></button>'
-      + '</div>';
-
-      if(state.aliases.loading){
-        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando apelidos…</span></div></div>';
-        return html;
-      }
-      if(state.aliases.error){
-        html += errorPanelHTML(state.aliases.error, 'mpAliasesRetry');
-        return html;
-      }
-
-      const filtroTexto = String(state.aliases.filtroTexto||'').toLowerCase().trim();
-      const filtrados = state.aliases.items.filter(function(a){
-        if(state.aliases.filtroProdutoBaseId && String(a.produtoBaseId)!==String(state.aliases.filtroProdutoBaseId)) return false;
-        if(filtroTexto && a.alias.toLowerCase().indexOf(filtroTexto)===-1 && (a.produtoBaseCodigo||'').toLowerCase().indexOf(filtroTexto)===-1) return false;
-        return true;
-      });
-
-      if(!filtrados.length){
-        const filtrado = !!(state.aliases.filtroTexto || state.aliases.filtroProdutoBaseId);
-        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
-          + '<h2>Nenhum apelido encontrado</h2>'
-          + '<p class="lead">'+(filtrado ? 'Nenhum apelido corresponde ao filtro atual.' : 'Cadastre como você costuma chamar cada produto físico — a IA usa isso pra entender referências como "aquela 16x11x6".')+'</p>'
-          + (filtrado ? '' : '<button class="primary-btn enabled" id="mpEmptyNewAlias" type="button">'+svg('plus')+'<span>Cadastrar apelido</span></button>')
-        + '</div>';
-      } else {
-        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Apelido</th><th>Produto base</th><th>Origem</th><th>Criado em</th><th></th>'
-          + '</tr></thead><tbody>'
-          + filtrados.map(function(a){
-              return '<tr>'
-                + '<td>'+escapeHtml(a.alias)+'</td>'
-                + '<td class="mono">'+escapeHtml(a.produtoBaseCodigo)+(a.produtoBaseNome?' — '+escapeHtml(a.produtoBaseNome):'')+'</td>'
-                + '<td>'+(a.origem==='ia_sugerido' ? '<span class="badge-status off">Sugerido pela IA</span>' : '<span class="badge-status on">Manual</span>')+'</td>'
-                + '<td>'+fmtDate(a.criadoEm)+'</td>'
-                + '<td><div class="row-actions">'
-                  + '<button class="row-ic-btn" data-edit-alias="'+a.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
-                  + '<button class="row-ic-btn danger" data-del-alias="'+a.id+'" title="Remover" type="button">'+svg('trash')+'</button>'
-                + '</div></td>'
-              + '</tr>';
-            }).join('')
-          + '</tbody></table></div></div>';
-      }
-      return html;
-    }
-
-    /* ---------- WIRING ---------- */
-    function wireCommon(){
-      const sel = document.getElementById('mpEmpresaSelect');
-      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadTudo(); });
-      const seg = document.getElementById('mpViewSeg');
-      if(seg) seg.querySelectorAll('button').forEach(function(b){ b.addEventListener('click', function(){ state.view = b.dataset.view; render(); }); });
-    }
-
-    function wireProdutosView(){
-      const statusSeg = document.getElementById('mpStatusSeg');
-      if(statusSeg) statusSeg.querySelectorAll('button').forEach(function(b){ b.addEventListener('click', function(){ state.produtos.status = b.dataset.status; loadProdutos(); }); });
-      const search = document.getElementById('mpProdutosSearch');
-      if(search) search.addEventListener('input', function(){
-        state.produtos.search = search.value;
-        clearTimeout(search._t);
-        search._t = setTimeout(loadProdutos, 300);
-      });
-      const retry = document.getElementById('mpProdutosRetry');
-      if(retry) retry.addEventListener('click', loadProdutos);
-      const emptyNew = document.getElementById('mpEmptyNew');
-      if(emptyNew) emptyNew.addEventListener('click', ()=> openModalProdutoBase());
-      document.querySelectorAll('[data-edit-produto]').forEach(function(b){ b.addEventListener('click', function(){
-        const pb = state.produtos.items.find(function(x){ return String(x.id)===b.dataset.editProduto; });
-        openModalProdutoBase(pb);
-      }); });
-      document.querySelectorAll('[data-toggle-produto]').forEach(function(b){ b.addEventListener('click', async function(){
-        const id = b.dataset.toggleProduto, next = b.dataset.next === 'true';
-        b.disabled = true;
-        try{
-          await api('/'+id+'/status', { method:'PATCH', body: JSON.stringify({ ativo: next }) });
-          toast(next ? 'Produto base ativado.' : 'Produto base desativado.');
-          loadProdutos();
-        }catch(err){ toast(err.message, 'error'); b.disabled = false; }
-      }); });
-      document.querySelectorAll('[data-ver-aliases]').forEach(function(b){ b.addEventListener('click', function(){
-        state.view = 'aliases';
-        state.aliases.filtroProdutoBaseId = b.dataset.verAliases;
-        render();
-      }); });
-    }
-
-    function wireVinculosView(){
-      const retrySug = document.getElementById('mpSugestoesRetry');
-      if(retrySug) retrySug.addEventListener('click', loadSugestoes);
-      const retry = document.getElementById('mpVinculosRetry');
-      if(retry) retry.addEventListener('click', loadVinculos);
-      const newBtn = document.getElementById('mpNewVinculo');
-      if(newBtn) newBtn.addEventListener('click', ()=> openModalVinculo());
-      const emptyNew = document.getElementById('mpEmptyNewVinculo');
-      if(emptyNew) emptyNew.addEventListener('click', ()=> openModalVinculo());
-      document.querySelectorAll('[data-aceitar-sugestao]').forEach(function(b){ b.addEventListener('click', function(){ aceitarSugestao(b.dataset.aceitarSugestao); }); });
-      document.querySelectorAll('[data-vincular-manual]').forEach(function(b){ b.addEventListener('click', function(){
-        const sku = b.dataset.vincularManual;
-        const sug = state.vinculos.sugestoes.find(function(s){ return s.sku===sku; });
-        openModalVinculo(null, { sku: sku, sugestao: sug ? sug.sugestao : null });
-      }); });
-      document.querySelectorAll('[data-edit-vinculo]').forEach(function(b){ b.addEventListener('click', function(){
-        const v = state.vinculos.items.find(function(x){ return String(x.id)===b.dataset.editVinculo; });
-        openModalVinculo(v);
-      }); });
-      document.querySelectorAll('[data-del-vinculo]').forEach(function(b){ b.addEventListener('click', async function(){
-        if(!window.confirm('Remover este vínculo? O SKU volta a aparecer como pendente.')) return;
-        try{
-          await api('/vinculos/'+b.dataset.delVinculo, { method:'DELETE' });
-          toast('Vínculo removido.');
-          loadVinculos(); loadSugestoes();
-        }catch(err){ toast(err.message, 'error'); }
-      }); });
-    }
-
-    function wireAliasesView(){
-      const filtroSel = document.getElementById('mpAliasProdutoFiltro');
-      if(filtroSel) filtroSel.addEventListener('change', function(){ state.aliases.filtroProdutoBaseId = filtroSel.value; render(); });
-      const search = document.getElementById('mpAliasSearch');
-      if(search) search.addEventListener('input', function(){
-        state.aliases.filtroTexto = search.value;
-        clearTimeout(search._t);
-        search._t = setTimeout(render, 200);
-      });
-      const newBtn = document.getElementById('mpNewAlias');
-      if(newBtn) newBtn.addEventListener('click', ()=> openModalAlias(null, state.aliases.filtroProdutoBaseId || null));
-      const emptyNew = document.getElementById('mpEmptyNewAlias');
-      if(emptyNew) emptyNew.addEventListener('click', ()=> openModalAlias());
-      document.querySelectorAll('[data-edit-alias]').forEach(function(b){ b.addEventListener('click', function(){
-        const a = state.aliases.items.find(function(x){ return String(x.id)===b.dataset.editAlias; });
-        openModalAlias(a);
-      }); });
-      document.querySelectorAll('[data-del-alias]').forEach(function(b){ b.addEventListener('click', async function(){
-        if(!window.confirm('Remover este apelido?')) return;
-        try{
-          await api('/aliases/'+b.dataset.delAlias, { method:'DELETE' });
-          toast('Apelido removido.');
-          loadAliases();
-        }catch(err){ toast(err.message, 'error'); }
-      }); });
-    }
-
-    /* ---------- MODAIS ---------- */
-    async function openModalProdutoBase(pb){
-      const isEdit = !!pb;
-      let categoriasSugeridas = [];
-      try{ categoriasSugeridas = (await api('/categorias-sugeridas?empresaId='+state.empresaId, { method:'GET' })).categorias; }catch(e){}
-
-      const modalRoot = document.getElementById('modalRoot');
-      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
-        + '<div class="modal-card">'
-          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar produto base':'Novo produto base')+'</div>'
-            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
-          + '<div class="modal-sub">'+(isEdit?'Atualize os dados do produto físico.':'Cadastre o modelo físico real por trás dos SKUs de venda.')+'</div>'
-          + '<form id="mpForm">'
-            + '<div class="field"><label>Código</label><input type="text" id="pbCodigo" placeholder="Ex: CX-16X11X6" value="'+(isEdit?escapeHtml(pb.codigo):'')+'" maxlength="100">'
-              + '<div class="field-error" id="ePbCodigo" style="display:none;"></div></div>'
-            + '<div class="field"><label>Nome <span class="opt">(opcional)</span></label><input type="text" id="pbNome" placeholder="Nome descritivo" value="'+(isEdit?escapeHtml(pb.nome||''):'')+'" maxlength="200"></div>'
-            + '<div class="field"><label>Medida <span class="opt">(opcional)</span></label><input type="text" id="pbMedida" placeholder="Ex: 16x11x6" value="'+(isEdit?escapeHtml(pb.medida||''):'')+'" maxlength="100"></div>'
-            + '<div class="field"><label>Categoria <span class="opt">(opcional)</span></label><input type="text" id="pbCategoria" list="pbCategoriasList" placeholder="Ex: Caixas de papelão" value="'+(isEdit?escapeHtml(pb.categoria||''):'')+'" maxlength="100">'
-              + '<datalist id="pbCategoriasList">'+categoriasSugeridas.map(function(c){ return '<option value="'+escapeHtml(c)+'">'; }).join('')+'</datalist></div>'
-            + '<div class="field"><label>Custo unitário <span class="opt">(opcional)</span></label><input type="text" inputmode="decimal" id="pbCusto" placeholder="0,00" value="'+(isEdit && pb.custo!==null ? String(pb.custo).replace('.',','):'')+'">'
-              + '<div class="field-error" id="ePbCusto" style="display:none;"></div></div>'
-            + (isEdit ? '<div class="toggle-row"><div><div class="toggle-row-label">Produto ativo</div><div class="toggle-row-sub">Produtos inativos ficam ocultos nas seleções do sistema.</div></div>'
-              + '<button type="button" class="toggle '+(pb.ativo?'on':'')+'" id="pbAtivo" data-on="'+(pb.ativo?'true':'false')+'"></button></div>' : '')
-            + '<div class="modal-actions">'
-              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
-              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Cadastrar produto base')+'</span></button>'
-            + '</div>'
-          + '</form>'
-        + '</div>'
-      + '</div>';
-
-      const overlay = document.getElementById('modalOverlay');
-      const close = ()=> modalRoot.innerHTML = '';
-      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
-      document.getElementById('modalClose').addEventListener('click', close);
-      document.getElementById('modalCancel').addEventListener('click', close);
-      document.getElementById('pbCodigo').focus();
-
-      const toggleBtn = document.getElementById('pbAtivo');
-      if(toggleBtn) toggleBtn.addEventListener('click', ()=>{
-        const on = toggleBtn.dataset.on !== 'true';
-        toggleBtn.dataset.on = String(on);
-        toggleBtn.classList.toggle('on', on);
-      });
-
-      document.getElementById('mpForm').addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        ['ePbCodigo','ePbCusto'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
-        ['pbCodigo','pbCusto'].forEach(id=> document.getElementById(id).classList.remove('invalid'));
-
-        const custoRaw = document.getElementById('pbCusto').value.trim();
-        const payload = {
-          empresaId: state.empresaId,
-          codigo: document.getElementById('pbCodigo').value,
-          nome: document.getElementById('pbNome').value,
-          medida: document.getElementById('pbMedida').value,
-          categoria: document.getElementById('pbCategoria').value,
-          custo: custoRaw ? custoRaw.replace(/\./g,'').replace(',','.') : '',
-        };
-        if(isEdit && toggleBtn) payload.ativo = toggleBtn.dataset.on === 'true';
-
-        const saveBtn = document.getElementById('modalSave');
-        saveBtn.disabled = true;
-        try{
-          if(isEdit) await api('/'+pb.id, { method:'PUT', body: JSON.stringify(payload) });
-          else await api('', { method:'POST', body: JSON.stringify(payload) });
-          close();
-          toast(isEdit ? 'Produto base atualizado.' : 'Produto base cadastrado.');
-          loadProdutos();
-        }catch(err){
-          saveBtn.disabled = false;
-          if(err.errors){
-            if(err.errors.codigo){ const el=document.getElementById('ePbCodigo'); el.textContent=err.errors.codigo; el.style.display='block'; document.getElementById('pbCodigo').classList.add('invalid'); }
-            if(err.errors.custo){ const el=document.getElementById('ePbCusto'); el.textContent=err.errors.custo; el.style.display='block'; document.getElementById('pbCusto').classList.add('invalid'); }
-            if(!err.errors.codigo && !err.errors.custo) toast(err.message || 'Não foi possível salvar.', 'error');
-          } else {
-            toast(err.message, 'error');
-          }
-        }
-      });
-    }
-
-    function openModalVinculo(vinculo, prefill){
-      const isEdit = !!vinculo;
-      const sku = isEdit ? vinculo.sku : (prefill && prefill.sku) || '';
-      const sugestaoPreencher = !isEdit && prefill && prefill.sugestao;
-      const produtoBaseIdInicial = isEdit ? vinculo.produtoBaseId : (sugestaoPreencher && sugestaoPreencher.produtoBaseExistenteId) || '';
-      const novoCodigoInicial = (!isEdit && sugestaoPreencher && !sugestaoPreencher.produtoBaseExistenteId) ? sugestaoPreencher.codigoBase : '';
-      const multiplicadorInicial = isEdit ? vinculo.multiplicador : (sugestaoPreencher ? sugestaoPreencher.multiplicador : 1);
-      const usarNovo = !produtoBaseIdInicial && !!novoCodigoInicial;
-
-      const produtoOptions = state.produtos.items.map(function(pb){
-        return '<option value="'+pb.id+'"'+(String(pb.id)===String(produtoBaseIdInicial)?' selected':'')+'>'+escapeHtml(pb.codigo)+(pb.nome?' — '+escapeHtml(pb.nome):'')+'</option>';
-      }).join('');
-
-      const modalRoot = document.getElementById('modalRoot');
-      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
-        + '<div class="modal-card">'
-          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar vínculo':'Novo vínculo de SKU')+'</div>'
-            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
-          + '<div class="modal-sub">'+(isEdit?'Corrija o produto físico e/ou o multiplicador deste SKU.':'Diga a quantas unidades do produto físico este SKU de venda corresponde.')+'</div>'
-          + '<form id="mpForm">'
-            + '<div class="field"><label>SKU</label><input type="text" id="vSku" placeholder="SKU exatamente como aparece no pedido" value="'+escapeHtml(sku)+'" maxlength="100" '+(isEdit?'disabled':'')+'>'
-              + (isEdit ? '<div class="field-hint">O SKU não pode ser alterado — remova o vínculo e crie um novo se o SKU mudou.</div>' : '<div class="field-error" id="eVSku" style="display:none;"></div>')
-            + '</div>'
-            + '<div class="field"><label>Produto base</label><select id="vProdutoBase">'
-              + '<option value="">Selecione…</option>'
-              + produtoOptions
-              + '<option value="__new__"'+(usarNovo?' selected':'')+'>+ Criar novo produto base</option>'
-            + '</select></div>'
-            + '<div class="field" id="vNovoCodigoWrap" style="'+(usarNovo?'':'display:none;')+'"><label>Código do novo produto base</label><input type="text" id="vNovoCodigo" placeholder="Ex: CX-16X11X6" value="'+escapeHtml(novoCodigoInicial)+'" maxlength="100"></div>'
-            + '<div class="field"><label>Multiplicador (unidades físicas por SKU vendido)</label><input type="text" inputmode="numeric" id="vMultiplicador" value="'+multiplicadorInicial+'">'
-              + '<div class="field-error" id="eVMultiplicador" style="display:none;"></div></div>'
-            + '<div class="modal-actions">'
-              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
-              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Criar vínculo')+'</span></button>'
-            + '</div>'
-          + '</form>'
-        + '</div>'
-      + '</div>';
-
-      const overlay = document.getElementById('modalOverlay');
-      const close = ()=> modalRoot.innerHTML = '';
-      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
-      document.getElementById('modalClose').addEventListener('click', close);
-      document.getElementById('modalCancel').addEventListener('click', close);
-      const skuInput = document.getElementById('vSku');
-      (skuInput.disabled ? document.getElementById('vMultiplicador') : skuInput).focus();
-
-      const selProduto = document.getElementById('vProdutoBase');
-      const novoWrap = document.getElementById('vNovoCodigoWrap');
-      selProduto.addEventListener('change', ()=>{ novoWrap.style.display = selProduto.value==='__new__' ? '' : 'none'; });
-
-      document.getElementById('mpForm').addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        ['eVSku','eVMultiplicador'].forEach(id=>{ const el=document.getElementById(id); if(el){ el.style.display='none'; el.textContent=''; } });
-
-        const multiplicador = document.getElementById('vMultiplicador').value.trim();
-        const payload = { empresaId: state.empresaId, multiplicador: Number(multiplicador) };
-        if(!isEdit) payload.sku = document.getElementById('vSku').value;
-        if(selProduto.value === '__new__') payload.codigoProdutoBase = document.getElementById('vNovoCodigo').value;
-        else if(selProduto.value) payload.produtoBaseId = Number(selProduto.value);
-
-        const saveBtn = document.getElementById('modalSave');
-        saveBtn.disabled = true;
-        try{
-          if(isEdit) await api('/vinculos/'+vinculo.id, { method:'PUT', body: JSON.stringify(payload) });
-          else await api('/vinculos', { method:'POST', body: JSON.stringify(payload) });
-          close();
-          toast(isEdit ? 'Vínculo atualizado.' : 'Vínculo criado.');
-          loadProdutos(); loadVinculos(); loadSugestoes();
-        }catch(err){
-          saveBtn.disabled = false;
-          if(err.errors){
-            let mostrouCampo = false;
-            if(err.errors.sku){ const el=document.getElementById('eVSku'); if(el){ el.textContent=err.errors.sku; el.style.display='block'; mostrouCampo=true; } }
-            if(err.errors.multiplicador){ const el=document.getElementById('eVMultiplicador'); el.textContent=err.errors.multiplicador; el.style.display='block'; mostrouCampo=true; }
-            if(err.errors.produtoBase || err.errors.produtoBaseId){ toast(err.errors.produtoBase || err.errors.produtoBaseId, 'error'); mostrouCampo=true; }
-            if(!mostrouCampo) toast(err.message || 'Não foi possível salvar.', 'error');
-          } else {
-            toast(err.message, 'error');
-          }
-        }
-      });
-    }
-
-    function openModalAlias(alias, prefillProdutoBaseId){
-      const isEdit = !!alias;
-      const produtoBaseIdInicial = isEdit ? alias.produtoBaseId : (prefillProdutoBaseId || '');
-      const produtoOptions = state.produtos.items.map(function(pb){
-        return '<option value="'+pb.id+'"'+(String(pb.id)===String(produtoBaseIdInicial)?' selected':'')+'>'+escapeHtml(pb.codigo)+(pb.nome?' — '+escapeHtml(pb.nome):'')+'</option>';
-      }).join('');
-
-      const modalRoot = document.getElementById('modalRoot');
-      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
-        + '<div class="modal-card">'
-          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar apelido':'Novo apelido')+'</div>'
-            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
-          + '<div class="modal-sub">Como você (ou a equipe) costuma chamar esse produto — usado pela IA para identificar o produto certo numa conversa.</div>'
-          + '<form id="mpForm">'
-            + '<div class="field"><label>Produto base</label><select id="aProdutoBase">'
-              + '<option value="">Selecione…</option>'
-              + produtoOptions
-            + '</select>'
-              + '<div class="field-error" id="eAProdutoBase" style="display:none;"></div></div>'
-            + '<div class="field"><label>Apelido</label><input type="text" id="aAlias" placeholder="Ex: aquela 16x11x6, caixa pequena" value="'+(isEdit?escapeHtml(alias.alias):'')+'" maxlength="200">'
-              + '<div class="field-error" id="eAAlias" style="display:none;"></div></div>'
-            + '<div class="modal-actions">'
-              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
-              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Cadastrar apelido')+'</span></button>'
-            + '</div>'
-          + '</form>'
-        + '</div>'
-      + '</div>';
-
-      const overlay = document.getElementById('modalOverlay');
-      const close = ()=> modalRoot.innerHTML = '';
-      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
-      document.getElementById('modalClose').addEventListener('click', close);
-      document.getElementById('modalCancel').addEventListener('click', close);
-      document.getElementById('aAlias').focus();
-
-      document.getElementById('mpForm').addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        ['eAProdutoBase','eAAlias'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
-
-        const produtoBaseId = document.getElementById('aProdutoBase').value;
-        if(!produtoBaseId){
-          const el=document.getElementById('eAProdutoBase'); el.textContent='Selecione o produto base.'; el.style.display='block';
-          return;
-        }
-        const payload = { empresaId: state.empresaId, produtoBaseId: Number(produtoBaseId), alias: document.getElementById('aAlias').value };
-
-        const saveBtn = document.getElementById('modalSave');
-        saveBtn.disabled = true;
-        try{
-          if(isEdit) await api('/aliases/'+alias.id, { method:'PUT', body: JSON.stringify(payload) });
-          else await api('/aliases', { method:'POST', body: JSON.stringify(payload) });
-          close();
-          toast(isEdit ? 'Apelido atualizado.' : 'Apelido cadastrado.');
-          loadAliases();
-        }catch(err){
-          saveBtn.disabled = false;
-          if(err.errors){
-            let mostrouCampo = false;
-            if(err.errors.alias){ const el=document.getElementById('eAAlias'); el.textContent=err.errors.alias; el.style.display='block'; mostrouCampo=true; }
-            if(err.errors.produtoBaseId){ const el=document.getElementById('eAProdutoBase'); el.textContent=err.errors.produtoBaseId; el.style.display='block'; mostrouCampo=true; }
-            if(!mostrouCampo) toast(err.message || 'Não foi possível salvar.', 'error');
-          } else {
-            toast(err.message, 'error');
-          }
-        }
-      });
-    }
-
-    document.getElementById('btnNewProdutoBase').addEventListener('click', ()=> openModalProdutoBase());
-
-    window.MapaProdutos = { load };
-  })();
-
   /* ================= ANÚNCIOS — visualização ao vivo (Mercado Livre) =================
      Mostra os anúncios reais das contas do Mercado Livre conectadas: ID,
      título, SKU, loja, preço, estoque disponível, status e tipo. Nada é
@@ -5788,7 +5131,136 @@
       });
     }
 
+    function openImportModal(){
+      const empresaId = Number(window.CerneFiltro.state.empresaId);
+      if(!empresaId){ toast('Selecione uma empresa antes de importar.', 'error'); return; }
+
+      const CAMPOS = [
+        ['fornecedor','Fornecedor',false], ['descricao','Descrição',true], ['categoria','Categoria',false],
+        ['documento','Documento / NF',false], ['parcela','Parcela',false], ['dataEmissao','Data de emissão',false],
+        ['vencimento','Vencimento',true], ['valor','Valor',true], ['formaPagamento','Forma de pagamento',false],
+        ['bancoConta','Banco / Conta',false], ['status','Status',false], ['dataPagamento','Data de pagamento',false],
+        ['valorPago','Valor pago',false], ['observacao','Observação',false]
+      ];
+      const imp = { nomeArquivo:'', colunas:[], linhas:[], mapeamento:{}, preview:null, force:new Set(), loading:false };
+      const modalRoot = document.getElementById('modalRoot');
+      const close = ()=> modalRoot.innerHTML='';
+
+      async function fetchJson(url, opts){
+        const res = await fetch(url, opts);
+        let body=null; try{ body=await res.json(); }catch(e){}
+        if(!res.ok) throw new Error((body&&body.error)||'Falha na importação.');
+        return body;
+      }
+
+      function shell(conteudo, largura){
+        modalRoot.innerHTML = '<div class="modal-overlay" id="cpImpOverlay">'
+          + '<div class="modal-card" style="max-width:'+(largura||'980px')+';max-height:92vh;overflow:auto;">'
+            + '<div class="modal-head"><div class="modal-title">Importar Contas a Pagar</div>'
+              + '<button class="row-ic-btn" id="cpImpClose" type="button">'+svg('x')+'</button></div>'
+            + conteudo
+          + '</div></div>';
+        document.getElementById('cpImpClose').addEventListener('click', close);
+        document.getElementById('cpImpOverlay').addEventListener('click', e=>{ if(e.target.id==='cpImpOverlay') close(); });
+      }
+
+      function renderInicio(){
+        shell('<div class="modal-sub">As contas serão importadas para a <strong>empresa selecionada no cabeçalho</strong> e entrarão na mesma base usada pelo Fluxo de Caixa.</div>'
+          + '<div class="empty-panel" style="margin-top:16px;padding:28px 20px;">'
+            + '<div class="empty-icon">'+svg('fileText')+'</div>'
+            + '<h2>Selecione sua planilha</h2><p class="lead">Aceita CSV ou Excel (.xlsx), até 5.000 linhas.</p>'
+            + '<input type="file" id="cpImpFile" accept=".csv,.xlsx" style="display:none;">'
+            + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px;">'
+              + '<button class="primary-btn enabled" id="cpImpChoose" type="button">'+svg('fileText')+'<span>Escolher arquivo</span></button>'
+              + '<a class="ghost-btn" href="/api/contas-pagar/importar/modelo" style="cursor:pointer;opacity:1;">'+svg('download')+'<span>Baixar modelo</span></a>'
+            + '</div>'
+          + '</div>', '680px');
+        const input=document.getElementById('cpImpFile');
+        document.getElementById('cpImpChoose').addEventListener('click', ()=>input.click());
+        input.addEventListener('change', async ()=>{
+          const file=input.files&&input.files[0]; if(!file) return;
+          if(file.size > 10*1024*1024){ toast('Arquivo maior que 10 MB.', 'error'); return; }
+          const nome=file.name.toLowerCase();
+          if(!nome.endsWith('.csv') && !nome.endsWith('.xlsx')){ toast('Envie um arquivo CSV ou XLSX.', 'error'); return; }
+          const btn=document.getElementById('cpImpChoose'); btn.disabled=true; btn.querySelector('span').textContent='Lendo arquivo…';
+          try{
+            const data=await fetchJson('/api/contas-pagar/importar/ler', { method:'POST', headers:{'Content-Type':'application/octet-stream','X-File-Name':encodeURIComponent(file.name)}, body:file });
+            imp.nomeArquivo=data.nomeArquivo; imp.colunas=data.colunas||[]; imp.linhas=data.linhas||[]; imp.mapeamento=data.mapeamentoSugerido||{}; imp.preview=null; imp.force=new Set();
+            renderMapeamento();
+          }catch(err){ toast(err.message,'error'); btn.disabled=false; btn.querySelector('span').textContent='Escolher arquivo'; }
+        });
+      }
+
+      function selectCampo(key){
+        const atual=imp.mapeamento[key]||'';
+        return '<select data-map="'+key+'"><option value="">Não importar</option>'
+          + imp.colunas.map(c=>'<option value="'+escapeHtml(c)+'" '+(c===atual?'selected':'')+'>'+escapeHtml(c)+'</option>').join('')
+          + '</select>';
+      }
+
+      function renderMapeamento(){
+        const rows=CAMPOS.map(c=>'<tr><td><strong>'+c[1]+'</strong>'+(c[2]?'<span style="color:var(--danger);"> *</span>':'')+'</td><td>'+selectCampo(c[0])+'</td></tr>').join('');
+        shell('<div class="modal-sub">Arquivo: <strong>'+escapeHtml(imp.nomeArquivo)+'</strong> · '+imp.linhas.length+' linha(s). Confira o mapeamento antes da prévia.</div>'
+          + '<div class="table-card" style="margin-top:16px;"><div class="table-wrap"><table class="data-table"><thead><tr><th>Campo no Cerne</th><th>Coluna da planilha</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'
+          + '<div class="field-hint" style="margin-top:10px;">Obrigatórios: Descrição, Vencimento e Valor. Fornecedor não cadastrado será preservado pelo nome, sem criar cadastro fictício.</div>'
+          + '<div class="modal-actions"><button class="btn-secondary" id="cpImpTrocar" type="button">Trocar arquivo</button><button class="btn-primary" id="cpImpPreview" type="button">'+svg('check')+'<span>Validar e ver prévia</span></button></div>');
+        document.querySelectorAll('[data-map]').forEach(sel=>sel.addEventListener('change', ()=>{ if(sel.value) imp.mapeamento[sel.dataset.map]=sel.value; else delete imp.mapeamento[sel.dataset.map]; imp.preview=null; }));
+        document.getElementById('cpImpTrocar').addEventListener('click', renderInicio);
+        document.getElementById('cpImpPreview').addEventListener('click', gerarPreview);
+      }
+
+      async function gerarPreview(){
+        const faltam=['descricao','vencimento','valor'].filter(k=>!imp.mapeamento[k]);
+        if(faltam.length){ toast('Mapeie Descrição, Vencimento e Valor.', 'error'); return; }
+        const btn=document.getElementById('cpImpPreview'); btn.disabled=true; btn.querySelector('span').textContent='Validando…';
+        try{
+          imp.preview=await fetchJson('/api/contas-pagar/importar/preview', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({empresaId, linhas:imp.linhas, mapeamento:imp.mapeamento}) });
+          imp.force=new Set(); renderPreview();
+        }catch(err){ toast(err.message,'error'); btn.disabled=false; btn.querySelector('span').textContent='Validar e ver prévia'; }
+      }
+
+      function renderPreview(){
+        const r=imp.preview.resumo;
+        const cards=[
+          ['Linhas',r.total,'muted'], ['Prontas',r.prontas,'success'], ['Duplicidades',r.duplicidades,r.duplicidades?'warning':'muted'], ['Com erro',r.erros,r.erros?'danger':'muted']
+        ].map(x=>'<div class="kpi-sec" style="'+tintVars(x[2])+'"><div class="kpi-sec-body"><div class="kpi-sec-label">'+x[0]+'</div><div class="kpi-sec-value">'+x[1]+'</div></div></div>').join('');
+        const itens=(imp.preview.itens||[]).slice(0,500);
+        const linhasHtml=itens.map(it=>{
+          const d=it.dados||{};
+          const label=it.status==='pronto'?'Pronto':it.status==='duplicidade'?'Possível duplicidade':'Erro';
+          const style=it.status==='pronto'?'color:var(--success);background:var(--success-soft);':it.status==='duplicidade'?'color:var(--warning);background:var(--warning-soft);':'color:var(--danger);background:var(--danger-soft);';
+          const force=it.status==='duplicidade' ? '<label style="display:flex;align-items:center;gap:6px;font-size:11px;white-space:nowrap;"><input type="checkbox" data-force="'+it.linha+'"> Importar mesmo assim</label>' : '';
+          return '<tr><td class="tab-nums">'+it.linha+'</td><td><span class="status-chip" style="'+style+'">'+label+'</span>'+force+'</td>'
+            + '<td>'+escapeHtml(d.fornecedorNomeImportado||'')+(d.fornecedorId?'Fornecedor cadastrado #'+d.fornecedorId:(d.fornecedorNomeImportado?'':'—'))+'</td>'
+            + '<td>'+escapeHtml(d.descricao||'')+(it.erros&&it.erros.length?'<div class="di-sub" style="color:var(--danger);">'+escapeHtml(it.erros.join(' · '))+'</div>':'')+'</td>'
+            + '<td>'+escapeHtml(d.documento||'—')+(d.parcela?'<div class="di-sub">Parcela '+escapeHtml(d.parcela)+'</div>':'')+'</td>'
+            + '<td class="tab-nums">'+fmtDate(d.vencimento)+'</td><td class="mono">'+(d.valor?money(d.valor):'—')+'</td></tr>';
+        }).join('');
+        shell('<div class="modal-sub">Revise antes de gravar. Linhas com erro nunca são importadas; duplicidades ficam ignoradas, a menos que você marque “Importar mesmo assim”.</div>'
+          + '<div class="kpi-sec-grid" style="margin-top:16px;margin-bottom:14px;">'+cards+'</div>'
+          + '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Linha</th><th>Validação</th><th>Fornecedor</th><th>Descrição</th><th>Documento</th><th>Vencimento</th><th>Valor</th></tr></thead><tbody>'+linhasHtml+'</tbody></table></div></div>'
+          + ((imp.preview.itens||[]).length>500?'<div class="field-hint" style="margin-top:8px;">Mostrando as primeiras 500 linhas na prévia; todas serão processadas na confirmação.</div>':'')
+          + '<div class="modal-actions"><button class="btn-secondary" id="cpImpBack" type="button">Voltar ao mapeamento</button><button class="btn-primary" id="cpImpConfirm" type="button">'+svg('check')+'<span>Confirmar importação</span></button></div>');
+        document.querySelectorAll('[data-force]').forEach(ch=>ch.addEventListener('change', ()=>{ const n=Number(ch.dataset.force); if(ch.checked) imp.force.add(n); else imp.force.delete(n); }));
+        document.getElementById('cpImpBack').addEventListener('click', renderMapeamento);
+        document.getElementById('cpImpConfirm').addEventListener('click', confirmar);
+      }
+
+      async function confirmar(){
+        const btn=document.getElementById('cpImpConfirm'); btn.disabled=true; btn.querySelector('span').textContent='Importando…';
+        try{
+          const result=await fetchJson('/api/contas-pagar/importar/confirmar', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ empresaId, nomeArquivo:imp.nomeArquivo, linhas:imp.linhas, mapeamento:imp.mapeamento, forceLinhas:Array.from(imp.force) }) });
+          close();
+          toast(result.importadas+' conta(s) importada(s).'+(result.duplicidadesIgnoradas?' '+result.duplicidadesIgnoradas+' duplicidade(s) ignorada(s).':'')+(result.erros?' '+result.erros+' linha(s) com erro.':''));
+          loadContas();
+        }catch(err){ toast(err.message,'error'); btn.disabled=false; btn.querySelector('span').textContent='Confirmar importação'; }
+      }
+
+      renderInicio();
+    }
+
     document.getElementById('btnNewContaPagar').addEventListener('click', ()=> openModal());
+    document.getElementById('btnImportContasPagar').addEventListener('click', ()=> openImportModal());
 
     window.ContasPagar = { load };
   })();
@@ -6052,73 +5524,43 @@
     window.ContasReceber = { load };
   })();
 
-  /* ================= RECEBIMENTOS — repasses de marketplace =================
-     Ativado em 24/08/2026, reescrito no Passo 1 da tarefa "Recebimentos +
-     Fluxo de Caixa + IA Gestora" (27/08/2026, ver docs/04-alteracoes.md).
-     Agora com 3 status financeiros bem separados (A RECEBER, DISPONÍVEL,
-     RECEBIDO — nunca chamado de "recebido no banco" só porque o
-     marketplace liberou, ver lib/recebimentosMl.js) e um resumo SEMPRE
-     atual (recebido hoje/mês, a receber total/7/15/30 dias, por
-     marketplace/loja, GET /api/recebimentos/resumo) — independente do
-     período do header. As 3 ações manuais (marcar disponível/recebido,
-     definir previsão de liberação) são as ÚNICAS formas de mudar o status
-     por aqui; a conciliação automática do extrato bancário (Fluxo de
-     Caixa → Importar extrato) é o outro caminho, sempre com confirmação
-     explícita do usuário lá. */
+  /* ================= RECEBIMENTOS — repasses do Mercado Livre (somente leitura) =================
+     Ativado em 24/08/2026. Diferente de Contas a Receber: aqui os dados vêm
+     REAIS da sincronização do Mercado Livre (ver lib/recebimentosMl.js) —
+     nenhum cadastro manual nesta etapa. Data de liberação, valor e data de
+     recebimento reais ainda não vêm da API — mostrados como "Informação
+     não disponível" (nunca inventados), preparando o terreno para a
+     conciliação futura (valor esperado x valor repassado) pedida pelo
+     usuário. */
   (function(){
-    const state = { loading:false, error:null, recebimentos:[], resumo:null, resumoLoading:false };
+    const state = { loading:false, error:null, recebimentos:[] };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '<span class="dash">Informação não disponível</span>' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
-    function moneyKpi(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
-    function fmtDate(iso){ if(!iso) return '<span class="dash">Informação não disponível</span>'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '<span class="dash">Informação não disponível</span>'; } }
-    function hojeBRT(){
-      const BRT_OFFSET_MS = 3*60*60*1000;
-      const brt = new Date(Date.now() - BRT_OFFSET_MS);
-      const p = n => String(n).padStart(2,'0');
-      return brt.getUTCFullYear()+'-'+p(brt.getUTCMonth()+1)+'-'+p(brt.getUTCDate());
-    }
-    const STATUS_LABEL = { a_receber:'A receber', disponivel:'Disponível', recebido:'Recebido' };
+    function fmtDate(iso){ if(!iso) return '<span class="dash">Informação não disponível</span>'; try{ return new Date(iso).toLocaleDateString('pt-BR'); }catch(e){ return '<span class="dash">Informação não disponível</span>'; } }
+    const STATUS_LABEL = { a_liberar:'A liberar', disponivel:'Disponível', recebido:'Recebido', divergente:'Divergente' };
     function statusChipStyle(status){
-      const cor = status==='recebido' ? 'success' : status==='disponivel' ? 'teal' : 'warning';
+      const cor = status==='recebido' ? 'success' : status==='divergente' ? 'danger' : status==='disponivel' ? 'teal' : 'warning';
       return 'color:var(--'+cor+');background:var(--'+cor+'-soft);';
     }
-    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
-    function secCardHTML(k){
-      return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
-        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
-        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div></div></div>';
-    }
-    function toast(message, type){
-      const wrap = document.getElementById('toastWrap');
-      const el = document.createElement('div');
-      el.className = 'toast ' + (type||'success');
-      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
-      wrap.appendChild(el);
-      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
-    }
 
-    async function api(path, opts){
-      const res = await fetch('/api/recebimentos'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+    async function api(path){
+      const res = await fetch('/api/recebimentos'+path);
       let body = null; try{ body = await res.json(); }catch(e){}
-      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      if(!res.ok) throw new Error((body&&body.error)||'Falha na requisição.');
       return body;
     }
 
     async function loadRecebimentos(){
       const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ state.recebimentos=[]; state.resumo=null; state.loading=false; render(); return; }
-      state.loading = true; state.resumoLoading = true; state.error = null; render();
+      if(!filtro.empresaId){ state.recebimentos=[]; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
-        const [data, resumoData] = await Promise.all([
-          api('?'+params.toString()),
-          api('/resumo?empresaId='+filtro.empresaId),
-        ]);
+        const data = await api('?'+params.toString());
         state.recebimentos = data.recebimentos;
-        state.resumo = resumoData.resumo;
       }catch(err){ state.error = err.message || 'Não foi possível carregar os recebimentos.'; }
-      finally{ state.loading = false; state.resumoLoading = false; render(); }
+      finally{ state.loading = false; render(); }
     }
 
     function load(){ loadRecebimentos(); }
@@ -6128,32 +5570,6 @@
       if(page && page.classList.contains('active')) loadRecebimentos();
       else render();
     });
-
-    function kpisHTML(r){
-      const linha1 = [
-        { label:'Recebido hoje', icon:'checkCircle', tint:'success', valueHtml: moneyKpi(r.recebidoHoje) },
-        { label:'Recebido este mês', icon:'checkCircle', tint:'success', valueHtml: moneyKpi(r.recebidoMes) },
-        { label:'Ainda a receber', icon:'arrowDownCircle', tint:'copper', valueHtml: moneyKpi(r.aReceberTotal) },
-        { label:'Atrasado (previsão vencida)', icon:'alertCircle', tint: r.aReceberAtrasado>0?'danger':'muted', valueHtml: moneyKpi(r.aReceberAtrasado) },
-      ];
-      const linha2 = [
-        { label:'A receber — próx. 7 dias', icon:'clock', tint:'warning', valueHtml: moneyKpi(r.aReceberProximos7Dias) },
-        { label:'A receber — próx. 15 dias', icon:'clock', tint:'warning', valueHtml: moneyKpi(r.aReceberProximos15Dias) },
-        { label:'A receber — próx. 30 dias', icon:'clock', tint:'warning', valueHtml: moneyKpi(r.aReceberProximos30Dias) },
-        { label:'Sem previsão de liberação', icon:'alertCircle', tint:'muted', valueHtml: moneyKpi(r.aReceberSemPrevisaoDeLiberacao.valor) + (r.aReceberSemPrevisaoDeLiberacao.quantidade ? ' <span class="di-sub" style="display:inline;">('+r.aReceberSemPrevisaoDeLiberacao.quantidade+')</span>' : '') },
-      ];
-      return '<div class="kpi-sec-grid" style="margin-bottom:10px;">' + linha1.map(secCardHTML).join('') + '</div>'
-        + '<div class="kpi-sec-grid" style="margin-bottom:14px;">' + linha2.map(secCardHTML).join('') + '</div>';
-    }
-
-    function breakdownTableHTML(titulo, icone, linhas, chaveLabel){
-      if(!linhas.length) return '';
-      return '<div class="table-card" style="flex:1;min-width:280px;"><div class="chart-card-head" style="padding:14px 16px 0;">'
-          + '<div class="panel-title"><span class="panel-title-ic">'+svg(icone)+'</span>'+titulo+'</div></div>'
-        + '<div class="table-wrap"><table class="data-table"><thead><tr><th>'+chaveLabel+'</th><th>Recebido</th><th>A receber</th></tr></thead><tbody>'
-        + linhas.map(l => '<tr><td>'+escapeHtml(l[chaveLabel==='Marketplace'?'marketplace':'loja']||'—')+'</td><td class="mono">'+money(l.recebido)+'</td><td class="mono">'+money(l.aReceber)+'</td></tr>').join('')
-        + '</tbody></table></div></div>';
-    }
 
     function render(){
       const root = document.getElementById('recebimentosRoot');
@@ -6167,16 +5583,7 @@
         return;
       }
 
-      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:820px;">Os cards abaixo são sempre atuais (independem do período selecionado no topo). A tabela mostra os pedidos com pagamento aprovado no período selecionado. "A receber" e "Disponível" ainda não são dinheiro confirmado no banco — só viram "Recebido" quando você confirma manualmente aqui ou quando o extrato bancário importado confirma o valor (Fluxo de Caixa → Importar extrato).</div>';
-
-      if(state.resumo && !state.resumoLoading) html += kpisHTML(state.resumo);
-
-      if(state.resumo && (state.resumo.porMarketplace.length || state.resumo.porLoja.length)){
-        html += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;">'
-          + breakdownTableHTML('Por marketplace', 'store', state.resumo.porMarketplace, 'Marketplace')
-          + breakdownTableHTML('Por loja', 'building', state.resumo.porLoja, 'Loja')
-        + '</div>';
-      }
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:720px;">Esta tela mostra os pedidos com pagamento aprovado do Mercado Livre no período selecionado. Data de liberação, valor recebido e data de recebimento ainda não são retornados pela API nesta integração — aparecem como "Informação não disponível" (nunca um valor inventado) até que essa fonte real exista. Preparado para, no futuro, comparar o valor que o ERP esperava receber com o valor que o marketplace realmente repassou.</div>';
 
       if(state.loading || filtro.loadingEmpresas){
         html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando recebimentos…</span></div></div>';
@@ -6186,10 +5593,10 @@
       } else if(!state.recebimentos.length){
         html += '<div class="empty-panel"><div class="empty-icon">'+svg('swap')+'</div>'
           + '<h2>Nenhum recebimento no período</h2>'
-          + '<p class="lead">Não há pedidos com pagamento aprovado no período e empresa selecionados.</p></div>';
+          + '<p class="lead">Não há pedidos com pagamento aprovado do Mercado Livre no período e empresa selecionados.</p></div>';
       } else {
         html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Loja</th><th>Pedido</th><th>Data da venda</th><th>Valor bruto</th><th>Taxas/descontos</th><th>Líquido esperado</th><th>Previsão de liberação</th><th>Recebido</th><th>Data recebimento</th><th>Status</th><th></th>'
+          + '<th>Loja</th><th>Pedido</th><th>Data da venda</th><th>Valor bruto</th><th>Taxas/descontos</th><th>Líquido esperado</th><th>Previsão de liberação</th><th>Recebido</th><th>Data recebimento</th><th>Status</th>'
           + '</tr></thead><tbody>'
           + state.recebimentos.map(r => '<tr>'
             + '<td>'+escapeHtml(r.loja||'—')+'</td>'
@@ -6201,125 +5608,12 @@
             + '<td class="tab-nums">'+fmtDate(r.dataPrevistaLiberacao)+'</td>'
             + '<td class="mono">'+money(r.valorRecebido)+'</td>'
             + '<td class="tab-nums">'+fmtDate(r.dataRecebimento)+'</td>'
-            + '<td><span class="status-chip" style="'+statusChipStyle(r.status)+'">'+(STATUS_LABEL[r.status]||r.status)+'</span>'
-              + (r.status==='recebido' && r.origemConfirmacao ? '<div class="di-sub">'+(r.origemConfirmacao==='conciliacao_extrato'?'via conciliação do extrato':'confirmado manualmente')+'</div>' : '')+'</td>'
-            + '<td><div class="row-actions">'
-              + (r.status==='a_receber' ? '<button class="row-ic-btn" data-disponivel="'+r.id+'" title="Marcar como disponível (marketplace já liberou)" type="button">'+svg('arrowDownCircle')+'</button>' : '')
-              + (r.status!=='recebido' ? '<button class="row-ic-btn" data-previsao="'+r.id+'" title="Definir previsão de liberação" type="button">'+svg('clock')+'</button>' : '')
-              + (r.status!=='recebido' ? '<button class="row-ic-btn success" data-recebido="'+r.id+'" title="Marcar como recebido (confirmado no banco)" type="button">'+svg('check')+'</button>' : '')
-            + '</div></td>'
+            + '<td><span class="status-chip" style="'+statusChipStyle(r.status)+'">'+(STATUS_LABEL[r.status]||r.status)+'</span></td>'
           + '</tr>').join('')
           + '</tbody></table></div></div>';
       }
 
       root.innerHTML = html;
-
-      root.querySelectorAll('[data-disponivel]').forEach(b=> b.addEventListener('click', async ()=>{
-        b.disabled = true;
-        try{ await api('/'+b.dataset.disponivel+'/disponivel', { method:'PATCH', body: JSON.stringify({ dataEfetivaLiberacao: hojeBRT() }) }); toast('Recebimento marcado como disponível.'); loadRecebimentos(); }
-        catch(err){ toast(err.message,'error'); b.disabled = false; }
-      }));
-      root.querySelectorAll('[data-recebido]').forEach(b=> b.addEventListener('click', ()=>{
-        const rec = state.recebimentos.find(r=>String(r.id)===b.dataset.recebido);
-        if(rec) abrirModalRecebido(rec);
-      }));
-      root.querySelectorAll('[data-previsao]').forEach(b=> b.addEventListener('click', ()=>{
-        const rec = state.recebimentos.find(r=>String(r.id)===b.dataset.previsao);
-        if(rec) abrirModalPrevisao(rec);
-      }));
-    }
-
-    function abrirModalRecebido(rec){
-      const modalRoot = document.getElementById('modalRoot');
-      const hoje = hojeBRT();
-      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
-        + '<div class="modal-card" style="max-width:480px;">'
-          + '<div class="modal-head"><div class="modal-title">Marcar como recebido</div>'
-            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
-          + '<div class="modal-sub">Pedido '+escapeHtml(rec.pedidoRef)+' ('+escapeHtml(rec.marketplace)+(rec.loja?' — '+escapeHtml(rec.loja):'')+'). Confirme só quando o valor realmente entrou no banco — se você importou o extrato bancário, prefira conciliar por lá em vez de confirmar aqui manualmente.</div>'
-          + '<form id="recForm">'
-            + '<div class="inline-form" style="margin-top:0;">'
-              + '<div class="field narrow"><label>Valor recebido</label><input type="text" inputmode="decimal" id="fValorRecebido" value="'+(rec.valorLiquidoEsperado!==null?String(rec.valorLiquidoEsperado).replace('.',','):'')+'">'
-                + '<div class="field-error" id="eValorRecebido" style="display:none;"></div></div>'
-              + '<div class="field narrow"><label>Data do recebimento</label><input type="date" id="fDataRecebido" value="'+hoje+'">'
-                + '<div class="field-error" id="eDataRecebido" style="display:none;"></div></div>'
-            + '</div>'
-            + '<div class="modal-actions">'
-              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
-              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Confirmar recebido</span></button>'
-            + '</div>'
-          + '</form>'
-        + '</div>'
-      + '</div>';
-
-      const overlay = document.getElementById('modalOverlay');
-      const close = ()=> modalRoot.innerHTML = '';
-      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
-      document.getElementById('modalClose').addEventListener('click', close);
-      document.getElementById('modalCancel').addEventListener('click', close);
-
-      document.getElementById('recForm').addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        ['eValorRecebido','eDataRecebido'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
-        const payload = {
-          valorRecebido: Number(document.getElementById('fValorRecebido').value.replace(',','.')),
-          dataEfetivaRecebimento: document.getElementById('fDataRecebido').value,
-        };
-        const saveBtn = document.getElementById('modalSave');
-        saveBtn.disabled = true;
-        try{
-          await api('/'+rec.id+'/recebido', { method:'PATCH', body: JSON.stringify(payload) });
-          close();
-          toast('Recebimento confirmado.');
-          loadRecebimentos();
-        }catch(err){
-          saveBtn.disabled = false;
-          if(err.errors && err.errors.valorRecebido){ const el=document.getElementById('eValorRecebido'); el.textContent=err.errors.valorRecebido; el.style.display='block'; }
-          else toast(err.message, 'error');
-        }
-      });
-    }
-
-    function abrirModalPrevisao(rec){
-      const modalRoot = document.getElementById('modalRoot');
-      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
-        + '<div class="modal-card" style="max-width:440px;">'
-          + '<div class="modal-head"><div class="modal-title">Definir previsão de liberação</div>'
-            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
-          + '<div class="modal-sub">Pedido '+escapeHtml(rec.pedidoRef)+'. O marketplace não informa essa data pela API — informe aqui só quando souber pelo painel dele; usada nos recortes "a receber nos próximos 7/15/30 dias".</div>'
-          + '<form id="prevForm">'
-            + '<div class="field"><label>Data prevista de liberação</label><input type="date" id="fDataPrevista" value="'+(rec.dataPrevistaLiberacao||'')+'">'
-              + '<div class="field-error" id="eDataPrevista" style="display:none;"></div></div>'
-            + '<div class="modal-actions">'
-              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
-              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Salvar previsão</span></button>'
-            + '</div>'
-          + '</form>'
-        + '</div>'
-      + '</div>';
-
-      const overlay = document.getElementById('modalOverlay');
-      const close = ()=> modalRoot.innerHTML = '';
-      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
-      document.getElementById('modalClose').addEventListener('click', close);
-      document.getElementById('modalCancel').addEventListener('click', close);
-
-      document.getElementById('prevForm').addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        const el = document.getElementById('eDataPrevista'); el.style.display='none'; el.textContent='';
-        const saveBtn = document.getElementById('modalSave');
-        saveBtn.disabled = true;
-        try{
-          await api('/'+rec.id+'/previsao-liberacao', { method:'PATCH', body: JSON.stringify({ dataPrevistaLiberacao: document.getElementById('fDataPrevista').value }) });
-          close();
-          toast('Previsão de liberação salva.');
-          loadRecebimentos();
-        }catch(err){
-          saveBtn.disabled = false;
-          if(err.errors && err.errors.dataPrevistaLiberacao){ el.textContent=err.errors.dataPrevistaLiberacao; el.style.display='block'; }
-          else toast(err.message, 'error');
-        }
-      });
     }
 
     window.Recebimentos = { load };
@@ -6646,33 +5940,12 @@
       ['7d','7 dias'], ['15d','15 dias'], ['30d','30 dias'],
       ['mes','Este mês'], ['proximoMes','Próximo mês'], ['personalizado','Personalizado'],
     ];
-    const state = {
-      loading:false, error:null, periodoChave:'30d', desdePersonalizado:null, atePersonalizado:null, dados:null,
-      // Extrato bancário / conciliação (Passo 2, 27/08/2026, ver docs/04-alteracoes.md).
-      contasBancarias:[], contaBancariaFiltro:null,
-      importacoes:[], importacoesLoading:false,
-      sugestoes:[], sugestoesLoading:false, sugestoesError:null,
-    };
-    const CAMPOS_MAPEAVEIS = ['data','descricao','documento','entrada','saida','valor','saldo'];
-    const CAMPO_LABEL = { data:'Data', descricao:'Descrição/histórico', documento:'Documento', entrada:'Entrada', saida:'Saída', valor:'Valor', saldo:'Saldo' };
+    const state = { loading:false, error:null, periodoChave:'30d', desdePersonalizado:null, atePersonalizado:null, dados:null };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
-    // ETAPA 3 (27/08/2026): o saldo pode vir `null` por dois motivos bem
-    // diferentes — nenhuma conta bancária cadastrada, ou alguma conta ativa
-    // ainda sem saldo inicial informado (o consolidado NUNCA soma parcial
-    // fingindo ser o total da empresa, ver lib/fluxoCaixa.js). O texto muda
-    // conforme o motivo, pra sempre deixar claro o que falta fazer.
-    const MOTIVO_SALDO_INDISPONIVEL_LABEL = {
-      sem_conta_bancaria_cadastrada: 'Cadastre uma conta bancária',
-      saldo_inicial_pendente_em_alguma_conta: 'Configure o saldo inicial das contas bancárias',
-      sem_saldo_inicial_informado: 'Saldo inicial não informado',
-    };
     function moneyOuIndisponivel(campo){
-      if(!campo || campo.valor===null || campo.valor===undefined){
-        const texto = MOTIVO_SALDO_INDISPONIVEL_LABEL[campo && campo.motivo] || 'Não informado';
-        return '<span class="dash" title="'+escapeHtml(texto)+'">'+escapeHtml(texto)+'</span>';
-      }
+      if(!campo || campo.valor===null || campo.valor===undefined) return '<span class="dash" title="Informe o saldo inicial para calcular">Não informado</span>';
       return money(campo.valor);
     }
     function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
@@ -6693,136 +5966,11 @@
       setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
     }
 
-    // Timeout de requisição (diagnóstico de 27/08/2026 — tela de Fluxo de
-    // Caixa travando pra sempre em "Carregando...", ver docs/04-alteracoes.md):
-    // sem isso, se a requisição nunca voltar (rede, servidor sem timeout de
-    // pool/query, etc.), o fetch fica pendurado indefinidamente e a tela
-    // nunca sai do loading. Com o AbortController, depois de FETCH_TIMEOUT_MS
-    // a requisição é cancelada e vira um erro CLARO — nunca esconde o
-    // problema, só garante que ele sempre aparece pro usuário em vez de
-    // travar silenciosamente.
-    const FETCH_TIMEOUT_MS = 20000;
-    async function fetchComTimeout(url, opts){
-      const controller = new AbortController();
-      const timer = setTimeout(()=> controller.abort(), FETCH_TIMEOUT_MS);
-      try{
-        return await fetch(url, { ...opts, signal: controller.signal });
-      }catch(err){
-        if(err.name === 'AbortError') throw new Error('A requisição demorou demais para responder. Tente novamente.');
-        throw err;
-      }finally{ clearTimeout(timer); }
-    }
     async function api(path, opts){
-      const res = await fetchComTimeout('/api/fluxo-caixa'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      const res = await fetch('/api/fluxo-caixa'+path, { headers:{'Content-Type':'application/json'}, ...opts });
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
-    }
-    async function apiExtrato(path, opts){
-      const res = await fetchComTimeout('/api/extrato'+path, { headers:{'Content-Type':'application/json'}, ...opts });
-      let body = null; try{ body = await res.json(); }catch(e){}
-      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
-      return body;
-    }
-    // Chamada "crua" pra /api/extrato/preview: MESMO quando a resposta vem
-    // com erro (400 — ex: coluna de data não identificada), o backend
-    // devolve colunas/mapeamentoSugerido junto (ver lib/extratoBancario.js#
-    // previsualizarImportacao) — o wizard precisa disso pra montar a etapa
-    // de mapeamento manual, então essa função nunca lança em cima de um 400,
-    // só em falha de rede/parse real.
-    async function apiPreviewCru(payload){
-      const res = await fetchComTimeout('/api/extrato/preview', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      let body = null; try{ body = await res.json(); }catch(e){}
-      if(!body) throw new Error('Falha na requisição.');
-      return body;
-    }
-    async function apiConciliacao(path, opts){
-      const res = await fetchComTimeout('/api/conciliacao'+path, { headers:{'Content-Type':'application/json'}, ...opts });
-      let body = null; try{ body = await res.json(); }catch(e){}
-      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
-      return body;
-    }
-    async function apiContasBancarias(path, opts){
-      const res = await fetchComTimeout('/api/contas-bancarias'+path, { headers:{'Content-Type':'application/json'}, ...opts });
-      let body = null; try{ body = await res.json(); }catch(e){}
-      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
-      return body;
-    }
-
-    // ---- extrato bancário: contas, histórico de importações, sugestões de conciliação ----
-    // Seleção padrão de conta bancária (diagnóstico de 27/08/2026 — ver
-    // docs/04-alteracoes.md): ANTES a conta padrão era sempre
-    // `data.contas[0]` de uma lista ordenada alfabeticamente por
-    // `lib/contasBancarias.js#listarContasBancarias` — como "Mercado Pago..."
-    // vem antes de "Nubank..." no alfabeto, o seletor de conciliação sempre
-    // voltava pra Mercado Pago a cada recarregamento da página, mesmo tendo
-    // acabado de importar pro Nubank (nunca um vazamento de dado — as
-    // queries já eram corretamente filtradas por conta — só a seleção
-    // visual errada). Prioridade da nova escolha, nessa ordem:
-    //   1) a conta que o usuário já tinha selecionado NESTA sessão
-    //      (state.contaBancariaFiltro), se ainda for válida;
-    //   2) a última conta escolhida por este usuário NESTE navegador,
-    //      salva em localStorage por empresa (sobrevive a recarregar a
-    //      página — pedido explícito: "manter conta que o usuário já
-    //      selecionou");
-    //   3) a conta da importação de extrato MAIS RECENTE (nunca alfabético);
-    //   4) só na ausência de tudo isso, a primeira da lista.
-    function chaveContaBancariaPreferida(empresaId){ return 'cerneFluxoContaBancaria_'+empresaId; }
-    function salvarContaBancariaPreferida(contaId){
-      try{
-        const empresaId = window.CerneFiltro.state.empresaId;
-        if(empresaId && contaId) localStorage.setItem(chaveContaBancariaPreferida(empresaId), String(contaId));
-      }catch(e){ /* localStorage pode estar indisponível (modo privado etc.) — nunca quebra a tela por causa disso */ }
-    }
-    function lerContaBancariaPreferida(empresaId){
-      try{ return localStorage.getItem(chaveContaBancariaPreferida(empresaId)); }catch(e){ return null; }
-    }
-    async function carregarContasBancarias(){
-      const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ state.contasBancarias = []; state.contaBancariaFiltro = null; return; }
-      try{
-        const data = await apiContasBancarias('?empresaId='+filtro.empresaId);
-        state.contasBancarias = data.contas;
-        // Nunca decide a conta padrão aqui — ver decidirContaBancariaFiltroPadrao(),
-        // chamada só depois que o histórico de importações também já carregou.
-      }catch(err){ /* silencioso — não trava o resto da página por causa da lista de contas */ }
-    }
-    async function carregarImportacoes(){
-      const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ state.importacoes = []; return; }
-      state.importacoesLoading = true;
-      try{
-        const data = await apiExtrato('/importacoes?empresaId='+filtro.empresaId);
-        state.importacoes = data.importacoes; // já vem ORDER BY created_at DESC — [0] é a importação mais recente
-      }catch(err){ /* silencioso */ }
-      finally{ state.importacoesLoading = false; }
-    }
-    function decidirContaBancariaFiltroPadrao(){
-      const filtro = window.CerneFiltro.state;
-      const existe = id => state.contasBancarias.some(c=>String(c.id)===String(id));
-      if(state.contaBancariaFiltro && existe(state.contaBancariaFiltro)) return; // 1) já tem seleção válida nesta sessão — nunca sobrescreve
-      const preferida = lerContaBancariaPreferida(filtro.empresaId);
-      if(preferida && existe(preferida)){ state.contaBancariaFiltro = preferida; return; } // 2) preferência salva neste navegador
-      if(state.importacoes.length){ state.contaBancariaFiltro = state.importacoes[0].contaBancariaId; return; } // 3) conta da importação mais recente
-      state.contaBancariaFiltro = state.contasBancarias.length ? state.contasBancarias[0].id : null; // 4) último recurso
-    }
-    async function carregarSugestoes(){
-      const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId || !state.contaBancariaFiltro){ state.sugestoes = []; state.sugestoesError = null; return; }
-      state.sugestoesLoading = true; state.sugestoesError = null;
-      try{
-        const data = await apiConciliacao('/sugestoes?empresaId='+filtro.empresaId+'&contaBancariaId='+state.contaBancariaFiltro);
-        state.sugestoes = data.sugestoes;
-      }catch(err){ state.sugestoesError = err.message || 'Não foi possível carregar as sugestões de conciliação.'; }
-      finally{ state.sugestoesLoading = false; }
-    }
-    async function carregarExtratoEConciliacao(){
-      // contas + importações primeiro (em paralelo — carregarSugestoes
-      // depende de já saber qual conta usar, decidido logo abaixo).
-      await Promise.all([ carregarContasBancarias(), carregarImportacoes() ]);
-      decidirContaBancariaFiltroPadrao();
-      await carregarSugestoes();
-      render();
     }
 
     async function loadFluxo(){
@@ -6844,12 +5992,11 @@
       if(!state.desdePersonalizado) state.desdePersonalizado = hojeBRT();
       if(!state.atePersonalizado) state.atePersonalizado = hojeBRT();
       loadFluxo();
-      carregarExtratoEConciliacao();
     }
 
     window.CerneFiltro.onChange(()=>{
       const page = document.getElementById('page-cashFlow');
-      if(page && page.classList.contains('active')){ loadFluxo(); carregarExtratoEConciliacao(); }
+      if(page && page.classList.contains('active')) loadFluxo();
       else render();
     });
 
@@ -6862,29 +6009,15 @@
         + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
       + '</div>';
     }
-    // ETAPA 3 (27/08/2026, ver docs/04-alteracoes.md): cards reorganizados
-    // pra deixar REALIZADO (extrato bancário — aconteceu de verdade) e
-    // PREVISTO (contas a pagar/receber pendentes) sempre visualmente
-    // separados, nunca somados por engano. "Transferências internas" só
-    // aparece quando existe alguma no período (dinheiro que só mudou de
-    // conta própria — nunca entra nos indicadores operacionais acima).
     function cardsHTML(dados){
       const c = dados.cards;
       const items = [
-        { label:'Saldo atual', icon:'wallet', tint: c.saldoAtual.valor===null?'muted':(c.saldoAtual.valor>=0?'success':'danger'), valueHtml: moneyOuIndisponivel(c.saldoAtual), note:'Agora, somando todas as contas bancárias ativas com saldo inicial configurado' },
-        { label:'Entradas realizadas', icon:'arrowDownCircle', tint:'success', valueHtml: money(c.entradasRealizadas), note:'Já caiu no banco no período — conciliado ou não' },
-        { label:'Saídas realizadas', icon:'arrowUpCircle', tint:'copper', valueHtml: money(c.saidasRealizadas), note:'Já saiu do banco no período — conciliado ou não' },
-        { label:'Resultado realizado', icon:'activity', tint: c.resultadoRealizado>=0?'success':'danger', valueHtml: money(c.resultadoRealizado), note:'Entradas realizadas − saídas realizadas, no período' },
-        { label:'A receber', icon:'arrowDownCircle', tint:'muted', valueHtml: money(c.entradasPrevistas), note:'Contas a receber pendentes no período — ainda não é dinheiro disponível' },
-        { label:'A pagar', icon:'arrowUpCircle', tint:'muted', valueHtml: money(c.saidasPrevistas), note:'Contas a pagar + despesas fixas previstas no período' },
-        { label:'Saldo projetado', icon:'lineChart', tint: (c.saldoProjetado.valor===null?'muted':(c.saldoProjetado.valor>=0?'success':'danger')), valueHtml: moneyOuIndisponivel(c.saldoProjetado), note:'Saldo atual + entradas previstas − saídas previstas, ao final do período' },
+        { label:'Saldo atual', icon:'wallet', tint: c.saldoAtual.valor===null?'muted':(c.saldoAtual.valor>=0?'success':'danger'), valueHtml: moneyOuIndisponivel(c.saldoAtual), note:'Hoje, a partir do saldo inicial informado' },
+        { label:'Entradas previstas', icon:'arrowDownCircle', tint:'success', valueHtml: money(c.entradasPrevistas), note:'A receber no período selecionado — ainda não é dinheiro disponível' },
+        { label:'Saídas previstas', icon:'arrowUpCircle', tint:'copper', valueHtml: money(c.saidasPrevistas), note:'Contas a pagar + despesas fixas previstas no período' },
+        { label:'Saldo projetado', icon:'activity', tint: (c.saldoProjetado.valor===null?'muted':(c.saldoProjetado.valor>=0?'success':'danger')), valueHtml: moneyOuIndisponivel(c.saldoProjetado), note:'Saldo estimado ao final do período — nunca dinheiro garantido' },
         { label:'Contas vencidas', icon:'alertCircle', tint: c.contasVencidas>0?'danger':'muted', valueHtml: money(c.contasVencidas), note:'A pagar vencidas + a receber atrasadas (saldo em aberto, agora)' },
       ];
-      if(c.transferenciasInternas && (c.transferenciasInternas.entradas || c.transferenciasInternas.saidas)){
-        items.push({ label:'Transferências internas', icon:'refreshCw', tint:'muted',
-          valueHtml: money(c.transferenciasInternas.entradas) + ' <span class="di-sub" style="display:inline;">recebida(s)</span> / ' + money(c.transferenciasInternas.saidas) + ' <span class="di-sub" style="display:inline;">enviada(s)</span>',
-          note:'Dinheiro que só mudou de conta própria — nunca entra em entradas/saídas realizadas acima' });
-      }
       return '<div class="kpi-hero-grid">' + items.map(cardHTML).join('') + '</div>';
     }
 
@@ -6895,7 +6028,7 @@
       return '<div class="chart-card" style="margin-bottom:14px;">'
         + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('barChart')+'</span>Como o saldo projetado é calculado</div></div>'
         + '<div class="formula-box">'
-          + linha('Saldo atual', moneyOuIndisponivel(f.saldoInicialOuAtual))
+          + linha('Saldo inicial / atual', moneyOuIndisponivel(f.saldoInicialOuAtual))
           + linha('Contas a receber (no período)', money(f.contasAReceber), '+')
           + linha('Recebimentos previstos dos marketplaces', money(f.recebimentosPrevistosMarketplaces), '+')
           + linha('Contas a pagar (no período)', money(f.contasAPagar), '−')
@@ -6906,34 +6039,6 @@
           + (dados.recebimentosMarketplaces && dados.recebimentosMarketplaces.quantidade ? (' ('+dados.recebimentosMarketplaces.quantidade+' pedido(s) no período.)') : '')
         + '</div>'
       + '</div>';
-    }
-
-    // ---- saldo por conta bancária (ETAPA 3, 27/08/2026) ----
-    // Saldo inicial agora é POR CONTA (nunca mais um valor único da
-    // empresa) — cada conta ativa aparece aqui, com o saldo inicial que foi
-    // informado (se já foi) e o saldo atual calculado a partir dele. Uma
-    // conta sem saldo inicial some do CONSOLIDADO do card "Saldo atual" (ver
-    // moneyOuIndisponivel), mas continua aparecendo aqui pra deixar claro o
-    // que falta configurar.
-    function saldoPorContaHTML(dados){
-      const lista = dados.saldosPorConta;
-      if(!lista) return ''; // null só quando a consulta já é escopada a UMA conta (não é o caso desta tela)
-      let html = '<div class="table-card" style="margin-bottom:14px;"><div class="chart-card-head" style="padding:14px 16px 0;">'
-        + '<div class="panel-title"><span class="panel-title-ic">'+svg('wallet')+'</span>Saldo por conta bancária</div></div>';
-      if(!lista.length){
-        html += '<div class="field-hint" style="padding:0 16px 16px;">Cadastre uma conta bancária (botão "Importar extrato bancário" → "Nova conta bancária") para configurar o saldo inicial.</div></div>';
-        return html;
-      }
-      html += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Conta</th><th>Saldo inicial</th><th>Referência</th><th>Saldo atual</th><th></th></tr></thead><tbody>'
-        + lista.map(c => '<tr>'
-            + '<td>'+escapeHtml(c.nome)+'</td>'
-            + '<td class="mono">'+(c.saldoInicial ? money(c.saldoInicial.valor) : '<span class="dash">Não configurado</span>')+'</td>'
-            + '<td class="tab-nums">'+(c.saldoInicial ? fmtDate(c.saldoInicial.referenciaEm) : '—')+'</td>'
-            + '<td class="mono">'+(c.saldo===null?'<span class="dash">Indisponível</span>':money(c.saldo))+'</td>'
-            + '<td><button class="row-ic-btn" data-config-saldo-conta="'+c.contaBancariaId+'" title="Configurar saldo inicial desta conta" type="button">'+svg('edit')+'</button></td>'
-          + '</tr>').join('')
-        + '</tbody></table></div></div>';
-      return html;
     }
 
     // ---- gráfico: evolução do saldo de caixa (REALIZADO sólido, PROJETADO tracejado) ----
@@ -7013,86 +6118,6 @@
         + '</tbody></table></div></div>';
     }
 
-    // ---- extrato bancário: seletor de conta + histórico de importações + sugestões de conciliação ----
-    function fmtDateHora(iso){ if(!iso) return '—'; try{ const d = new Date(iso); return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return '—'; } }
-    const STATUS_IMPORTACAO_LABEL = { concluida:'Concluída', erro:'Erro' };
-
-    function importacoesHistoricoHTML(){
-      let html = '<div class="table-card" style="margin-bottom:14px;"><div class="chart-card-head" style="padding:14px 16px 0;">'
-        + '<div class="panel-title"><span class="panel-title-ic">'+svg('inbox')+'</span>Histórico de importações de extrato</div></div>';
-      if(state.importacoesLoading){
-        html += '<div class="table-skel"><span class="spin"></span><span>Carregando histórico…</span></div></div>';
-        return html;
-      }
-      if(!state.importacoes.length){
-        html += '<div class="field-hint" style="padding:0 16px 16px;">Nenhuma planilha importada ainda. Use "Importar extrato bancário" no topo da página.</div></div>';
-        return html;
-      }
-      const contaNome = id => { const c = state.contasBancarias.find(x=>String(x.id)===String(id)); return c ? c.nome : '—'; };
-      html += '<div class="table-wrap"><table class="data-table"><thead><tr>'
-        + '<th>Arquivo</th><th>Conta bancária</th><th>Data da importação</th><th>Movimentações</th><th>Novas</th><th>Duplicadas (ignoradas)</th><th>Entradas</th><th>Saídas</th><th>Quem importou</th><th>Status</th>'
-        + '</tr></thead><tbody>'
-        + state.importacoes.map(i => '<tr>'
-          + '<td class="mono">'+escapeHtml(i.nomeArquivo||'—')+'</td>'
-          + '<td>'+escapeHtml(contaNome(i.contaBancariaId))+'</td>'
-          + '<td class="tab-nums">'+fmtDateHora(i.criadoEm)+'</td>'
-          + '<td class="mono">'+(i.totalMovimentacoes ?? '—')+'</td>'
-          + '<td class="mono">'+(i.totalNovas ?? '—')+'</td>'
-          + '<td class="mono">'+(i.totalDuplicadas ?? '—')+'</td>'
-          + '<td class="mono">'+money(i.totalEntradas)+'</td>'
-          + '<td class="mono">'+money(i.totalSaidas)+'</td>'
-          + '<td>'+escapeHtml(i.importadoPor||'—')+'</td>'
-          + '<td><span class="status-chip" style="'+(i.status==='concluida'?'color:var(--success);background:var(--success-soft);':'color:var(--danger);background:var(--danger-soft);')+'">'+(STATUS_IMPORTACAO_LABEL[i.status]||i.status)+'</span></td>'
-        + '</tr>').join('')
-        + '</tbody></table></div></div>';
-      return html;
-    }
-
-    function sugestoesConciliacaoHTML(){
-      let html = '<div class="chart-card" style="margin-bottom:14px;">'
-        + '<div class="chart-card-head">'
-          + '<div class="panel-title"><span class="panel-title-ic">'+svg('link')+'</span>Sugestões de conciliação</div>'
-          + '<div class="chart-legend"><select id="fcContaBancariaConc" style="max-width:260px;">'
-              + (state.contasBancarias.length ? state.contasBancarias.map(c=>'<option value="'+c.id+'"'+(String(c.id)===String(state.contaBancariaFiltro)?' selected':'')+'>'+escapeHtml(c.nome)+'</option>').join('') : '<option value="">Nenhuma conta bancária cadastrada</option>')
-            + '</select></div>'
-        + '</div>';
-      if(!state.contasBancarias.length){
-        html += '<div class="field-hint" style="padding:0 16px 16px;">Cadastre uma conta bancária (botão "Importar extrato bancário" → "Nova conta bancária") para ver sugestões de conciliação.</div></div>';
-        return html;
-      }
-      html += '<div class="field-hint" style="margin:0 16px 12px;">O ERP nunca concilia sozinho — cada sugestão abaixo precisa da sua confirmação. O critério é o valor bater (±R$0,01); a data só ordena, nunca descarta uma sugestão.</div>';
-      if(state.sugestoesLoading){
-        html += '<div class="table-skel"><span class="spin"></span><span>Carregando sugestões…</span></div></div>';
-      } else if(state.sugestoesError){
-        html += '<div class="field-hint" style="color:var(--danger);padding:0 16px 16px;">'+escapeHtml(state.sugestoesError)+'</div></div>';
-      } else if(!state.sugestoes.length){
-        html += '<div class="field-hint" style="padding:0 16px 16px;">Nenhuma sugestão pendente para esta conta — todos os movimentos de entrada/saída já foram conciliados, ignorados, ou não há candidato com valor batendo.</div></div>';
-      } else {
-        html += '<div class="table-wrap" style="padding:0 16px 16px;">' + state.sugestoes.map((s,si) => {
-          const m = s.movimento;
-          return '<div class="table-card" style="margin-bottom:10px;"><div style="padding:12px 14px;">'
-            + '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
-              + '<div><strong>'+escapeHtml(m.descricao||'(sem descrição)')+'</strong><div class="di-sub">Extrato — '+fmtDate(m.data)+' — '+(m.tipo==='entrada'?'Entrada':'Saída')+' — <span class="mono">'+money(m.valor)+'</span></div></div>'
-              + '<button class="row-ic-btn" data-ignorar="'+m.id+'" title="Ignorar este movimento (não corresponde a nada rastreado)" type="button">'+svg('x')+'</button>'
-            + '</div>'
-            + s.candidatos.map(c => '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
-                + '<div><span class="status-chip" style="color:var(--teal);background:var(--teal-soft);margin-right:8px;">Possível conciliação encontrada</span>'
-                  + escapeHtml(c.descricao)+' — <span class="mono">'+money(c.valor)+'</span>'
-                  + (c.dataReferencia ? ' — <span class="di-sub" style="display:inline;">'+fmtDate(c.dataReferencia)+(c.diferencaDias!==null?' ('+c.diferencaDias+'d de diferença)':'')+'</span>' : '')
-                + '</div>'
-                + '<button class="btn-secondary" data-confirmar-movimento="'+m.id+'" data-confirmar-tipo="'+c.tipo+'" data-confirmar-alvo="'+c.id+'" type="button" style="white-space:nowrap;">'+svg('check')+'<span>Confirmar</span></button>'
-              + '</div>').join('')
-          + '</div></div>';
-        }).join('') + '</div>';
-      }
-      html += '</div>';
-      return html;
-    }
-
-    function extratoSectionHTML(){
-      return importacoesHistoricoHTML() + sugestoesConciliacaoHTML();
-    }
-
     function periodoSeletorHTML(){
       let html = '<div class="toolbar"><div class="seg" id="fcSeg">'
         + PERIODO_OPCOES.map(function(par){ return '<button data-periodo="'+par[0]+'" class="'+(state.periodoChave===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
@@ -7130,36 +6155,10 @@
       } else if(!state.dados){
         html += '<div class="empty-panel"><div class="empty-icon">'+svg('activity')+'</div><h2>Selecione uma empresa</h2></div>';
       } else {
-        // Diagnóstico de 27/08/2026 (ver docs/04-alteracoes.md): `root.innerHTML
-        // = html` só acontece no FINAL desta função — se qualquer coisa aqui
-        // dentro lançar uma exceção, a tela ficava presa pra sempre no
-        // esqueleto de "Carregando..." do render() anterior, SEM nenhum erro
-        // visível pro usuário (só no console). Nunca mais deixamos isso
-        // acontecer: um erro de montagem agora sempre vira uma tela de erro
-        // amigável — nunca escondido (segue no console.error pra debug), mas
-        // também nunca uma tela travada silenciosamente.
-        try{
-          html += cardsHTML(state.dados)
-            + formulaHTML(state.dados)
-            + saldoPorContaHTML(state.dados)
-            + chartCardHTML(state.dados)
-            + tabelaDiariaHTML(state.dados);
-        }catch(errRender){
-          console.error('[FluxoCaixa] erro ao montar a tela com os dados recebidos:', errRender);
-          html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
-            + '<h2 style="color:var(--danger);">Não foi possível exibir o fluxo de caixa</h2>'
-            + '<p class="lead">Os dados chegaram, mas houve um erro ao montar a tela. Tente novamente — se persistir, avise o suporte.</p>'
-            + '<button class="ghost-btn" id="fcRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
-        }
-      }
-
-      try{
-        html += extratoSectionHTML();
-      }catch(errExtrato){
-        console.error('[FluxoCaixa] erro ao montar a seção de extrato/conciliação:', errExtrato);
-        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
-          + '<h2 style="color:var(--danger);">Não foi possível exibir extrato/conciliação</h2>'
-          + '<p class="lead">Houve um erro ao montar esta seção. O resto da tela continua funcionando normalmente.</p></div>';
+        html += cardsHTML(state.dados)
+          + formulaHTML(state.dados)
+          + chartCardHTML(state.dados)
+          + tabelaDiariaHTML(state.dados);
       }
 
       root.innerHTML = html;
@@ -7174,352 +6173,72 @@
         state.atePersonalizado = document.getElementById('fcAte').value || hojeBRT();
         loadFluxo();
       });
-      root.querySelectorAll('.chart-empty [disabled]').forEach(b=> { b.disabled=false; b.style.cursor='pointer'; b.style.opacity='1'; b.addEventListener('click', ()=>abrirModalSaldoInicial()); });
-      root.querySelectorAll('[data-config-saldo-conta]').forEach(b=> b.addEventListener('click', ()=> abrirModalSaldoInicial(b.dataset.configSaldoConta)));
-
-      const contaConc = document.getElementById('fcContaBancariaConc');
-      if(contaConc) contaConc.addEventListener('change', async ()=>{
-        state.contaBancariaFiltro = contaConc.value || null;
-        salvarContaBancariaPreferida(state.contaBancariaFiltro); // escolha explícita do usuário — vira a preferência salva (item 1 da prioridade)
-        state.sugestoesLoading = true; render();
-        await carregarSugestoes();
-        render();
-      });
-      root.querySelectorAll('[data-ignorar]').forEach(b=> b.addEventListener('click', async ()=>{
-        b.disabled = true;
-        try{
-          await apiConciliacao('/'+b.dataset.ignorar+'/ignorar', { method:'PATCH' });
-          toast('Movimento marcado como ignorado.');
-          await carregarSugestoes(); render();
-        }catch(err){ toast(err.message,'error'); b.disabled = false; }
-      }));
-      root.querySelectorAll('[data-confirmar-movimento]').forEach(b=> b.addEventListener('click', async ()=>{
-        b.disabled = true;
-        try{
-          await apiConciliacao('/confirmar', { method:'POST', body: JSON.stringify({
-            movimentoId: b.dataset.confirmarMovimento, tipo: b.dataset.confirmarTipo, alvoId: b.dataset.confirmarAlvo,
-          }) });
-          toast('Conciliação confirmada — previsto virou realizado.');
-          await carregarSugestoes();
-          loadFluxo();
-          render();
-        }catch(err){ toast(err.message,'error'); b.disabled = false; }
-      }));
+      root.querySelectorAll('.chart-empty [disabled]').forEach(b=> { b.disabled=false; b.style.cursor='pointer'; b.style.opacity='1'; b.addEventListener('click', abrirModalSaldoInicial); });
     }
 
-    // ETAPA 3 (27/08/2026): saldo inicial passou a ser POR CONTA BANCÁRIA
-    // (nunca mais um valor único da empresa — ver lib/fluxoCaixa.js). O
-    // modal agora sempre pede qual conta, e busca o saldo já configurado
-    // pra ela (se houver) pra preencher o formulário. `contaBancariaIdPreselecionada`
-    // vem de cada botão de editar na lista "Saldo por conta"; sem ela, usa a
-    // conta do filtro de conciliação (ou a primeira da lista) como ponto de partida.
-    function abrirModalSaldoInicial(contaBancariaIdPreselecionada){
+    function abrirModalSaldoInicial(){
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ toast('Selecione uma empresa primeiro.', 'error'); return; }
-      if(!state.contasBancarias.length){ toast('Cadastre uma conta bancária primeiro (botão "Importar extrato bancário" → "Nova conta bancária").', 'error'); return; }
       const modalRoot = document.getElementById('modalRoot');
       const hoje = hojeBRT();
-
-      function contaSelecionadaAtual(){
-        const sel = document.getElementById('fSaldoConta');
-        return sel ? sel.value : (contaBancariaIdPreselecionada || state.contaBancariaFiltro || state.contasBancarias[0].id);
-      }
-      function saldoConfiguradoDe(contaId){
-        const lista = (state.dados && state.dados.saldosPorConta) || [];
-        const entry = lista.find(c => String(c.contaBancariaId) === String(contaId));
-        return entry && entry.saldoInicial ? entry.saldoInicial : null;
-      }
-
-      function renderForm(){
-        const contaId = contaSelecionadaAtual();
-        const atual = saldoConfiguradoDe(contaId);
-        modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
-          + '<div class="modal-card" style="max-width:520px;">'
-            + '<div class="modal-head"><div class="modal-title">Saldo inicial da conta</div>'
-              + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
-            + '<div class="modal-sub">Informado por você — o ERP não tem integração bancária, então nunca calcula esse número sozinho. Representa o saldo da conta IMEDIATAMENTE ANTES do primeiro movimento considerado (a partir da data de referência, tudo que passar no extrato desta conta soma em cima dele).</div>'
-            + '<form id="fcSaldoForm">'
-              + '<div class="field"><label>Conta bancária</label><select id="fSaldoConta">'
-                + state.contasBancarias.map(c=>'<option value="'+c.id+'"'+(String(c.id)===String(contaId)?' selected':'')+'>'+escapeHtml(c.nome)+(c.banco?' — '+escapeHtml(c.banco):'')+'</option>').join('')
-              + '</select></div>'
-              + '<div class="inline-form" style="margin-top:0;">'
-                + '<div class="field narrow"><label>Valor do saldo</label><input type="text" inputmode="decimal" id="fSaldoValor" placeholder="Ex: 15000,00" value="'+(atual?String(atual.valor).replace('.',','):'')+'">'
-                  + '<div class="field-error" id="eSaldoValor" style="display:none;"></div></div>'
-                + '<div class="field narrow"><label>Data de referência</label><input type="date" id="fSaldoData" value="'+(atual?String(atual.referenciaEm).slice(0,10):hoje)+'">'
-                  + '<div class="field-error" id="eSaldoData" style="display:none;"></div></div>'
-              + '</div>'
-              + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fSaldoObs" placeholder="Ex: extrato do banco X em '+hoje+'" value="'+(atual&&atual.observacao?escapeHtml(atual.observacao):'')+'"></div>'
-              + '<div class="modal-actions">'
-                + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
-                + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Salvar saldo inicial</span></button>'
-              + '</div>'
-            + '</form>'
-          + '</div>'
-        + '</div>';
-
-        const overlay = document.getElementById('modalOverlay');
-        const close = ()=> modalRoot.innerHTML = '';
-        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
-        document.getElementById('modalClose').addEventListener('click', close);
-        document.getElementById('modalCancel').addEventListener('click', close);
-        document.getElementById('fSaldoConta').addEventListener('change', renderForm); // troca de conta -> repopula com o saldo já salvo dela, se houver
-
-        document.getElementById('fcSaldoForm').addEventListener('submit', async (e)=>{
-          e.preventDefault();
-          ['eSaldoValor','eSaldoData'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
-          const payload = {
-            empresaId: filtro.empresaId,
-            contaBancariaId: document.getElementById('fSaldoConta').value,
-            valor: Number(document.getElementById('fSaldoValor').value.replace(',','.')),
-            dataReferencia: document.getElementById('fSaldoData').value,
-            observacao: document.getElementById('fSaldoObs').value,
-          };
-          const saveBtn = document.getElementById('modalSave');
-          saveBtn.disabled = true;
-          try{
-            await api('/saldo-inicial-conta', { method:'POST', body: JSON.stringify(payload) });
-            close();
-            toast('Saldo inicial da conta salvo.');
-            loadFluxo();
-          }catch(err){
-            saveBtn.disabled = false;
-            if(err.errors){
-              if(err.errors.valor){ const el=document.getElementById('eSaldoValor'); el.textContent=err.errors.valor; el.style.display='block'; }
-              if(err.errors.dataReferencia){ const el=document.getElementById('eSaldoData'); el.textContent=err.errors.dataReferencia; el.style.display='block'; }
-              if(err.errors.contaBancariaId) toast(err.errors.contaBancariaId, 'error');
-            } else {
-              toast(err.message, 'error');
-            }
-          }
-        });
-      }
-
-      renderForm();
-    }
-
-    // ---- wizard: Importar extrato bancário (Passo 2, 27/08/2026) ----
-    // 3 etapas exatamente como pedido: 1) conta bancária + arquivo; 2)
-    // mapeamento de colunas (sugerido automaticamente, editável); 3) prévia
-    // (quantas movimentações, quanto em entradas/saídas, quantas já
-    // existiam) — só grava de fato quando o usuário confirma a prévia. O
-    // arquivo nunca é enviado pra lugar nenhum além desta requisição: o
-    // conteúdo base64 fica só na memória do navegador durante o wizard.
-    function abrirModalImportarExtrato(){
-      const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ toast('Selecione uma empresa primeiro.', 'error'); return; }
-      const modalRoot = document.getElementById('modalRoot');
-      const wiz = {
-        step: 'conta', contaBancariaId: state.contaBancariaFiltro || null,
-        nomeArquivo: null, formato: null, conteudoBase64: null,
-        colunas: [], mapeamento: null, resultadoPreview: null,
-        mostrarNovaConta: false, carregando: false, erro: null,
-      };
-
-      function close(){ modalRoot.innerHTML = ''; }
-
-      function headHTML(subtitulo){
-        return '<div class="modal-head"><div class="modal-title">Importar extrato bancário</div>'
-          + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
-          + '<div class="modal-sub">'+subtitulo+'</div>';
-      }
-
-      function stepContaHTML(){
-        let html = headHTML('Etapa 1 de 3 — conta bancária e arquivo. Selecione a conta e envie o extrato semanal (XLSX ou CSV). A planilha em si nunca é armazenada — só as movimentações estruturadas.');
-        html += '<div class="field"><label>Conta bancária</label>'
-          + '<select id="wConta">'
-            + '<option value="">Selecione…</option>'
-            + state.contasBancarias.map(c=>'<option value="'+c.id+'"'+(String(c.id)===String(wiz.contaBancariaId)?' selected':'')+'>'+escapeHtml(c.nome)+(c.banco?' — '+escapeHtml(c.banco):'')+'</option>').join('')
-          + '</select><div class="field-error" id="eConta" style="display:none;"></div></div>';
-        html += '<button type="button" class="ghost-btn" id="wToggleNovaConta" style="cursor:pointer;opacity:1;margin:2px 0 14px;">'+svg('plus')+'<span>Nova conta bancária</span></button>';
-        if(wiz.mostrarNovaConta){
-          html += '<div class="table-card" style="padding:12px;margin-bottom:14px;">'
-            + '<div class="field"><label>Nome/apelido</label><input type="text" id="wNovaContaNome" placeholder="Ex: Banco X - Conta Corrente"><div class="field-error" id="eNovaContaNome" style="display:none;"></div></div>'
+      const atual = state.dados && state.dados.saldoInicial;
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card" style="max-width:520px;">'
+          + '<div class="modal-head"><div class="modal-title">Definir saldo inicial</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">Informado por você — o ERP não tem integração bancária, então nunca calcula esse número sozinho. A partir daqui, o Fluxo de Caixa soma o que já foi realmente pago/recebido e o que está previsto.</div>'
+          + '<form id="fcSaldoForm">'
             + '<div class="inline-form" style="margin-top:0;">'
-              + '<div class="field narrow"><label>Banco <span class="opt">(opcional)</span></label><input type="text" id="wNovaContaBanco"></div>'
-              + '<div class="field narrow"><label>Número da conta <span class="opt">(opcional)</span></label><input type="text" id="wNovaContaNumero"></div>'
+              + '<div class="field narrow"><label>Valor do saldo</label><input type="text" inputmode="decimal" id="fSaldoValor" placeholder="Ex: 15000,00" value="'+(atual?String(atual.valor).replace('.',','):'')+'">'
+                + '<div class="field-error" id="eSaldoValor" style="display:none;"></div></div>'
+              + '<div class="field narrow"><label>Data de referência</label><input type="date" id="fSaldoData" value="'+(atual?atual.dataReferencia:hoje)+'">'
+                + '<div class="field-error" id="eSaldoData" style="display:none;"></div></div>'
             + '</div>'
-            + '<button type="button" class="btn-secondary" id="wSalvarNovaConta">'+svg('check')+'<span>Salvar conta bancária</span></button>'
-          + '</div>';
+            + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fSaldoObs" placeholder="Ex: extrato do banco X em '+hoje+'" value="'+(atual&&atual.observacao?escapeHtml(atual.observacao):'')+'"></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Salvar saldo inicial</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+
+      document.getElementById('fcSaldoForm').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eSaldoValor','eSaldoData'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+        const payload = {
+          empresaId: filtro.empresaId,
+          valor: Number(document.getElementById('fSaldoValor').value.replace(',','.')),
+          dataReferencia: document.getElementById('fSaldoData').value,
+          observacao: document.getElementById('fSaldoObs').value,
+        };
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          await api('/saldo-inicial', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast('Saldo inicial salvo.');
+          loadFluxo();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            if(err.errors.valor){ const el=document.getElementById('eSaldoValor'); el.textContent=err.errors.valor; el.style.display='block'; }
+            if(err.errors.dataReferencia){ const el=document.getElementById('eSaldoData'); el.textContent=err.errors.dataReferencia; el.style.display='block'; }
+          } else {
+            toast(err.message, 'error');
+          }
         }
-        html += '<div class="field"><label>Arquivo do extrato (.xlsx ou .csv)</label><input type="file" id="wArquivo" accept=".xlsx,.csv"><div class="field-error" id="eArquivo" style="display:none;"></div></div>';
-        if(wiz.erro) html += '<div class="field-error" style="display:block;margin-bottom:10px;">'+escapeHtml(wiz.erro)+'</div>';
-        html += '<div class="modal-actions"><button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
-          + '<button type="button" class="btn-primary" id="wAvancar1" '+(wiz.carregando?'disabled':'')+'>'+(wiz.carregando?'<span class="spin"></span>':svg('chevDown'))+'<span>'+(wiz.carregando?'Lendo planilha…':'Avançar')+'</span></button></div>';
-        return html;
-      }
-
-      function stepMapeamentoHTML(){
-        let html = headHTML('Etapa 2 de 3 — confira o mapeamento de colunas. O ERP tenta identificar sozinho; ajuste o que estiver errado antes de gerar a prévia.');
-        if(wiz.erro) html += '<div class="field-error" style="display:block;margin-bottom:10px;">'+escapeHtml(wiz.erro)+'</div>';
-        html += '<div class="table-wrap" style="margin-bottom:14px;"><table class="data-table"><thead><tr><th>Campo</th><th>Coluna na planilha</th></tr></thead><tbody>'
-          + CAMPOS_MAPEAVEIS.map(campo => '<tr><td>'+CAMPO_LABEL[campo]+(campo==='data'?' *':'')+'</td><td>'
-            + '<select data-campo-map="'+campo+'">'
-              + '<option value="">— não usar —</option>'
-              + wiz.colunas.map((c,i)=>'<option value="'+i+'"'+(wiz.mapeamento && String(wiz.mapeamento[campo])===String(i)?' selected':'')+'>'+escapeHtml(c||('Coluna '+(i+1)))+'</option>').join('')
-            + '</select></td></tr>').join('')
-          + '</tbody></table></div>';
-        html += '<div class="field-hint" style="margin-bottom:14px;">* Data é obrigatória. Informe as colunas de Entrada/Saída OU uma única coluna de Valor (nesse caso o ERP identifica o sinal automaticamente).</div>';
-        html += '<div class="modal-actions"><button type="button" class="btn-secondary" id="wVoltar2">Voltar</button>'
-          + '<button type="button" class="btn-primary" id="wGerarPrevia" '+(wiz.carregando?'disabled':'')+'>'+(wiz.carregando?'<span class="spin"></span>':svg('activity'))+'<span>'+(wiz.carregando?'Gerando prévia…':'Gerar prévia')+'</span></button></div>';
-        return html;
-      }
-
-      function stepPreviaHTML(){
-        const r = wiz.resultadoPreview.resumo;
-        let html = headHTML('Etapa 3 de 3 — confirme a prévia antes de importar. Nada é gravado até você confirmar.');
-        html += '<div class="kpi-sec-grid" style="margin-bottom:14px;">'
-          + secCardHTMLLocal({ label:'Movimentações encontradas', icon:'inbox', tint:'teal', valueHtml: String(r.totalMovimentacoes) })
-          + secCardHTMLLocal({ label:'Novas (serão importadas)', icon:'checkCircle', tint:'success', valueHtml: String(r.totalNovas) })
-          + secCardHTMLLocal({ label:'Já existentes (duplicadas)', icon:'refreshCw', tint:'muted', valueHtml: String(r.totalDuplicadas) })
-          + secCardHTMLLocal({ label:'Entradas', icon:'arrowDownCircle', tint:'success', valueHtml: money(r.totalEntradas) })
-          + secCardHTMLLocal({ label:'Saídas', icon:'arrowUpCircle', tint:'copper', valueHtml: money(r.totalSaidas) })
-        + '</div>';
-        if(r.totalDuplicadas > 0) html += '<div class="field-hint" style="margin-bottom:14px;">'+r.totalDuplicadas+' movimentação(ões) já existe(m) nesta conta bancária (mesma data, valor, tipo, descrição e documento) — não serão importadas de novo, mesma planilha nunca duplica.</div>';
-        if(wiz.resultadoPreview.linhasComErro && wiz.resultadoPreview.linhasComErro.length) html += '<div class="field-hint" style="margin-bottom:14px;color:var(--danger);">'+wiz.resultadoPreview.linhasComErro.length+' linha(s) da planilha não puderam ser lidas e serão ignoradas (ex: data ou valor inválido).</div>';
-        if(wiz.erro) html += '<div class="field-error" style="display:block;margin-bottom:10px;">'+escapeHtml(wiz.erro)+'</div>';
-        html += '<div class="modal-actions"><button type="button" class="btn-secondary" id="wVoltar3">Voltar</button>'
-          + '<button type="button" class="btn-primary" id="wConfirmar" '+(wiz.carregando||!r.totalNovas?'disabled':'')+'>'+(wiz.carregando?'<span class="spin"></span>':svg('check'))+'<span>'+(wiz.carregando?'Importando…':(r.totalNovas?'Confirmar importação':'Nada novo pra importar'))+'</span></button></div>';
-        return html;
-      }
-      function secCardHTMLLocal(k){
-        return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
-          + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
-          + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div></div></div>';
-      }
-
-      function renderWizard(){
-        const html = wiz.step==='conta' ? stepContaHTML() : wiz.step==='mapeamento' ? stepMapeamentoHTML() : stepPreviaHTML();
-        modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card" style="max-width:620px;">'+html+'</div></div>';
-        const overlay = document.getElementById('modalOverlay');
-        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
-        const btnClose = document.getElementById('modalClose'); if(btnClose) btnClose.addEventListener('click', close);
-        const btnCancel = document.getElementById('modalCancel'); if(btnCancel) btnCancel.addEventListener('click', close);
-
-        if(wiz.step === 'conta'){
-          const toggle = document.getElementById('wToggleNovaConta');
-          if(toggle) toggle.addEventListener('click', ()=>{ wiz.mostrarNovaConta = !wiz.mostrarNovaConta; renderWizard(); });
-          const salvarConta = document.getElementById('wSalvarNovaConta');
-          if(salvarConta) salvarConta.addEventListener('click', async ()=>{
-            const nome = document.getElementById('wNovaContaNome').value.trim();
-            const eNome = document.getElementById('eNovaContaNome'); eNome.style.display='none';
-            if(!nome){ eNome.textContent='Informe um nome pra esta conta.'; eNome.style.display='block'; return; }
-            salvarConta.disabled = true;
-            try{
-              const data = await apiContasBancarias('', { method:'POST', body: JSON.stringify({
-                empresaId: filtro.empresaId, nome,
-                banco: document.getElementById('wNovaContaBanco').value,
-                numeroConta: document.getElementById('wNovaContaNumero').value,
-              }) });
-              state.contasBancarias.push(data.conta);
-              wiz.contaBancariaId = data.conta.id;
-              wiz.mostrarNovaConta = false;
-              toast('Conta bancária criada.');
-              renderWizard();
-            }catch(err){
-              salvarConta.disabled = false;
-              if(err.errors && err.errors.nome){ eNome.textContent = err.errors.nome; eNome.style.display='block'; }
-              else toast(err.message, 'error');
-            }
-          });
-          document.getElementById('wAvancar1').addEventListener('click', async ()=>{
-            ['eConta','eArquivo'].forEach(id=>{ const el=document.getElementById(id); if(el){ el.style.display='none'; } });
-            wiz.erro = null;
-            const contaSel = document.getElementById('wConta').value;
-            const arquivoInput = document.getElementById('wArquivo');
-            const arquivo = arquivoInput.files && arquivoInput.files[0];
-            if(!contaSel){ const el=document.getElementById('eConta'); el.textContent='Selecione a conta bancária.'; el.style.display='block'; return; }
-            if(!arquivo){ const el=document.getElementById('eArquivo'); el.textContent='Selecione o arquivo do extrato.'; el.style.display='block'; return; }
-            const nomeMinusculo = arquivo.name.toLowerCase();
-            const formato = nomeMinusculo.endsWith('.csv') ? 'csv' : nomeMinusculo.endsWith('.xlsx') ? 'xlsx' : null;
-            if(!formato){ const el=document.getElementById('eArquivo'); el.textContent='Formato não suportado — use .xlsx ou .csv.'; el.style.display='block'; return; }
-            wiz.contaBancariaId = contaSel;
-            wiz.nomeArquivo = arquivo.name;
-            wiz.formato = formato;
-            wiz.carregando = true; renderWizard();
-            try{
-              const conteudoBase64 = await new Promise((resolve, reject)=>{
-                const reader = new FileReader();
-                reader.onload = ()=> resolve(String(reader.result).split(',').pop());
-                reader.onerror = ()=> reject(new Error('Não foi possível ler o arquivo.'));
-                reader.readAsDataURL(arquivo);
-              });
-              wiz.conteudoBase64 = conteudoBase64;
-              const resultado = await apiPreviewCru({ empresaId: filtro.empresaId, contaBancariaId: wiz.contaBancariaId, nomeArquivo: wiz.nomeArquivo, formato: wiz.formato, conteudoBase64 });
-              if(resultado.errors){
-                wiz.colunas = resultado.colunas || [];
-                wiz.mapeamento = resultado.mapeamentoSugerido || null;
-                wiz.erro = resultado.errors.arquivo || resultado.errors.mapeamento || 'Não foi possível processar o arquivo.';
-                wiz.carregando = false;
-                if(!wiz.colunas.length){ renderWizard(); return; }
-                wiz.step = 'mapeamento'; renderWizard(); return;
-              }
-              wiz.colunas = resultado.colunas;
-              wiz.mapeamento = resultado.mapeamentoSugerido;
-              wiz.resultadoPreview = resultado;
-              wiz.erro = null;
-              wiz.carregando = false;
-              wiz.step = 'previa';
-              renderWizard();
-            }catch(err){
-              wiz.carregando = false;
-              wiz.erro = err.message || 'Não foi possível ler o arquivo.';
-              renderWizard();
-            }
-          });
-        } else if(wiz.step === 'mapeamento'){
-          document.getElementById('wVoltar2').addEventListener('click', ()=>{ wiz.step='conta'; wiz.erro=null; renderWizard(); });
-          document.getElementById('wGerarPrevia').addEventListener('click', async ()=>{
-            const mapeamento = {};
-            document.querySelectorAll('[data-campo-map]').forEach(sel=>{ const v = sel.value; mapeamento[sel.dataset.campoMap] = v===''? null : Number(v); });
-            wiz.mapeamento = mapeamento;
-            wiz.carregando = true; wiz.erro = null; renderWizard();
-            try{
-              const resultado = await apiPreviewCru({ empresaId: filtro.empresaId, contaBancariaId: wiz.contaBancariaId, nomeArquivo: wiz.nomeArquivo, formato: wiz.formato, conteudoBase64: wiz.conteudoBase64, mapeamento });
-              wiz.carregando = false;
-              if(resultado.errors){
-                wiz.erro = resultado.errors.arquivo || resultado.errors.mapeamento || 'Não foi possível gerar a prévia.';
-                renderWizard(); return;
-              }
-              wiz.resultadoPreview = resultado;
-              wiz.step = 'previa';
-              renderWizard();
-            }catch(err){
-              wiz.carregando = false;
-              wiz.erro = err.message || 'Não foi possível gerar a prévia.';
-              renderWizard();
-            }
-          });
-        } else if(wiz.step === 'previa'){
-          document.getElementById('wVoltar3').addEventListener('click', ()=>{ wiz.step='mapeamento'; wiz.erro=null; renderWizard(); });
-          const btnConfirmar = document.getElementById('wConfirmar');
-          if(btnConfirmar) btnConfirmar.addEventListener('click', async ()=>{
-            wiz.carregando = true; wiz.erro = null; renderWizard();
-            try{
-              await apiExtrato('/confirmar', { method:'POST', body: JSON.stringify({
-                empresaId: filtro.empresaId, contaBancariaId: wiz.contaBancariaId, nomeArquivo: wiz.nomeArquivo, formato: wiz.formato,
-                mapeamento: wiz.mapeamento, movimentos: wiz.resultadoPreview.movimentos, importadoPor: 'Pablo',
-              }) });
-              close();
-              toast('Extrato importado com sucesso.');
-              state.contaBancariaFiltro = wiz.contaBancariaId;
-              salvarContaBancariaPreferida(wiz.contaBancariaId); // após importar, essa conta vira a preferência (sobrevive a recarregar a página)
-              await carregarExtratoEConciliacao();
-            }catch(err){
-              wiz.carregando = false;
-              wiz.erro = err.message || 'Não foi possível confirmar a importação.';
-              renderWizard();
-            }
-          });
-        }
-      }
-
-      renderWizard();
+      });
     }
 
     const btnSaldo = document.getElementById('btnSaldoInicialFluxoCaixa');
     if(btnSaldo) btnSaldo.addEventListener('click', abrirModalSaldoInicial);
-    const btnImportarExtrato = document.getElementById('btnImportarExtrato');
-    if(btnImportarExtrato) btnImportarExtrato.addEventListener('click', abrirModalImportarExtrato);
 
     window.FluxoCaixa = { load };
   })();
