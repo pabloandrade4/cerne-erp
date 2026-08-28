@@ -108,7 +108,7 @@ router.get('/importar/modelo', async (req, res, next) => {
     const ExcelJS = require('exceljs');
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Contas a Pagar');
-    const headers = ['Fornecedor','Descrição','Categoria','Documento','Parcela','Data Emissão','Vencimento','Valor','Forma Pagamento','Banco/Conta','Status','Data Pagamento','Valor Pago','Observação'];
+    const headers = ['CR','Descrição','Categoria','Fornecedor','Valor','Vencimento','Observação'];
     ws.addRow(headers);
     ws.getRow(1).font = { bold: true };
     ws.views = [{ state: 'frozen', ySplit: 1 }];
@@ -116,10 +116,10 @@ router.get('/importar/modelo', async (req, res, next) => {
     const instrucoes = wb.addWorksheet('Instruções');
     instrucoes.addRows([
       ['Como usar'],
-      ['1. Preencha uma linha por conta/parcela.'],
+      ['1. Use uma linha por boleto/conta a pagar.'],
       ['2. Descrição, Vencimento e Valor são obrigatórios.'],
-      ['3. Status vazio = Pendente. "Vencido" também é tratado como Pendente e o ERP calcula o vencimento pela data.'],
-      ['4. Se usar status Pago, informe Data Pagamento. Pagamento parcial ainda não é suportado.'],
+      ['3. CR é opcional, mas é o campo usado para localizar rapidamente o boleto pela busca.'],
+      ['4. Categoria, Fornecedor e Observação são opcionais.'],
       ['5. Fornecedor não cadastrado será preservado pelo nome, sem criar CNPJ/CPF fictício.'],
     ]);
     instrucoes.getRow(1).font = { bold: true };

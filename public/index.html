@@ -4966,7 +4966,7 @@
         + '<div class="seg" id="cpSeg">'
           + [['todos','Todos']].concat(STATUS_OPCOES).map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
         + '</div>'
-        + '<div class="search-box">'+svg('search')+'<input type="text" id="cpSearch" placeholder="Buscar por descrição, categoria ou fornecedor" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="cpSearch" placeholder="Buscar por CR, descrição, categoria ou fornecedor" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
       + '</div>';
 
       if(state.loading || filtro.loadingEmpresas){
@@ -4988,7 +4988,7 @@
           + '</tr></thead><tbody>'
           + state.contas.map(c => '<tr'+(c.status==='cancelado'?' style="opacity:.6;"':'')+'>'
             + '<td class="tab-nums">'+fmtDate(c.vencimento)+'</td>'
-            + '<td>'+escapeHtml(c.descricao)+(c.observacao?'<div class="di-sub">'+escapeHtml(c.observacao)+'</div>':'')+'</td>'
+            + '<td>'+escapeHtml(c.descricao)+(c.documento?'<div class="di-sub"><strong>CR '+escapeHtml(c.documento)+'</strong></div>':'')+(c.observacao?'<div class="di-sub">'+escapeHtml(c.observacao)+'</div>':'')+'</td>'
             + '<td>'+escapeHtml(c.categoria||'—')+'</td>'
             + '<td>'+escapeHtml(c.fornecedorNome||'—')+'</td>'
             + '<td class="mono">'+money(c.valor)+'</td>'
@@ -4996,7 +4996,7 @@
               + (c.status==='pago' ? '<div class="di-sub">pago em '+fmtDate(c.dataPagamento)+'</div>' : '')+'</td>'
             + '<td><div class="row-actions">'
               + (c.statusBase==='pendente' ? '<button class="row-ic-btn" data-pagar="'+c.id+'" title="Marcar como pago" type="button">'+svg('check')+'</button>' : '')
-              + (c.statusBase==='pendente' ? '<button class="row-ic-btn" data-edit="'+c.id+'" title="Editar" type="button">'+svg('edit')+'</button>' : '')
+              + (c.statusBase!=='cancelado' ? '<button class="row-ic-btn" data-edit="'+c.id+'" title="Editar" type="button">'+svg('edit')+'</button>' : '')
               + (c.statusBase==='pendente' ? '<button class="row-ic-btn" data-cancelar="'+c.id+'" title="Cancelar" type="button">'+svg('x')+'</button>' : '')
               + (c.statusBase!=='pago' ? '<button class="row-ic-btn danger" data-excluir="'+c.id+'" title="Excluir" type="button">'+svg('trash')+'</button>' : '')
             + '</div></td>'
@@ -5053,6 +5053,7 @@
           + '<form id="cpForm">'
             + '<div class="field"><label>Descrição</label><input type="text" id="fDescricao" placeholder="Ex: Boleto fornecedor X" value="'+(isEdit?escapeHtml(conta.descricao):'')+'">'
               + '<div class="field-error" id="eDescricao" style="display:none;"></div></div>'
+            + '<div class="field"><label>CR <span class="opt">(opcional)</span></label><input type="text" id="fDocumento" placeholder="Ex: 9050" value="'+(isEdit?escapeHtml(conta.documento||''):'')+'"></div>'
             + '<div class="inline-form" style="margin-top:0;">'
               + '<div class="field narrow"><label>Categoria <span class="opt">(opcional)</span></label><input type="text" id="fCategoria" list="dlCategoriasPagar" value="'+(isEdit?escapeHtml(conta.categoria||''):'')+'"><datalist id="dlCategoriasPagar"></datalist></div>'
               + '<div class="field narrow"><label>Fornecedor <span class="opt">(quando houver)</span></label><select id="fFornecedor"><option value="">Carregando…</option></select></div>'
@@ -5063,6 +5064,7 @@
               + '<div class="field narrow"><label>Vencimento</label><input type="date" id="fVencimento" value="'+(isEdit?conta.vencimento:hoje)+'">'
                 + '<div class="field-error" id="eVencimento" style="display:none;"></div></div>'
             + '</div>'
+            + (isEdit && conta.statusBase==='pago' ? '<div class="field"><label>Data do pagamento</label><input type="date" id="fDataPagamento" value="'+escapeHtml(conta.dataPagamento||hoje)+'"><div class="field-error" id="eDataPagamento" style="display:none;"></div></div>' : '')
             + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" value="'+(isEdit?escapeHtml(conta.observacao||''):'')+'"></div>'
             + '<div class="modal-actions">'
               + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
@@ -5093,17 +5095,19 @@
 
       document.getElementById('cpForm').addEventListener('submit', async (e)=>{
         e.preventDefault();
-        ['eDescricao','eValor','eVencimento'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+        ['eDescricao','eValor','eVencimento','eDataPagamento'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.style.display='none'; el.textContent=''; });
 
         const payload = {
           empresaId: window.CerneFiltro.state.empresaId,
           fornecedorId: document.getElementById('fFornecedor').value || null,
           descricao: document.getElementById('fDescricao').value,
+          documento: document.getElementById('fDocumento').value,
           categoria: document.getElementById('fCategoria').value,
           valor: Number(document.getElementById('fValor').value.replace(',','.')),
           vencimento: document.getElementById('fVencimento').value,
           observacao: document.getElementById('fObservacao').value,
         };
+        if(isEdit && conta.statusBase==='pago') payload.dataPagamento = document.getElementById('fDataPagamento').value;
 
         const saveBtn = document.getElementById('modalSave');
         saveBtn.disabled = true;
@@ -5117,9 +5121,9 @@
           saveBtn.disabled = false;
           if(err.errors){
             let mostrou = false;
-            ['descricao','valor','vencimento','fornecedorId'].forEach(function(campo){
+            ['descricao','valor','vencimento','dataPagamento','documento','fornecedorId'].forEach(function(campo){
               if(err.errors[campo]){
-                const elId = campo==='fornecedorId' ? null : 'e'+campo.charAt(0).toUpperCase()+campo.slice(1);
+                const elId = (campo==='fornecedorId'||campo==='documento') ? null : 'e'+campo.charAt(0).toUpperCase()+campo.slice(1);
                 if(elId && document.getElementById(elId)){ const el=document.getElementById(elId); el.textContent=err.errors[campo]; el.style.display='block'; mostrou = true; }
               }
             });
@@ -5136,11 +5140,9 @@
       if(!empresaId){ toast('Selecione uma empresa antes de importar.', 'error'); return; }
 
       const CAMPOS = [
-        ['fornecedor','Fornecedor',false], ['descricao','Descrição',true], ['categoria','Categoria',false],
-        ['documento','Documento / NF',false], ['parcela','Parcela',false], ['dataEmissao','Data de emissão',false],
-        ['vencimento','Vencimento',true], ['valor','Valor',true], ['formaPagamento','Forma de pagamento',false],
-        ['bancoConta','Banco / Conta',false], ['status','Status',false], ['dataPagamento','Data de pagamento',false],
-        ['valorPago','Valor pago',false], ['observacao','Observação',false]
+        ['documento','CR',false], ['descricao','Descrição',true], ['categoria','Categoria',false],
+        ['fornecedor','Fornecedor',false], ['valor','Valor',true], ['vencimento','Vencimento',true],
+        ['observacao','Observação',false]
       ];
       const imp = { nomeArquivo:'', colunas:[], linhas:[], mapeamento:{}, preview:null, force:new Set(), loading:false };
       const modalRoot = document.getElementById('modalRoot');
@@ -5202,7 +5204,7 @@
         const rows=CAMPOS.map(c=>'<tr><td><strong>'+c[1]+'</strong>'+(c[2]?'<span style="color:var(--danger);"> *</span>':'')+'</td><td>'+selectCampo(c[0])+'</td></tr>').join('');
         shell('<div class="modal-sub">Arquivo: <strong>'+escapeHtml(imp.nomeArquivo)+'</strong> · '+imp.linhas.length+' linha(s). Confira o mapeamento antes da prévia.</div>'
           + '<div class="table-card" style="margin-top:16px;"><div class="table-wrap"><table class="data-table"><thead><tr><th>Campo no Cerne</th><th>Coluna da planilha</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'
-          + '<div class="field-hint" style="margin-top:10px;">Obrigatórios: Descrição, Vencimento e Valor. Fornecedor não cadastrado será preservado pelo nome, sem criar cadastro fictício.</div>'
+          + '<div class="field-hint" style="margin-top:10px;">A planilha segue o cadastro manual: CR, Descrição, Categoria, Fornecedor, Valor, Vencimento e Observação. Obrigatórios: Descrição, Vencimento e Valor.</div>'
           + '<div class="modal-actions"><button class="btn-secondary" id="cpImpTrocar" type="button">Trocar arquivo</button><button class="btn-primary" id="cpImpPreview" type="button">'+svg('check')+'<span>Validar e ver prévia</span></button></div>');
         document.querySelectorAll('[data-map]').forEach(sel=>sel.addEventListener('change', ()=>{ if(sel.value) imp.mapeamento[sel.dataset.map]=sel.value; else delete imp.mapeamento[sel.dataset.map]; imp.preview=null; }));
         document.getElementById('cpImpTrocar').addEventListener('click', renderInicio);
@@ -5238,7 +5240,7 @@
         }).join('');
         shell('<div class="modal-sub">Revise antes de gravar. Linhas com erro nunca são importadas; duplicidades ficam ignoradas, a menos que você marque “Importar mesmo assim”.</div>'
           + '<div class="kpi-sec-grid" style="margin-top:16px;margin-bottom:14px;">'+cards+'</div>'
-          + '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Linha</th><th>Validação</th><th>Fornecedor</th><th>Descrição</th><th>Documento</th><th>Vencimento</th><th>Valor</th></tr></thead><tbody>'+linhasHtml+'</tbody></table></div></div>'
+          + '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Linha</th><th>Validação</th><th>Fornecedor</th><th>Descrição</th><th>CR</th><th>Vencimento</th><th>Valor</th></tr></thead><tbody>'+linhasHtml+'</tbody></table></div></div>'
           + ((imp.preview.itens||[]).length>500?'<div class="field-hint" style="margin-top:8px;">Mostrando as primeiras 500 linhas na prévia; todas serão processadas na confirmação.</div>':'')
           + '<div class="modal-actions"><button class="btn-secondary" id="cpImpBack" type="button">Voltar ao mapeamento</button><button class="btn-primary" id="cpImpConfirm" type="button">'+svg('check')+'<span>Confirmar importação</span></button></div>');
         document.querySelectorAll('[data-force]').forEach(ch=>ch.addEventListener('change', ()=>{ const n=Number(ch.dataset.force); if(ch.checked) imp.force.add(n); else imp.force.delete(n); }));
