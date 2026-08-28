@@ -93,15 +93,19 @@ describe('Contas a Pagar / Contas a Receber / Recebimentos — 24/08/2026', { sk
       assert.ok(r1.vencendoHoje >= 200);
     });
 
-    test('marcar como pago, depois bloqueia edição e exclusão', async () => {
-      const criada = await contasPagar.criarContaPagar({ empresaId: EMPRESA_ID, descricao: PREFIXO_TESTE + ' a pagar', valor: 77, vencimento: amanha });
+    test('marcar como pago permite corrigir os dados, mas continua bloqueando exclusão', async () => {
+      const criada = await contasPagar.criarContaPagar({ empresaId: EMPRESA_ID, descricao: PREFIXO_TESTE + ' a pagar', valor: 77, vencimento: amanha, documento: 'CR-TESTE-1' });
       criados.pagar.push(criada.conta.id);
       const pago = await contasPagar.marcarComoPago(criada.conta.id, hoje);
       assert.equal(pago.conta.status, 'pago');
       assert.equal(pago.conta.dataPagamento, hoje);
 
-      const edit = await contasPagar.atualizarContaPagar(criada.conta.id, { valor: 999 });
-      assert.ok(edit.errors);
+      const edit = await contasPagar.atualizarContaPagar(criada.conta.id, { valor: 99, documento: 'CR-TESTE-2', dataPagamento: ontem });
+      assert.equal(edit.conta.valor, 99);
+      assert.equal(edit.conta.documento, 'CR-TESTE-2');
+      assert.equal(edit.conta.dataPagamento, ontem);
+      assert.equal(edit.conta.status, 'pago');
+
       const del = await contasPagar.excluirContaPagar(criada.conta.id);
       assert.ok(del.errors);
 

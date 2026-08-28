@@ -194,3 +194,37 @@ test('normaliza timestamp ISO vindo do XLSX serializado pelo navegador', () => {
 test('interpreta ponto isolado com três dígitos como separador de milhar brasileiro', () => {
   assert.equal(importacao.normalizarValor('1.250'), 1250);
 });
+
+test('reconhece coluna CR como código do documento', () => {
+  const mapa = importacao.sugerirMapeamento(['CR', 'Descrição', 'Categoria', 'Fornecedor', 'Valor', 'Vencimento', 'Observação']);
+  assert.equal(mapa.documento, 'CR');
+});
+
+test('interface e modelo de importação usam somente CR e os campos do cadastro manual aprovado', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const front = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const route = fs.readFileSync(path.join(__dirname, '../routes/contasPagar.js'), 'utf8');
+  assert.match(front, /Buscar por CR, descrição, categoria ou fornecedor/);
+  assert.match(front, /\['documento','CR',false\]/);
+  assert.doesNotMatch(front, /\['parcela','Parcela',false\]/);
+  assert.doesNotMatch(front, /\['status','Status',false\]/);
+  assert.match(route, /const headers = \['CR','Descrição','Categoria','Fornecedor','Valor','Vencimento','Observação'\]/);
+});
+
+test('formulário de conta a pagar trata campo de erro condicional da data de pagamento sem acessar null', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const front = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  assert.match(front, /\['eDescricao','eValor','eVencimento','eDataPagamento'\]\.forEach\(id=>\{ const el=document\.getElementById\(id\); if\(!el\) return;/);
+});
+
+test('edição de conta paga envia data de pagamento dentro do formulário de contas a pagar', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const front = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const inicio = front.indexOf("document.getElementById('cpForm').addEventListener");
+  const fim = front.indexOf('function openImportModal()', inicio);
+  const bloco = front.slice(inicio, fim);
+  assert.match(bloco, /if\(isEdit && conta\.statusBase==='pago'\) payload\.dataPagamento = document\.getElementById\('fDataPagamento'\)\.value;/);
+});
