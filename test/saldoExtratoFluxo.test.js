@@ -83,3 +83,17 @@ test('saldo bancário vira base do fluxo e movimentos realizados não são desco
     for(const [p,old] of olds){if(old)require.cache[p]=old;else delete require.cache[p];}
   }
 });
+
+test('schema atualiza contas_bancarias antigas com colunas de saldo', () => {
+  const schema=fs.readFileSync(path.join(__dirname,'../db/schema.sql'),'utf8');
+  assert.match(schema,/ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atual/i);
+  assert.match(schema,/ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_data/i);
+  assert.match(schema,/ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atualizado_em/i);
+});
+
+test('fluxo continua funcionando sem saldo bancario se schema bancario antigo ainda nao estiver compativel', async () => {
+  const bancos=require('../lib/contasBancarias');
+  const dbAntigo={query:async()=>{ const err=new Error('column saldo_atual does not exist'); err.code='42703'; throw err; }};
+  const saldo=await bancos.saldoConsolidado(1,dbAntigo);
+  assert.equal(saldo,null);
+});
