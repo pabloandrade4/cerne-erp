@@ -61,7 +61,6 @@ test('fluxo de caixa inclui conta pendente quando vencimento DATE chega como Dat
   const fakePool = {
     query: async (sql) => {
       if (/FROM fluxo_caixa_saldo_inicial/.test(sql)) return { rows: [] };
-      if (/FROM contas_bancarias/.test(sql)) return { rows: [] };
       if (/SELECT vencimento, valor FROM contas_pagar/.test(sql) && /status='pendente'/.test(sql)) {
         return { rows: [{ vencimento: dateLocalDeISO(amanha), valor: '321.45' }] };
       }

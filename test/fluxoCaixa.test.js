@@ -61,12 +61,12 @@ describe('Fluxo de Caixa — 25/08/2026', { skip: !TEM_BANCO && 'defina DATABASE
     });
   });
 
-  describe('saldo bancário ou saldo manual de fallback — nunca inventado', () => {
-    test('sem saldo bancário e sem saldo manual, saldoAtual/saldoProjetado vêm null com motivo (nunca um número inventado)', async () => {
+  describe('saldo inicial — sempre informado pelo usuário, nunca inventado', () => {
+    test('sem saldo inicial informado, saldoAtual/saldoProjetado vêm null com motivo (nunca um número inventado)', async () => {
       await pool.query('DELETE FROM fluxo_caixa_saldo_inicial WHERE empresa_id = $1', [EMPRESA_ID]);
       const f = await fluxoCaixa.gerarFluxoDeCaixa({ empresaId: EMPRESA_ID, periodoChave: '7d' });
       assert.equal(f.cards.saldoAtual.valor, null);
-      assert.equal(f.cards.saldoAtual.motivo, 'sem_saldo_conhecido');
+      assert.equal(f.cards.saldoAtual.motivo, 'sem_saldo_inicial_informado');
       assert.equal(f.cards.saldoProjetado.valor, null);
     });
 
