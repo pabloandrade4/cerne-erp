@@ -4866,7 +4866,6 @@
     ];
     const STATUS_LABEL = Object.fromEntries(STATUS_OPCOES);
     const state = { loading:false, error:null, contas:[], resumo:null, status:'todos', search:'' };
-    let categoriasSugeridas = null;
 
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
@@ -4913,11 +4912,21 @@
       const res = await fetch('/api/fornecedores?empresaId='+empresaId+'&status=ativos');
       return ((await res.json()).fornecedores) || [];
     }
-    async function apiCategorias(){
-      if(categoriasSugeridas) return categoriasSugeridas;
-      try{ const res = await fetch('/api/contas-pagar/categorias-sugeridas'); categoriasSugeridas = ((await res.json()).categorias)||[]; }
-      catch(e){ categoriasSugeridas = []; }
-      return categoriasSugeridas;
+    // Cadastro real de categorias financeiras (31/08/2026) — substitui a
+    // antiga lista fixa de sugestões por texto livre (CATEGORIAS_SUGERIDAS)
+    // por um cadastro de verdade, editável por empresa, com um único nível
+    // de subcategoria — ver lib/categoriasFinanceiras.js.
+    async function apiCategoriasFinanceiras(empresaId, incluirInativas){
+      const params = new URLSearchParams({ empresaId: empresaId });
+      if(incluirInativas) params.set('incluirInativas','true');
+      const res = await fetch('/api/categorias-financeiras?'+params.toString());
+      const body = await res.json();
+      return body.categorias || [];
+    }
+    async function apiContasBancariasAtivas(empresaId){
+      const res = await fetch('/api/contas-bancarias?empresaId='+empresaId);
+      const body = await res.json();
+      return ((body.contas)||[]).filter(c=>c.ativo!==false);
     }
 
     async function loadContas(){
@@ -5046,6 +5055,108 @@
       }));
     }
 
+    // Gerenciar categorias financeiras (31/08/2026) — cadastro real por
+    // empresa, editável direto do formulário de Contas a Pagar (link
+    // "gerenciar categorias"). Abre em cima do modal de conta a pagar (sua
+    // própria overlay anexada ao <body>, sem tocar em modalRoot) pra não
+    // perder o que já foi digitado no formulário por trás. Nunca exclui
+    // categoria de verdade — só ativa/desativa, ver lib/categoriasFinanceiras.js.
+    function openCategoriasModal(onClose){
+      const empresaId = window.CerneFiltro.state.empresaId;
+      const wrap = document.createElement('div');
+      wrap.className = 'modal-overlay';
+      wrap.style.zIndex = '10000';
+      document.body.appendChild(wrap);
+      const st = { categorias: [], loading: true };
+
+      function close(){ wrap.remove(); if(onClose) onClose(); }
+
+      function linhaHtml(c, sub){
+        return '<tr'+(!c.ativa?' style="opacity:.55;"':'')+'>'
+          + '<td>'+(sub?'↳ ':'')+escapeHtml(c.nome)+'</td>'
+          + '<td><span class="status-chip" style="'+(c.ativa?'color:var(--success);background:var(--success-soft);':'color:var(--text-muted);background:var(--surface-2);')+'">'+(c.ativa?'Ativa':'Desativada')+'</span></td>'
+          + '<td><div class="row-actions">'
+            + '<button class="row-ic-btn" type="button" data-renomear="'+c.id+'" data-nome-atual="'+escapeHtml(c.nome)+'" title="Renomear">'+svg('edit')+'</button>'
+            + '<button class="row-ic-btn" type="button" data-toggle-ativa="'+c.id+'" data-ativar-agora="'+(c.ativa?'0':'1')+'" title="'+(c.ativa?'Desativar':'Ativar')+'">'+svg(c.ativa?'x':'check')+'</button>'
+          + '</div></td></tr>';
+      }
+
+      function render(){
+        let rows = '';
+        st.categorias.forEach(function(raiz){
+          rows += linhaHtml(raiz, false);
+          (raiz.subcategorias||[]).forEach(function(s){ rows += linhaHtml(s, true); });
+        });
+        wrap.innerHTML = '<div class="modal-card" style="max-width:640px;max-height:88vh;overflow:auto;">'
+          + '<div class="modal-head"><div class="modal-title">Categorias financeiras</div><button class="row-ic-btn" id="catmClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">Usadas em Contas a Pagar, no extrato bancário e na DRE. Desativar uma categoria nunca apaga o histórico de lançamentos já feitos com ela.</div>'
+          + (st.loading
+            ? '<div class="table-skel" style="margin-top:12px;"><span class="spin"></span><span>Carregando…</span></div>'
+            : '<div class="table-card" style="margin-top:14px;"><div class="table-wrap"><table class="data-table"><thead><tr><th>Nome</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>')
+          + '<form id="catmForm" style="margin-top:16px;">'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Nova categoria/subcategoria</label><input type="text" id="catmNome" placeholder="Ex: Salgados"></div>'
+              + '<div class="field narrow"><label>Subcategoria de <span class="opt">(opcional)</span></label><select id="catmPai"><option value="">Categoria própria (nível principal)</option>'
+                + st.categorias.filter(function(r){return r.ativa;}).map(function(r){ return '<option value="'+r.id+'">'+escapeHtml(r.nome)+'</option>'; }).join('') + '</select></div>'
+            + '</div>'
+            + '<div class="modal-actions"><button type="button" class="btn-secondary" id="catmClose2">Fechar</button><button type="submit" class="btn-primary" id="catmSalvar">'+svg('plus')+'<span>Adicionar</span></button></div>'
+          + '</form>'
+        + '</div>';
+
+        document.getElementById('catmClose').addEventListener('click', close);
+        document.getElementById('catmClose2').addEventListener('click', close);
+        wrap.addEventListener('click', function(e){ if(e.target===wrap) close(); });
+
+        wrap.querySelectorAll('[data-toggle-ativa]').forEach(function(btn){
+          btn.addEventListener('click', async function(){
+            btn.disabled = true;
+            const id = btn.dataset.toggleAtiva;
+            const ativarAgora = btn.dataset.ativarAgora === '1';
+            try{ await fetch('/api/categorias-financeiras/'+id+(ativarAgora?'/ativar':'/desativar'), { method:'PATCH' }); await carregar(); }
+            catch(e){ toast('Não foi possível atualizar a categoria.', 'error'); btn.disabled=false; }
+          });
+        });
+        wrap.querySelectorAll('[data-renomear]').forEach(function(btn){
+          btn.addEventListener('click', async function(){
+            const id = btn.dataset.renomear;
+            const atual = btn.dataset.nomeAtual;
+            const novo = prompt('Novo nome da categoria:', atual);
+            if(!novo || !novo.trim() || novo.trim()===atual) return;
+            try{
+              const res = await fetch('/api/categorias-financeiras/'+id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({nome: novo.trim()}) });
+              const body = await res.json().catch(function(){return {};});
+              if(!res.ok) throw new Error((body.errors&&body.errors.nome)||'Não foi possível renomear.');
+              await carregar();
+            }catch(e){ toast(e.message,'error'); }
+          });
+        });
+
+        document.getElementById('catmForm').addEventListener('submit', async function(e){
+          e.preventDefault();
+          const nome = document.getElementById('catmNome').value.trim();
+          const categoriaPaiId = document.getElementById('catmPai').value || null;
+          if(!nome){ toast('Informe o nome da categoria.', 'error'); return; }
+          const btn = document.getElementById('catmSalvar'); btn.disabled = true;
+          try{
+            const res = await fetch('/api/categorias-financeiras', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({empresaId:empresaId, nome:nome, categoriaPaiId:categoriaPaiId}) });
+            const body = await res.json().catch(function(){return {};});
+            if(!res.ok) throw new Error((body.errors&&(body.errors.nome||body.errors.categoriaPaiId))||'Não foi possível criar a categoria.');
+            toast('Categoria criada.');
+            await carregar();
+          }catch(err){ toast(err.message,'error'); btn.disabled=false; }
+        });
+      }
+
+      async function carregar(){
+        st.loading = true; render();
+        try{ st.categorias = await apiCategoriasFinanceiras(empresaId, true); }
+        catch(e){ toast('Não foi possível carregar as categorias.', 'error'); }
+        finally{ st.loading = false; render(); }
+      }
+
+      carregar();
+    }
+
     function openModal(conta){
       const isEdit = !!conta;
       const modalRoot = document.getElementById('modalRoot');
@@ -5058,9 +5169,12 @@
           + '<form id="cpForm">'
             + '<div class="field"><label>Descrição</label><input type="text" id="fDescricao" placeholder="Ex: Boleto fornecedor X" value="'+(isEdit?escapeHtml(conta.descricao):'')+'">'
               + '<div class="field-error" id="eDescricao" style="display:none;"></div></div>'
-            + '<div class="field"><label>CR <span class="opt">(opcional)</span></label><input type="text" id="fDocumento" placeholder="Ex: 9050" value="'+(isEdit?escapeHtml(conta.documento||''):'')+'"></div>'
+            + '<div class="field"><label>CR/documento <span class="opt">(opcional)</span></label><input type="text" id="fDocumento" placeholder="Ex: 9050" value="'+(isEdit?escapeHtml(conta.documento||''):'')+'"></div>'
             + '<div class="inline-form" style="margin-top:0;">'
-              + '<div class="field narrow"><label>Categoria <span class="opt">(opcional)</span></label><input type="text" id="fCategoria" list="dlCategoriasPagar" value="'+(isEdit?escapeHtml(conta.categoria||''):'')+'"><datalist id="dlCategoriasPagar"></datalist></div>'
+              + '<div class="field narrow"><label>Categoria <span class="opt">(opcional)</span> <a href="#" id="fCategoriaGerenciar" style="font-size:11px;font-weight:400;">gerenciar categorias</a></label>'
+                + '<select id="fCategoria"><option value="">Carregando…</option></select>'
+                + (isEdit && conta.categoria && !conta.categoriaId ? '<div class="field-hint">Categoria atual (texto livre): '+escapeHtml(conta.categoria)+'. Escolha uma categoria do cadastro para substituir, ou deixe como está.</div>' : '')
+              + '</div>'
               + '<div class="field narrow"><label>Fornecedor <span class="opt">(quando houver)</span></label><select id="fFornecedor"><option value="">Carregando…</option></select></div>'
             + '</div>'
             + '<div class="inline-form" style="margin-top:0;">'
@@ -5068,6 +5182,10 @@
                 + '<div class="field-error" id="eValor" style="display:none;"></div></div>'
               + '<div class="field narrow"><label>Vencimento</label><input type="date" id="fVencimento" value="'+(isEdit?conta.vencimento:hoje)+'">'
                 + '<div class="field-error" id="eVencimento" style="display:none;"></div></div>'
+            + '</div>'
+            + '<div class="inline-form" style="margin-top:0;">'
+              + '<div class="field narrow"><label>Conta bancária <span class="opt">(opcional)</span></label><select id="fContaBancaria"><option value="">Carregando…</option></select></div>'
+              + '<div class="field narrow"><label>Forma de pagamento <span class="opt">(opcional)</span></label><input type="text" id="fFormaPagamento" placeholder="Ex: Pix, Boleto, Cartão" value="'+(isEdit?escapeHtml(conta.formaPagamento||''):'')+'"></div>'
             + '</div>'
             + (isEdit && conta.statusBase==='pago' ? '<div class="field"><label>Data do pagamento</label><input type="date" id="fDataPagamento" value="'+escapeHtml(conta.dataPagamento||hoje)+'"><div class="field-error" id="eDataPagamento" style="display:none;"></div></div>' : '')
             + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" value="'+(isEdit?escapeHtml(conta.observacao||''):'')+'"></div>'
@@ -5085,29 +5203,65 @@
       document.getElementById('modalClose').addEventListener('click', close);
       document.getElementById('modalCancel').addEventListener('click', close);
 
-      (async function carregarPickers(){
+      function categoriaOptionsHtml(categorias, selecionadaId){
+        let out = '<option value="">Nenhuma</option>';
+        categorias.forEach(function(raiz){
+          out += '<option value="'+raiz.id+'" '+(selecionadaId===raiz.id?'selected':'')+'>'+escapeHtml(raiz.nome)+'</option>';
+          if(raiz.subcategorias && raiz.subcategorias.length){
+            out += '<optgroup label="'+escapeHtml(raiz.nome)+'">'
+              + raiz.subcategorias.map(function(s){ return '<option value="'+s.id+'" '+(selecionadaId===s.id?'selected':'')+'>↳ '+escapeHtml(s.nome)+'</option>'; }).join('')
+              + '</optgroup>';
+          }
+        });
+        return out;
+      }
+
+      async function carregarPickers(){
         const empresaId = window.CerneFiltro.state.empresaId;
         try{
-          const [fornecedores, categorias] = await Promise.all([apiFornecedoresAtivos(empresaId), apiCategorias()]);
+          const [fornecedores, categorias, contasBancarias] = await Promise.all([
+            apiFornecedoresAtivos(empresaId), apiCategoriasFinanceiras(empresaId), apiContasBancariasAtivas(empresaId),
+          ]);
           const fSel = document.getElementById('fFornecedor');
           if(fSel){
             fSel.innerHTML = '<option value="">Nenhum</option>' + fornecedores.map(function(f){ return '<option value="'+f.id+'" '+(isEdit&&conta.fornecedorId===f.id?'selected':'')+'>'+escapeHtml(f.razaoSocial)+'</option>'; }).join('');
           }
-          const dl = document.getElementById('dlCategoriasPagar');
-          if(dl) dl.innerHTML = categorias.map(function(c){ return '<option value="'+escapeHtml(c)+'"></option>'; }).join('');
-        }catch(e){ toast('Não foi possível carregar fornecedores.', 'error'); }
-      })();
+          const catSel = document.getElementById('fCategoria');
+          if(catSel) catSel.innerHTML = categoriaOptionsHtml(categorias, isEdit?conta.categoriaId:null);
+          const cbSel = document.getElementById('fContaBancaria');
+          if(cbSel){
+            cbSel.innerHTML = '<option value="">Nenhuma</option>' + contasBancarias.map(function(cb){ return '<option value="'+cb.id+'" '+(isEdit&&conta.contaBancariaId===cb.id?'selected':'')+'>'+escapeHtml(cb.nome)+(cb.banco?' ('+escapeHtml(cb.banco)+')':'')+'</option>'; }).join('');
+          }
+        }catch(e){ toast('Não foi possível carregar fornecedores/categorias/contas.', 'error'); }
+      }
+      carregarPickers();
+
+      const gerenciarLink = document.getElementById('fCategoriaGerenciar');
+      if(gerenciarLink) gerenciarLink.addEventListener('click', function(e){
+        e.preventDefault();
+        openCategoriasModal(function(){ carregarPickers(); });
+      });
 
       document.getElementById('cpForm').addEventListener('submit', async (e)=>{
         e.preventDefault();
         ['eDescricao','eValor','eVencimento','eDataPagamento'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.style.display='none'; el.textContent=''; });
 
+        // Categoria agora vem do cadastro real (select id="fCategoria",
+        // valor = categoriaId). Se nada for escolhido, preserva o texto
+        // livre já existente no lançamento (edição) ou manda vazio (novo) —
+        // nunca some com uma categoria já lançada só por o usuário não ter
+        // mexido no campo. Ver validatePayload/atualizarContaPagar em
+        // lib/contasPagar.js para a mesma regra do lado do servidor.
+        const categoriaIdSelecionada = document.getElementById('fCategoria').value || null;
         const payload = {
           empresaId: window.CerneFiltro.state.empresaId,
           fornecedorId: document.getElementById('fFornecedor').value || null,
           descricao: document.getElementById('fDescricao').value,
           documento: document.getElementById('fDocumento').value,
-          categoria: document.getElementById('fCategoria').value,
+          categoriaId: categoriaIdSelecionada,
+          categoria: categoriaIdSelecionada ? undefined : (isEdit ? (conta.categoria || '') : ''),
+          contaBancariaId: document.getElementById('fContaBancaria').value || null,
+          formaPagamento: document.getElementById('fFormaPagamento').value,
           valor: Number(document.getElementById('fValor').value.replace(',','.')),
           vencimento: document.getElementById('fVencimento').value,
           observacao: document.getElementById('fObservacao').value,
@@ -6482,36 +6636,110 @@
   })();
 
   /* ================= DRE — Demonstrativo de Resultado do Exercício =================
-     Ativado em 24/08/2026. Sem lógica financeira própria: só consome
-     GET /api/dre, que reorganiza os mesmos números já usados em Financeiro/
-     Visão Geral/Pedidos (lib/relatorioVendas.js) e o "pago no período" de
-     Contas a Pagar (lib/contasPagar.js) — ver docs/02-decisoes.md. Usa o
-     filtro do header (empresa + período), igual Contas a Pagar/Receber/
-     Recebimentos. */
+     Ativado em 24/08/2026, ampliado em 31/08/2026 (categorias, "Para onde
+     está indo o dinheiro?", detalhamento linha-a-linha, exportação). Sem
+     lógica financeira própria: só consome GET /api/dre e GET /api/dre/
+     detalhamento, que reorganizam números já calculados em outro lugar —
+     lib/relatorioVendas.js (receita/CMV/margem), lib/contasPagar.js (contas
+     pagas) e lib/despesasFinanceiras.js (detalhamento unificado, sem
+     duplicar — ver comentário no topo desse arquivo). Usa a EMPRESA do
+     filtro do header, mas tem PERÍODO PRÓPRIO (igual Fluxo de Caixa) porque
+     precisa de opções que o período do header não tem (15 dias, mês
+     anterior, personalizado) — ver lib/dre.js#calcularPeriodoDre. */
   (function(){
-    const state = { loading:false, error:null, data:null };
+    const PERIODO_OPCOES = [
+      ['hoje','Hoje'], ['7d','7 dias'], ['15d','15 dias'], ['30d','30 dias'],
+      ['mes','Este mês'], ['mesAnterior','Mês anterior'], ['personalizado','Personalizado'],
+    ];
+    const ORIGEM_LABEL = {
+      despesa_fixa: 'Despesa fixa', conta_a_pagar: 'Conta a pagar',
+      lancamento_manual: 'Lançamento manual', extrato_bancario: 'Extrato bancário',
+    };
+    const state = {
+      loading:false, error:null, data:null,
+      periodoChave:'30d', desdePersonalizado:null, atePersonalizado:null,
+      categoriaId:'', contaBancariaId:'', search:'',
+      categorias:[], contasBancarias:[],
+      detalhamento:[], loadingDetalhamento:false, exportTipo:'resumida',
+    };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function pct(v){ return v===null||v===undefined ? null : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+    function hojeBRT(){
+      const BRT_OFFSET_MS = 3*60*60*1000;
+      const brt = new Date(Date.now() - BRT_OFFSET_MS);
+      const p = n => String(n).padStart(2,'0');
+      return brt.getUTCFullYear()+'-'+p(brt.getUTCMonth()+1)+'-'+p(brt.getUTCDate());
+    }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
 
-    async function apiDRE(empresaId, periodo){
-      const res = await fetch('/api/dre?empresaId='+empresaId+'&periodo='+periodo);
+    async function apiCategoriasFinanceiras(empresaId){
+      try{ const res = await fetch('/api/categorias-financeiras?empresaId='+empresaId); const body = await res.json(); return body.categorias||[]; }
+      catch(e){ return []; }
+    }
+    async function apiContasBancariasAtivas(empresaId){
+      try{ const res = await fetch('/api/contas-bancarias?empresaId='+empresaId); const body = await res.json(); return ((body.contas)||[]).filter(c=>c.ativo!==false); }
+      catch(e){ return []; }
+    }
+
+    function paramsComuns(){
+      const filtro = window.CerneFiltro.state;
+      const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: state.periodoChave });
+      if(state.periodoChave === 'personalizado'){
+        params.set('desde', state.desdePersonalizado || hojeBRT());
+        params.set('ate', state.atePersonalizado || hojeBRT());
+      }
+      if(state.categoriaId) params.set('categoriaId', state.categoriaId);
+      if(state.contaBancariaId) params.set('contaBancariaId', state.contaBancariaId);
+      return params;
+    }
+
+    async function apiDRE(){
+      const res = await fetch('/api/dre?'+paramsComuns().toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar a DRE.');
+      return body;
+    }
+    async function apiDetalhamento(){
+      const params = paramsComuns();
+      if(state.search.trim()) params.set('search', state.search.trim());
+      const res = await fetch('/api/dre/detalhamento?'+params.toString());
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o detalhamento.');
       return body;
     }
 
     async function loadDRE(){
       const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ state.data=null; state.loading=false; render(); return; }
+      if(!filtro.empresaId){ state.data=null; state.detalhamento=[]; state.loading=false; render(); return; }
       state.loading = true; state.error = null; render();
-      try{ state.data = await apiDRE(filtro.empresaId, filtro.periodo); }
-      catch(err){ state.error = err.message; state.data = null; }
+      try{
+        state.data = await apiDRE();
+        const [categorias, contasBancarias] = await Promise.all([
+          apiCategoriasFinanceiras(filtro.empresaId), apiContasBancariasAtivas(filtro.empresaId),
+        ]);
+        state.categorias = categorias; state.contasBancarias = contasBancarias;
+      }catch(err){ state.error = err.message; state.data = null; }
       state.loading = false; render();
+      loadDetalhamento();
     }
 
-    function load(){ loadDRE(); }
+    async function loadDetalhamento(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId) return;
+      state.loadingDetalhamento = true; render();
+      try{ const body = await apiDetalhamento(); state.detalhamento = body.despesas || []; }
+      catch(err){ state.detalhamento = []; }
+      finally{ state.loadingDetalhamento = false; render(); }
+    }
+
+    function load(){
+      if(!state.desdePersonalizado) state.desdePersonalizado = hojeBRT();
+      if(!state.atePersonalizado) state.atePersonalizado = hojeBRT();
+      loadDRE();
+    }
 
     window.CerneFiltro.onChange(()=>{
       const page = document.getElementById('page-dre');
@@ -6545,6 +6773,148 @@
         + valorTexto(campo, hasOrders) + (campo.valor!==null ? pctSpan(campo) : '') + '</span></div>';
     }
 
+    // ---- filtros (período próprio + categoria + conta bancária) ----
+    function filtrosHTML(){
+      let html = '<div class="toolbar"><div class="seg" id="dreSeg">'
+        + PERIODO_OPCOES.map(function(par){ return '<button data-periodo="'+par[0]+'" class="'+(state.periodoChave===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+      + '</div></div>';
+      if(state.periodoChave === 'personalizado'){
+        html += '<div class="inline-form" style="margin-top:0;margin-bottom:14px;align-items:flex-end;">'
+          + '<div class="field narrow"><label>De</label><input type="date" id="dreDesde" value="'+(state.desdePersonalizado||'')+'"></div>'
+          + '<div class="field narrow"><label>Até</label><input type="date" id="dreAte" value="'+(state.atePersonalizado||'')+'"></div>'
+          + '<button class="ghost-btn" id="dreAplicarPersonalizado" type="button" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Aplicar</span></button>'
+        + '</div>';
+      }
+      const categoriaOptions = ['<option value="">Todas as categorias</option>'].concat(
+        state.categorias.map(function(raiz){
+          let out = '<option value="'+raiz.id+'" '+(String(state.categoriaId)===String(raiz.id)?'selected':'')+'>'+escapeHtml(raiz.nome)+'</option>';
+          (raiz.subcategorias||[]).forEach(function(s){ out += '<option value="'+s.id+'" '+(String(state.categoriaId)===String(s.id)?'selected':'')+'>↳ '+escapeHtml(raiz.nome)+' › '+escapeHtml(s.nome)+'</option>'; });
+          return out;
+        })
+      ).join('');
+      const contaOptions = ['<option value="">Todas as contas bancárias</option>'].concat(
+        state.contasBancarias.map(function(c){ return '<option value="'+c.id+'" '+(String(state.contaBancariaId)===String(c.id)?'selected':'')+'>'+escapeHtml(c.nome)+'</option>'; })
+      ).join('');
+      html += '<div class="inline-form" style="margin-top:0;margin-bottom:14px;align-items:flex-end;">'
+        + '<div class="field narrow"><label>Categoria</label><select id="dreFiltroCategoria">'+categoriaOptions+'</select></div>'
+        + '<div class="field narrow"><label>Conta bancária</label><select id="dreFiltroConta">'+contaOptions+'</select></div>'
+      + '</div>';
+      return html;
+    }
+
+    // ---- cards de despesas (Total/Maior categoria/Segunda maior/Quantidade/Média por dia) ----
+    function cardHTML(k){
+      return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
+        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div></div></div>';
+    }
+    function cardsDespesasHTML(cards){
+      const items = [
+        { label:'Total de despesas', icon:'arrowUpCircle', tint:'copper', valueHtml: money(cards.totalDespesas) },
+        { label:'Maior categoria', icon:'lineChart', tint:'warning', valueHtml: cards.maiorCategoria ? escapeHtml(cards.maiorCategoria.categoria)+' <span style="font-size:11px;font-weight:600;color:var(--text-muted);">('+money(cards.maiorCategoria.valor)+')</span>' : '—' },
+        { label:'Segunda maior', icon:'lineChart', tint:'muted', valueHtml: cards.segundaMaiorCategoria ? escapeHtml(cards.segundaMaiorCategoria.categoria)+' <span style="font-size:11px;font-weight:600;color:var(--text-muted);">('+money(cards.segundaMaiorCategoria.valor)+')</span>' : '—' },
+        { label:'Quantidade de lançamentos', icon:'fileText', tint:'muted', valueHtml: String(cards.quantidadeDespesas) },
+        { label:'Média por dia', icon:'activity', tint:'muted', valueHtml: money(cards.mediaPorDia) },
+      ];
+      return '<div class="kpi-sec-grid" style="margin-bottom:14px;">' + items.map(cardHTML).join('') + '</div>';
+    }
+
+    // ---- gráfico "Para onde está indo o dinheiro?" — barras horizontais, mesmos números do bloco por categoria abaixo ----
+    function graficoCategoriasHTML(porCategoria){
+      if(!porCategoria.length) return '<div class="field-hint">Nenhuma despesa no período/filtro selecionado.</div>';
+      const max = Math.max.apply(null, porCategoria.map(function(g){ return g.total; }));
+      const cores = ['var(--copper)','var(--teal)','var(--warning)','var(--danger)','var(--success)'];
+      return '<div style="display:flex;flex-direction:column;gap:10px;">' + porCategoria.map(function(g, i){
+        const larguraPct = max>0 ? Math.max(2, Math.round((g.total/max)*100)) : 0;
+        return '<div>'
+          + '<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px;"><span style="font-weight:600;color:var(--text);">'+escapeHtml(g.categoria)+'</span><span class="mono" style="color:var(--text-muted);">'+money(g.total)+'</span></div>'
+          + '<div style="height:10px;border-radius:6px;background:var(--surface-2);overflow:hidden;"><div style="height:100%;width:'+larguraPct+'%;border-radius:6px;background:'+cores[i%cores.length]+';"></div></div>'
+        + '</div>';
+      }).join('') + '</div>';
+    }
+
+    // ---- bloco "Despesas Operacionais" — categorias clicáveis/expansíveis (<details>), mostrando subcategoria e cada lançamento ----
+    function itemLinhaHTML(item){
+      return '<tr>'
+        + '<td class="tab-nums">'+fmtDate(item.data)+'</td>'
+        + '<td>'+escapeHtml(item.descricao||'—')+'</td>'
+        + '<td>'+escapeHtml(item.fornecedor||'—')+'</td>'
+        + '<td>'+escapeHtml(item.documento||'—')+'</td>'
+        + '<td>'+escapeHtml(item.contaBancaria||'—')+'</td>'
+        + '<td><span class="status-chip" style="color:var(--text-muted);background:var(--surface-2);">'+escapeHtml(ORIGEM_LABEL[item.origem]||item.origem)+'</span></td>'
+        + '<td class="mono">'+money(item.valor)+'</td>'
+      + '</tr>';
+    }
+    function itensTabelaHTML(itens){
+      return '<div class="table-wrap" style="margin-top:8px;"><table class="data-table"><thead><tr>'
+        + '<th>Data</th><th>Descrição</th><th>Fornecedor</th><th>CR/Documento</th><th>Conta bancária</th><th>Origem</th><th>Valor</th>'
+        + '</tr></thead><tbody>' + itens.map(itemLinhaHTML).join('') + '</tbody></table></div>';
+    }
+    function blocoCategoriasHTML(porCategoria){
+      if(!porCategoria.length) return '<div class="field-hint">Nenhuma despesa no período/filtro selecionado.</div>';
+      return porCategoria.map(function(g){
+        const itensDiretos = g.itens.filter(function(it){ return !it.subcategoria; });
+        return '<details style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;padding:0;overflow:hidden;">'
+          + '<summary style="cursor:pointer;list-style:none;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;background:var(--surface-2);font-weight:600;font-size:13px;">'
+            + '<span>'+escapeHtml(g.categoria)+' <span style="font-weight:500;color:var(--text-muted);font-size:11.5px;">('+g.quantidade+' lançamento(s))</span></span>'
+            + '<span class="mono">'+money(g.total)+'</span>'
+          + '</summary>'
+          + '<div style="padding:10px 14px;">'
+            + (g.subcategorias||[]).map(function(s){
+                return '<details style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
+                  + '<summary style="cursor:pointer;list-style:none;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:600;">'
+                    + '<span>↳ '+escapeHtml(s.subcategoria)+' <span style="font-weight:500;color:var(--text-muted);font-size:11px;">('+s.quantidade+')</span></span>'
+                    + '<span class="mono">'+money(s.total)+'</span>'
+                  + '</summary>'
+                  + '<div style="padding:0 12px 10px;">'+itensTabelaHTML(s.itens)+'</div>'
+                + '</details>';
+              }).join('')
+            + (itensDiretos.length ? itensTabelaHTML(itensDiretos) : '')
+          + '</div>'
+        + '</details>';
+      }).join('');
+    }
+
+    // ---- detalhamento linha-a-linha completo (com busca) ----
+    function detalhamentoLinhaHTML(item){
+      return '<tr>'
+        + '<td class="tab-nums">'+fmtDate(item.data)+'</td>'
+        + '<td>'+escapeHtml(item.descricao||'—')+'</td>'
+        + '<td>'+escapeHtml(item.categoria||'—')+'</td>'
+        + '<td>'+escapeHtml(item.subcategoria||'—')+'</td>'
+        + '<td>'+escapeHtml(item.fornecedor||'—')+'</td>'
+        + '<td>'+escapeHtml(item.documento||'—')+'</td>'
+        + '<td>'+escapeHtml(item.contaBancaria||'—')+'</td>'
+        + '<td><span class="status-chip" style="color:var(--text-muted);background:var(--surface-2);">'+escapeHtml(ORIGEM_LABEL[item.origem]||item.origem)+'</span></td>'
+        + '<td class="mono">'+money(item.valor)+'</td>'
+        + '<td><span class="status-chip" style="color:var(--success);background:var(--success-soft);">'+escapeHtml(item.status)+'</span></td>'
+      + '</tr>';
+    }
+    function detalhamentoHTML(){
+      let html = '<div class="chart-card" style="margin-top:14px;">'
+        + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('fileText')+'</span>Detalhamento das despesas</div></div>'
+        + '<div class="toolbar" style="margin-top:0;"><div class="search-box">'+svg('search')+'<input type="text" id="dreSearch" placeholder="Buscar descrição, fornecedor, CR ou categoria" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+          + '<select id="dreExportTipo" style="font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);">'
+            + '<option value="resumida" '+(state.exportTipo==='resumida'?'selected':'')+'>Exportar: Resumo da DRE</option>'
+            + '<option value="detalhada" '+(state.exportTipo==='detalhada'?'selected':'')+'>Exportar: Despesas por categoria</option>'
+            + '<option value="despesas" '+(state.exportTipo==='despesas'?'selected':'')+'>Exportar: Despesas linha a linha</option>'
+          + '</select>'
+          + '<button class="ghost-btn" id="dreExportXlsx" type="button" style="cursor:pointer;opacity:1;">'+svg('download')+'<span>XLSX</span></button>'
+          + '<button class="ghost-btn" id="dreExportCsv" type="button" style="cursor:pointer;opacity:1;">'+svg('download')+'<span>CSV</span></button>'
+        + '</div>';
+      if(state.loadingDetalhamento){
+        html += '<div class="table-skel"><span class="spin"></span><span>Carregando detalhamento…</span></div>';
+      } else if(!state.detalhamento.length){
+        html += '<div class="field-hint" style="margin-top:8px;">Nenhuma despesa encontrada para o período/filtro/busca atual.</div>';
+      } else {
+        html += '<div class="table-card" style="margin-top:10px;"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Data</th><th>Descrição</th><th>Categoria</th><th>Subcategoria</th><th>Fornecedor</th><th>CR/Documento</th><th>Conta bancária</th><th>Origem</th><th>Valor</th><th>Status</th>'
+          + '</tr></thead><tbody>' + state.detalhamento.map(detalhamentoLinhaHTML).join('') + '</tbody></table></div></div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
     function render(){
       const root = document.getElementById('dreRoot');
       if(!root) return;
@@ -6557,7 +6927,8 @@
         return;
       }
 
-      let html = '';
+      let html = filtrosHTML();
+
       if(state.loading || filtro.loadingEmpresas){
         html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando DRE…</span></div></div>';
       } else if(state.error){
@@ -6567,34 +6938,81 @@
         const d = state.data.dre;
         const l = d.linhas;
         const hasOrders = d.hasOrders;
+        const despesas = d.despesas || { cards:{totalDespesas:0,maiorCategoria:null,segundaMaiorCategoria:null,quantidadeDespesas:0,mediaPorDia:0}, porCategoria:[] };
+
+        html += cardsDespesasHTML(despesas.cards);
 
         html += '<div class="panel" style="max-width:640px;">'
           + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('barChart')+'</span>Demonstrativo de Resultado</div><span class="panel-note">'+escapeHtml(state.data.periodo.label)+'</span></div>'
           + '<p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">'+d.qtdPedidos+' pedido(s) considerados na receita ('+d.qtdPedidosCancelados+' cancelado(s) — entram só na linha de cancelamentos). Percentuais calculados sobre o faturamento (vendas não canceladas do período).</p>'
 
-          + '<div class="detail-section-title" style="margin-top:4px;">Receita</div>'
+          + '<div class="detail-section-title" style="margin-top:4px;">Receita Bruta</div>'
           + linhaHTML('Receita Bruta', l.receitaBruta, hasOrders)
           + linhaHTML('(−) Cancelamentos/Devoluções', l.cancelamentos, hasOrders, {negativo:true})
           + linhaHTML('(−) Descontos concedidos (cupom)', l.descontos, hasOrders, {negativo:true})
           + totalRowHTML('= Receita Líquida', l.receitaLiquida, hasOrders)
 
           + '<div class="detail-section-title">Deduções sobre a venda</div>'
-          + linhaHTML('(−) Custo dos Produtos', l.custoProdutos, hasOrders, {negativo:true})
+          + linhaHTML('(−) Custo dos Produtos (CMV)', l.custoProdutos, hasOrders, {negativo:true})
           + linhaHTML('(−) Taxas e Comissões dos marketplaces', l.taxasComissoes, hasOrders, {negativo:true})
           + linhaHTML('(−) Frete do vendedor', l.freteVendedor, hasOrders, {negativo:true})
           + linhaHTML('(−) Impostos', l.impostos, hasOrders, {negativo:true})
           + totalRowHTML('= Margem de Contribuição', l.margemContribuicao, hasOrders)
 
-          + '<div class="detail-section-title">Despesas</div>'
-          + linhaHTML('(−) Despesas / Contas pagas no período', l.despesasPeriodo, true, {negativo:true})
+          + '<div class="detail-section-title">Despesas Operacionais</div>'
+          + linhaHTML('(−) Despesas do período (contas a pagar + extrato)', l.despesasPeriodo, true, {negativo:true})
           + totalRowHTML('= Resultado Final', l.resultadoFinal, hasOrders)
 
-          + (!hasOrders ? '<div class="bd-side-note">Nenhum pedido no período e empresa selecionados — por isso as linhas de receita aparecem como "Sem dados". As despesas pagas no período (Contas a Pagar) continuam sendo um saldo real, independente de haver venda.</div>' : '')
-          + '<div class="bd-side-note">Usa exatamente o mesmo cálculo já usado em Pedidos, Financeiro e Relatórios (nenhuma fórmula nova) — e o mesmo "pago no período" já mostrado em Contas a Pagar.</div>'
+          + (!hasOrders ? '<div class="bd-side-note">Nenhum pedido no período e empresa selecionados — por isso as linhas de receita aparecem como "Sem dados". As despesas do período continuam sendo um saldo real, independente de haver venda.</div>' : '')
+          + '<div class="bd-side-note">Receita/CMV/margem usam exatamente o mesmo cálculo já usado em Pedidos, Financeiro e Relatórios (nenhuma fórmula nova). Despesas = contas a pagar pagas + saídas do extrato bancário que nunca viraram conta a pagar, sem contar a mesma saída duas vezes (uma conta a pagar conciliada com o extrato conta uma única vez) — nunca inclui transferência entre contas da própria empresa.</div>'
         + '</div>';
+
+        html += '<div class="chart-card" style="margin-top:14px;">'
+          + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('barChart')+'</span>Para onde está indo o dinheiro?</div><span class="panel-note">Mesmos valores do bloco de despesas por categoria abaixo</span></div>'
+          + graficoCategoriasHTML(despesas.porCategoria)
+        + '</div>';
+
+        html += '<div class="chart-card" style="margin-top:14px;">'
+          + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('fileText')+'</span>Despesas por categoria</div><span class="panel-note">Clique numa categoria para ver os lançamentos</span></div>'
+          + blocoCategoriasHTML(despesas.porCategoria)
+        + '</div>';
+
+        html += detalhamentoHTML();
       }
 
       root.innerHTML = html;
+
+      const seg = document.getElementById('dreSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.periodoChave = b.dataset.periodo; loadDRE(); }));
+      const aplicar = document.getElementById('dreAplicarPersonalizado');
+      if(aplicar) aplicar.addEventListener('click', ()=>{
+        state.desdePersonalizado = document.getElementById('dreDesde').value || hojeBRT();
+        state.atePersonalizado = document.getElementById('dreAte').value || hojeBRT();
+        loadDRE();
+      });
+      const fCategoria = document.getElementById('dreFiltroCategoria');
+      if(fCategoria) fCategoria.addEventListener('change', ()=>{ state.categoriaId = fCategoria.value; loadDRE(); });
+      const fConta = document.getElementById('dreFiltroConta');
+      if(fConta) fConta.addEventListener('change', ()=>{ state.contaBancariaId = fConta.value; loadDRE(); });
+      const search = document.getElementById('dreSearch');
+      if(search) search.addEventListener('input', ()=>{
+        state.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadDetalhamento, 300);
+      });
+      const exportTipoSel = document.getElementById('dreExportTipo');
+      if(exportTipoSel) exportTipoSel.addEventListener('change', ()=>{ state.exportTipo = exportTipoSel.value; });
+      function urlExportar(formato){
+        const params = paramsComuns();
+        if(state.search.trim()) params.set('search', state.search.trim());
+        params.set('tipo', state.exportTipo);
+        params.set('formato', formato);
+        return '/api/dre/exportar?'+params.toString();
+      }
+      const exportXlsx = document.getElementById('dreExportXlsx');
+      if(exportXlsx) exportXlsx.addEventListener('click', ()=>{ window.location.href = urlExportar('xlsx'); });
+      const exportCsv = document.getElementById('dreExportCsv');
+      if(exportCsv) exportCsv.addEventListener('click', ()=>{ window.location.href = urlExportar('csv'); });
     }
 
     window.DRE = { load };
