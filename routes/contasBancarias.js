@@ -75,4 +75,46 @@ router.post('/importar/confirmar', async (req,res,next)=>{
   }
 });
 
+// (31/08/2026) Ajustes finos num movimento do extrato — categoria,
+// transferência interna, e conciliação manual com uma conta a pagar. Toda a
+// regra (e a explicação de por que isso nunca duplica despesa na DRE) mora
+// em lib/contasBancarias.js.
+router.patch('/movimentos/:id/categoria', async (req,res,next)=>{
+  try{
+    if(!req.body.empresaId) return res.status(400).json({error:'Informe empresaId.'});
+    const r=await contas.definirCategoriaMovimento(req.params.id, req.body.categoriaId||null, {empresaId:req.body.empresaId});
+    if(r.notFound) return res.status(404).json({error:'Movimentação não encontrada.'});
+    if(r.errors) return res.status(400).json({errors:r.errors});
+    res.json(r);
+  }catch(err){next(err);}
+});
+
+router.patch('/movimentos/:id/transferencia', async (req,res,next)=>{
+  try{
+    if(!req.body.empresaId) return res.status(400).json({error:'Informe empresaId.'});
+    const r=await contas.marcarTransferenciaInterna(req.params.id, {empresaId:req.body.empresaId, transferenciaInterna:req.body.transferenciaInterna===true});
+    if(r.notFound) return res.status(404).json({error:'Movimentação não encontrada.'});
+    res.json(r);
+  }catch(err){next(err);}
+});
+
+router.patch('/movimentos/:id/conciliar', async (req,res,next)=>{
+  try{
+    if(!req.body.empresaId) return res.status(400).json({error:'Informe empresaId.'});
+    const r=await contas.vincularContaPagar(req.params.id, req.body.contaPagarId, {empresaId:req.body.empresaId});
+    if(r.notFound) return res.status(404).json({error:'Movimentação não encontrada.'});
+    if(r.errors) return res.status(400).json({errors:r.errors});
+    res.json(r);
+  }catch(err){next(err);}
+});
+
+router.patch('/movimentos/:id/desconciliar', async (req,res,next)=>{
+  try{
+    if(!req.body.empresaId) return res.status(400).json({error:'Informe empresaId.'});
+    const r=await contas.desvincularContaPagar(req.params.id, {empresaId:req.body.empresaId});
+    if(r.notFound) return res.status(404).json({error:'Movimentação não encontrada.'});
+    res.json(r);
+  }catch(err){next(err);}
+});
+
 module.exports=router;

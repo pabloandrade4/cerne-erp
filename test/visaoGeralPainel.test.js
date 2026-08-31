@@ -248,8 +248,15 @@ describe(
       assert.ok('contasAPagar' in resultado.fluxoCaixa);
       assert.ok('contasAReceber' in resultado.fluxoCaixa);
       assert.ok('recebimentosMl' in resultado.fluxoCaixa);
+      // saldoProjetado (fim de período à frente) continua nunca calculado
+      // por este painel — só a tela Fluxo de Caixa faz o laço dia-a-dia
+      // completo (ver lib/fluxoCaixa.js#gerarFluxoDeCaixa). Desde
+      // 31/08/2026 o motivo já não é "sem saldo bancário cadastrado" (isso
+      // deixou de ser sempre verdade com a importação de extrato) — ver
+      // saldoBancarioAtual abaixo pro saldo real, quando existir.
       assert.equal(resultado.fluxoCaixa.saldoProjetado.valor, null, 'nunca inventa saldo bancário');
-      assert.equal(resultado.fluxoCaixa.saldoProjetado.motivo, 'sem_saldo_bancario_cadastrado');
+      assert.equal(resultado.fluxoCaixa.saldoProjetado.motivo, 'projecao_dia_a_dia_disponivel_na_tela_fluxo_de_caixa');
+      assert.ok('saldoBancarioAtual' in resultado.fluxoCaixa, 'deve expor o saldo bancário real consolidado (ou null com motivo) — nunca omitido');
       assert.ok(Array.isArray(resultado.alertas));
     });
 

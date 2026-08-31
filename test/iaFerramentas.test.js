@@ -362,8 +362,21 @@ describe(
       assert.equal(resultado.previstoOuProjetado.contasAPagarVencidas.valor, esperado.contasAPagar.vencidas);
       assert.equal(resultado.previstoOuProjetado.contasAReceberEmAberto.valor, esperado.contasAReceber.totalAReceber);
       assert.equal(resultado.previstoOuProjetado.contasAReceberAtrasadas.valor, esperado.contasAReceber.atrasado);
-      assert.equal(resultado.saldoProjetado.valor, null, 'sem saldo bancário cadastrado — nunca inventado');
-      assert.equal(resultado.saldoProjetado.motivo, 'sem_saldo_bancario_cadastrado');
+      // saldoProjetado (fim de período à frente) nunca é calculado por esta
+      // ferramenta — só a tela Fluxo de Caixa faz o laço dia-a-dia completo
+      // (ver lib/fluxoCaixa.js#gerarFluxoDeCaixa) — nunca um valor inventado
+      // aqui. saldoBancarioAtual (31/08/2026) é o saldo bancário REAL
+      // consolidado quando existir extrato importado para a empresa; sem
+      // nenhuma conta bancária com saldo importado, também nunca inventa —
+      // fica null com o motivo correto.
+      assert.equal(resultado.saldoProjetado.valor, null, 'projeção dia-a-dia não é calculada por esta ferramenta — nunca inventado');
+      assert.equal(resultado.saldoProjetado.motivo, 'projecao_dia_a_dia_disponivel_na_tela_fluxo_de_caixa');
+      assert.ok('saldoBancarioAtual' in resultado, 'deve expor o saldo bancário real consolidado (ou null com motivo) — nunca omitido');
+      if (resultado.saldoBancarioAtual.valor === null) {
+        assert.equal(resultado.saldoBancarioAtual.motivo, 'nenhuma_conta_bancaria_com_saldo_importado');
+      } else {
+        assert.equal(typeof resultado.saldoBancarioAtual.valor, 'number');
+      }
     });
 
     test('dre_completa bate linha a linha com gerarDRE (todas as linhas do demonstrativo, não só o resumo de 3 linhas)', async () => {
@@ -378,7 +391,12 @@ describe(
       assert.equal(resultado.linhas.freteDoVendedor.valor, esperado.linhas.freteVendedor.valor);
       assert.equal(resultado.linhas.impostos.valor, esperado.linhas.impostos.valor);
       assert.equal(resultado.linhas.margemDeContribuicao.valor, esperado.linhas.margemContribuicao.valor);
+      assert.equal(resultado.linhas.despesasDoPeriodo.valor, esperado.linhas.despesasPeriodo.valor);
       assert.equal(resultado.linhas.resultadoFinal.valor, esperado.linhas.resultadoFinal.valor);
+      // Bloco por categoria (31/08/2026) — mesmos números do total de
+      // despesas, nunca uma segunda consulta.
+      assert.equal(resultado.cardsDespesas.totalDespesas, esperado.despesas.cards.totalDespesas);
+      assert.equal(resultado.despesasPorCategoria.length, esperado.despesas.porCategoria.slice(0, 15).length);
     });
 
     test('compras_resumo bate com resumoComprasPorFornecedor e nunca soma compra cancelada', async () => {

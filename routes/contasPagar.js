@@ -18,14 +18,14 @@ const router = express.Router();
 // listarContasPagar e resumoContasPagar.
 router.get('/', async (req, res, next) => {
   try {
-    const { empresaId, periodo, status, search } = req.query;
+    const { empresaId, periodo, status, search, categoriaId } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
     const periodoCalc = calcularPeriodo(periodo);
     const { desde, ate } = periodoParaDatasBRT(periodoCalc);
 
     const [contas, resumo] = await Promise.all([
-      contasPagar.listarContasPagar({ empresaId, desde, ate, status, search }),
+      contasPagar.listarContasPagar({ empresaId, desde, ate, status, search, categoriaId }),
       contasPagar.resumoContasPagar({ empresaId, desde, ate }),
     ]);
 
