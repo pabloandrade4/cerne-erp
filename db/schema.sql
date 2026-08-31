@@ -1023,6 +1023,14 @@ CREATE TABLE IF NOT EXISTS contas_bancarias (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Compatibilidade com bancos que já possuíam `contas_bancarias` de uma
+-- versão anterior do Cerne. CREATE TABLE IF NOT EXISTS não adiciona colunas
+-- novas em uma tabela existente; sem estes ALTERs, saldoConsolidado() pode
+-- receber `column saldo_atual does not exist` e derrubar o Fluxo de Caixa.
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atual NUMERIC(14,2);
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_data DATE;
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atualizado_em TIMESTAMPTZ;
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 CREATE INDEX IF NOT EXISTS idx_contas_bancarias_empresa ON contas_bancarias(empresa_id, ativo);
 
 CREATE TABLE IF NOT EXISTS extrato_importacoes (
