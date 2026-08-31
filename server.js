@@ -35,11 +35,14 @@ const iaGestoraRouter = require('./routes/iaGestora');
 const performanceAnunciosRouter = require('./routes/performanceAnuncios');
 const visitasConversaoRouter = require('./routes/visitasConversao');
 const margemAnuncioRouter = require('./routes/margemAnuncio');
+const contasBancariasRouter = require('./routes/contasBancarias');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '12mb' }));
+// Extratos são enviados em base64 (~33% maiores que o arquivo original).
+// 16 MB comporta o limite interno de 10 MB do importador sem rejeitar antes da validação.
+app.use(express.json({ limit: '16mb' }));
 
 // Healthcheck simples (útil para o provedor de hospedagem verificar o serviço)
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -72,6 +75,7 @@ app.use('/api/ia-gestora', iaGestoraRouter);
 app.use('/api/performance-anuncios', performanceAnunciosRouter);
 app.use('/api/visitas-conversao', visitasConversaoRouter);
 app.use('/api/margem-anuncio', margemAnuncioRouter);
+app.use('/api/contas-bancarias', contasBancariasRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));

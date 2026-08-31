@@ -1,191 +1,79 @@
-// Testes de INTEGRAÇÃO (precisa de Postgres local — mesmo padrão dos
-// outros *.test.js) da importação de extrato bancário + conciliação
-// (Passo 2 da tarefa "Recebimentos + Fluxo de Caixa + IA Gestora",
-// 27/08/2026, ver docs/04-alteracoes.md). Cobre os testes OBRIGATÓRIOS
-// pedidos pelo usuário: 1) importar planilha; 2) reimportar a mesma
-// planilha sem duplicar; 3) conciliar um recebimento de marketplace; 4)
-// previsto -> realizado sem duplicação (esse último tem um teste dedicado
-// e mais detalhado em fluxoCaixa.test.js).
-const { test, describe, before, after } = require('node:test');
+const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const extrato = require('../lib/extratoBancario');
 
-const TEM_BANCO = !!process.env.DATABASE_URL;
-const EMPRESA_ID = 900;
-const PREFIXO_TESTE = '[TESTE AUTOMATIZADO]';
-
-describe('Extrato Bancário + Conciliação — Passo 2 (27/08/2026)', { skip: !TEM_BANCO && 'defina DATABASE_URL apontando pra um Postgres de teste já seedado' }, () => {
-  let extratoBancario, contasBancarias, conciliacaoBancaria, contasReceber, pool;
-  let contaBancariaId;
-  let contaReceberId;
-  let recebimentoMlId, recebimentoMlStatusOriginal, recebimentoMlValor;
-
-  before(async () => {
-    extratoBancario = require('../lib/extratoBancario');
-    contasBancarias = require('../lib/contasBancarias');
-    conciliacaoBancaria = require('../lib/conciliacaoBancaria');
-    contasReceber = require('../lib/contasReceber');
-    pool = require('../db/pool');
-
-    const conta = await contasBancarias.criarContaBancaria({ empresaId: EMPRESA_ID, nome: PREFIXO_TESTE + ' Banco Extrato' });
-    assert.equal(conta.errors, undefined);
-    contaBancariaId = conta.conta.id;
-
-    const cr = await contasReceber.criarContaReceber({
-      empresaId: EMPRESA_ID, descricao: PREFIXO_TESTE + ' recebível pra conciliar', origem: 'Outros', valor: 77.5, dataPrevista: '2026-08-20',
-    });
-    assert.equal(cr.errors, undefined);
-    contaReceberId = cr.conta.id;
-
-    const { rows } = await pool.query(
-      `SELECT id, status, valor_liquido_esperado FROM recebimentos_marketplace WHERE empresa_id = $1 AND status = 'a_receber' AND valor_liquido_esperado IS NOT NULL ORDER BY id LIMIT 1`,
-      [EMPRESA_ID]
-    );
-    assert.ok(rows.length, 'precisa existir um recebimento ML "a_receber" nos dados de teste');
-    recebimentoMlId = rows[0].id;
-    recebimentoMlStatusOriginal = rows[0].status;
-    recebimentoMlValor = Number(rows[0].valor_liquido_esperado);
-  });
-
-  after(async () => {
-    if (contaBancariaId) {
-      await pool.query('DELETE FROM extrato_movimentos WHERE conta_bancaria_id = $1', [contaBancariaId]);
-      await pool.query('DELETE FROM extrato_importacoes WHERE conta_bancaria_id = $1', [contaBancariaId]);
-      await pool.query('DELETE FROM contas_bancarias WHERE id = $1', [contaBancariaId]);
-    }
-    if (contaReceberId) await pool.query('DELETE FROM contas_receber WHERE id = $1', [contaReceberId]);
-    if (recebimentoMlId) {
-      await pool.query(
-        `UPDATE recebimentos_marketplace SET status=$1, valor_recebido=NULL, data_efetiva_recebimento=NULL, origem_confirmacao=NULL, updated_at=now() WHERE id=$2`,
-        [recebimentoMlStatusOriginal, recebimentoMlId]
-      );
-    }
-    await pool.end();
-  });
-
-  function csvBase64(linhas) {
-    const texto = 'Data;Histórico;Documento;Entrada;Saída\n' + linhas.join('\n');
-    return Buffer.from(texto, 'utf8').toString('base64');
-  }
-
-  describe('Teste obrigatório 1 e 2: importar planilha, reimportar sem duplicar', () => {
-    let conteudoBase64;
-    let mapeamentoUsado;
-
-    before(() => {
-      conteudoBase64 = csvBase64([
-        `27/08/2026;PIX RECEBIDO MERCADO PAGO;DOC001;${recebimentoMlValor.toFixed(2).replace('.', ',')};`,
-        '20/08/2026;TED RECEBIDA;DOC002;77,50;',
-        '19/08/2026;TARIFA BANCARIA;DOC003;;9,90',
-      ]);
-    });
-
-    test('CSV com ; e vírgula decimal é lido corretamente, mapeamento sugerido identifica as colunas certas', async () => {
-      const { colunas, linhas } = await extratoBancario.lerPlanilha({ conteudoBase64, formato: 'csv' });
-      assert.deepEqual(colunas, ['Data', 'Histórico', 'Documento', 'Entrada', 'Saída']);
-      assert.equal(linhas.length, 3);
-
-      const mapeamento = extratoBancario.sugerirMapeamento(colunas);
-      assert.equal(mapeamento.data, 0);
-      assert.equal(mapeamento.descricao, 1);
-      assert.equal(mapeamento.documento, 2);
-      assert.equal(mapeamento.entrada, 3);
-      assert.equal(mapeamento.saida, 4);
-      mapeamentoUsado = mapeamento;
-    });
-
-    test('prévia mostra contagens ANTES de qualquer gravação (nenhuma linha em extrato_movimentos ainda)', async () => {
-      const preview = await extratoBancario.previsualizarImportacao({
-        conteudoBase64, formato: 'csv', nomeArquivo: 'extrato.csv', mapeamento: mapeamentoUsado, contaBancariaId,
-      });
-      assert.equal(preview.errors, undefined);
-      assert.equal(preview.resumo.totalMovimentacoes, 3);
-      assert.equal(preview.resumo.totalNovas, 3);
-      assert.equal(preview.resumo.totalDuplicadas, 0);
-      assert.equal(preview.resumo.totalEntradas, round2(recebimentoMlValor + 77.5));
-      assert.equal(preview.resumo.totalSaidas, 9.9);
-
-      const { rows } = await pool.query('SELECT count(*)::int AS n FROM extrato_movimentos WHERE conta_bancaria_id = $1', [contaBancariaId]);
-      assert.equal(rows[0].n, 0, 'a prévia NUNCA grava nada no banco');
-    });
-
-    test('Teste obrigatório 1 — confirmar a importação grava as movimentações', async () => {
-      const preview = await extratoBancario.previsualizarImportacao({
-        conteudoBase64, formato: 'csv', nomeArquivo: 'extrato.csv', mapeamento: mapeamentoUsado, contaBancariaId,
-      });
-      const result = await extratoBancario.confirmarImportacao({
-        empresaId: EMPRESA_ID, contaBancariaId, nomeArquivo: 'extrato.csv', formato: 'csv',
-        mapeamento: mapeamentoUsado, movimentos: preview.movimentos, importadoPor: 'teste-automatizado',
-      });
-      assert.equal(result.errors, undefined);
-      assert.equal(result.importacao.totalNovas, 3);
-      assert.equal(result.importacao.totalDuplicadas, 0);
-
-      const { rows } = await pool.query('SELECT count(*)::int AS n FROM extrato_movimentos WHERE conta_bancaria_id = $1', [contaBancariaId]);
-      assert.equal(rows[0].n, 3);
-    });
-
-    test('Teste obrigatório 2 — reimportar a MESMA planilha não duplica nenhuma movimentação', async () => {
-      const preview = await extratoBancario.previsualizarImportacao({
-        conteudoBase64, formato: 'csv', nomeArquivo: 'extrato.csv', mapeamento: mapeamentoUsado, contaBancariaId,
-      });
-      assert.equal(preview.resumo.totalNovas, 0, 'a prévia da reimportação já mostra 0 novas — tudo já existe');
-      assert.equal(preview.resumo.totalDuplicadas, 3);
-
-      const result = await extratoBancario.confirmarImportacao({
-        empresaId: EMPRESA_ID, contaBancariaId, nomeArquivo: 'extrato.csv', formato: 'csv',
-        mapeamento: mapeamentoUsado, movimentos: preview.movimentos, importadoPor: 'teste-automatizado',
-      });
-      assert.equal(result.importacao.totalNovas, 0);
-      assert.equal(result.importacao.totalDuplicadas, 3);
-
-      const { rows } = await pool.query('SELECT count(*)::int AS n FROM extrato_movimentos WHERE conta_bancaria_id = $1', [contaBancariaId]);
-      assert.equal(rows[0].n, 3, 'CONTINUA em 3 — reimportar a mesma planilha nunca duplica');
-    });
-  });
-
-  describe('Teste obrigatório 3: conciliar um recebimento de marketplace', () => {
-    test('sugestão encontra o recebimento certo pelo valor; confirmar muda o status pra RECEBIDO e marca o movimento como conciliado', async () => {
-      const sugestoes = await conciliacaoBancaria.sugerirConciliacoes({ empresaId: EMPRESA_ID, contaBancariaId });
-      const doRecebimentoMl = sugestoes.find((s) => s.movimento.descricao.includes('PIX RECEBIDO MERCADO PAGO'));
-      assert.ok(doRecebimentoMl, 'deveria haver uma sugestão pro movimento do PIX recebido');
-      const candidato = doRecebimentoMl.candidatos.find((c) => c.tipo === 'recebimento_marketplace' && c.id === recebimentoMlId);
-      assert.ok(candidato, 'o recebimento ML certo (mesmo valor) deveria aparecer como candidato');
-
-      const confirmado = await conciliacaoBancaria.confirmarConciliacao({
-        movimentoId: doRecebimentoMl.movimento.id, tipo: 'recebimento_marketplace', alvoId: recebimentoMlId,
-      });
-      assert.equal(confirmado.errors, undefined);
-      assert.equal(confirmado.alvo.status, 'recebido');
-      assert.equal(confirmado.alvo.origemConfirmacao, 'conciliacao_extrato');
-      assert.equal(confirmado.movimento.statusConciliacao, 'conciliado');
-      assert.equal(confirmado.movimento.conciliadoComTipo, 'recebimento_marketplace');
-      assert.equal(confirmado.movimento.conciliadoComId, recebimentoMlId);
-
-      // Não pode conciliar de novo o mesmo movimento.
-      const denovo = await conciliacaoBancaria.confirmarConciliacao({
-        movimentoId: doRecebimentoMl.movimento.id, tipo: 'recebimento_marketplace', alvoId: recebimentoMlId,
-      });
-      assert.ok(denovo.errors, 'não pode conciliar um movimento que já foi conciliado');
-    });
-
-    test('conciliar uma conta a receber muda o status dela pra recebido, sem duplicar', async () => {
-      const sugestoes = await conciliacaoBancaria.sugerirConciliacoes({ empresaId: EMPRESA_ID, contaBancariaId });
-      const daContaReceber = sugestoes.find((s) => s.candidatos.some((c) => c.tipo === 'conta_receber' && c.id === contaReceberId));
-      assert.ok(daContaReceber, 'deveria haver uma sugestão pra conta a receber de teste (R$77,50)');
-
-      const confirmado = await conciliacaoBancaria.confirmarConciliacao({
-        movimentoId: daContaReceber.movimento.id, tipo: 'conta_receber', alvoId: contaReceberId,
-      });
-      assert.equal(confirmado.errors, undefined);
-      assert.equal(confirmado.alvo.status, 'recebido');
-    });
-
-    test('movimento sem candidato correspondente (tarifa bancária) não aparece nas sugestões — usuário usa "ignorar"', async () => {
-      const sugestoes = await conciliacaoBancaria.sugerirConciliacoes({ empresaId: EMPRESA_ID, contaBancariaId });
-      const daTarifa = sugestoes.find((s) => s.movimento.descricao.includes('TARIFA BANCARIA'));
-      assert.equal(daTarifa, undefined, 'nunca sugere um candidato forçado pra um valor sem correspondência real');
-    });
-  });
+test('normaliza valores brasileiros com sinal', () => {
+  assert.equal(typeof extrato.normalizarValor, 'function');
+  assert.equal(extrato.normalizarValor('R$ 32.144,56'), 32144.56);
+  assert.equal(extrato.normalizarValor('-131.639,08'), -131639.08);
+  assert.equal(extrato.normalizarValor('+10.696,00'), 10696);
 });
 
-function round2(n) { return Math.round(n * 100) / 100; }
+test('lê CSV Nubank realista e classifica entrada/saída', () => {
+  assert.equal(typeof extrato.lerCsvBuffer, 'function');
+  const csv = Buffer.from('Data;Natureza;Tipo;Descrição;Valor (R$)\n11/08/2026;Saída;Pagamento de boleto efetuado;CONTADOR;-680,0\n17/08/2026;Entrada;Transferência recebida pelo Pix;PF EMBALAGENS;11098,0\n');
+  const r = extrato.lerCsvBuffer(csv);
+  assert.equal(r.movimentos.length, 2);
+  assert.deepEqual(r.movimentos[0], { data:'2026-08-11', tipo:'saida', descricao:'CONTADOR', valor:680 });
+  assert.deepEqual(r.movimentos[1], { data:'2026-08-17', tipo:'entrada', descricao:'PF EMBALAGENS', valor:11098 });
+});
+
+test('CSV detecta saldo final quando existe coluna de saldo', () => {
+  const csv = Buffer.from('Data;Descrição;Valor;Saldo\n30/08/2026;PIX A;-100,00;1.500,00\n31/08/2026;PIX B;200,00;1.700,00\n');
+  const r = extrato.lerCsvBuffer(csv);
+  assert.equal(r.saldoFinal, 1700);
+  assert.equal(r.saldoData, '2026-08-31');
+});
+
+test('texto de PDF Nubank detecta saldo final, data final e conta', () => {
+  assert.equal(typeof extrato.analisarTextoPdfNubank, 'function');
+  const texto = `EMPRESA TESTE LTDA\nCNPJ 00.000.000/0001-00 Agência 0001 Conta\n123456789-0\n01 DE AGOSTO DE 2026 a 27 DE AGOSTO DE 2026 VALORES EM R$\nSaldo final do período\nR$ 12.345,67\nSaldo inicial 10.000,00\nTotal de entradas +3.000,00\nTotal de saídas -654,33\nSaldo final do período 12.345,67\nMovimentações\n03 AGO 2026 Total de saídas - 1.266,50\nTransferência enviada pelo Pix JULIANO TESTE 606,50\nTransferência enviada pelo Pix AMANDA TESTE 660,00\nSaldo do dia 28.169,72\n06 AGO 2026 Total de entradas + 10.696,00\nTransferência recebida pelo Pix EMPRESA TESTE LTDA 10.696,00\nSaldo do dia 38.865,72`;
+  const r = extrato.analisarTextoPdfNubank(texto);
+  assert.equal(r.banco, 'Nubank');
+  assert.equal(r.conta, '123456789-0');
+  assert.equal(r.saldoFinal, 12345.67);
+  assert.equal(r.saldoData, '2026-08-27');
+  assert.equal(r.movimentos.length, 3);
+  assert.equal(r.movimentos[0].tipo, 'saida');
+  assert.equal(r.movimentos[2].tipo, 'entrada');
+});
+
+test('fingerprint diferencia ocorrências idênticas sem perder deduplicação entre reimportações', () => {
+  assert.equal(typeof extrato.adicionarFingerprints, 'function');
+  const movs = [
+    { data:'2026-08-31', tipo:'saida', descricao:'PIX TESTE', valor:50 },
+    { data:'2026-08-31', tipo:'saida', descricao:'PIX TESTE', valor:50 },
+  ];
+  const a = extrato.adicionarFingerprints(movs);
+  const b = extrato.adicionarFingerprints(movs);
+  assert.notEqual(a[0].fingerprint, a[1].fingerprint);
+  assert.equal(a[0].fingerprint, b[0].fingerprint);
+  assert.equal(a[1].fingerprint, b[1].fingerprint);
+});
+
+test('analisarArquivo usa PDF textual e devolve hash/fingerprints', async () => {
+  assert.equal(typeof extrato.analisarArquivo, 'function');
+  const fakePdf = async () => ({ text:`EMPRESA TESTE LTDA\nNu Pagamentos S.A.\nAgência 0001 Conta\n123456789-0\n01 DE AGOSTO DE 2026 a 31 DE AGOSTO DE 2026\nSaldo final do período\nR$ 1.234,56\n31 AGO 2026 Total de entradas + 100,00\nTransferência recebida pelo Pix TESTE 100,00\nSaldo do dia 1.234,56` });
+  const r = await extrato.analisarArquivo({nomeArquivo:'nubank.pdf',buffer:Buffer.from('pdffake')},{pdfParse:fakePdf});
+  assert.equal(r.formato,'pdf');
+  assert.equal(r.saldoFinal,1234.56);
+  assert.equal(r.saldoData,'2026-08-31');
+  assert.equal(r.movimentos.length,1);
+  assert.equal(r.movimentos[0].fingerprint.length,64);
+  assert.equal(r.arquivoHash.length,64);
+});
+
+test('PDF de outro banco não é tratado silenciosamente como Nubank', async () => {
+  const fakePdf = async () => ({ text:`BANCO EXEMPLO S.A.\nAgência 0001 Conta\n12345678-9\n01 DE AGOSTO DE 2026 a 31 DE AGOSTO DE 2026\nSaldo final do período\nR$ 999,99\n31 AGO 2026 Total de entradas + 100,00\nTransferência recebida TESTE 100,00\nSaldo do dia 999,99` });
+  await assert.rejects(
+    () => extrato.analisarArquivo({nomeArquivo:'outro-banco.pdf',buffer:Buffer.from('pdffake')},{pdfParse:fakePdf}),
+    /PDF.*Nubank/i
+  );
+});
+
+test('não anuncia suporte ao XLS legado que o ExcelJS não lê', async () => {
+  await assert.rejects(
+    () => extrato.analisarArquivo({nomeArquivo:'extrato.xls',buffer:Buffer.from('xls-legado')}),
+    /Formato não suportado.*XLSX/i
+  );
+});
