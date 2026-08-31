@@ -65,7 +65,8 @@ router.post('/importar/confirmar', async (req,res,next)=>{
     if(a.saldoFinal===null||a.saldoFinal===undefined||!a.saldoData){
       return res.status(400).json({error:'Não consegui identificar o saldo final e a data. Confira os campos antes de importar.'});
     }
-    const r=await contas.confirmarImportacao({empresaId,contaBancariaId,nomeArquivo,arquivoHash:a.arquivoHash,formato:a.formato,saldoFinal:a.saldoFinal,saldoData:a.saldoData,bancoDetectado:a.banco,contaDetectada:a.conta,movimentos:a.movimentos});
+    const forcarSubstituicaoSaldo = req.body.forcarSubstituicaoSaldo===true || req.body.forcarSubstituicaoSaldo==='true';
+    const r=await contas.confirmarImportacao({empresaId,contaBancariaId,nomeArquivo,arquivoHash:a.arquivoHash,formato:a.formato,saldoFinal:a.saldoFinal,saldoData:a.saldoData,bancoDetectado:a.banco,contaDetectada:a.conta,movimentos:a.movimentos,forcarSubstituicaoSaldo});
     const saldoConsolidado=await contas.saldoConsolidado(empresaId);
     res.json({...r,saldoFinal:a.saldoFinal,saldoData:a.saldoData,saldoConsolidado});
   }catch(err){

@@ -1279,6 +1279,11 @@
       inner += '<button class="primary-btn enabled" id="btnNewDespesaFixa" type="button">'+svg('plus')+'<span>Nova despesa fixa</span></button>';
     } else if(id === 'cashFlow'){
       inner += '<button class="ghost-btn" id="btnSaldoInicialFluxoCaixa" type="button" style="cursor:pointer;opacity:1;">'+svg('wallet')+'<span>Definir saldo inicial</span></button>';
+    } else if(id === 'settlements'){
+      inner += '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">'
+        + '<button class="ghost-btn" id="btnNovaContaBancaria" type="button" style="cursor:pointer;opacity:1;">'+svg('plus')+'<span>Nova conta bancária</span></button>'
+        + '<button class="primary-btn enabled" id="btnImportExtrato" type="button">'+svg('download')+'<span>Importar extrato</span></button>'
+      + '</div>';
     } else if(id !== 'overview' && !REAL_MODULES.includes(id)){
       inner += '<button class="primary-btn" disabled>'+svg('plus')+'<span>'+(p.action||'Em breve')+'</span></button>';
     }
@@ -5535,7 +5540,7 @@
      conciliação futura (valor esperado x valor repassado) pedida pelo
      usuário. */
   (function(){
-    const state = { loading:false, error:null, recebimentos:[] };
+    const state = { loading:false, error:null, recebimentos:[], contasBancarias:[], saldoConsolidado:null, loadingBancos:false };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '<span class="dash">Informação não disponível</span>' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -5545,6 +5550,14 @@
       const cor = status==='recebido' ? 'success' : status==='divergente' ? 'danger' : status==='disponivel' ? 'teal' : 'warning';
       return 'color:var(--'+cor+');background:var(--'+cor+'-soft);';
     }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
 
     async function api(path){
       const res = await fetch('/api/recebimentos'+path);
@@ -5553,13 +5566,31 @@
       return body;
     }
 
+    async function apiBancos(path, opts){
+      const res = await fetch('/api/contas-bancarias'+path, opts ? { headers:{'Content-Type':'application/json'}, ...opts } : undefined);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body&&body.error)||'Falha na requisição.');
+      return body;
+    }
+
+    async function loadContasBancarias(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.contasBancarias=[]; state.saldoConsolidado=null; return; }
+      state.loadingBancos = true;
+      try{
+        const data = await apiBancos('?'+new URLSearchParams({empresaId:filtro.empresaId}).toString());
+        state.contasBancarias = data.contas||[]; state.saldoConsolidado = data.saldoConsolidado||null;
+      }catch(err){ state.contasBancarias=[]; state.saldoConsolidado=null; }
+      finally{ state.loadingBancos = false; }
+    }
+
     async function loadRecebimentos(){
       const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ state.recebimentos=[]; state.loading=false; render(); return; }
+      if(!filtro.empresaId){ state.recebimentos=[]; state.contasBancarias=[]; state.saldoConsolidado=null; state.loading=false; render(); return; }
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
-        const data = await api('?'+params.toString());
+        const [data] = await Promise.all([ api('?'+params.toString()), loadContasBancarias() ]);
         state.recebimentos = data.recebimentos;
       }catch(err){ state.error = err.message || 'Não foi possível carregar os recebimentos.'; }
       finally{ state.loading = false; render(); }
@@ -5585,7 +5616,9 @@
         return;
       }
 
-      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:720px;">Esta tela mostra os pedidos com pagamento aprovado do Mercado Livre no período selecionado. Data de liberação, valor recebido e data de recebimento ainda não são retornados pela API nesta integração — aparecem como "Informação não disponível" (nunca um valor inventado) até que essa fonte real exista. Preparado para, no futuro, comparar o valor que o ERP esperava receber com o valor que o marketplace realmente repassou.</div>';
+      let html = contasBancariasPanelHTML();
+
+      html += '<div class="field-hint" style="margin-bottom:12px;max-width:720px;">Esta tela mostra os pedidos com pagamento aprovado do Mercado Livre no período selecionado. Data de liberação, valor recebido e data de recebimento ainda não são retornados pela API nesta integração — aparecem como "Informação não disponível" (nunca um valor inventado) até que essa fonte real exista. Preparado para, no futuro, comparar o valor que o ERP esperava receber com o valor que o marketplace realmente repassou.</div>';
 
       if(state.loading || filtro.loadingEmpresas){
         html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando recebimentos…</span></div></div>';
@@ -5616,7 +5649,210 @@
       }
 
       root.innerHTML = html;
+      const btnNovaContaInline = document.getElementById('bancosEmptyNovaConta');
+      if(btnNovaContaInline) btnNovaContaInline.addEventListener('click', ()=> openNovaContaBancariaModal());
     }
+
+    function contasBancariasPanelHTML(){
+      let html = '<div class="table-card" style="margin-bottom:16px;">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('wallet')+'</span>Contas bancárias</div></div>';
+      if(state.loadingBancos){
+        html += '<div class="table-skel" style="padding:20px;"><span class="spin"></span><span>Carregando contas bancárias…</span></div>';
+      } else if(!state.contasBancarias.length){
+        html += '<div class="empty-panel" style="padding:24px 20px;">'
+          + '<div class="empty-icon">'+svg('wallet')+'</div>'
+          + '<h2>Nenhuma conta bancária cadastrada</h2>'
+          + '<p class="lead">Cadastre uma conta e importe um extrato (PDF do Nubank, CSV ou XLSX) para o saldo bancário entrar automaticamente no Fluxo de Caixa.</p>'
+          + '<button class="primary-btn enabled" id="bancosEmptyNovaConta" type="button" style="margin-top:6px;">'+svg('plus')+'<span>Nova conta bancária</span></button>'
+          + '</div>';
+      } else {
+        const sc = state.saldoConsolidado;
+        html += '<div style="padding:14px 20px 6px;">'
+          + '<div class="kpi-sec" style="'+(sc?'--tint:var(--success);--tint-soft:var(--success-soft);':'--tint:var(--text-muted);--tint-soft:var(--surface-2);')+'max-width:340px;">'
+          + '<div class="kpi-sec-icon">'+svg('wallet')+'</div>'
+          + '<div class="kpi-sec-body"><div class="kpi-sec-label">Saldo bancário consolidado</div>'
+          + '<div class="kpi-sec-value">'+(sc?money(sc.valor):'<span class="dash">Saldo não informado</span>')+'</div>'
+          + (sc&&sc.dataReferencia?'<div class="di-sub">Referência: '+fmtDate(sc.dataReferencia)+(sc.contasSemSaldo?' · '+sc.contasSemSaldo+' conta(s) sem saldo importado':'')+'</div>':'')
+          + '</div></div></div>'
+          + '<div class="table-wrap"><table class="data-table"><thead><tr><th>Conta</th><th>Banco</th><th>Saldo atual</th><th>Atualizado em</th></tr></thead><tbody>'
+          + state.contasBancarias.map(c=>'<tr><td>'+escapeHtml(c.nome)+(c.agencia||c.conta?'<div class="di-sub">'+escapeHtml([c.agencia,c.conta].filter(Boolean).join(' · '))+'</div>':'')+'</td>'
+            + '<td>'+escapeHtml(c.banco||'—')+'</td>'
+            + '<td class="mono">'+(c.saldoAtual===null?'<span class="dash">Saldo não informado</span>':money(c.saldoAtual))+'</td>'
+            + '<td class="tab-nums">'+(c.saldoData?fmtDate(c.saldoData):'<span class="dash">—</span>')+'</td></tr>').join('')
+          + '</tbody></table></div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    async function lerArquivoBase64(file){
+      return new Promise((resolve,reject)=>{
+        const reader = new FileReader();
+        reader.onload = ()=> resolve(String(reader.result).replace(/^data:[^;]+;base64,/, ''));
+        reader.onerror = ()=> reject(new Error('Não foi possível ler o arquivo.'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function openNovaContaBancariaModal(){
+      const empresaId = Number(window.CerneFiltro.state.empresaId);
+      if(!empresaId){ toast('Selecione uma empresa antes de cadastrar uma conta.', 'error'); return; }
+      const modalRoot = document.getElementById('modalRoot');
+      const close = ()=> modalRoot.innerHTML='';
+      modalRoot.innerHTML = '<div class="modal-overlay" id="ncbOverlay"><div class="modal-card" style="max-width:480px;">'
+        + '<div class="modal-head"><div class="modal-title">Nova conta bancária</div><button class="row-ic-btn" id="ncbClose" type="button">'+svg('x')+'</button></div>'
+        + '<div class="modal-sub">Cadastre a conta para depois importar o extrato e manter o saldo bancário atualizado automaticamente.</div>'
+        + '<div class="form-grid" style="margin-top:14px;display:flex;flex-direction:column;gap:12px;">'
+          + '<label>Nome da conta *<input type="text" id="ncbNome" placeholder="Ex.: Nubank PJ"></label>'
+          + '<label>Banco<input type="text" id="ncbBanco" placeholder="Ex.: Nubank"></label>'
+          + '<label>Agência<input type="text" id="ncbAgencia"></label>'
+          + '<label>Conta<input type="text" id="ncbConta" placeholder="Ex.: 123456789-0"></label>'
+        + '</div>'
+        + '<div class="modal-actions"><button class="btn-secondary" id="ncbCancelar" type="button">Cancelar</button><button class="btn-primary" id="ncbSalvar" type="button">'+svg('check')+'<span>Cadastrar conta</span></button></div>'
+        + '</div></div>';
+      document.getElementById('ncbClose').addEventListener('click', close);
+      document.getElementById('ncbCancelar').addEventListener('click', close);
+      document.getElementById('ncbOverlay').addEventListener('click', e=>{ if(e.target.id==='ncbOverlay') close(); });
+      document.getElementById('ncbSalvar').addEventListener('click', async ()=>{
+        const btn = document.getElementById('ncbSalvar');
+        const nome = document.getElementById('ncbNome').value.trim();
+        if(!nome){ toast('Informe o nome da conta.', 'error'); return; }
+        btn.disabled = true; btn.querySelector('span').textContent='Salvando…';
+        try{
+          const r = await apiBancos('', { method:'POST', body: JSON.stringify({
+            empresaId, nome,
+            banco: document.getElementById('ncbBanco').value.trim(),
+            agencia: document.getElementById('ncbAgencia').value.trim(),
+            conta: document.getElementById('ncbConta').value.trim(),
+          })});
+          if(r.errors){ toast(Object.values(r.errors)[0], 'error'); btn.disabled=false; btn.querySelector('span').textContent='Cadastrar conta'; return; }
+          close();
+          toast('Conta bancária cadastrada.');
+          await loadContasBancarias(); render();
+        }catch(err){ toast(err.message,'error'); btn.disabled=false; btn.querySelector('span').textContent='Cadastrar conta'; }
+      });
+    }
+
+    function openImportExtratoModal(){
+      const empresaId = Number(window.CerneFiltro.state.empresaId);
+      if(!empresaId){ toast('Selecione uma empresa antes de importar um extrato.', 'error'); return; }
+      if(!state.contasBancarias.length){ toast('Cadastre uma conta bancária antes de importar um extrato.', 'error'); return; }
+      const modalRoot = document.getElementById('modalRoot');
+      const close = ()=> modalRoot.innerHTML='';
+      const imp = { contaBancariaId:'', file:null, analise:null, saldoManualFinal:'', saldoManualData:'' };
+
+      function shell(conteudo, largura){
+        modalRoot.innerHTML = '<div class="modal-overlay" id="impExtOverlay">'
+          + '<div class="modal-card" style="max-width:'+(largura||'620px')+';max-height:92vh;overflow:auto;">'
+            + '<div class="modal-head"><div class="modal-title">Importar extrato</div>'
+              + '<button class="row-ic-btn" id="impExtClose" type="button">'+svg('x')+'</button></div>'
+            + conteudo
+          + '</div></div>';
+        document.getElementById('impExtClose').addEventListener('click', close);
+        document.getElementById('impExtOverlay').addEventListener('click', e=>{ if(e.target.id==='impExtOverlay') close(); });
+      }
+
+      function renderEscolha(){
+        shell('<div class="modal-sub">Escolha a conta bancária e o arquivo do extrato. Aceita PDF do Nubank, CSV ou XLSX.</div>'
+          + '<div style="display:flex;flex-direction:column;gap:12px;margin-top:14px;">'
+            + '<label>Conta bancária *<select id="impExtConta"><option value="">Selecione…</option>'
+              + state.contasBancarias.map(c=>'<option value="'+c.id+'">'+escapeHtml(c.nome)+(c.banco?' — '+escapeHtml(c.banco):'')+'</option>').join('')
+              + '</select></label>'
+          + '</div>'
+          + '<div class="empty-panel" style="margin-top:14px;padding:26px 18px;">'
+            + '<div class="empty-icon">'+svg('fileText')+'</div>'
+            + '<h2>Selecione o arquivo do extrato</h2>'
+            + '<p class="lead">PDF do Nubank, CSV ou XLSX, até 10 MB.</p>'
+            + '<input type="file" id="impExtFile" accept=".pdf,.csv,.xlsx" style="display:none;">'
+            + '<button class="primary-btn enabled" id="impExtChoose" type="button" style="margin-top:8px;">'+svg('fileText')+'<span>Escolher arquivo</span></button>'
+          + '</div>');
+        const input = document.getElementById('impExtFile');
+        const selConta = document.getElementById('impExtConta');
+        if(imp.contaBancariaId) selConta.value = imp.contaBancariaId;
+        selConta.addEventListener('change', ()=> imp.contaBancariaId = selConta.value);
+        document.getElementById('impExtChoose').addEventListener('click', ()=>input.click());
+        input.addEventListener('change', async ()=>{
+          const file = input.files && input.files[0]; if(!file) return;
+          if(!imp.contaBancariaId){ toast('Selecione a conta bancária antes de escolher o arquivo.', 'error'); return; }
+          if(file.size > 10*1024*1024){ toast('Arquivo maior que 10 MB.', 'error'); return; }
+          const btn = document.getElementById('impExtChoose'); btn.disabled=true; btn.querySelector('span').textContent='Analisando extrato…';
+          try{
+            imp.file = file;
+            const arquivoBase64 = await lerArquivoBase64(file);
+            imp.analise = await apiBancos('/importar/analisar', { method:'POST', body: JSON.stringify({ nomeArquivo:file.name, arquivoBase64 }) });
+            imp.saldoManualFinal=''; imp.saldoManualData='';
+            renderPreview();
+          }catch(err){ toast(err.message,'error'); btn.disabled=false; btn.querySelector('span').textContent='Escolher arquivo'; }
+        });
+      }
+
+      function renderPreview(){
+        const a = imp.analise.analise;
+        const contaSelecionada = state.contasBancarias.find(c=>String(c.id)===String(imp.contaBancariaId));
+        const semSaldo = a.saldoFinal===null || a.saldoFinal===undefined;
+        const linhas = (a.preview||[]).slice(0,10).map(m=>'<tr><td class="tab-nums">'+fmtDate(m.data)+'</td><td>'+(m.tipo==='entrada'?'Entrada':'Saída')+'</td><td>'+escapeHtml(m.descricao||'')+'</td><td class="mono">'+money(m.valor)+'</td></tr>').join('');
+        shell('<div class="modal-sub">Arquivo: <strong>'+escapeHtml(imp.file.name)+'</strong> · '+(a.quantidadeMovimentos||0)+' movimentação(ões) identificada(s)'+(a.banco?' · '+escapeHtml(a.banco):'')+(a.conta?' · conta '+escapeHtml(a.conta):'')+'.</div>'
+          + (semSaldo
+            ? '<div class="empty-panel" style="margin-top:14px;padding:18px;">'
+              + '<div class="empty-icon" style="color:var(--warning);background:var(--warning-soft);">'+svg('alertCircle')+'</div>'
+              + '<h2 style="font-size:15px;">Não foi possível identificar o saldo final deste extrato.</h2>'
+              + '<p class="lead">Informe manualmente o saldo final do extrato para atualizar o saldo da conta.</p>'
+              + '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:10px;">'
+                + '<label>Saldo final do extrato *<input type="text" id="impExtSaldoManual" placeholder="Ex.: 12345,67" style="width:160px;"></label>'
+                + '<label>Data do saldo *<input type="date" id="impExtDataManual"></label>'
+              + '</div></div>'
+            : '<div class="kpi-sec" style="--tint:var(--teal);--tint-soft:var(--teal-soft);max-width:340px;margin-top:14px;">'
+              + '<div class="kpi-sec-icon">'+svg('wallet')+'</div>'
+              + '<div class="kpi-sec-body"><div class="kpi-sec-label">Saldo final do extrato</div><div class="kpi-sec-value">'+money(a.saldoFinal)+'</div>'
+              + '<div class="di-sub">Referência: '+fmtDate(a.saldoData)+'</div></div></div>'
+              + '<div class="field-hint" style="margin-top:8px;">Este saldo será utilizado como saldo atual da conta '+escapeHtml(contaSelecionada?contaSelecionada.nome:'')+' — substitui o saldo anterior, nunca é somado a ele.</div>')
+          + (linhas ? '<div class="table-card" style="margin-top:14px;"><div class="table-wrap"><table class="data-table"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor</th></tr></thead><tbody>'+linhas+'</tbody></table></div></div>' : '')
+          + '<div class="modal-actions"><button class="btn-secondary" id="impExtVoltar" type="button">Trocar arquivo</button><button class="btn-primary" id="impExtConfirmar" type="button">'+svg('check')+'<span>Confirmar importação</span></button></div>');
+        document.getElementById('impExtVoltar').addEventListener('click', renderEscolha);
+        document.getElementById('impExtConfirmar').addEventListener('click', ()=> confirmar(false));
+      }
+
+      function renderConflitoSaldoAntigo(saldoFinal, saldoData){
+        shell('<div class="empty-panel" style="padding:22px 18px;">'
+          + '<div class="empty-icon" style="color:var(--warning);background:var(--warning-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="font-size:15px;">Este extrato possui data anterior ao saldo bancário atualmente registrado.</h2>'
+          + '<p class="lead">Os movimentos já foram importados. O saldo da conta NÃO foi alterado. Se mesmo assim você quiser substituir o saldo atual pelo saldo deste extrato ('+money(saldoFinal)+' em '+fmtDate(saldoData)+'), confirme abaixo.</p>'
+          + '</div>'
+          + '<div class="modal-actions"><button class="btn-secondary" id="impExtManterSaldo" type="button">Manter saldo atual</button><button class="btn-primary" id="impExtForcarSaldo" type="button" style="background:var(--warning);border-color:var(--warning);">'+svg('check')+'<span>Substituir saldo mesmo assim</span></button></div>');
+        document.getElementById('impExtManterSaldo').addEventListener('click', ()=>{ close(); toast('Movimentos importados. Saldo da conta mantido.'); loadContasBancarias().then(render); });
+        document.getElementById('impExtForcarSaldo').addEventListener('click', ()=> confirmar(true));
+      }
+
+      async function confirmar(forcarSubstituicaoSaldo){
+        const btn = document.getElementById(forcarSubstituicaoSaldo?'impExtForcarSaldo':'impExtConfirmar');
+        if(btn){ btn.disabled=true; btn.querySelector('span').textContent='Importando…'; }
+        try{
+          const a = imp.analise.analise;
+          const semSaldo = a.saldoFinal===null || a.saldoFinal===undefined;
+          const payload = { empresaId, contaBancariaId:Number(imp.contaBancariaId), nomeArquivo:imp.file.name, arquivoBase64: await lerArquivoBase64(imp.file), forcarSubstituicaoSaldo:!!forcarSubstituicaoSaldo };
+          if(semSaldo && !forcarSubstituicaoSaldo){
+            const valorTexto = document.getElementById('impExtSaldoManual').value.trim();
+            const dataTexto = document.getElementById('impExtDataManual').value;
+            if(!valorTexto || !dataTexto){ toast('Informe o saldo final e a data para continuar.', 'error'); if(btn){btn.disabled=false; btn.querySelector('span').textContent='Confirmar importação';} return; }
+            payload.saldoFinal = valorTexto.replace(/\./g,'').replace(',', '.');
+            payload.saldoData = dataTexto;
+          }
+          const r = await apiBancos('/importar/confirmar', { method:'POST', body: JSON.stringify(payload) });
+          if(r.saldoIgnoradoPorSerMaisAntigo && !forcarSubstituicaoSaldo){
+            renderConflitoSaldoAntigo(r.saldoFinal, r.saldoData);
+            return;
+          }
+          close();
+          toast((r.jaImportado ? 'Extrato já importado antes — saldo atualizado.' : (r.importadas||0)+' movimentação(ões) importada(s).') + (r.saldoAtualizado ? ' Saldo da conta atualizado.' : ''));
+          await loadContasBancarias(); render();
+        }catch(err){ toast(err.message,'error'); if(btn){ btn.disabled=false; btn.querySelector('span').textContent = forcarSubstituicaoSaldo ? 'Substituir saldo mesmo assim' : 'Confirmar importação'; } }
+      }
+
+      renderEscolha();
+    }
+
+    document.getElementById('btnNovaContaBancaria').addEventListener('click', ()=> openNovaContaBancariaModal());
+    document.getElementById('btnImportExtrato').addEventListener('click', ()=> openImportExtratoModal());
 
     window.Recebimentos = { load };
   })();

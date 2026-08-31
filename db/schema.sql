@@ -1003,3 +1003,86 @@ CREATE TABLE IF NOT EXISTS fluxo_caixa_saldo_inicial (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ============================================================
+-- Etapa: Saldo bancário automático a partir de extrato (31/08/2026)
+-- ============================================================
+-- contas_bancarias / extrato_importacoes / extrato_movimentos JÁ EXISTIAM em
+-- produção antes desta etapa (criadas fora deste arquivo). Os CREATE TABLE
+-- IF NOT EXISTS abaixo são só para deixar o schema.sql completo em qualquer
+-- ambiente NOVO (ex.: um banco de testes do zero) — em produção eles são
+-- no-op, exatamente como o resto deste arquivo. NÃO recriam nem apagam nada.
+--
+-- O saldo bancário (saldo_atual/saldo_data/saldo_atualizado_em) é sempre
+-- SUBSTITUÍDO pelo "saldo final" identificado no extrato mais recente
+-- confirmado — nunca somado a movimentos importados separadamente (ver
+-- lib/contasBancarias.js#confirmarImportacao e lib/fluxoCaixa.js). Um
+-- extrato com data de saldo mais antiga que a já registrada nunca regride o
+-- saldo sozinho (só com confirmação explícita do usuário — ver
+-- forcarSubstituicaoSaldo em confirmarImportacao).
+CREATE TABLE IF NOT EXISTS contas_bancarias (
+  id                    SERIAL PRIMARY KEY,
+  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
+  nome                  VARCHAR(200) NOT NULL,
+  banco                 VARCHAR(100),
+  agencia               VARCHAR(20),
+  conta                 VARCHAR(30),
+  ativa                 BOOLEAN NOT NULL DEFAULT TRUE,
+  saldo_atual           NUMERIC(14,2),
+  saldo_data            DATE,
+  saldo_atualizado_em   TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Retrofit explícito e separado do CREATE TABLE acima (mesmo padrão já usado
+-- para users.ativo e contas_pagar.despesa_fixa_id neste arquivo) — pedido
+-- explicitamente pelo usuário para nunca repetir o incidente em que uma
+-- coluna só existia dentro de um CREATE TABLE IF NOT EXISTS e por isso
+-- nunca era aplicada num banco onde a tabela já existia (ver o mesmo caso
+-- em despesas_fixas.ativo, mais acima neste arquivo).
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atual NUMERIC(14,2);
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_data DATE;
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atualizado_em TIMESTAMPTZ;
+
+-- Uma linha por arquivo de extrato realmente confirmado (a prévia/análise
+-- não grava nada — só o passo de confirmação). arquivo_hash é o SHA-256 do
+-- arquivo inteiro; a combinação (conta_bancaria_id, arquivo_hash) é o que
+-- permite reimportar o mesmo arquivo sem duplicar (reconfirma/atualiza o
+-- saldo em vez de gravar tudo de novo — ver confirmarImportacao).
+CREATE TABLE IF NOT EXISTS extrato_importacoes (
+  id                      SERIAL PRIMARY KEY,
+  empresa_id              INTEGER NOT NULL REFERENCES empresas(id),
+  conta_bancaria_id       INTEGER NOT NULL REFERENCES contas_bancarias(id),
+  arquivo_nome            VARCHAR(255),
+  arquivo_hash            VARCHAR(128),
+  formato                 VARCHAR(20),
+  saldo_final             NUMERIC(14,2),
+  saldo_data              DATE,
+  quantidade_movimentos   INTEGER NOT NULL DEFAULT 0,
+  quantidade_importada    INTEGER NOT NULL DEFAULT 0,
+  quantidade_duplicada    INTEGER NOT NULL DEFAULT 0,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(conta_bancaria_id, arquivo_hash)
+);
+
+-- Cada movimentação individual de um extrato confirmado. fingerprint (hash
+-- de data+tipo+descrição+valor, com um contador para desempatar
+-- movimentações idênticas no mesmo dia — ver lib/extratoBancario.js) é a
+-- trava de não-duplicação por conta: ON CONFLICT (conta_bancaria_id,
+-- fingerprint) DO NOTHING garante que reimportar o mesmo extrato nunca
+-- duplica uma movimentação já gravada.
+CREATE TABLE IF NOT EXISTS extrato_movimentos (
+  id                  SERIAL PRIMARY KEY,
+  importacao_id       INTEGER REFERENCES extrato_importacoes(id),
+  empresa_id          INTEGER NOT NULL REFERENCES empresas(id),
+  conta_bancaria_id   INTEGER NOT NULL REFERENCES contas_bancarias(id),
+  data                DATE NOT NULL,
+  descricao           VARCHAR(500),
+  tipo                VARCHAR(10) NOT NULL, -- entrada | saida
+  valor               NUMERIC(14,2) NOT NULL,
+  fingerprint         VARCHAR(64) NOT NULL,
+  conciliado          BOOLEAN NOT NULL DEFAULT false,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(conta_bancaria_id, fingerprint)
+);
