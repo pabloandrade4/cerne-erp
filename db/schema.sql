@@ -1086,3 +1086,63 @@ CREATE TABLE IF NOT EXISTS extrato_movimentos (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(conta_bancaria_id, fingerprint)
 );
+
+-- ============================================================
+-- Etapa: Categorias financeiras + DRE detalhada + conciliação simples
+-- (31/08/2026)
+-- ============================================================
+-- Plano de contas do próprio usuário (antes só existia como texto livre em
+-- contas_pagar.categoria/despesas_fixas.categoria, sem cadastro real — ver
+-- CATEGORIAS_SUGERIDAS duplicada em lib/contasPagar.js e
+-- lib/despesasFixas.js). Esta tabela NÃO substitui a coluna de texto livre
+-- em nenhum lugar — ela é adicionada por cima (contas_pagar.categoria_id
+-- abaixo), pra nunca quebrar um lançamento antigo que só tem o texto.
+--
+-- categoria_pai_id: um único nível de subcategoria (uma subcategoria nunca
+-- tem filha própria — pedido explícito do usuário de "não criar
+-- complexidade desnecessária"). Categoria nunca é apagada de verdade
+-- (excluir um DELETE quebraria o histórico de lançamentos já categorizados)
+-- — só "ativa=false" (mesmo padrão de despesas_fixas.ativo/contas_bancarias.ativa).
+CREATE TABLE IF NOT EXISTS categorias_financeiras (
+  id                  SERIAL PRIMARY KEY,
+  empresa_id          INTEGER NOT NULL REFERENCES empresas(id),
+  nome                VARCHAR(100) NOT NULL,
+  categoria_pai_id    INTEGER REFERENCES categorias_financeiras(id),
+  ativa               BOOLEAN NOT NULL DEFAULT true,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- contas_pagar e extrato_movimentos JÁ EXISTIAM — retrofit em colunas
+-- separadas (ALTER ... ADD COLUMN IF NOT EXISTS), nunca dentro de um CREATE
+-- TABLE, mesma regra documentada mais acima neste arquivo (incidente
+-- despesas_fixas.ativo) e reaplicada na etapa do saldo bancário.
+--
+-- contas_pagar.categoria_id: aponta pro cadastro real de categoria, mas a
+-- coluna de texto `categoria` continua existindo e sendo preenchida em
+-- paralelo (lib/contasPagar.js mantém as duas em sincronia) — nunca quebra
+-- busca/relatório antigo que lê `categoria` como texto.
+-- contas_pagar.conta_bancaria_id: só ROTULA de qual conta saiu o dinheiro
+-- (rastreio/relatório) — NUNCA altera contas_bancarias.saldo_atual. Quem
+-- manda no saldo real da conta continua sendo exclusivamente o saldo final
+-- do extrato importado (ver etapa anterior); lançar uma conta a pagar como
+-- paga não soma nem subtrai desse saldo, pra nunca ter duas fórmulas de
+-- saldo bancário concorrendo.
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS categoria_id INTEGER REFERENCES categorias_financeiras(id);
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS conta_bancaria_id INTEGER REFERENCES contas_bancarias(id);
+
+-- extrato_movimentos.categoria_id: permite categorizar um lançamento que
+-- aparece SÓ no extrato (nunca virou conta a pagar) — ex.: tarifa bancária,
+-- cobrança de um serviço que só existe no extrato.
+-- extrato_movimentos.conta_pagar_id / conta_receber_id: o vínculo de
+-- conciliação — quando preenchido, este movimento do extrato JÁ está
+-- contado através da conta a pagar/receber correspondente, então a DRE e o
+-- detalhamento (lib/despesasFinanceiras.js) NUNCA somam os dois ao mesmo
+-- tempo (ver comentário lá — filtro `conta_pagar_id IS NULL`).
+-- extrato_movimentos.transferencia_interna: marca uma movimentação como
+-- transferência entre contas da própria empresa (ex.: Nubank → Mercado
+-- Pago) — nunca entra como despesa/receita na DRE nem no Fluxo de Caixa.
+ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS categoria_id INTEGER REFERENCES categorias_financeiras(id);
+ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS conta_pagar_id INTEGER REFERENCES contas_pagar(id);
+ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS conta_receber_id INTEGER REFERENCES contas_receber(id);
+ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS transferencia_interna BOOLEAN NOT NULL DEFAULT false;
