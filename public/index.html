@@ -1154,7 +1154,7 @@
         bullets:['Contas por vencimento','Aprovação de pagamentos','Recorrências e parcelamentos','Anexo de boletos e notas'] },
       { id:'receivable', title:'Contas a Receber', icon:'arrowDownCircle', action:'Nova conta a receber', desc:'Valores a receber de clientes, marketplaces e outras fontes.',
         bullets:['Recebíveis por vencimento','Vínculo com pedidos e notas','Inadimplência e cobrança','Previsão de recebimento'] },
-      { id:'settlements', title:'Recebimentos', icon:'swap', action:'Importar extrato', desc:'Repasses e extratos financeiros dos marketplaces por conta e loja.',
+      { id:'settlements', title:'Recebimentos', icon:'swap', action:'Importar extrato', desc:'Contas bancárias, extratos e repasses financeiros por empresa e loja.',
         bullets:['Extrato de repasses do Mercado Livre','Extrato de repasses da Shopee','Conciliação com pedidos','Taxas e descontos por repasse'] },
       { id:'dre', title:'DRE', icon:'barChart', action:'Gerar DRE', desc:'Demonstrativo de resultado do exercício, consolidado ou por empresa.',
         bullets:['Receita bruta e deduções','Custos e despesas por categoria','Resultado por empresa e período','Comparativo entre períodos'] },
@@ -1165,7 +1165,7 @@
       { id:'fixedExpenses', title:'Despesas Fixas', icon:'refreshCw', action:'Nova despesa fixa', desc:'Despesas recorrentes da empresa (aluguel, salários, pró-labore, sistemas, contador, energia, internet e outras).',
         bullets:['Frequência mensal, semanal ou anual','Ativação e desativação sem perder histórico','Gera a Conta a Pagar automaticamente a cada período','Nunca duplica: cada ocorrência vira 1 única conta a pagar'] },
       { id:'cashFlow', title:'Fluxo de Caixa', icon:'activity', action:'Definir saldo inicial', desc:'Evolução diária do caixa, separando sempre o que já ACONTECEU (realizado) do que é só PREVISTO (projetado).',
-        bullets:['Saldo inicial informado pelo usuário — nunca inventado','Contas a pagar/receber + despesas fixas previstas, sem duplicar','Recebimentos previstos dos marketplaces separados (sem data certa)','7/15/30 dias, este mês, próximo mês ou período personalizado'] },
+        bullets:['Saldo bancário atualizado pelo extrato; saldo manual só como fallback','Contas a pagar/receber + despesas fixas previstas, sem duplicar','Recebimentos previstos dos marketplaces separados (sem data certa)','7/15/30 dias, este mês, próximo mês ou período personalizado'] },
     ]},
     { id:'analise', label:'Análise', open:false, items:[
       { id:'ads', title:'Ads', icon:'megaphone', action:'Conectar Ads', desc:'Investimento e retorno das campanhas de publicidade dentro dos marketplaces.',
@@ -1275,6 +1275,11 @@
       + '</div>';
     } else if(id === 'receivable'){
       inner += '<button class="primary-btn enabled" id="btnNewContaReceber" type="button">'+svg('plus')+'<span>Nova conta a receber</span></button>';
+    } else if(id === 'settlements'){
+      inner += '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">'
+        + '<button class="ghost-btn" id="btnNewContaBancaria" type="button" style="cursor:pointer;opacity:1;">'+svg('plus')+'<span>Nova conta bancária</span></button>'
+        + '<button class="primary-btn enabled" id="btnImportExtrato" type="button">'+svg('download')+'<span>Importar extrato</span></button>'
+      + '</div>';
     } else if(id === 'fixedExpenses'){
       inner += '<button class="primary-btn enabled" id="btnNewDespesaFixa" type="button">'+svg('plus')+'<span>Nova despesa fixa</span></button>';
     } else if(id === 'cashFlow'){
@@ -3387,7 +3392,7 @@
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function moneyOuIndisponivel(campo){
-      if(!campo || campo.valor===null || campo.valor===undefined) return '<span class="dash" title="Informe o saldo inicial em Fluxo de Caixa">Não informado</span>';
+      if(!campo || campo.valor===null || campo.valor===undefined) return '<span class="dash" title="Importe um extrato bancário ou informe um saldo manual">Não informado</span>';
       return money(campo.valor);
     }
     function pct(v){ return v===null||v===undefined ? null : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
@@ -3456,7 +3461,7 @@
     function cardsHTML(dados){
       const c = dados.cards;
       const items = [
-        { label:'Saldo atual', icon:'wallet', tint: c.saldoAtual.valor===null?'muted':(c.saldoAtual.valor>=0?'success':'danger'), valueHtml: moneyOuIndisponivel(c.saldoAtual), note:'A partir do saldo inicial informado' },
+        { label:'Saldo atual', icon:'wallet', tint: c.saldoAtual.valor===null?'muted':(c.saldoAtual.valor>=0?'success':'danger'), valueHtml: moneyOuIndisponivel(c.saldoAtual), note:(state.fluxo&&state.fluxo.saldoFonte==='bancario'?'Atualizado pelo extrato bancário':'A partir do saldo manual informado') },
         { label:'Entradas previstas', icon:'arrowDownCircle', tint:'success', valueHtml: money(c.entradasPrevistas), note:'A receber no período' },
         { label:'Saídas previstas', icon:'arrowUpCircle', tint:'copper', valueHtml: money(c.saidasPrevistas), note:'Contas a pagar + despesas fixas' },
         { label:'Saldo projetado', icon:'activity', tint: (c.saldoProjetado.valor===null?'muted':(c.saldoProjetado.valor>=0?'success':'danger')), valueHtml: moneyOuIndisponivel(c.saldoProjetado), note:'Estimado ao fim do período' },
@@ -3471,7 +3476,7 @@
       const temSaldo = dias.some(d => d.saldoAcumulado !== null && d.saldoAcumulado !== undefined);
       if(!dias.length || !temSaldo){
         return '<div class="chart-canvas h-lg">' + chartGridLines(4)
-          + chartEmptyState('wallet', 'Informe o saldo inicial em Fluxo de Caixa pra ver a evolução do caixa — sem isso o ERP não inventa nenhum saldo.')
+          + chartEmptyState('wallet', 'Importe um extrato bancário ou informe um saldo manual para ver a evolução do caixa.')
         + '</div>';
       }
       const n = dias.length;
@@ -5526,99 +5531,90 @@
     window.ContasReceber = { load };
   })();
 
-  /* ================= RECEBIMENTOS — repasses do Mercado Livre (somente leitura) =================
-     Ativado em 24/08/2026. Diferente de Contas a Receber: aqui os dados vêm
-     REAIS da sincronização do Mercado Livre (ver lib/recebimentosMl.js) —
-     nenhum cadastro manual nesta etapa. Data de liberação, valor e data de
-     recebimento reais ainda não vêm da API — mostrados como "Informação
-     não disponível" (nunca inventados), preparando o terreno para a
-     conciliação futura (valor esperado x valor repassado) pedida pelo
-     usuário. */
+  /* ================= RECEBIMENTOS + CONTAS BANCÁRIAS =================
+     O extrato bancário é fonte de verdade do SALDO ATUAL. As movimentações
+     importadas ficam para histórico/conciliação e NUNCA são somadas direto
+     no Fluxo de Caixa, evitando duplicar contas a pagar/receber. */
   (function(){
-    const state = { loading:false, error:null, recebimentos:[] };
+    const state = { loading:false, error:null, recebimentos:[], loadingBancos:false, bancos:[], saldoConsolidado:null, movimentos:[] };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-    function money(v){ return v===null||v===undefined ? '<span class="dash">Informação não disponível</span>' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
-    function fmtDate(iso){ if(!iso) return '<span class="dash">Informação não disponível</span>'; try{ return new Date(iso).toLocaleDateString('pt-BR'); }catch(e){ return '<span class="dash">Informação não disponível</span>'; } }
+    function money(v){ return v===null||v===undefined ? '<span class="dash">Não informado</span>' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '—'; const p=String(iso).slice(0,10).split('-'); return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'—'; }
+    function toast(message,type){ const wrap=document.getElementById('toastWrap'); const el=document.createElement('div'); el.className='toast '+(type||'success'); el.innerHTML=svg(type==='error'?'alertCircle':'checkCircle')+'<span>'+escapeHtml(message)+'</span>'; wrap.appendChild(el); setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),250);},3500); }
     const STATUS_LABEL = { a_liberar:'A liberar', disponivel:'Disponível', recebido:'Recebido', divergente:'Divergente' };
-    function statusChipStyle(status){
-      const cor = status==='recebido' ? 'success' : status==='divergente' ? 'danger' : status==='disponivel' ? 'teal' : 'warning';
-      return 'color:var(--'+cor+');background:var(--'+cor+'-soft);';
-    }
+    function statusChipStyle(status){ const cor=status==='recebido'?'success':status==='divergente'?'danger':status==='disponivel'?'teal':'warning'; return 'color:var(--'+cor+');background:var(--'+cor+'-soft);'; }
 
-    async function api(path){
-      const res = await fetch('/api/recebimentos'+path);
-      let body = null; try{ body = await res.json(); }catch(e){}
-      if(!res.ok) throw new Error((body&&body.error)||'Falha na requisição.');
-      return body;
-    }
+    async function apiReceb(path){ const res=await fetch('/api/recebimentos'+path); let b=null;try{b=await res.json();}catch(e){} if(!res.ok)throw new Error((b&&b.error)||'Falha na requisição.');return b; }
+    async function apiBanco(path,opts){ const res=await fetch('/api/contas-bancarias'+path,{headers:{'Content-Type':'application/json'},...(opts||{})}); let b=null;try{b=await res.json();}catch(e){} if(!res.ok){const er=new Error((b&&b.error)||'Falha na requisição.');er.errors=b&&b.errors;throw er;}return b; }
 
-    async function loadRecebimentos(){
-      const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ state.recebimentos=[]; state.loading=false; render(); return; }
-      state.loading = true; state.error = null; render();
+    async function loadBancos(){
+      const filtro=window.CerneFiltro.state; if(!filtro.empresaId){state.bancos=[];state.saldoConsolidado=null;state.movimentos=[];render();return;}
+      state.loadingBancos=true; render();
       try{
-        const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
-        const data = await api('?'+params.toString());
-        state.recebimentos = data.recebimentos;
-      }catch(err){ state.error = err.message || 'Não foi possível carregar os recebimentos.'; }
-      finally{ state.loading = false; render(); }
+        const [b,m]=await Promise.all([apiBanco('?empresaId='+filtro.empresaId),apiBanco('/movimentos?empresaId='+filtro.empresaId+'&limite=20')]);
+        state.bancos=b.contas||[]; state.saldoConsolidado=b.saldoConsolidado||null; state.movimentos=m.movimentos||[];
+      }catch(err){state.error=err.message;}finally{state.loadingBancos=false;render();}
+    }
+    async function loadRecebimentos(){
+      const filtro=window.CerneFiltro.state; if(!filtro.empresaId){state.recebimentos=[];state.loading=false;render();return;}
+      state.loading=true;state.error=null;render();
+      try{const params=new URLSearchParams({empresaId:filtro.empresaId,periodo:filtro.periodo}); const d=await apiReceb('?'+params.toString());state.recebimentos=d.recebimentos||[];}
+      catch(err){state.error=err.message||'Não foi possível carregar os recebimentos.';}finally{state.loading=false;render();}
+    }
+    function load(){loadBancos();loadRecebimentos();}
+    window.CerneFiltro.onChange(()=>{const page=document.getElementById('page-settlements');if(page&&page.classList.contains('active'))load();else render();});
+
+    function bancosHTML(){
+      if(state.loadingBancos) return '<div class="panel"><div class="table-skel"><span class="spin"></span><span>Carregando contas bancárias…</span></div></div>';
+      const sc=state.saldoConsolidado;
+      let html='<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('wallet')+'</span>Contas bancárias</div>'+(sc?'<span class="panel-note">Saldo consolidado: <strong>'+money(sc.valor)+'</strong></span>':'')+'</div>';
+      if(!state.bancos.length) html+='<div class="field-hint">Cadastre Nubank, Mercado Pago ou outra conta e depois importe o extrato. O saldo final do extrato atualizará automaticamente o Fluxo de Caixa.</div>';
+      else html+='<div class="table-wrap"><table class="data-table"><thead><tr><th>Conta</th><th>Banco</th><th>Número</th><th>Saldo atual</th><th>Data do saldo</th></tr></thead><tbody>'
+        +state.bancos.map(b=>'<tr><td>'+escapeHtml(b.nome)+'</td><td>'+escapeHtml(b.banco||'—')+'</td><td class="mono">'+escapeHtml(b.conta||'—')+'</td><td class="mono">'+money(b.saldoAtual)+'</td><td class="tab-nums">'+fmtDate(b.saldoData)+'</td></tr>').join('')+'</tbody></table></div>';
+      if(sc&&sc.contasSemSaldo) html+='<div class="field-hint" style="margin-top:8px;color:var(--warning);">Há '+sc.contasSemSaldo+' conta(s) ativa(s) ainda sem saldo importado. O consolidado usa somente contas com saldo conhecido.</div>';
+      html+='</div>';
+      if(state.movimentos.length) html+='<div class="panel" style="margin-top:14px;"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Últimas movimentações importadas</div><span class="panel-note">Não somadas diretamente ao fluxo</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Valor</th></tr></thead><tbody>'
+        +state.movimentos.map(m=>'<tr><td class="tab-nums">'+fmtDate(m.data)+'</td><td>'+escapeHtml(m.descricao)+'</td><td><span class="status-chip" style="'+(m.tipo==='entrada'?'color:var(--success);background:var(--success-soft);':'color:var(--danger);background:var(--danger-soft);')+'">'+(m.tipo==='entrada'?'Entrada':'Saída')+'</span></td><td class="mono">'+money(m.valor)+'</td></tr>').join('')+'</tbody></table></div></div>';
+      return html;
     }
 
-    function load(){ loadRecebimentos(); }
-
-    window.CerneFiltro.onChange(()=>{
-      const page = document.getElementById('page-settlements');
-      if(page && page.classList.contains('active')) loadRecebimentos();
-      else render();
-    });
+    function recebimentosHTML(){
+      let html='<div class="panel" style="margin-top:14px;"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('swap')+'</span>Recebimentos de marketplaces</div></div>';
+      if(state.loading) html+='<div class="table-skel"><span class="spin"></span><span>Carregando recebimentos…</span></div>';
+      else if(!state.recebimentos.length) html+='<div class="field-hint">Nenhum recebimento de marketplace no período selecionado.</div>';
+      else html+='<div class="table-wrap"><table class="data-table"><thead><tr><th>Loja</th><th>Pedido</th><th>Data da venda</th><th>Valor bruto</th><th>Líquido esperado</th><th>Status</th></tr></thead><tbody>'
+        +state.recebimentos.map(r=>'<tr><td>'+escapeHtml(r.loja||'—')+'</td><td class="mono">'+escapeHtml(r.pedidoRef)+'</td><td>'+fmtDate(r.dataVenda)+'</td><td class="mono">'+money(r.valorBruto)+'</td><td class="mono">'+money(r.valorLiquidoEsperado)+'</td><td><span class="status-chip" style="'+statusChipStyle(r.status)+'">'+(STATUS_LABEL[r.status]||r.status)+'</span></td></tr>').join('')+'</tbody></table></div>';
+      return html+'</div>';
+    }
 
     function render(){
-      const root = document.getElementById('recebimentosRoot');
-      if(!root) return;
-      const filtro = window.CerneFiltro.state;
-
-      if(!filtro.loadingEmpresas && !filtro.empresas.length){
-        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
-          + '<h2>Nenhuma empresa ativa</h2>'
-          + '<p class="lead">Cadastre e ative uma empresa, conecte o Mercado Livre em <strong>Marketplaces</strong> e sincronize para ver os recebimentos aqui.</p></div>';
-        return;
-      }
-
-      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:720px;">Esta tela mostra os pedidos com pagamento aprovado do Mercado Livre no período selecionado. Data de liberação, valor recebido e data de recebimento ainda não são retornados pela API nesta integração — aparecem como "Informação não disponível" (nunca um valor inventado) até que essa fonte real exista. Preparado para, no futuro, comparar o valor que o ERP esperava receber com o valor que o marketplace realmente repassou.</div>';
-
-      if(state.loading || filtro.loadingEmpresas){
-        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando recebimentos…</span></div></div>';
-      } else if(state.error){
-        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
-          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
-      } else if(!state.recebimentos.length){
-        html += '<div class="empty-panel"><div class="empty-icon">'+svg('swap')+'</div>'
-          + '<h2>Nenhum recebimento no período</h2>'
-          + '<p class="lead">Não há pedidos com pagamento aprovado do Mercado Livre no período e empresa selecionados.</p></div>';
-      } else {
-        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Loja</th><th>Pedido</th><th>Data da venda</th><th>Valor bruto</th><th>Taxas/descontos</th><th>Líquido esperado</th><th>Previsão de liberação</th><th>Recebido</th><th>Data recebimento</th><th>Status</th>'
-          + '</tr></thead><tbody>'
-          + state.recebimentos.map(r => '<tr>'
-            + '<td>'+escapeHtml(r.loja||'—')+'</td>'
-            + '<td class="mono">'+escapeHtml(r.pedidoRef)+'</td>'
-            + '<td class="tab-nums">'+fmtDate(r.dataVenda)+'</td>'
-            + '<td class="mono">'+money(r.valorBruto)+'</td>'
-            + '<td class="mono">'+(r.taxasDescontos!==null?('− '+money(r.taxasDescontos)):money(null))+'</td>'
-            + '<td class="mono">'+money(r.valorLiquidoEsperado)+'</td>'
-            + '<td class="tab-nums">'+fmtDate(r.dataPrevistaLiberacao)+'</td>'
-            + '<td class="mono">'+money(r.valorRecebido)+'</td>'
-            + '<td class="tab-nums">'+fmtDate(r.dataRecebimento)+'</td>'
-            + '<td><span class="status-chip" style="'+statusChipStyle(r.status)+'">'+(STATUS_LABEL[r.status]||r.status)+'</span></td>'
-          + '</tr>').join('')
-          + '</tbody></table></div></div>';
-      }
-
-      root.innerHTML = html;
+      const root=document.getElementById('recebimentosRoot');if(!root)return;const filtro=window.CerneFiltro.state;
+      if(!filtro.loadingEmpresas&&!filtro.empresas.length){root.innerHTML='<div class="empty-panel"><h2>Nenhuma empresa ativa</h2></div>';return;}
+      if(!filtro.empresaId){root.innerHTML='<div class="empty-panel"><h2>Selecione uma empresa</h2></div>';return;}
+      root.innerHTML=(state.error?'<div class="field-hint" style="color:var(--danger);margin-bottom:12px;">'+escapeHtml(state.error)+'</div>':'')+bancosHTML()+recebimentosHTML();
     }
 
-    window.Recebimentos = { load };
+    function openContaModal(){
+      const filtro=window.CerneFiltro.state;if(!filtro.empresaId){toast('Selecione uma empresa.','error');return;}
+      const mr=document.getElementById('modalRoot');mr.innerHTML='<div class="modal-overlay" id="modalOverlay"><div class="modal-card" style="max-width:560px;"><div class="modal-head"><div class="modal-title">Nova conta bancária</div><button class="row-ic-btn" id="modalClose">'+svg('x')+'</button></div><div class="modal-sub">Cadastre cada conta separadamente, por exemplo Nubank e Mercado Pago. O saldo será atualizado pelo extrato.</div><form id="bankForm"><div class="field"><label>Nome da conta</label><input id="bankNome" placeholder="Ex: Nubank PF Embalagens"></div><div class="inline-form"><div class="field"><label>Banco</label><input id="bankBanco" placeholder="Ex: Nubank"></div><div class="field"><label>Agência</label><input id="bankAgencia"></div><div class="field"><label>Conta</label><input id="bankConta"></div></div><div class="modal-actions"><button type="button" class="btn-secondary" id="modalCancel">Cancelar</button><button type="submit" class="btn-primary">Salvar conta</button></div></form></div></div>';
+      const close=()=>mr.innerHTML='';document.getElementById('modalClose').onclick=close;document.getElementById('modalCancel').onclick=close;document.getElementById('modalOverlay').onclick=e=>{if(e.target.id==='modalOverlay')close();};
+      document.getElementById('bankForm').onsubmit=async e=>{e.preventDefault();try{await apiBanco('',{method:'POST',body:JSON.stringify({empresaId:filtro.empresaId,nome:document.getElementById('bankNome').value,banco:document.getElementById('bankBanco').value,agencia:document.getElementById('bankAgencia').value,conta:document.getElementById('bankConta').value})});close();toast('Conta bancária cadastrada.');loadBancos();}catch(err){toast(err.message,'error');}};
+    }
+
+    function openImportModal(){
+      const filtro=window.CerneFiltro.state;if(!filtro.empresaId){toast('Selecione uma empresa.','error');return;} if(!state.bancos.length){toast('Cadastre uma conta bancária antes de importar o extrato.','error');openContaModal();return;}
+      const mr=document.getElementById('modalRoot');let arquivo=null,arquivoBase64=null,analise=null;
+      mr.innerHTML='<div class="modal-overlay" id="modalOverlay"><div class="modal-card" style="max-width:760px;"><div class="modal-head"><div class="modal-title">Importar extrato bancário</div><button class="row-ic-btn" id="modalClose">'+svg('x')+'</button></div><div class="modal-sub">Aceita <strong>PDF do Nubank, CSV ou XLSX</strong>. Para Mercado Pago e outros bancos, prefira CSV/XLSX. O Cerne lê o <strong>Saldo final do extrato</strong> e usa esse saldo como base atual do Fluxo de Caixa, sem somar as movimentações duas vezes.</div><div class="field"><label>Conta bancária</label><select id="impConta">'+state.bancos.map(b=>'<option value="'+b.id+'">'+escapeHtml(b.nome)+'</option>').join('')+'</select></div><div class="field"><label>Arquivo do extrato</label><input type="file" id="impArquivo" accept=".pdf,.csv,.xlsx"></div><button class="ghost-btn" id="impAnalisar" type="button" style="cursor:pointer;opacity:1;">'+svg('eye')+'<span>Analisar extrato</span></button><div id="impPreview" style="margin-top:14px;"></div><div class="modal-actions"><button class="btn-secondary" id="modalCancel" type="button">Cancelar</button><button class="btn-primary" id="impConfirmar" type="button" disabled>'+svg('check')+'<span>Confirmar importação</span></button></div></div></div>';
+      const close=()=>mr.innerHTML='';document.getElementById('modalClose').onclick=close;document.getElementById('modalCancel').onclick=close;document.getElementById('modalOverlay').onclick=e=>{if(e.target.id==='modalOverlay')close();};
+      document.getElementById('impArquivo').onchange=e=>{arquivo=e.target.files&&e.target.files[0];analise=null;arquivoBase64=null;document.getElementById('impConfirmar').disabled=true;document.getElementById('impPreview').innerHTML='';};
+      document.getElementById('impAnalisar').onclick=async()=>{if(!arquivo){toast('Escolha o arquivo do extrato.','error');return;}const btn=document.getElementById('impAnalisar');btn.disabled=true;try{arquivoBase64=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(String(fr.result).split(',')[1]);fr.onerror=reject;fr.readAsDataURL(arquivo);});analise=(await apiBanco('/importar/analisar',{method:'POST',body:JSON.stringify({empresaId:filtro.empresaId,nomeArquivo:arquivo.name,arquivoBase64})})).analise;const pv=document.getElementById('impPreview');pv.innerHTML='<div class="panel" style="margin:0;"><div class="fin-mini-stats"><div class="fin-mini-stat"><span class="fin-mini-label">Movimentações encontradas</span><span class="fin-mini-value">'+analise.quantidadeMovimentos+'</span></div><div class="fin-mini-stat"><span class="fin-mini-label">Banco detectado</span><span class="fin-mini-value">'+escapeHtml(analise.banco||'—')+'</span></div></div><div class="inline-form" style="margin-top:12px;"><div class="field"><label>Saldo final do extrato</label><input id="impSaldoFinal" inputmode="decimal" value="'+(analise.saldoFinal===null?'':String(analise.saldoFinal).replace('.',','))+'" placeholder="Ex: 32144,56"></div><div class="field"><label>Data do saldo final</label><input type="date" id="impSaldoData" value="'+(analise.saldoData||'')+'"></div></div>'+(analise.saldoFinal===null?'<div class="field-hint" style="color:var(--warning);">O arquivo não trouxe o saldo em uma coluna reconhecida. Confira no extrato e informe o saldo final acima.</div>':'<div class="field-hint" style="color:var(--success);">Saldo final identificado automaticamente. Confira antes de confirmar.</div>')+'</div>';document.getElementById('impConfirmar').disabled=false;}catch(err){toast(err.message,'error');}finally{btn.disabled=false;}};
+      document.getElementById('impConfirmar').onclick=async()=>{if(!analise||!arquivoBase64)return;const btn=document.getElementById('impConfirmar');btn.disabled=true;try{const r=await apiBanco('/importar/confirmar',{method:'POST',body:JSON.stringify({empresaId:filtro.empresaId,contaBancariaId:Number(document.getElementById('impConta').value),nomeArquivo:arquivo.name,arquivoBase64,saldoFinal:document.getElementById('impSaldoFinal').value,saldoData:document.getElementById('impSaldoData').value})});close();toast(r.jaImportado?(r.saldoAtualizado?'Extrato já existia; o saldo foi corrigido sem duplicar movimentações.':'Este extrato já havia sido importado.'):'Extrato importado e saldo atualizado.');await loadBancos();if(window.FluxoCaixa)window.FluxoCaixa.load();if(window.Financeiro)window.Financeiro.load();}catch(err){btn.disabled=false;toast(err.message,'error');}};
+    }
+
+    const btnImp=document.getElementById('btnImportExtrato');if(btnImp)btnImp.addEventListener('click',openImportModal);
+    const btnConta=document.getElementById('btnNewContaBancaria');if(btnConta)btnConta.addEventListener('click',openContaModal);
+    window.Recebimentos={load};
   })();
 
   /* ================= DESPESAS FIXAS — cadastro de despesas recorrentes =================
@@ -5947,7 +5943,7 @@
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function moneyOuIndisponivel(campo){
-      if(!campo || campo.valor===null || campo.valor===undefined) return '<span class="dash" title="Informe o saldo inicial para calcular">Não informado</span>';
+      if(!campo || campo.valor===null || campo.valor===undefined) return '<span class="dash" title="Importe um extrato bancário ou informe um saldo manual">Não informado</span>';
       return money(campo.valor);
     }
     function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
@@ -6014,7 +6010,7 @@
     function cardsHTML(dados){
       const c = dados.cards;
       const items = [
-        { label:'Saldo atual', icon:'wallet', tint: c.saldoAtual.valor===null?'muted':(c.saldoAtual.valor>=0?'success':'danger'), valueHtml: moneyOuIndisponivel(c.saldoAtual), note:'Hoje, a partir do saldo inicial informado' },
+        { label:'Saldo atual', icon:'wallet', tint: c.saldoAtual.valor===null?'muted':(c.saldoAtual.valor>=0?'success':'danger'), valueHtml: moneyOuIndisponivel(c.saldoAtual), note:(dados.saldoFonte==='bancario'?'Hoje, atualizado pelo extrato bancário':'Hoje, a partir do saldo manual informado') },
         { label:'Entradas previstas', icon:'arrowDownCircle', tint:'success', valueHtml: money(c.entradasPrevistas), note:'A receber no período selecionado — ainda não é dinheiro disponível' },
         { label:'Saídas previstas', icon:'arrowUpCircle', tint:'copper', valueHtml: money(c.saidasPrevistas), note:'Contas a pagar + despesas fixas previstas no período' },
         { label:'Saldo projetado', icon:'activity', tint: (c.saldoProjetado.valor===null?'muted':(c.saldoProjetado.valor>=0?'success':'danger')), valueHtml: moneyOuIndisponivel(c.saldoProjetado), note:'Saldo estimado ao final do período — nunca dinheiro garantido' },
@@ -6030,7 +6026,7 @@
       return '<div class="chart-card" style="margin-bottom:14px;">'
         + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('barChart')+'</span>Como o saldo projetado é calculado</div></div>'
         + '<div class="formula-box">'
-          + linha('Saldo inicial / atual', moneyOuIndisponivel(f.saldoInicialOuAtual))
+          + linha(dados.saldoFonte==='bancario'?'Saldo bancário atual':'Saldo inicial / atual', moneyOuIndisponivel(f.saldoInicialOuAtual))
           + linha('Contas a receber (no período)', money(f.contasAReceber), '+')
           + linha('Recebimentos previstos dos marketplaces', money(f.recebimentosPrevistosMarketplaces), '+')
           + linha('Contas a pagar (no período)', money(f.contasAPagar), '−')
@@ -6049,7 +6045,7 @@
       const temSaldo = dias.some(d => d.saldoAcumulado !== null && d.saldoAcumulado !== undefined);
       if(!dias.length || !temSaldo){
         return '<div class="chart-canvas h-lg">' + chartGridLines(4)
-          + chartEmptyState('wallet', 'Informe o saldo inicial para ver a evolução do caixa — sem isso o ERP não inventa nenhum saldo.', 'Definir saldo inicial')
+          + chartEmptyState('wallet', 'Importe um extrato bancário para atualizar o saldo automaticamente, ou informe um saldo manual como fallback.', 'Definir saldo inicial')
         + '</div>';
       }
       const n = dias.length;
@@ -6188,7 +6184,7 @@
         + '<div class="modal-card" style="max-width:520px;">'
           + '<div class="modal-head"><div class="modal-title">Definir saldo inicial</div>'
             + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
-          + '<div class="modal-sub">Informado por você — o ERP não tem integração bancária, então nunca calcula esse número sozinho. A partir daqui, o Fluxo de Caixa soma o que já foi realmente pago/recebido e o que está previsto.</div>'
+          + '<div class="modal-sub">Saldo manual de fallback. Quando houver saldo final importado de uma conta bancária, o saldo do extrato terá prioridade automática no Fluxo de Caixa.</div>'
           + '<form id="fcSaldoForm">'
             + '<div class="inline-form" style="margin-top:0;">'
               + '<div class="field narrow"><label>Valor do saldo</label><input type="text" inputmode="decimal" id="fSaldoValor" placeholder="Ex: 15000,00" value="'+(atual?String(atual.valor).replace('.',','):'')+'">'
