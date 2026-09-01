@@ -802,6 +802,22 @@ CREATE TABLE IF NOT EXISTS radar_alertas (
 );
 CREATE INDEX IF NOT EXISTS idx_radar_alertas_empresa_status ON radar_alertas(empresa_id, status, severidade);
 
+-- CORREÇÃO (01/09/2026, ativação da Central de Alertas — Etapa 7 pedida
+-- pelo usuário, ver docs/04-alteracoes.md): a tela pede 4 status
+-- (Novo/Visualizado/Resolvido/Ignorado), mas a coluna `status` acima só
+-- aceitava 2 ('aberto'/'resolvido'). Retrofit explícito (mesmo padrão já
+-- usado neste arquivo pra contas_bancarias/despesas_fixas.ativo — nunca
+-- só dentro do CREATE TABLE, que é no-op numa tabela que já existe):
+-- adiciona 'ignorado' como 3º valor de status, e duas colunas novas pra
+-- derivar Novo (visualizado_em IS NULL) x Visualizado (preenchido) sem
+-- precisar de mais uma coluna de status paralela. Nome do constraint é o
+-- nome automático que o Postgres já deu (`<tabela>_<coluna>_check`,
+-- confirmado localmente) — o DROP+ADD é seguro rodar de novo (idempotente).
+ALTER TABLE radar_alertas ADD COLUMN IF NOT EXISTS visualizado_em TIMESTAMPTZ;
+ALTER TABLE radar_alertas ADD COLUMN IF NOT EXISTS ignorado_em TIMESTAMPTZ;
+ALTER TABLE radar_alertas DROP CONSTRAINT IF EXISTS radar_alertas_status_check;
+ALTER TABLE radar_alertas ADD CONSTRAINT radar_alertas_status_check CHECK (status IN ('aberto', 'resolvido', 'ignorado'));
+
 -- Estado do Radar por empresa (1 linha por empresa) — usado pra: 1) provar
 -- que o radar roda mesmo sem ninguém com o ERP aberto (ultima_execucao_em
 -- persiste no banco, sobrevive a reiniciar o servidor); 2) guardar o
@@ -1044,6 +1060,21 @@ CREATE TABLE IF NOT EXISTS contas_bancarias (
 ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atual NUMERIC(14,2);
 ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_data DATE;
 ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atualizado_em TIMESTAMPTZ;
+
+-- CORREÇÃO (01/09/2026, diagnóstico do módulo Ads/banco de dados — ver
+-- docs/04-alteracoes.md): o retrofit acima (28/08→31/08/2026) esqueceu de
+-- incluir banco/agencia/conta — exatamente o mesmo incidente que ele
+-- documenta ter corrigido para saldo_atual/saldo_data/saldo_atualizado_em,
+-- só que para estas 3 colunas. Confirmado em produção via erro real do
+-- Postgres: `error: column "conta" does not exist` (código 42703),
+-- disparado por lib/contasBancarias.js#listarContasBancarias, que já
+-- seleciona banco/agencia/conta desde que a tabela existe neste arquivo —
+-- essas colunas nunca tinham sido de fato criadas no banco de produção
+-- (só existiam dentro do CREATE TABLE IF NOT EXISTS acima, que é no-op
+-- numa tabela que já existia antes deste arquivo).
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS banco VARCHAR(100);
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS agencia VARCHAR(20);
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS conta VARCHAR(30);
 
 -- Uma linha por arquivo de extrato realmente confirmado (a prévia/análise
 -- não grava nada — só o passo de confirmação). arquivo_hash é o SHA-256 do
