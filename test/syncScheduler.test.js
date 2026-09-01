@@ -16,6 +16,13 @@
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
+// CORREÇÃO (01/09/2026, diagnóstico do Ads/sync travando — ver
+// docs/04-alteracoes.md): watchdog por conta, testado abaixo — precisa de
+// um timeout BEM curto pro teste não demorar os 5min padrão de produção.
+// Tem que ser setado antes de `require('../lib/syncScheduler')` (lido uma
+// vez só, no carregamento do módulo).
+process.env.ML_SYNC_TIMEOUT_POR_CONTA_MS = '150';
+
 const TEM_BANCO = !!process.env.DATABASE_URL;
 const EMPRESA_A = 920;
 const EMPRESA_B = 921;
@@ -117,6 +124,38 @@ describe(
       liberarPrimeiro();
       const status1 = await p1;
       assert.equal(status1.ultimoCicloOk, true);
+    });
+
+    // CORREÇÃO (01/09/2026, ver docs/04-alteracoes.md): reproduz em miniatura
+    // o incidente real de produção — o ciclo ficou travado (`emExecucao`
+    // nunca voltou a `false`) por mais de 34 HORAS seguidas porque
+    // Promise.allSettled só resolve quando TODAS as promises terminam, e uma
+    // conta cuja sincronização nunca resolve/rejeita (aqui simulada por uma
+    // promise que nunca termina) travava o ciclo inteiro pra sempre. Este
+    // teste prova que o watchdog por conta (comTimeout, TIMEOUT_POR_CONTA_MS
+    // = 150ms neste teste) resolve o ciclo mesmo assim, e que o PRÓXIMO
+    // ciclo consegue rodar depois (nunca mais fica pulando pra sempre).
+    test('uma conta cuja sincronização NUNCA resolve/rejeita não trava o ciclo pra sempre (watchdog) — reproduz o incidente real de 34h em produção', async () => {
+      const status = await executarCicloDeSincronizacao({
+        // Nunca resolve nem rejeita — exatamente o cenário observado em
+        // produção (uma query sem timeout, presa esperando um lock/conexão).
+        sincronizarContaFn: async () => new Promise(() => {}),
+      });
+      assert.ok(status, 'o ciclo precisa terminar (não pode ficar pendurado pra sempre esperando a conta travada)');
+      assert.equal(status.ultimoCicloOk, false, 'a conta travada deve contar como erro (abortada pelo watchdog), nunca como sucesso');
+      assert.ok(
+        status.contasComErro.some((c) => /excedeu/i.test(c.erro || '')),
+        'o erro reportado precisa deixar claro que foi o watchdog (timeout) que abortou, não um erro real do Mercado Livre'
+      );
+
+      // E o ciclo SEGUINTE precisa rodar normalmente — sem isso, o guard
+      // `estado.emExecucao` ficaria preso em `true` pra sempre, exatamente
+      // como em produção.
+      const statusSeguinte = await executarCicloDeSincronizacao({
+        sincronizarContaFn: async () => 'ok',
+      });
+      assert.notEqual(statusSeguinte, null, 'o ciclo seguinte não pode ser pulado — o watchdog precisa ter liberado emExecucao');
+      assert.equal(statusSeguinte.ultimoCicloOk, true);
     });
   }
 );

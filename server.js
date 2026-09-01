@@ -37,6 +37,7 @@ const iaGestoraRouter = require('./routes/iaGestora');
 const performanceAnunciosRouter = require('./routes/performanceAnuncios');
 const visitasConversaoRouter = require('./routes/visitasConversao');
 const margemAnuncioRouter = require('./routes/margemAnuncio');
+const alertasRouter = require('./routes/alertas');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -76,6 +77,7 @@ app.use('/api/ia-gestora', iaGestoraRouter);
 app.use('/api/performance-anuncios', performanceAnunciosRouter);
 app.use('/api/visitas-conversao', visitasConversaoRouter);
 app.use('/api/margem-anuncio', margemAnuncioRouter);
+app.use('/api/alertas', alertasRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));

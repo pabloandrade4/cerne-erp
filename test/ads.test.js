@@ -19,6 +19,15 @@
 //     node --test ads.test.js
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const nodeCrypto = require('crypto');
+
+// CORREÇÃO (01/09/2026, diagnóstico do Ads não sincronizar — ver
+// docs/04-alteracoes.md): watchdog por conta em sincronizarTodasAsContasAds
+// (lib/ads.js), testado no describe do fim deste arquivo — precisa de um
+// timeout BEM curto pro teste não demorar os 3min padrão de produção. Tem
+// que ser setado ANTES do primeiro `require('../lib/ads')` (lido uma vez
+// só, no carregamento do módulo).
+process.env.ADS_SYNC_TIMEOUT_POR_CONTA_MS = '150';
 
 const TEM_BANCO = !!process.env.DATABASE_URL;
 const EMPRESA_ID = 900;
@@ -53,7 +62,9 @@ describe('Ads — itens por pedido e agregação (25/08/2026)', { skip: !TEM_BAN
   });
 
   after(async () => {
-    await require('../db/pool').end();
+    // NUNCA `pool.end()` aqui: `pool` é um módulo singleton compartilhado
+    // com o describe de watchdog do Ads no fim deste arquivo — só o ÚLTIMO
+    // describe do arquivo encerra o pool (ver comentário lá).
   });
 
   test('buscarItensDoPeriodo: todo item pertence a um pedido não cancelado real', () => {
@@ -258,3 +269,65 @@ describe('Ads — calcularCards (função pura, sem banco)', () => {
     assert.equal(cards.gastoHoje, 20);
   });
 });
+
+// ============================================================
+// CORREÇÃO (01/09/2026, diagnóstico do Ads não sincronizar — ver
+// docs/04-alteracoes.md, Etapa 2/3): reproduz em miniatura o mesmo
+// incidente encontrado no ciclo de pedidos/estoque (lib/syncScheduler.js)
+// — Promise.allSettled só resolve quando TODAS as promises terminam, então
+// uma única conta cuja sincronização de Ads nunca resolve/rejeita (ex.:
+// presa numa chamada à API sem responder) travaria
+// sincronizarTodasAsContasAds (e, por consequência,
+// lib/adsScheduler.js#executarCicloDeSincronizacaoAds) pra sempre. Prova
+// que o watchdog por conta (comTimeoutAds, ADS_SYNC_TIMEOUT_POR_CONTA_MS =
+// 150ms neste teste) resolve mesmo assim.
+// ============================================================
+describe(
+  'sincronizarTodasAsContasAds — watchdog por conta (correção 01/09/2026)',
+  { skip: !TEM_BANCO && 'defina DATABASE_URL apontando pra um Postgres de teste já com o schema aplicado' },
+  () => {
+    const EMPRESA_WD_ID = 953;
+    const CONTA_WD_ID = 953;
+    let pool, ml, cryptoLib, adsLib, apiGetReal;
+
+    before(async () => {
+      if (!process.env.ML_TOKEN_KEY) process.env.ML_TOKEN_KEY = nodeCrypto.randomBytes(32).toString('base64');
+      pool = require('../db/pool');
+      ml = require('../lib/mercadolivre');
+      cryptoLib = require('../lib/crypto');
+      adsLib = require('../lib/ads');
+      apiGetReal = ml.apiGet;
+
+      await pool.query(
+        `INSERT INTO empresas (id, cnpj, razao_social, ativo) VALUES ($1,'77777777000191','EMPRESA TESTE ADS WATCHDOG',TRUE)
+         ON CONFLICT (id) DO NOTHING`,
+        [EMPRESA_WD_ID]
+      );
+      await pool.query(
+        `INSERT INTO ml_contas (id, empresa_id, ml_user_id, nickname, site_id, access_token_enc, refresh_token_enc, token_expires_at, status)
+         VALUES ($1,$2,953000001,'LOJA TRAVADA','MLB',$3,$4, now() + interval '6 hours', 'ativa')
+         ON CONFLICT (id) DO UPDATE SET status='ativa', ultimo_erro=NULL`,
+        [CONTA_WD_ID, EMPRESA_WD_ID, cryptoLib.encrypt('token-ok'), cryptoLib.encrypt('refresh-ok')]
+      );
+    });
+
+    after(async () => {
+      ml.apiGet = apiGetReal;
+      await pool.query('DELETE FROM ads_contas WHERE conta_id = $1', [CONTA_WD_ID]);
+      await pool.query('DELETE FROM ml_contas WHERE id = $1', [CONTA_WD_ID]);
+      await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_WD_ID]);
+      // Último describe do arquivo — aqui sim encerra o pool.
+      await pool.end();
+    });
+
+    test('uma conta cuja API de Ads nunca responde não trava sincronizarTodasAsContasAds pra sempre (watchdog)', async () => {
+      ml.apiGet = () => new Promise(() => {}); // nunca resolve nem rejeita — simula uma chamada travada de verdade
+
+      const resultado = await adsLib.sincronizarTodasAsContasAds();
+      assert.ok(resultado, 'sincronizarTodasAsContasAds precisa terminar (não pode ficar pendurada esperando a conta travada)');
+      const erroDaConta = resultado.comErro.find((c) => c.contaId === CONTA_WD_ID);
+      assert.ok(erroDaConta, 'a conta travada precisa aparecer em comErro (abortada pelo watchdog), nunca travar o resultado inteiro');
+      assert.match(erroDaConta.erro, /excedeu/i, 'o erro reportado precisa deixar claro que foi o watchdog (timeout) que abortou');
+    });
+  }
+);

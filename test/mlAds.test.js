@@ -125,7 +125,11 @@ describe(
       await pool.query('DELETE FROM ads_contas WHERE conta_id = ANY($1)', [[CONTA_ML_ID, CONTA_SEM_ANUNCIANTE_ID]]);
       await pool.query('DELETE FROM ml_contas WHERE id = ANY($1)', [[CONTA_ML_ID, CONTA_SEM_ANUNCIANTE_ID]]);
       await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_ID]);
-      await pool.end();
+      // NUNCA `pool.end()` aqui: `pool` é um módulo singleton (require('../db/pool')
+      // sempre devolve a MESMA instância) compartilhado com o describe de
+      // renovação de token logo abaixo, neste mesmo arquivo — encerrar a
+      // sessão aqui quebraria os testes seguintes. Só o ÚLTIMO describe do
+      // arquivo (renovação de token) encerra o pool.
     });
 
     test('conta SEM anunciante: sincronizarContaAds grava o motivo/mensagem/corpo REAL da API em ads_contas (Passo 1)', async () => {
@@ -155,12 +159,31 @@ describe(
     // uma janela na outra (ver teste de isolamento logo abaixo).
     const periodoLib = require('../lib/periodo');
     const INVESTIMENTO_POR_CHAVE = { hoje: 1, ontem: 2, '7d': 7, '30d': 30, mes: 99 };
-    function chaveDoDesdeStr(desdeStr) {
+    // CORREÇÃO (01/09/2026): desambigua por (desde, ate), nunca só por
+    // `desde` — no 1º dia do mês, "Este mês" e "Hoje" começam no MESMO
+    // instante (00:00 BRT do dia 1), então só olhar `desde` confundia as
+    // duas janelas (o teste ficava dependente do dia em que rodasse — falha
+    // real observada rodando em 01/09/2026). `ate` sempre diferencia: "Hoje"
+    // termina no início do dia seguinte, "Este mês" termina "agora".
+    function chaveDoDesdeAte(desdeStr, ateStr) {
       for (const chave of Object.keys(INVESTIMENTO_POR_CHAVE)) {
-        const { desde } = periodoLib.periodoParaDatasBRT(periodoLib.calcularPeriodo(chave));
-        if (desde === desdeStr) return chave;
+        const { desde, ate } = periodoLib.periodoParaDatasBRT(periodoLib.calcularPeriodo(chave));
+        if (desde === desdeStr && ate === ateStr) return chave;
       }
       return null;
+    }
+    // Mesmo no 1º dia do mês (desde/ate de "hoje" e "mes" IDÊNTICOS em
+    // granularidade de dia — a API do Mercado Livre só aceita data, não
+    // timestamp), o valor esperado por período precisa ser o mesmo que o
+    // mock acima realmente vai devolver: resolve pra qual chave CANÔNICA
+    // (1ª que bater no laço de chaveDoDesdeAte) a janela de `chave` cai,
+    // e usa o investimento dela — nunca assume que toda chave tem seu
+    // próprio valor sempre distinto (isso só é verdade quando as janelas
+    // realmente não se sobrepõem).
+    function investimentoEsperadoParaChave(chave) {
+      const { desde, ate } = periodoLib.periodoParaDatasBRT(periodoLib.calcularPeriodo(chave));
+      const canonica = chaveDoDesdeAte(desde, ate) || chave;
+      return INVESTIMENTO_POR_CHAVE[canonica];
     }
 
     test('conta COM anunciante: sincronizarContaAds usa os endpoints ATUAIS (com /search e site no path — Passo 1) e grava CADA período separadamente em banco (Passo 2 e 3)', async () => {
@@ -178,8 +201,10 @@ describe(
           if (path.includes('aggregation_type=daily')) {
             return { results: [{ date: '2026-08-24', metrics: { cost: 10, total_amount: 40 } }, { date: '2026-08-25', metrics: { cost: 12, total_amount: 50 } }], paging: { total: 2 } };
           }
-          const desdeStr = new URLSearchParams(path.split('?')[1]).get('date_from');
-          const chave = chaveDoDesdeStr(desdeStr);
+          const paramsBusca = new URLSearchParams(path.split('?')[1]);
+          const desdeStr = paramsBusca.get('date_from');
+          const ateStrBusca = paramsBusca.get('date_to');
+          const chave = chaveDoDesdeAte(desdeStr, ateStrBusca);
           const investimento = chave ? INVESTIMENTO_POR_CHAVE[chave] : 30;
           return {
             results: [{
@@ -256,7 +281,7 @@ describe(
       const { desde: mesDesdeStr, ate: mesAteStr } = periodo.periodoParaDatasBRT(periodo.calcularPeriodo('mes'));
       const { desde: hojeStr } = periodo.periodoParaDatasBRT(periodo.calcularPeriodo('hoje'));
 
-      for (const [chave, investimentoEsperado] of Object.entries(INVESTIMENTO_POR_CHAVE)) {
+      for (const chave of Object.keys(INVESTIMENTO_POR_CHAVE)) {
         const { desde: desdeStr, ate: ateStr } = periodo.periodoParaDatasBRT(periodo.calcularPeriodo(chave));
         const resultado = await adsLib.listarAds({
           empresaId: EMPRESA_ID, contaId: CONTA_ML_ID, periodoChave: chave,
@@ -264,8 +289,130 @@ describe(
         });
         const linha = resultado.linhas.find((l) => l.mlItemId === 'MLB111');
         assert.ok(linha, `período '${chave}' deveria ter o anúncio sincronizado`);
-        assert.equal(linha.investimento, investimentoEsperado, `período '${chave}' misturou investimento de outra janela`);
+        assert.equal(linha.investimento, investimentoEsperadoParaChave(chave), `período '${chave}' misturou investimento de outra janela`);
       }
+    });
+  }
+);
+
+// ============================================================
+// CORREÇÃO (01/09/2026, diagnóstico do Ads não sincronizar — ver
+// docs/04-alteracoes.md, Etapa 2/3): antes desta correção,
+// sincronizarContaAds lia ml_contas.access_token_enc direto, SEM NUNCA
+// checar/renovar o vencimento do token — só a sincronização de pedidos
+// (ciclo de 1min, lib/mlSync.js) fazia essa renovação. Confirmado em
+// produção que esse ciclo ficou travado por mais de 34h seguidas, o que
+// deixava os tokens vencerem sem ninguém renovar — e, pior, um token
+// vencido (HTTP 401 da API do Mercado Livre) era registrado com o motivo
+// 'sem_acesso_ads' ("esta conta não tem acesso liberado à API de
+// Publicidade" — ver lib/mlAds.js#motivoDeErro), um diagnóstico FALSO que
+// mandava o usuário conferir permissões no painel de desenvolvedores do
+// Mercado Livre, quando o problema real era só o token vencido.
+//
+// Estes testes provam a correção: sincronizarContaAds agora usa
+// getContaComTokenValido (lib/mlSync.js) — a MESMA função usada pela
+// sincronização de pedidos/estoque — então renova sozinho, sem depender
+// de nenhum outro ciclo.
+// ============================================================
+describe(
+  'sincronizarContaAds — renovação de token (correção 01/09/2026)',
+  { skip: !TEM_BANCO && 'defina DATABASE_URL apontando pra um Postgres de teste já com o schema aplicado' },
+  () => {
+    const EMPRESA_TOKEN_ID = 952;
+    const CONTA_TOKEN_ID = 952;
+    let pool, ml, cryptoLib, adsLib, apiGetReal, refreshReal;
+
+    before(async () => {
+      if (!process.env.ML_TOKEN_KEY) process.env.ML_TOKEN_KEY = nodeCrypto.randomBytes(32).toString('base64');
+      pool = require('../db/pool');
+      ml = require('../lib/mercadolivre');
+      cryptoLib = require('../lib/crypto');
+      adsLib = require('../lib/ads');
+      apiGetReal = ml.apiGet;
+      refreshReal = ml.refreshAccessToken;
+
+      await pool.query(
+        `INSERT INTO empresas (id, cnpj, razao_social, ativo) VALUES ($1,'66666666000191','EMPRESA TESTE ADS TOKEN',TRUE)
+         ON CONFLICT (id) DO NOTHING`,
+        [EMPRESA_TOKEN_ID]
+      );
+    });
+
+    after(async () => {
+      ml.apiGet = apiGetReal;
+      ml.refreshAccessToken = refreshReal;
+      await pool.query('DELETE FROM ads_contas WHERE conta_id = $1', [CONTA_TOKEN_ID]);
+      await pool.query('DELETE FROM ml_contas WHERE id = $1', [CONTA_TOKEN_ID]);
+      await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_TOKEN_ID]);
+      await pool.end();
+    });
+
+    test('token vencido: sincronizarContaAds renova sozinho (getContaComTokenValido) e usa o token NOVO pra chamar a API de Ads', async () => {
+      await pool.query(
+        `INSERT INTO ml_contas (id, empresa_id, ml_user_id, nickname, site_id, access_token_enc, refresh_token_enc, token_expires_at, status)
+         VALUES ($1,$2,952000001,'LOJA TOKEN VENCIDO','MLB',$3,$4, now() - interval '1 hour', 'ativa')
+         ON CONFLICT (id) DO UPDATE SET access_token_enc=EXCLUDED.access_token_enc, refresh_token_enc=EXCLUDED.refresh_token_enc, token_expires_at=EXCLUDED.token_expires_at, status='ativa', ultimo_erro=NULL`,
+        [CONTA_TOKEN_ID, EMPRESA_TOKEN_ID, cryptoLib.encrypt('token-velho-vencido'), cryptoLib.encrypt('refresh-valido')]
+      );
+
+      let refreshChamadoCom = null;
+      ml.refreshAccessToken = async ({ refreshToken }) => {
+        refreshChamadoCom = refreshToken;
+        return { access_token: 'token-novo-renovado', refresh_token: 'refresh-novo', expires_in: 21600 };
+      };
+
+      const tokensUsadosNaApi = [];
+      ml.apiGet = async (path, accessToken) => {
+        tokensUsadosNaApi.push(accessToken);
+        if (path.startsWith('/advertising/advertisers')) {
+          const err = new Error('Not Found');
+          err.status = 404;
+          err.data = { message: 'no advertiser' };
+          throw err;
+        }
+        throw new Error('rota não coberta: ' + path);
+      };
+
+      const resultado = await adsLib.sincronizarContaAds(CONTA_TOKEN_ID);
+      assert.equal(resultado.ok, false); // sem anunciante, mas o ponto do teste é o token
+      assert.equal(refreshChamadoCom, 'refresh-valido', 'precisa ter chamado refreshAccessToken com o refresh_token real desta conta');
+      assert.ok(tokensUsadosNaApi.length > 0, 'a API de Ads precisa ter sido chamada (prova que não desistiu por causa do token)');
+      assert.ok(tokensUsadosNaApi.every((t) => t === 'token-novo-renovado'), 'TODAS as chamadas à API de Ads precisam usar o token NOVO recém-renovado, nunca o antigo vencido');
+
+      const { rows } = await pool.query('SELECT access_token_enc, token_expires_at, status FROM ml_contas WHERE id = $1', [CONTA_TOKEN_ID]);
+      assert.equal(cryptoLib.decrypt(rows[0].access_token_enc), 'token-novo-renovado', 'o token novo precisa ter sido persistido em ml_contas (reaproveitável pelas próximas chamadas, inclusive de pedidos/estoque)');
+      assert.equal(rows[0].status, 'ativa');
+    });
+
+    test('refresh_token inválido/revogado: sincronizarContaAds NUNCA quebra — marca ads_contas como indisponível com motivo claro, e ml_contas como erro', async () => {
+      await pool.query(
+        `INSERT INTO ml_contas (id, empresa_id, ml_user_id, nickname, site_id, access_token_enc, refresh_token_enc, token_expires_at, status)
+         VALUES ($1,$2,952000001,'LOJA TOKEN VENCIDO','MLB',$3,$4, now() - interval '1 hour', 'ativa')
+         ON CONFLICT (id) DO UPDATE SET access_token_enc=EXCLUDED.access_token_enc, refresh_token_enc=EXCLUDED.refresh_token_enc, token_expires_at=EXCLUDED.token_expires_at, status='ativa', ultimo_erro=NULL`,
+        [CONTA_TOKEN_ID, EMPRESA_TOKEN_ID, cryptoLib.encrypt('token-velho-vencido'), cryptoLib.encrypt('refresh-invalido')]
+      );
+
+      ml.refreshAccessToken = async () => {
+        const err = new Error('invalid_grant: refresh token revogado');
+        err.status = 400;
+        throw err;
+      };
+      let apiChamada = false;
+      ml.apiGet = async () => { apiChamada = true; throw new Error('não deveria chamar a API sem token válido'); };
+
+      const resultado = await adsLib.sincronizarContaAds(CONTA_TOKEN_ID);
+      assert.equal(resultado.ok, false);
+      assert.equal(apiChamada, false, 'nunca deveria tentar chamar a API de Ads sem conseguir um token válido');
+
+      const { rows: adsRows } = await pool.query('SELECT * FROM ads_contas WHERE conta_id = $1', [CONTA_TOKEN_ID]);
+      assert.equal(adsRows.length, 1);
+      assert.equal(adsRows[0].disponivel, false);
+      assert.equal(adsRows[0].motivo, 'token_invalido', 'o motivo precisa deixar claro que é problema de TOKEN, nunca o falso "sem acesso liberado à API de Publicidade" de antes desta correção');
+      assert.match(adsRows[0].mensagem, /reconecta|refeita|renovar/i, 'a mensagem precisa orientar o usuário a reconectar a conta em Integrações');
+
+      const { rows: contaRows } = await pool.query('SELECT status, ultimo_erro FROM ml_contas WHERE id = $1', [CONTA_TOKEN_ID]);
+      assert.equal(contaRows[0].status, 'erro', 'a conta precisa ficar marcada como erro (mesmo contrato já usado por pedidos/estoque — nunca fica "ativa" com token quebrado)');
+      assert.ok(contaRows[0].ultimo_erro, 'ultimo_erro precisa estar preenchido pra aparecer na tela de Integrações');
     });
   }
 );

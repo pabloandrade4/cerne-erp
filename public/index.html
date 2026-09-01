@@ -1252,7 +1252,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','reports','iaGestora'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','reports','iaGestora','alerts'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1314,6 +1314,7 @@
     else if(id === 'visitasConversao'){ inner += '<div id="visitasConversaoRoot"></div>'; }
     else if(id === 'margemAnuncio'){ inner += '<div id="margemAnuncioRoot"></div>'; }
     else if(id === 'reports'){ inner += '<div id="relatoriosRoot"></div>'; }
+    else if(id === 'alerts'){ inner += '<div id="alertasRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1360,6 +1361,7 @@
     if(id === 'visitasConversao' && window.VisitasConversao) window.VisitasConversao.load(queryStr);
     if(id === 'margemAnuncio' && window.MargemAnuncio) window.MargemAnuncio.load(queryStr);
     if(id === 'reports' && window.Relatorios) window.Relatorios.load();
+    if(id === 'alerts' && window.Alertas) window.Alertas.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -2377,7 +2379,7 @@
 
     function iaSummaryPanelHTML(painel, painelError){
       const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Resumo da IA</div></div>';
-      const ctaAbrir = '<div class="ov2-ia-cta-wrap"><a href="#" class="ov2-ia-cta alert-row" data-page="alerts">'+svg('sparkle')+'Abrir IA Gestora</a></div>';
+      const ctaAbrir = '<div class="ov2-ia-cta-wrap"><a href="#" class="ov2-ia-cta alert-row" data-page="iaGestora">'+svg('sparkle')+'Abrir IA Gestora</a></div>';
       if(painelError){
         return '<div class="panel ov2-ia-card">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;padding:0 18px 16px;">Não foi possível carregar.</p></div>';
       }
@@ -2410,7 +2412,7 @@
         + head
         + '<p class="ov2-ia-summary">'+fraseResumo+(atualizadoEmFmt?' <span style="color:var(--text-faint);">Atualizado '+escapeHtml(atualizadoEmFmt)+'.</span>':'')+'</p>'
         + itens
-        + '<div class="ov2-ia-cta-wrap"><a href="#" class="ov2-ia-cta alert-row" data-page="alerts">Ver insights completos<span style="display:inline-flex;">→</span></a></div>'
+        + '<div class="ov2-ia-cta-wrap"><a href="#" class="ov2-ia-cta alert-row" data-page="iaGestora">Ver insights completos<span style="display:inline-flex;">→</span></a></div>'
       + '</div>';
     }
 
@@ -7420,6 +7422,178 @@
     }
 
     window.NotasFiscais = { load };
+  })();
+
+  /* ================= ALERTAS & IA — Central de Alertas =====================
+     Ativada em 01/09/2026 (Etapa 7 pedida pelo usuário, ver docs/04-alteracoes.md).
+     Esta tela NUNCA dispara uma análise nova — quem gera os alertas é sempre
+     o ciclo periódico em segundo plano do Radar da IA (lib/ia/radarScheduler.js
+     → lib/ia/radar.js), rodando sozinho no servidor a cada 15min, cruzando
+     pedidos/anúncios/Ads/estoque/custos/financeiro desta empresa. Aqui só se
+     lê o que já foi persistido em radar_alertas (routes/alertas.js) e se
+     marca visualizado/ignorado/resolvido/reaberto — sempre com empresaId no
+     corpo da requisição, pra nunca deixar uma empresa ver/alterar o alerta
+     de outra (mesma regra de isolamento do resto do ERP). */
+  (function(){
+    const PRIORIDADE_OPCOES = [['critico','Crítico'],['alto','Alto'],['medio','Médio'],['baixo','Baixo']];
+    const STATUS_OPCOES = [['novo','Novo'],['visualizado','Visualizado'],['resolvido','Resolvido'],['ignorado','Ignorado']];
+    const PRIORIDADE_COR = { critico:'danger', alto:'warning', medio:'teal', baixo:'success' };
+    // categoria (chave interna, ver lib/ia/radarNegocio.js / radarAnuncios.js) → rótulo amigável
+    // agrupado nas 4 áreas pedidas pelo usuário (Ads/Margem/Estoque/Financeiro).
+    const CATEGORIA_LABEL = {
+      anuncio_parado:'Ads · Anúncio parado', anuncio_venda_baixa:'Ads · Venda baixa',
+      anuncio_faturamento_baixa_margem:'Ads · Margem baixa no anúncio', anuncio_prejuizo:'Ads · Anúncio no prejuízo',
+      anuncio_crescimento:'Ads · Anúncio em crescimento', anuncio_bom_desempenho:'Ads · Bom desempenho',
+      ads_gastando_sem_vender:'Ads · Investindo sem vender', ads_consumindo_margem:'Ads · Consumindo margem',
+      custo_alterado:'Margem · Custo alterado',
+      estoque_cobertura_critica:'Estoque · Cobertura crítica', estoque_cobertura_baixa:'Estoque · Cobertura baixa',
+      estoque_excesso:'Estoque · Excesso', compra_necessaria:'Estoque · Compra necessária',
+      financeiro_contas_vencidas:'Financeiro · Contas vencidas', financeiro_contas_vencendo_semana:'Financeiro · Vencendo essa semana',
+      financeiro_recebimentos_semana:'Financeiro · Recebimentos da semana', fluxo_caixa_risco:'Financeiro · Risco no fluxo de caixa',
+    };
+    function categoriaLabel(cat){ return CATEGORIA_LABEL[cat] || String(cat||'—').replace(/_/g,' '); }
+    function statusChipStyle(statusCentral){
+      if(statusCentral === 'resolvido') return 'color:var(--success);background:var(--success-soft);';
+      if(statusCentral === 'novo') return 'color:var(--teal);background:var(--teal-soft);';
+      return 'color:var(--text-muted);background:var(--surface-2);'; // visualizado / ignorado
+    }
+
+    const state = { loading:false, error:null, itens:[], contagemPrioridade:null, contagemStatus:null, prioridade:'todas', status:'todos' };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return '—'; } }
+
+    async function api(path, opts){
+      const res = await fetch('/api/alertas'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ throw new Error((body && body.error) || 'Falha na requisição.'); }
+      return body;
+    }
+
+    async function loadItens(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.itens=[]; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: filtro.empresaId });
+        if(state.prioridade !== 'todas') params.set('prioridade', state.prioridade);
+        if(state.status !== 'todos') params.set('status', state.status);
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.itens = data.alertas || [];
+        state.contagemPrioridade = data.contagemPorPrioridade || null;
+        state.contagemStatus = data.contagemPorStatus || null;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar os alertas.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    function load(){ loadItens(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-alerts');
+      if(page && page.classList.contains('active')) loadItens();
+      else render();
+    });
+
+    async function acao(id, tipo){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId) return;
+      try{
+        await api('/'+id+'/'+tipo, { method:'PATCH', body: JSON.stringify({ empresaId: filtro.empresaId }) });
+        const msgs = { visualizar:'Alerta marcado como visualizado.', ignorar:'Alerta ignorado.', resolver:'Alerta marcado como resolvido.', reabrir:'Alerta reaberto.' };
+        toast(msgs[tipo] || 'Alerta atualizado.');
+        loadItens();
+      }catch(err){ toast(err.message || 'Não foi possível atualizar o alerta.', 'error'); }
+    }
+
+    function render(){
+      const root = document.getElementById('alertasRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver os alertas aqui.</p></div>';
+        return;
+      }
+      if(!filtro.empresaId){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('sparkle')+'</div>'
+          + '<h2>Selecione uma empresa</h2><p class="lead">Escolha uma empresa no topo da tela para ver a Central de Alertas dela.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:820px;">Alertas gerados automaticamente pelo Radar da IA (roda sozinho em segundo plano, sem precisar desta tela aberta), cruzando pedidos, anúncios, Ads, estoque, custos e financeiro <strong>desta empresa</strong>. Nunca mistura dado de outra empresa ou conta.</div>';
+
+      const cp = state.contagemPrioridade || {};
+      const cs = state.contagemStatus || {};
+      const totalPrioridade = (cp.critico||0) + (cp.alto||0) + (cp.medio||0) + (cp.baixo||0);
+      html += '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">'
+        + '<div class="seg" id="alPrioridadeSeg">'
+          + ['<button data-prioridade="todas" class="'+(state.prioridade==='todas'?'active':'')+'">Todas ('+totalPrioridade+')</button>']
+            .concat(PRIORIDADE_OPCOES.map(function(par){ return '<button data-prioridade="'+par[0]+'" class="'+(state.prioridade===par[0]?'active':'')+'">'+par[1]+' ('+(cp[par[0]]||0)+')</button>'; }))
+          .join('')
+        + '</div>'
+        + '<div class="seg" id="alStatusSeg">'
+          + ['<button data-status="todos" class="'+(state.status==='todos'?'active':'')+'">Todos</button>']
+            .concat(STATUS_OPCOES.map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+' ('+(cs[par[0]]||0)+')</button>'; }))
+          .join('')
+        + '</div>'
+      + '</div>';
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando alertas…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(!state.itens.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('sparkle')+'</div>'
+          + '<h2>Nenhum alerta encontrado</h2>'
+          + '<p class="lead">Nenhum alerta corresponde ao filtro atual. O Radar da IA continua acompanhando esta empresa em segundo plano.</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Data</th><th>Categoria</th><th>Problema</th><th>Valor envolvido</th><th>Recomendação</th><th>Status</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.itens.map(a => {
+              const corPrioridade = PRIORIDADE_COR[a.prioridade] || 'teal';
+              const acoes = [];
+              if(a.statusCentral === 'novo') acoes.push('<button class="row-ic-btn" data-acao="visualizar" data-id="'+a.id+'" title="Marcar como visualizado" type="button">'+svg('eye')+'</button>');
+              if(a.statusCentral !== 'resolvido') acoes.push('<button class="row-ic-btn" data-acao="resolver" data-id="'+a.id+'" title="Marcar como resolvido" type="button">'+svg('checkCircle')+'</button>');
+              if(a.statusCentral !== 'ignorado' && a.statusCentral !== 'resolvido') acoes.push('<button class="row-ic-btn" data-acao="ignorar" data-id="'+a.id+'" title="Ignorar" type="button">'+svg('x')+'</button>');
+              if(a.statusCentral === 'ignorado' || a.statusCentral === 'resolvido') acoes.push('<button class="row-ic-btn" data-acao="reabrir" data-id="'+a.id+'" title="Reabrir" type="button">'+svg('refreshCw')+'</button>');
+              if(a.pagina) acoes.push('<button class="row-ic-btn" data-ir-pagina="'+escapeHtml(a.pagina)+'" title="Abrir tela relacionada" type="button">'+svg('logOut')+'</button>');
+              return '<tr>'
+                + '<td class="tab-nums" style="white-space:nowrap;">'+fmtDateTime(a.criadoEm)+'</td>'
+                + '<td><span class="status-chip" style="color:var(--'+corPrioridade+');background:var(--'+corPrioridade+'-soft);">'+escapeHtml(a.prioridadeLabel)+'</span><div style="font-size:11px;color:var(--text-faint);margin-top:4px;">'+escapeHtml(categoriaLabel(a.categoria))+'</div></td>'
+                + '<td><div style="font-weight:600;">'+escapeHtml(a.titulo)+'</div><div style="font-size:12px;color:var(--text-faint);max-width:340px;">'+escapeHtml(a.descricao||'')+'</div></td>'
+                + '<td class="mono">'+(a.valorEnvolvido!=null ? money(a.valorEnvolvido) : '<span class="dash">—</span>')+'</td>'
+                + '<td style="max-width:280px;font-size:12px;">'+escapeHtml(a.recomendacao||'—')+'</td>'
+                + '<td><span class="status-chip" style="'+statusChipStyle(a.statusCentral)+'">'+escapeHtml(a.statusCentralLabel)+'</span></td>'
+                + '<td><div class="row-actions">'+acoes.join('')+'</div></td>'
+              + '</tr>';
+            }).join('')
+          + '</tbody></table></div></div>';
+      }
+
+      root.innerHTML = html;
+
+      const prioSeg = document.getElementById('alPrioridadeSeg');
+      if(prioSeg) prioSeg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.prioridade = b.dataset.prioridade; loadItens(); }));
+      const statusSeg = document.getElementById('alStatusSeg');
+      if(statusSeg) statusSeg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadItens(); }));
+      root.querySelectorAll('[data-acao]').forEach(b=> b.addEventListener('click', ()=> acao(Number(b.dataset.id), b.dataset.acao)));
+      root.querySelectorAll('[data-ir-pagina]').forEach(b=> b.addEventListener('click', ()=> navigate(b.dataset.irPagina)));
+    }
+
+    window.Alertas = { load };
   })();
 
   /* ================= ADS — Product Ads real do Mercado Livre =================

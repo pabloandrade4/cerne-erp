@@ -247,8 +247,17 @@ describe(
         resumoContasReceber({ empresaId: EMPRESA_REAL_ID, desde: ctx.desdeStr, ate: ctx.ateStr }),
       ]);
       const esperado = await gerarAlertas({ empresaId: EMPRESA_REAL_ID, pedidos: pedidosR.pedidos, itens: itensR.itens, fluxoCaixa: { contasAPagar: cp, contasAReceber: cr }, conexoes });
-      assert.equal(resultado.quantidadeDeAlertas, esperado.length);
-      assert.deepEqual(resultado.alertas.map((a) => a.tipo).sort(), esperado.map((a) => a.tipo).sort());
+      // CORREÇÃO (01/09/2026, ativação da Central de Alertas/Ads — ver
+      // docs/04-alteracoes.md): alertas_operacionais agora TAMBÉM inclui os
+      // alertas da Central de Alertas/Radar da IA (origem
+      // 'central_de_alertas', única fonte com regras de Ads) além dos de
+      // Visão Geral (origem 'visao_geral') — a comparação abaixo isola só
+      // os de 'visao_geral' pra continuar comparando com gerarAlertas 1:1.
+      const doVisaoGeral = resultado.alertas.filter((a) => a.origem === 'visao_geral');
+      assert.equal(doVisaoGeral.length, esperado.length);
+      assert.deepEqual(doVisaoGeral.map((a) => a.tipo).sort(), esperado.map((a) => a.tipo).sort());
+      assert.equal(resultado.quantidadeDeAlertas, resultado.alertas.length, 'quantidadeDeAlertas precisa contar TODOS os alertas combinados (visão geral + central de alertas)');
+      resultado.alertas.forEach((a) => assert.ok(a.origem === 'visao_geral' || a.origem === 'central_de_alertas', 'todo alerta combinado precisa deixar claro de onde veio'));
     });
 
     test('contas_a_pagar_resumo: conta vencida cadastrada aparece certa (saldo em aberto, independe do período)', async () => {
