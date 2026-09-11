@@ -79,6 +79,38 @@ describe('mlAds — fallback do endpoint novo para o clássico', () => {
       }
     );
   });
+
+  test('CORREÇÃO (11/09/2026): o corpo REAL da resposta do formato clássico chega em detalheFormatoClassico.corpoResposta (antes só endpoint/status/mensagem curta)', async () => {
+    ml.apiGet = async (path) => {
+      if (path.startsWith('/marketplace/advertising/')) {
+        const err = new Error('resource not found');
+        err.status = 404;
+        err.data = { message: 'not found (novo)' };
+        throw err;
+      }
+      const err = new Error('resource not found classico');
+      err.status = 404;
+      err.data = { message: 'Si quieres conocer los recursos de la API...', cause: [{ code: 'X', description: 'motivo real' }] };
+      throw err;
+    };
+    await assert.rejects(
+      () => buscarItensComMetricas({ accessToken: 'tok', siteId: 'MLB', advertiserId: '753060', desde: '2026-08-01', ate: '2026-08-26' }),
+      (err) => {
+        assert.deepEqual(err.detalheFormatoClassico.corpoResposta, { message: 'Si quieres conocer los recursos de la API...', cause: [{ code: 'X', description: 'motivo real' }] });
+        assert.match(err.detalheFormatoClassico.endpoint, /^\/753060\/product_ads\/items/);
+        return true;
+      }
+    );
+  });
+});
+
+describe('mlAds — motivoDeErro inclui o detalhe do formato clássico quando disponível', () => {
+  test('detalheApi.formatoClassico carrega o corpo completo da tentativa clássica, nunca só um texto curto', () => {
+    const errNovo = new Error('not found'); errNovo.status = 404;
+    errNovo.detalheFormatoClassico = { endpoint: '/753060/product_ads/items?x', status: 404, mensagem: 'not found classico', corpoResposta: { message: 'motivo real da API' } };
+    const r = motivoDeErro(errNovo, { advertiserJaConfirmado: true, advertiserId: '753060' });
+    assert.deepEqual(r.detalheApi.formatoClassico.corpoResposta, { message: 'motivo real da API' });
+  });
 });
 
 describe('mlAds — motivoDeErro nunca diz "sem anunciante" quando o anunciante já foi confirmado', () => {
