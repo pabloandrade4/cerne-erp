@@ -113,6 +113,34 @@ describe('mlAds — motivoDeErro inclui o detalhe do formato clássico quando di
   });
 });
 
+describe('mlAds — motivoDeErro cita as DUAS causas possíveis da mensagem genérica de rota, nunca afirma uma só (correção 11/09/2026: a hipótese "sempre é falta de permissão" foi TESTADA e refutada — a conta PFEMBALAGEMS tinha a permissão "Advertising" habilitada e mesmo assim recebeu essa mensagem)', () => {
+  const CORPO_GENERICO_ROTA = { error: 'resource not found', message: 'Si quieres conocer los recursos de la API que se encuentran disponibles visita el Sitio de Desarrolladores de MercadoLibre (http://developers.mercadolibre.com)' };
+
+  test('os dois formatos (novo e clássico) respondendo a MESMA mensagem genérica de rota -> continua sem_anuncios_ads, mas a mensagem cita as duas causas possíveis (sem anúncio ativo OU token desatualizado)', () => {
+    const errNovo = new Error('not found'); errNovo.status = 404; errNovo.data = CORPO_GENERICO_ROTA;
+    errNovo.detalheFormatoClassico = { endpoint: '/753060/product_ads/items?x', status: 404, mensagem: CORPO_GENERICO_ROTA.message, corpoResposta: CORPO_GENERICO_ROTA };
+    const r = motivoDeErro(errNovo, { advertiserJaConfirmado: true, advertiserId: '753060' });
+    assert.equal(r.motivo, 'sem_anuncios_ads');
+    assert.match(r.mensagem, /nenhum anúncio patrocinado ativo/);
+    assert.match(r.mensagem, /token de acesso desta conta foi gerado antes/);
+  });
+
+  test('404 com mensagem ESPECÍFICA (não a genérica de rota) usa a mensagem padrão de sem_anuncios_ads, sem citar as duas causas da genérica', () => {
+    const errNovo = new Error('not found'); errNovo.status = 404; errNovo.data = { message: 'No active campaigns found for this advertiser in the given period' };
+    errNovo.detalheFormatoClassico = { endpoint: '/753060/product_ads/items?x', status: 404, mensagem: 'idem', corpoResposta: { message: 'No active campaigns found for this advertiser in the given period' } };
+    const r = motivoDeErro(errNovo, { advertiserJaConfirmado: true, advertiserId: '753060' });
+    assert.equal(r.motivo, 'sem_anuncios_ads');
+    assert.doesNotMatch(r.mensagem, /token de acesso desta conta foi gerado antes/);
+  });
+
+  test('sem detalheFormatoClassico (só um formato foi tentado) mas com a mensagem genérica -> ainda assim cita as duas causas', () => {
+    const errNovo = new Error('not found'); errNovo.status = 404; errNovo.data = CORPO_GENERICO_ROTA;
+    const r = motivoDeErro(errNovo, { advertiserJaConfirmado: true, advertiserId: '753060' });
+    assert.equal(r.motivo, 'sem_anuncios_ads');
+    assert.match(r.mensagem, /token de acesso desta conta foi gerado antes/);
+  });
+});
+
 describe('mlAds — motivoDeErro nunca diz "sem anunciante" quando o anunciante já foi confirmado', () => {
   test('404 comum (sem contexto) continua sendo "sem_anunciante"', () => {
     const err = new Error('not found'); err.status = 404;
