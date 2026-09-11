@@ -31,7 +31,7 @@ describe('mlAds — fallback do endpoint novo para o clássico', () => {
         err.data = { error: 'resource not found', message: 'Si quieres conocer los recursos...' };
         throw err;
       }
-      if (path.startsWith('/v1/753060/product_ads/items')) {
+      if (path.startsWith('/753060/product_ads/items')) {
         return { results: [{ item_id: 'MLB1', metrics: { clicks: 5, cost: 10 } }], paging: { total: 1 } };
       }
       throw new Error('path inesperado: ' + path);
@@ -43,7 +43,9 @@ describe('mlAds — fallback do endpoint novo para o clássico', () => {
     assert.equal(r.itens[0].item_id, 'MLB1');
     assert.equal(chamadas.length, 2, 'tentou o novo primeiro, depois o clássico');
     assert.match(chamadas[0], /^\/marketplace\/advertising\//);
-    assert.match(chamadas[1], /^\/v1\/753060\/product_ads\/items/);
+    // CORREÇÃO (11/09/2026): o formato clássico real NÃO tem prefixo `/v1/`
+    // — testado ao vivo contra a conta PFEMBALAGEMS, ver lib/mlAds.js.
+    assert.match(chamadas[1], /^\/753060\/product_ads\/items/);
   });
 
   test('erro 401/403 (sem acesso) NUNCA tenta o formato clássico — não é um problema de endpoint errado', async () => {
