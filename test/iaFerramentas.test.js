@@ -459,6 +459,59 @@ describe(
       assert.equal(resultado.quantidadePedidos.anterior, esperadoAnterior.qtdPedidos);
     });
 
+    // ---- comparacao_periodo_anterior com datas explícitas: pedido do
+    // usuário em 11/09/2026 ("quero saber das datas 01-08 até 10-08
+    // comparado a 01-09 a 10-09") — a IA respondia que não conseguia
+    // alterar o período manualmente. Cada teste recalcula manualmente com a
+    // MESMA fonte canônica (buscarPedidosDoPeriodo + resumirPeriodo), igual
+    // ao padrão já usado no teste do modo padrão logo acima.
+    test('comparacao_periodo_anterior com periodoA/periodoB explícitos: usa exatamente as datas informadas, ignora o período do cabeçalho', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: '30d' }); // cabeçalho não deve influenciar o resultado
+      const periodoADesde = '2026-08-01';
+      const periodoAAte = '2026-08-05';
+      const periodoBDesde = '2026-07-01';
+      const periodoBAte = '2026-07-05';
+
+      const resultado = await executarFerramenta('comparacao_periodo_anterior', { periodoADesde, periodoAAte, periodoBDesde, periodoBAte }, ctx);
+
+      assert.equal(resultado.periodoAtual.desde, periodoADesde);
+      assert.equal(resultado.periodoAtual.ate, periodoAAte);
+      assert.equal(resultado.periodoAnterior.desde, periodoBDesde);
+      assert.equal(resultado.periodoAnterior.ate, periodoBAte);
+
+      const { inicioDoDiaBRTDeString } = require('../lib/periodo');
+      const UM_DIA_MS = 24 * 60 * 60 * 1000;
+      const [{ pedidos: pedidosA }, { pedidos: pedidosB }] = await Promise.all([
+        buscarPedidosDoPeriodo({ empresaId: EMPRESA_REAL_ID, desde: inicioDoDiaBRTDeString(periodoADesde), ate: new Date(inicioDoDiaBRTDeString(periodoAAte).getTime() + UM_DIA_MS) }),
+        buscarPedidosDoPeriodo({ empresaId: EMPRESA_REAL_ID, desde: inicioDoDiaBRTDeString(periodoBDesde), ate: new Date(inicioDoDiaBRTDeString(periodoBAte).getTime() + UM_DIA_MS) }),
+      ]);
+      const esperadoA = resumirPeriodo(pedidosA);
+      const esperadoB = resumirPeriodo(pedidosB);
+      assert.equal(resultado.faturamento.atual.valor, esperadoA.faturamento.valor);
+      assert.equal(resultado.faturamento.anterior.valor, esperadoB.faturamento.valor);
+      assert.equal(resultado.quantidadePedidos.atual, esperadoA.qtdPedidos);
+      assert.equal(resultado.quantidadePedidos.anterior, esperadoB.qtdPedidos);
+    });
+
+    test('comparacao_periodo_anterior: datas explícitas incompletas/inválidas nunca quebram nem inventam — devolvem erro claro', async () => {
+      const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: '30d' });
+
+      const faltandoAsOutras3 = await executarFerramenta('comparacao_periodo_anterior', { periodoADesde: '2026-08-01' }, ctx);
+      assert.ok(faltandoAsOutras3.erro);
+
+      const formatoInvalido = await executarFerramenta('comparacao_periodo_anterior', { periodoADesde: '01/08/2026', periodoAAte: '2026-08-05', periodoBDesde: '2026-07-01', periodoBAte: '2026-07-05' }, ctx);
+      assert.ok(formatoInvalido.erro);
+
+      const dataQueNaoExiste = await executarFerramenta('comparacao_periodo_anterior', { periodoADesde: '2026-02-30', periodoAAte: '2026-08-05', periodoBDesde: '2026-07-01', periodoBAte: '2026-07-05' }, ctx);
+      assert.ok(dataQueNaoExiste.erro);
+
+      const ateAntesDoDesde = await executarFerramenta('comparacao_periodo_anterior', { periodoADesde: '2026-08-10', periodoAAte: '2026-08-01', periodoBDesde: '2026-07-01', periodoBAte: '2026-07-05' }, ctx);
+      assert.ok(ateAntesDoDesde.erro);
+
+      const janelaEnorme = await executarFerramenta('comparacao_periodo_anterior', { periodoADesde: '2020-01-01', periodoAAte: '2026-01-01', periodoBDesde: '2026-07-01', periodoBAte: '2026-07-05' }, ctx);
+      assert.ok(janelaEnorme.erro);
+    });
+
     test('consultar_documentacao: tema conhecido devolve texto; tema desconhecido devolve a lista de temas disponíveis (nunca inventa explicação)', async () => {
       const ctx = criarContexto({ empresaId: EMPRESA_REAL_ID, periodoChave: 'hoje' });
       const conhecido = await executarFerramenta('consultar_documentacao', { tema: 'ads' }, ctx);
