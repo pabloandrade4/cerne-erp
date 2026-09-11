@@ -38,6 +38,7 @@ const performanceAnunciosRouter = require('./routes/performanceAnuncios');
 const visitasConversaoRouter = require('./routes/visitasConversao');
 const margemAnuncioRouter = require('./routes/margemAnuncio');
 const alertasRouter = require('./routes/alertas');
+const whatsappRouter = require('./routes/whatsapp');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -78,6 +79,7 @@ app.use('/api/performance-anuncios', performanceAnunciosRouter);
 app.use('/api/visitas-conversao', visitasConversaoRouter);
 app.use('/api/margem-anuncio', margemAnuncioRouter);
 app.use('/api/alertas', alertasRouter);
+app.use('/api/integracoes/whatsapp', whatsappRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
