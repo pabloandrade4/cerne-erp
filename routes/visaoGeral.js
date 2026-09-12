@@ -14,9 +14,9 @@ const router = express.Router();
 // GET /api/visao-geral/painel?empresaId=ID&periodo=30d
 router.get('/painel', async (req, res, next) => {
   try {
-    const { empresaId, periodo } = req.query;
+    const { empresaId, periodo, desde, ate } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
-    const resultado = await painelVisaoGeral({ empresaId, periodoChave: periodo });
+    const resultado = await painelVisaoGeral({ empresaId, periodoChave: periodo, desde, ate });
     res.json(resultado);
   } catch (err) { next(err); }
 });

@@ -1411,9 +1411,21 @@
     { chave:'7d', label:'Últimos 7 dias' },
     { chave:'30d', label:'Últimos 30 dias' },
     { chave:'mes', label:'Este mês' },
+    // Adicionado em 12/09/2026 (pedido explícito do usuário): poder
+    // escolher qualquer intervalo de datas, não só os períodos prontos —
+    // em TODA aba que usa este filtro do cabeçalho (a maioria do ERP, ver
+    // lib/periodo.js). Mesma opção que Fluxo de Caixa/DRE já tinham no
+    // período PRÓPRIO deles.
+    { chave:'personalizado', label:'Personalizado' },
   ];
+  function hojeBRTStr(){
+    const BRT_OFFSET_MS = 3*60*60*1000;
+    const brt = new Date(Date.now() - BRT_OFFSET_MS);
+    const p = n => String(n).padStart(2,'0');
+    return brt.getUTCFullYear()+'-'+p(brt.getUTCMonth()+1)+'-'+p(brt.getUTCDate());
+  }
   window.CerneFiltro = (function(){
-    const state = { empresas:[], empresaId:null, loadingEmpresas:true, periodo:'30d' };
+    const state = { empresas:[], empresaId:null, loadingEmpresas:true, periodo:'30d', desdePersonalizado:null, atePersonalizado:null };
     const listeners = [];
     function onChange(fn){ listeners.push(fn); }
     function notify(){ listeners.forEach(fn=>{ try{ fn(state); }catch(e){} }); }
@@ -1459,19 +1471,51 @@
       lbl.textContent = emp ? (emp.nomeFantasia||emp.razaoSocial) : 'Nenhuma empresa ativa';
     }
 
+    function fmtDataBR(iso){
+      if(!iso) return '';
+      const partes = String(iso).slice(0,10).split('-');
+      return partes.length===3 ? (partes[2]+'/'+partes[1]) : iso;
+    }
+
+    // O formulário De/Até só aparece dentro do dropdown quando 'personalizado'
+    // já é a escolha atual — clicar em "Personalizado" na lista já ativa o
+    // período (com um valor padrão de datas) e mostra o formulário pra
+    // ajustar; reabrir o dropdown depois também mostra o formulário, sempre
+    // com as datas atualmente aplicadas, pra dar pra mudar sem escolher a
+    // opção de novo.
     function renderPeriodDropdown(){
       const dd = document.getElementById('periodDropdown');
       if(!dd) return;
+      const personalizadoAtivo = state.periodo === 'personalizado';
       dd.innerHTML = '<div class="dropdown-title">Período (Visão Geral)</div>' + HEADER_PERIODOS.map(p =>
         '<div class="dropdown-item" data-periodo="'+p.chave+'">'
           + '<div class="di-name">'+p.label+'</div>'
           + '<span class="dot'+(p.chave===state.periodo?'':' muted')+'"></span>'
         + '</div>'
-      ).join('');
+      ).join('')
+      + (personalizadoAtivo
+        ? '<div style="padding:10px 14px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;" onclick="event.stopPropagation()">'
+            + '<div class="field narrow" style="margin:0;"><label style="font-size:11px;">De</label><input type="date" id="headerPeriodoDesde" value="'+(state.desdePersonalizado||'')+'" style="width:132px;"></div>'
+            + '<div class="field narrow" style="margin:0;"><label style="font-size:11px;">Até</label><input type="date" id="headerPeriodoAte" value="'+(state.atePersonalizado||'')+'" style="width:132px;"></div>'
+            + '<button class="ghost-btn" id="headerPeriodoAplicar" type="button" style="cursor:pointer;opacity:1;">Aplicar</button>'
+          + '</div>'
+        : '');
       dd.querySelectorAll('[data-periodo]').forEach(item=>{
         item.addEventListener('click', (e)=>{
           e.stopPropagation();
           const chave = item.dataset.periodo;
+          if(chave === 'personalizado'){
+            // Fica com o dropdown aberto pra escolher/confirmar as datas —
+            // nunca fecha nem notifica só por clicar na opção.
+            if(!state.desdePersonalizado) state.desdePersonalizado = hojeBRTStr();
+            if(!state.atePersonalizado) state.atePersonalizado = hojeBRTStr();
+            const jaEstavaPersonalizado = state.periodo === 'personalizado';
+            state.periodo = 'personalizado';
+            renderPeriodDropdown();
+            updatePeriodLabel();
+            if(!jaEstavaPersonalizado) notify();
+            return;
+          }
           dd.classList.remove('open');
           if(chave === state.periodo) return;
           state.periodo = chave;
@@ -1480,13 +1524,37 @@
           notify();
         });
       });
+      const aplicar = document.getElementById('headerPeriodoAplicar');
+      if(aplicar){
+        aplicar.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const d = document.getElementById('headerPeriodoDesde').value;
+          const a = document.getElementById('headerPeriodoAte').value;
+          state.desdePersonalizado = d || state.desdePersonalizado || hojeBRTStr();
+          state.atePersonalizado = a || state.atePersonalizado || hojeBRTStr();
+          dd.classList.remove('open');
+          updatePeriodLabel();
+          notify();
+        });
+      }
+    }
+
+    // Reaproveitado por outras telas que precisam mostrar o período atual em
+    // texto (ex.: IA Gestora) — nunca duplica a lógica de formatação.
+    function periodoLabel(){
+      if(state.periodo === 'personalizado'){
+        return state.desdePersonalizado && state.atePersonalizado
+          ? (fmtDataBR(state.desdePersonalizado)+' – '+fmtDataBR(state.atePersonalizado))
+          : 'Personalizado';
+      }
+      const p = HEADER_PERIODOS.find(p => p.chave === state.periodo);
+      return p ? p.label : '';
     }
 
     function updatePeriodLabel(){
       const lbl = document.getElementById('periodLabel');
       if(!lbl) return;
-      const p = HEADER_PERIODOS.find(p => p.chave === state.periodo);
-      lbl.textContent = p ? p.label : '';
+      lbl.textContent = periodoLabel();
     }
 
     let empresasFetchEmAndamento = null;
@@ -1517,7 +1585,17 @@
     updatePeriodLabel();
     carregarEmpresas();
 
-    return { state, onChange, refreshEmpresas: carregarEmpresas };
+    // Fragmento de query string ('' ou '&desde=...&ate=...') pra toda tela
+    // que usa este filtro anexar na própria chamada de API sempre que o
+    // período for personalizado — nunca precisa duplicar a checagem
+    // `periodo==='personalizado'` em cada tela.
+    function periodoExtra(){
+      if(state.periodo !== 'personalizado') return '';
+      const d = state.desdePersonalizado || '', a = state.atePersonalizado || '';
+      return (d ? '&desde='+encodeURIComponent(d) : '') + (a ? '&ate='+encodeURIComponent(a) : '');
+    }
+
+    return { state, onChange, refreshEmpresas: carregarEmpresas, periodoExtra, periodoLabel };
   })();
 
   /* ---------- SINCRONIZAÇÃO AUTOMÁTICA DO MERCADO LIVRE (indicador discreto) ----------
@@ -2059,8 +2137,8 @@
     function pctFmt(v){ return v===null||v===undefined ? null : (v<0?'− ':'')+Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
     function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
 
-    async function apiResumo(empresaId, periodo){
-      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo);
+    async function apiResumo(empresaId, periodo, extra){
+      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os indicadores.');
       return body;
@@ -2071,8 +2149,8 @@
     // Empresas e Alertas & IA (lib/visaoGeralPainel.js). Buscado em
     // paralelo e com erro isolado: se este falhar, os indicadores/gráfico
     // principal (que não dependem dele) continuam aparecendo normalmente.
-    async function apiPainel(empresaId, periodo){
-      const res = await fetch('/api/visao-geral/painel?empresaId='+empresaId+'&periodo='+periodo);
+    async function apiPainel(empresaId, periodo, extra){
+      const res = await fetch('/api/visao-geral/painel?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os indicadores adicionais.');
       return body;
@@ -2082,9 +2160,10 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.error = null; state.painel = null; state.painelError = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; state.painelError = null; render();
+      const extra = window.CerneFiltro.periodoExtra();
       const [resumoResult, painelResult] = await Promise.allSettled([
-        apiResumo(filtro.empresaId, filtro.periodo),
-        apiPainel(filtro.empresaId, filtro.periodo),
+        apiResumo(filtro.empresaId, filtro.periodo, extra),
+        apiPainel(filtro.empresaId, filtro.periodo, extra),
       ]);
       if(resumoResult.status==='fulfilled'){ state.data = resumoResult.value; state.error = null; }
       else { state.data = null; state.error = resumoResult.reason.message; }
@@ -2522,12 +2601,14 @@
     const apiListarConversas = (empresaId) => apiIa('/conversas?empresaId='+empresaId);
     const apiAbrirConversa = (id) => apiIa('/conversas/'+id);
     const apiExcluirConversa = (id) => apiIa('/conversas/'+id, { method:'DELETE' });
-    const apiPerguntar = (empresaId, periodo, pergunta, conversaId) => apiIa('/perguntar', { method:'POST', body: JSON.stringify({ empresaId, periodo, pergunta, conversaId: conversaId||undefined }) });
+    // `desde`/`ate` só valem quando periodo==='personalizado' (mesma regra
+    // de lib/periodo.js) — passados sempre que o filtro do cabeçalho os tiver.
+    const apiPerguntar = (empresaId, periodo, pergunta, conversaId, desde, ate) => apiIa('/perguntar', { method:'POST', body: JSON.stringify({ empresaId, periodo, desde, ate, pergunta, conversaId: conversaId||undefined }) });
     const apiRadarResumo = (empresaId) => apiIa('/radar-resumo?empresaId='+empresaId);
     // Mesmo endpoint reaproveitado por Pedidos nesta sessão — não é uma rota
     // da IA Gestora, é o resumo geral de vendas já usado em outras telas.
-    async function apiResumoVendas(empresaId, periodo){
-      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo);
+    async function apiResumoVendas(empresaId, periodo, extra){
+      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Falha ao carregar os indicadores.');
       return body;
@@ -2539,9 +2620,7 @@
       return emp ? (emp.nomeFantasia || emp.razaoSocial) : null;
     }
     function periodoAtualLabel(){
-      const chave = window.CerneFiltro.state.periodo;
-      const def = HEADER_PERIODOS.find(p => p.chave === chave);
-      return def ? def.label : chave;
+      return window.CerneFiltro.periodoLabel();
     }
 
     async function carregarConversas(){
@@ -2576,7 +2655,7 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.resumoInsights = null; return; }
       state.loadingResumoInsights = true; render();
-      try{ state.resumoInsights = await apiResumoVendas(filtro.empresaId, filtro.periodo); }
+      try{ state.resumoInsights = await apiResumoVendas(filtro.empresaId, filtro.periodo, window.CerneFiltro.periodoExtra()); }
       catch(e){ state.resumoInsights = null; }
       state.loadingResumoInsights = false; render();
     }
@@ -2978,7 +3057,7 @@
       render();
 
       try{
-        const resp = await apiPerguntar(filtro.empresaId, filtro.periodo, texto, state.conversaId);
+        const resp = await apiPerguntar(filtro.empresaId, filtro.periodo, texto, state.conversaId, filtro.desdePersonalizado, filtro.atePersonalizado);
         const ehErro = resp.aviso === 'nao_configurada' || resp.aviso === 'erro_provedor' || resp.aviso === 'limite_rodadas';
         state.conversaId = resp.conversaId;
         state.messages.push({ id: resp.mensagemId, papel: 'assistente', texto: resp.resposta, estrutura: resp.estrutura, ferramentasUsadas: resp.ferramentasUsadas, aviso: resp.aviso, erro: ehErro });
@@ -3011,10 +3090,17 @@
       { chave:'7d', label:'Últimos 7 dias' },
       { chave:'30d', label:'Últimos 30 dias' },
       { chave:'mes', label:'Este mês' },
+      { chave:'personalizado', label:'Personalizado' },
     ];
-    const state = { empresas:[], empresaId:null, loadingEmpresas:false, periodo:'30d', contaId:'', status:'', busca:'',
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, periodo:'30d', desdePersonalizado:null, atePersonalizado:null, contaId:'', status:'', busca:'',
       items:[], totalNoPeriodo:0, totalFiltrado:0, periodoLabel:'', filtrosDisponiveis:{lojas:[],status:[]}, loading:false, error:null, gerandoRelatorio:false,
       resumo:null, loadingResumo:false };
+    function hojeBRT(){
+      const BRT_OFFSET_MS = 3*60*60*1000;
+      const brt = new Date(Date.now() - BRT_OFFSET_MS);
+      const p = n => String(n).padStart(2,'0');
+      return brt.getUTCFullYear()+'-'+p(brt.getUTCMonth()+1)+'-'+p(brt.getUTCDate());
+    }
 
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
@@ -3069,8 +3155,10 @@
     // filtros de loja/status/produto da tabela abaixo, porque essa rota não
     // tem esses filtros — nunca deixe de mostrar diferente do que os filtros
     // extras sugerem: por isso a nota abaixo dos cards).
-    async function apiResumoVendas(empresaId, periodo){
-      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo);
+    async function apiResumoVendas(empresaId, periodo, desde, ate){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
+      const res = await fetch('/api/relatorios/resumo-vendas?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Falha ao carregar os indicadores.');
       return body;
@@ -3078,13 +3166,14 @@
     async function loadResumo(){
       if(!state.empresaId){ state.resumo = null; return; }
       state.loadingResumo = true; render();
-      try{ state.resumo = await apiResumoVendas(state.empresaId, state.periodo); }
+      try{ state.resumo = await apiResumoVendas(state.empresaId, state.periodo, state.desdePersonalizado, state.atePersonalizado); }
       catch(err){ state.resumo = null; }
       state.loadingResumo = false; render();
     }
 
     function queryFiltrosAtuais(){
       const params = new URLSearchParams({ empresaId: state.empresaId, periodo: state.periodo });
+      if(state.periodo === 'personalizado'){ if(state.desdePersonalizado) params.set('desde', state.desdePersonalizado); if(state.atePersonalizado) params.set('ate', state.atePersonalizado); }
       if(state.contaId) params.set('contaId', state.contaId);
       if(state.status) params.set('status', state.status);
       if(state.busca.trim()) params.set('busca', state.busca.trim());
@@ -3163,6 +3252,14 @@
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedPeriodoSelect">'
             + PERIODOS.map(pr=>'<option value="'+pr.chave+'" '+(pr.chave===state.periodo?'selected':'')+'>'+pr.label+'</option>').join('')
           + '</select></div>'
+          + (state.periodo === 'personalizado'
+              ? '<div class="empresa-picker" style="margin-bottom:0;display:flex;gap:6px;align-items:center;">'
+                + '<input type="date" id="pedDesdeInput" value="'+(state.desdePersonalizado||'')+'" style="padding:6px 8px;">'
+                + '<span style="color:var(--text-muted);">até</span>'
+                + '<input type="date" id="pedAteInput" value="'+(state.atePersonalizado||'')+'" style="padding:6px 8px;">'
+                + '<button class="ghost-btn" id="pedAplicarPeriodo" type="button" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Aplicar</span></button>'
+              + '</div>'
+              : '')
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedLojaSelect">'
             + '<option value="">Todas as lojas</option>'
             + state.filtrosDisponiveis.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
@@ -3238,7 +3335,21 @@
       const sel = document.getElementById('pedEmpresaSelect');
       if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadResumo(); loadPedidos(); });
       const selPer = document.getElementById('pedPeriodoSelect');
-      if(selPer) selPer.addEventListener('change', ()=>{ state.periodo = selPer.value; loadResumo(); loadPedidos(); });
+      if(selPer) selPer.addEventListener('change', ()=>{
+        state.periodo = selPer.value;
+        if(state.periodo === 'personalizado'){
+          if(!state.desdePersonalizado) state.desdePersonalizado = hojeBRT();
+          if(!state.atePersonalizado) state.atePersonalizado = hojeBRT();
+        }
+        loadResumo(); loadPedidos();
+      });
+      const pedAplicarPeriodo = document.getElementById('pedAplicarPeriodo');
+      if(pedAplicarPeriodo) pedAplicarPeriodo.addEventListener('click', ()=>{
+        const d = document.getElementById('pedDesdeInput').value || hojeBRT();
+        const a = document.getElementById('pedAteInput').value || hojeBRT();
+        state.desdePersonalizado = d; state.atePersonalizado = a;
+        loadResumo(); loadPedidos();
+      });
       const syncBtn = document.getElementById('pedSyncBtn');
       if(syncBtn) syncBtn.addEventListener('click', async ()=>{
         syncBtn.disabled = true;
@@ -4937,6 +5048,7 @@
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
         if(state.status !== 'todos') params.set('status', state.status);
         if(state.search.trim()) params.set('search', state.search.trim());
         const data = await api('?'+params.toString(), { method:'GET' });
@@ -5484,6 +5596,7 @@
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
         if(state.status !== 'todos') params.set('status', state.status);
         if(state.search.trim()) params.set('search', state.search.trim());
         const data = await api('?'+params.toString(), { method:'GET' });
@@ -5746,6 +5859,7 @@
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
         const [data] = await Promise.all([ api('?'+params.toString()), loadContasBancarias() ]);
         state.recebimentos = data.recebimentos;
       }catch(err){ state.error = err.message || 'Não foi possível carregar os recebimentos.'; }
@@ -7066,6 +7180,7 @@
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
         if(state.status !== 'todos') params.set('status', state.status);
         if(state.search.trim()) params.set('search', state.search.trim());
         const data = await api('?'+params.toString(), { method:'GET' });
@@ -7243,6 +7358,7 @@
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
         if(state.status !== 'todos') params.set('status', state.status);
         if(state.search.trim()) params.set('search', state.search.trim());
         const data = await api('?'+params.toString(), { method:'GET' });
@@ -7636,9 +7752,10 @@
     function intFmt(v){ return v===null||v===undefined ? pendenteSync() : Number(v).toLocaleString('pt-BR'); }
     function fmtDiaCurto(diaISO){ const [, m, d] = diaISO.split('-'); return d+'/'+m; }
 
-    async function apiAds(empresaId, periodo, contaId){
+    async function apiAds(empresaId, periodo, contaId, desde, ate){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
       const res = await fetch('/api/ads?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os dados de Ads.');
@@ -7669,7 +7786,7 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; render();
-      try{ state.data = await apiAds(filtro.empresaId, filtro.periodo, state.contaId); }
+      try{ state.data = await apiAds(filtro.empresaId, filtro.periodo, state.contaId, filtro.desdePersonalizado, filtro.atePersonalizado); }
       catch(err){ state.error = err.message; state.data = null; }
       state.loading = false; render();
     }
@@ -8017,11 +8134,12 @@
       + '</span>';
     }
 
-    async function apiPerformance(empresaId, periodo, contaId, sku, status){
+    async function apiPerformance(empresaId, periodo, contaId, sku, status, desde, ate){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
       if(sku) params.set('sku', sku);
       if(status) params.set('status', status);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
       const res = await fetch('/api/performance-anuncios?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Performance de Anúncios.');
@@ -8032,7 +8150,7 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; render();
-      try{ state.data = await apiPerformance(filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.status); }
+      try{ state.data = await apiPerformance(filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.status, filtro.desdePersonalizado, filtro.atePersonalizado); }
       catch(err){ state.error = err.message; state.data = null; }
       state.loading = false; render();
     }
@@ -8342,10 +8460,11 @@
       + '</span>';
     }
 
-    async function apiVisitas(empresaId, periodo, contaId, sku){
+    async function apiVisitas(empresaId, periodo, contaId, sku, desde, ate){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
       if(sku) params.set('sku', sku);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
       const res = await fetch('/api/visitas-conversao?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Visitas e Conversão.');
@@ -8356,7 +8475,7 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; render();
-      try{ state.data = await apiVisitas(filtro.empresaId, filtro.periodo, state.contaId, state.sku); }
+      try{ state.data = await apiVisitas(filtro.empresaId, filtro.periodo, state.contaId, state.sku, filtro.desdePersonalizado, filtro.atePersonalizado); }
       catch(err){ state.error = err.message; state.data = null; }
       state.loading = false; render();
     }
@@ -8703,10 +8822,11 @@
         + (ads.campanha?('<div class="cell-stack-sub">'+escapeHtml(ads.campanha)+'</div>'):'');
     }
 
-    async function apiMargem(empresaId, periodo, contaId, sku){
+    async function apiMargem(empresaId, periodo, contaId, sku, desde, ate){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
       if(sku) params.set('sku', sku);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
       const res = await fetch('/api/margem-anuncio?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Margem por Anúncio.');
@@ -8717,7 +8837,7 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; render();
-      try{ state.data = await apiMargem(filtro.empresaId, filtro.periodo, state.contaId, state.sku); }
+      try{ state.data = await apiMargem(filtro.empresaId, filtro.periodo, state.contaId, state.sku, filtro.desdePersonalizado, filtro.atePersonalizado); }
       catch(err){ state.error = err.message; state.data = null; }
       state.loading = false; render();
     }
@@ -9001,10 +9121,11 @@
       }catch(e){ return []; }
     }
 
-    async function apiCategoria(categoria, empresaId, periodo, contaId, sku, visaoProdutos){
+    async function apiCategoria(categoria, empresaId, periodo, contaId, sku, visaoProdutos, desde, ate){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
       if(categoria === 'produtos' && visaoProdutos !== 'caixa' && sku.trim()) params.set('sku', sku.trim());
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
       const path = categoria === 'vendas-margem' ? '/api/relatorios/vendas-margem'
         : categoria === 'produtos' ? (visaoProdutos === 'caixa' ? '/api/relatorios/produtos-por-caixa' : '/api/relatorios/produtos')
         : '/api/relatorios/marketplaces';
@@ -9020,7 +9141,7 @@
       state.loading = true; state.error = null; render();
       try{
         const [dados, lojas] = await Promise.all([
-          apiCategoria(state.categoria, filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.visaoProdutos),
+          apiCategoria(state.categoria, filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.visaoProdutos, filtro.desdePersonalizado, filtro.atePersonalizado),
           apiLojas(filtro.empresaId),
         ]);
         state.data = dados;
@@ -9043,6 +9164,7 @@
       const params = new URLSearchParams({ categoria: state.categoria, empresaId: filtro.empresaId, periodo: filtro.periodo, formato });
       if(state.contaId) params.set('contaId', state.contaId);
       if(state.categoria === 'produtos' && state.sku.trim()) params.set('sku', state.sku.trim());
+      if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
       window.location.href = '/api/relatorios/exportar?'+params.toString();
     }
 

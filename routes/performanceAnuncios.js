@@ -9,10 +9,10 @@ const router = express.Router();
 // GET /api/performance-anuncios?empresaId=ID&periodo=30d&contaId=&sku=&status=
 router.get('/', async (req, res, next) => {
   try {
-    const { empresaId, periodo, contaId, sku, status } = req.query;
+    const { empresaId, periodo, contaId, sku, status, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const { ate: ateStr, desde: desdeStr } = periodoParaDatasBRT(periodoCalc);
 
     const resultado = await gerarPerformanceAnuncios({

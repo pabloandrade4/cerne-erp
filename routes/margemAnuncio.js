@@ -9,10 +9,10 @@ const router = express.Router();
 // GET /api/margem-anuncio?empresaId=ID&periodo=30d&contaId=&sku=
 router.get('/', async (req, res, next) => {
   try {
-    const { empresaId, periodo, contaId, sku } = req.query;
+    const { empresaId, periodo, contaId, sku, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
 
     // `periodoChaveAds` é a mesma chave usada para ler ads_metricas_anuncio
     // (lib/ads.js — sincronizada em background pelas 5 janelas de

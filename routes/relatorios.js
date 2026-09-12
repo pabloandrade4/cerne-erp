@@ -23,10 +23,10 @@ const router = express.Router();
 // periodo: hoje | ontem | 7d | 30d (padrão) | mes
 router.get('/resumo-vendas', async (req, res, next) => {
   try {
-    const { empresaId, periodo } = req.query;
+    const { empresaId, periodo, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const { pedidos, totalNoPeriodo } = await buscarPedidosDoPeriodo({
       empresaId,
       desde: periodoCalc.desde,
@@ -51,9 +51,9 @@ function periodoInfo(periodoCalc) {
 // GET /api/relatorios/vendas-margem?empresaId=&periodo=&contaId=
 router.get('/vendas-margem', async (req, res, next) => {
   try {
-    const { empresaId, periodo, contaId } = req.query;
+    const { empresaId, periodo, contaId, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const { desde: desdeStr, ate: ateStr } = periodoParaDatasBRT(periodoCalc);
     const resultado = await relatorioVendasMargem({
       empresaId, contaId: contaId || null, periodoChave: periodoCalc.chave, desde: periodoCalc.desde, ate: periodoCalc.ate, desdeStr, ateStr,
@@ -65,9 +65,9 @@ router.get('/vendas-margem', async (req, res, next) => {
 // GET /api/relatorios/produtos?empresaId=&periodo=&contaId=&sku=
 router.get('/produtos', async (req, res, next) => {
   try {
-    const { empresaId, periodo, contaId, sku } = req.query;
+    const { empresaId, periodo, contaId, sku, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const resultado = await relatorioProdutos({
       empresaId, contaId: contaId || null, desde: periodoCalc.desde, ate: periodoCalc.ate, sku: sku || null,
     });
@@ -82,9 +82,9 @@ router.get('/produtos', async (req, res, next) => {
 // relatorioProdutosPorCaixa e docs/02-decisoes.md.
 router.get('/produtos-por-caixa', async (req, res, next) => {
   try {
-    const { empresaId, periodo, contaId } = req.query;
+    const { empresaId, periodo, contaId, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const resultado = await relatorioProdutosPorCaixa({
       empresaId, contaId: contaId || null, desde: periodoCalc.desde, ate: periodoCalc.ate,
     });
@@ -95,9 +95,9 @@ router.get('/produtos-por-caixa', async (req, res, next) => {
 // GET /api/relatorios/marketplaces?empresaId=&periodo=
 router.get('/marketplaces', async (req, res, next) => {
   try {
-    const { empresaId, periodo } = req.query;
+    const { empresaId, periodo, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const resultado = await relatorioMarketplaces({ empresaId, desde: periodoCalc.desde, ate: periodoCalc.ate });
     res.json({ periodo: periodoInfo(periodoCalc), ...resultado });
   } catch (err) { next(err); }
@@ -243,14 +243,14 @@ function linhasVendasMargem(resultado, totalUnidades) {
 // GET /api/relatorios/exportar?categoria=vendas-margem|produtos|marketplaces&empresaId=&periodo=&contaId=&sku=&formato=xlsx|csv
 router.get('/exportar', async (req, res, next) => {
   try {
-    const { empresaId, periodo, contaId, sku, categoria } = req.query;
+    const { empresaId, periodo, contaId, sku, categoria, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
     const categoriasValidas = ['vendas-margem', 'produtos', 'marketplaces'];
     if (!categoriasValidas.includes(categoria)) {
       return res.status(400).json({ error: 'Informe categoria: vendas-margem, produtos ou marketplaces.' });
     }
     const formato = ['xlsx', 'csv'].includes(String(req.query.formato)) ? req.query.formato : 'xlsx';
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const { empresaNome, lojaNome } = await nomesParaFiltro(empresaId, contaId);
 
     let colunas;

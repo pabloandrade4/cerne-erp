@@ -9,10 +9,10 @@ const router = express.Router();
 // GET /api/visitas-conversao?empresaId=ID&periodo=30d&contaId=&sku=
 router.get('/', async (req, res, next) => {
   try {
-    const { empresaId, periodo, contaId, sku } = req.query;
+    const { empresaId, periodo, contaId, sku, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const { desde: desdeStr, ate: ateStr } = periodoParaDatasBRT(periodoCalc);
 
     const resultado = await gerarVisitasConversao({

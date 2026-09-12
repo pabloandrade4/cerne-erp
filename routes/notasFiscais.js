@@ -9,10 +9,10 @@ const router = express.Router();
 // GET /api/notas-fiscais?empresaId=ID&periodo=30d&status=&search=
 router.get('/', async (req, res, next) => {
   try {
-    const { empresaId, periodo, status, search } = req.query;
+    const { empresaId, periodo, status, search, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const { itens, totalNoPeriodo } = await notasFiscais.listarNotasFiscais({
       empresaId,
       desde: periodoCalc.desde,

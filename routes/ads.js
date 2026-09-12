@@ -10,13 +10,23 @@ const { obterStatusSincronizacaoAds } = require('../lib/adsScheduler');
 
 const router = express.Router();
 
-// GET /api/ads?empresaId=ID&periodo=30d&contaId=
+// GET /api/ads?empresaId=ID&periodo=30d&contaId=&desde=&ate=
+// `desde`/`ate` (YYYY-MM-DD) só valem quando periodo=personalizado (ver
+// lib/periodo.js) — pedido explícito do usuário (12/09/2026) pra poder
+// escolher qualquer intervalo de datas nesta tela também. Os cards/gráfico
+// continuam vindo de ads_diario (já é dado dia a dia, cobre qualquer
+// intervalo sem mudança nenhuma); a tabela por anúncio, quando o período é
+// personalizado, busca a métrica AO VIVO na API do Mercado Livre pro
+// intervalo exato pedido (ver lib/ads.js#buscarMetricasPorAnuncio) — única
+// exceção deliberada à regra acima de nunca consultar a API dentro da
+// requisição HTTP, porque não dá pra pré-sincronizar em segundo plano todo
+// intervalo de datas possível que o usuário decida escolher.
 router.get('/', async (req, res, next) => {
   try {
-    const { empresaId, periodo, contaId } = req.query;
+    const { empresaId, periodo, contaId, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const { desde: desdeStr, ate: ateStr } = periodoParaDatasBRT(periodoCalc);
 
     // Cards "Gasto hoje"/"Gasto no mês" são sempre a data real de hoje em
