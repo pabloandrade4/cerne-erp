@@ -1176,4 +1176,49 @@ ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS conta_bancaria_id INTEGER REFE
 ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS categoria_id INTEGER REFERENCES categorias_financeiras(id);
 ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS conta_pagar_id INTEGER REFERENCES contas_pagar(id);
 ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS conta_receber_id INTEGER REFERENCES contas_receber(id);
+
+-- ============================================================
+-- Etapa: IA de Promoções — Fase A (13/09/2026)
+-- Pedido do usuário: módulo que analisa anúncios do Mercado Livre e
+-- recomenda entrar/sair de promoções olhando a margem REAL — mas hoje o
+-- aplicativo cadastrado no Mercado Livre Developers tem (segundo o próprio
+-- usuário) só permissão de LEITURA, então esta primeira fase é só a base:
+-- nenhuma tabela/coluna aqui guarda nada que a IA "decidiu aplicar" de
+-- verdade — isso só existe a partir da Fase B/E (ver docs/plano-ia-promocoes).
+-- ============================================================
+
+-- ml_contas.escopo_oauth: guarda O TEXTO EXATO que o Mercado Livre devolve
+-- no campo `scope` da resposta de autenticação (ex.: "offline_access read
+-- write") — capturado de graça tanto na conexão inicial
+-- (routes/integracoes.js#/callback) quanto em toda renovação de token
+-- (lib/mlSync.js#getContaComTokenValido), sem nenhuma chamada nova à API.
+-- ATENÇÃO (documentado em lib/mlPermissoes.js): esse campo é só
+-- INFORMATIVO — ver por que ele sozinho não prova que a Central de
+-- Promoções aceita escrita. Quem manda de verdade é
+-- config_promocoes.permite_escrita_ml, controlado manualmente pelo usuário.
+ALTER TABLE ml_contas ADD COLUMN IF NOT EXISTS escopo_oauth VARCHAR(255);
+
+-- Configuração da IA de Promoções, por empresa. `permite_escrita_ml` nasce
+-- SEMPRE false e só deve virar true manualmente pelo usuário, depois de
+-- confirmar (no painel do Mercado Livre Developers) que a Central de
+-- Promoções foi liberada para leitura E escrita, E de reconectar a conta
+-- (novo OAuth) — reautorizar é obrigatório porque um token já emitido não
+-- ganha permissão nova sozinho. Nenhum código desta primeira fase executa
+-- ação de escrita de verdade; esta coluna só existe pra já deixar a
+-- arquitetura pronta pra quando isso for construído (Fase E).
+CREATE TABLE IF NOT EXISTS config_promocoes (
+  empresa_id           INTEGER PRIMARY KEY REFERENCES empresas(id),
+  margem_minima_pct    NUMERIC(5,2) NOT NULL DEFAULT 14,   -- % — abaixo disso a IA marca "NÃO RECOMENDADA"
+  desconto_maximo_pct  NUMERIC(5,2),                        -- opcional — trava futura do modo automático (Fase E)
+  estoque_minimo       INTEGER,                             -- opcional — idem
+  vendas_minimas_30d   INTEGER,                             -- opcional — idem ("não mexer com menos de X vendas")
+  permite_full         BOOLEAN NOT NULL DEFAULT true,
+  permite_proprio      BOOLEAN NOT NULL DEFAULT true,
+  modo_ia              VARCHAR(30) NOT NULL DEFAULT 'somente_analisar',
+    -- 'somente_analisar' | 'sugerir_aprovar' | 'automatico' — só
+    -- 'somente_analisar' funciona nesta fase; os outros dois exigem escrita
+    -- liberada (Fase E) e ficam bloqueados no backend até lá.
+  permite_escrita_ml   BOOLEAN NOT NULL DEFAULT false,
+  atualizado_em        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS transferencia_interna BOOLEAN NOT NULL DEFAULT false;
