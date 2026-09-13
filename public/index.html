@@ -1176,6 +1176,8 @@
         bullets:['Conversão = pedidos ÷ visitas × 100','Ranking de mais/menos visitados e melhor/pior conversão','Gráficos de visitas x vendas e conversão no tempo','Nunca inventa número de visita'] },
       { id:'margemAnuncio', title:'Margem por Anúncio', icon:'wallet', desc:'Margem de contribuição real de cada anúncio, antes e depois do Ads — mesma fórmula de Pedidos, Financeiro e Relatórios.',
         bullets:['Faturamento, custo, imposto, tarifas e frete por anúncio','Resultado após Ads (margem − investimento)','Rankings de maior resultado, prejuízo e margem %','Sinaliza margem incompleta quando falta custo do SKU'] },
+      { id:'promocoesIa', title:'IA de Promoções', icon:'sparkle', desc:'A IA analisa seus anúncios do Mercado Livre e recomenda entrar ou sair de promoções, sempre calculando a margem real — nunca só pelo percentual de desconto.',
+        bullets:['Status da integração: leitura ou leitura e escrita','Margem mínima configurável por empresa','Recomendação explicada anúncio por anúncio (próxima etapa)','Nunca aplica nada sem permissão de escrita e sua confirmação'] },
       { id:'reports', title:'Relatórios', icon:'lineChart', action:'Novo relatório', desc:'Relatórios operacionais e financeiros configuráveis.',
         bullets:['Relatórios pré-configurados','Exportação em Excel e PDF','Filtros por empresa, canal e período','Relatórios agendados'] },
     ]},
@@ -1252,7 +1254,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','reports','iaGestora','alerts'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1313,6 +1315,7 @@
     else if(id === 'performanceAnuncios'){ inner += '<div id="performanceAnunciosRoot"></div>'; }
     else if(id === 'visitasConversao'){ inner += '<div id="visitasConversaoRoot"></div>'; }
     else if(id === 'margemAnuncio'){ inner += '<div id="margemAnuncioRoot"></div>'; }
+    else if(id === 'promocoesIa'){ inner += '<div id="promocoesIaRoot"></div>'; }
     else if(id === 'reports'){ inner += '<div id="relatoriosRoot"></div>'; }
     else if(id === 'alerts'){ inner += '<div id="alertasRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
@@ -1360,6 +1363,7 @@
     if(id === 'performanceAnuncios' && window.PerformanceAnuncios) window.PerformanceAnuncios.load(queryStr);
     if(id === 'visitasConversao' && window.VisitasConversao) window.VisitasConversao.load(queryStr);
     if(id === 'margemAnuncio' && window.MargemAnuncio) window.MargemAnuncio.load(queryStr);
+    if(id === 'promocoesIa' && window.PromocoesIA) window.PromocoesIA.load();
     if(id === 'reports' && window.Relatorios) window.Relatorios.load();
     if(id === 'alerts' && window.Alertas) window.Alertas.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
@@ -9090,6 +9094,169 @@
     }
 
     window.MargemAnuncio = { load };
+  })();
+
+  /* ================= IA DE PROMOÇÕES — Fase A (13/09/2026) =================
+     Pedido do usuário: módulo que analisa anúncios do Mercado Livre e
+     recomenda entrar/sair de promoções olhando a margem real. Esta
+     primeira fase NÃO tem o motor de análise ainda (precisa antes
+     confirmar, com dado real da API, o formato dos itens de cada
+     promoção — ver routes/promocoes.js#/diagnostico-itens) — mostra só:
+     1) o card "Integração Mercado Livre" (leitura vs. leitura+escrita,
+        pedido explícito do usuário na seção 0), nunca decidido por
+        adivinhação — ver lib/mlPermissoes.js;
+     2) a configuração da margem mínima (seção 3), que o motor de análise
+        (próxima fase) já vai usar assim que existir.
+     Usa o filtro do topo (window.CerneFiltro) pra empresa, mesmo padrão de
+     Margem por Anúncio/Ads/Performance de Anúncios. */
+  (function(){
+    const state = { statusIntegracao:null, loadingStatus:false, config:null, loadingConfig:false, salvando:false, error:null };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+
+    async function apiGet(url){
+      const res = await fetch(url);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && (body.error||(body.errors&&JSON.stringify(body.errors)))) || 'Falha na requisição.');
+      return body;
+    }
+    async function apiStatusIntegracao(empresaId){ return apiGet('/api/promocoes/status-integracao?empresaId='+empresaId); }
+    async function apiConfig(empresaId){ return apiGet('/api/promocoes/config?empresaId='+empresaId); }
+    async function apiSalvarConfig(dados){
+      const res = await fetch('/api/promocoes/config', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(dados) });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && (body.error||(body.errors&&JSON.stringify(body.errors)))) || 'Falha ao salvar configuração.');
+      return body;
+    }
+
+    async function load(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.statusIntegracao=null; state.config=null; state.loadingStatus=false; state.loadingConfig=false; render(); return; }
+      state.loadingStatus = true; state.loadingConfig = true; state.error = null; render();
+      try{
+        const [statusIntegracao, config] = await Promise.all([
+          apiStatusIntegracao(filtro.empresaId),
+          apiConfig(filtro.empresaId),
+        ]);
+        state.statusIntegracao = statusIntegracao;
+        state.config = config;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar a IA de Promoções.'; }
+      state.loadingStatus = false; state.loadingConfig = false; render();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-promocoesIa');
+      if(page && page.classList.contains('active')) load();
+      else render();
+    });
+
+    // ---- card "Integração Mercado Livre" (seção 0 do pedido do usuário) ----
+    function cardIntegracaoHTML(){
+      const r = state.statusIntegracao && state.statusIntegracao.resumo;
+      const ok = !!(r && r.escritaDisponivel);
+      return '<div class="table-card" style="padding:20px;margin-bottom:14px;">'
+        + '<div class="panel-title" style="margin-bottom:14px;"><span class="panel-title-ic">'+svg('link')+'</span>Integração Mercado Livre</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:24px;margin-bottom:10px;">'
+          + '<div><div class="field-hint" style="margin:0 0 4px;">Status</div><div style="font-weight:600;">'+(ok?'🟢 Leitura e escrita disponíveis':'🟢 Leitura disponível')+'</div></div>'
+          + '<div><div class="field-hint" style="margin:0 0 4px;">Alteração de promoções</div><div style="font-weight:600;">'+(ok?'🟢 Escrita disponível':'🔴 Escrita não disponível')+'</div></div>'
+        + '</div>'
+        + '<div class="field-hint">'+escapeHtml((r && r.mensagem) || 'Seu aplicativo Mercado Livre possui atualmente acesso de leitura. A IA pode analisar e recomendar promoções, mas não pode alterá-las automaticamente.')+'</div>'
+      + '</div>';
+    }
+
+    // ---- configuração (seção 3/10 do pedido do usuário) ----
+    function cardConfigHTML(){
+      const c = state.config || {};
+      const modos = [
+        { v:'somente_analisar', label:'Somente analisar / recomendar' },
+        { v:'sugerir_aprovar', label:'Sugerir e aguardar aprovação' },
+        { v:'automatico', label:'Automático' },
+      ];
+      const permiteEscrita = !!(state.statusIntegracao && state.statusIntegracao.resumo && state.statusIntegracao.resumo.escritaDisponivel);
+      return '<div class="table-card" style="padding:20px;margin-bottom:14px;">'
+        + '<div class="panel-title" style="margin-bottom:14px;"><span class="panel-title-ic">'+svg('percent')+'</span>Configuração da IA de Promoções</div>'
+        + '<div class="inline-form" style="margin-top:0;align-items:flex-end;">'
+          + '<div class="field narrow"><label>Margem mínima permitida em promoção (%)</label><input type="number" id="promoMargemMinima" min="0" max="100" step="0.1" value="'+(c.margemMinimaPct!==undefined?c.margemMinimaPct:14)+'"></div>'
+          + '<button class="ghost-btn" id="promoSalvarConfig" type="button" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Salvar</span></button>'
+        + '</div>'
+        + '<div class="field-hint" style="margin-top:6px;">Quando uma promoção deixar a margem estimada abaixo deste número, a IA vai marcar como <strong>🔴 NÃO RECOMENDADA</strong>.</div>'
+        + '<div style="margin-top:18px;">'
+          + '<div class="field-hint" style="margin:0 0 8px;">Modo da IA</div>'
+          + modos.map(m => {
+              const disabled = m.v !== 'somente_analisar' && !permiteEscrita;
+              return '<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;'+(disabled?'opacity:.5;':'cursor:pointer;')+'" title="'+(disabled?'É necessário habilitar permissão de escrita na integração Mercado Livre.':'')+'">'
+                + '<input type="radio" name="promoModoIa" value="'+m.v+'" '+(c.modoIa===m.v?'checked':'')+' '+(disabled?'disabled':'')+'>'
+                + '<span>'+escapeHtml(m.label)+'</span>'
+              + '</label>';
+            }).join('')
+        + '</div>'
+      + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('promocoesIaRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de usar a IA de Promoções.</p></div>';
+        return;
+      }
+      if(!filtro.empresaId){ root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('sparkle')+'</div><h2>Selecione uma empresa</h2></div>'; return; }
+
+      if((state.loadingStatus || state.loadingConfig) && !state.statusIntegracao){
+        root.innerHTML = '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando IA de Promoções…</span></div></div>';
+        return;
+      }
+      if(state.error){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="promoRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+        root.querySelector('#promoRetry').addEventListener('click', load);
+        return;
+      }
+
+      let html = cardIntegracaoHTML() + cardConfigHTML();
+      html += '<div class="empty-panel"><div class="empty-icon">'+svg('sparkle')+'</div>'
+        + '<h2>Motor de análise chega na próxima etapa</h2>'
+        + '<p class="lead">Depois de confirmar (com dado real da API) o formato dos itens de cada promoção, esta tela vai mostrar os anúncios analisados, oportunidades encontradas e a recomendação da IA para cada um — sempre calculada pela margem real, nunca só pelo percentual de desconto.</p></div>';
+
+      root.innerHTML = html;
+
+      const btnSalvar = document.getElementById('promoSalvarConfig');
+      if(btnSalvar) btnSalvar.addEventListener('click', async ()=>{
+        const margemMinimaPct = Number(document.getElementById('promoMargemMinima').value);
+        if(!Number.isFinite(margemMinimaPct) || margemMinimaPct < 0 || margemMinimaPct > 100){
+          toast('Informe um percentual entre 0 e 100.', 'error'); return;
+        }
+        btnSalvar.disabled = true;
+        try{
+          state.config = await apiSalvarConfig({ empresaId: filtro.empresaId, margemMinimaPct });
+          toast('Configuração salva.');
+          render();
+        }catch(err){ toast(err.message, 'error'); }
+        finally{ if(btnSalvar) btnSalvar.disabled = false; }
+      });
+      root.querySelectorAll('input[name="promoModoIa"]').forEach(r=> r.addEventListener('change', async (e)=>{
+        try{
+          state.config = await apiSalvarConfig({ empresaId: filtro.empresaId, modoIa: e.target.value });
+          toast('Configuração salva.');
+        }catch(err){ toast(err.message, 'error'); }
+        render();
+      }));
+    }
+
+    window.PromocoesIA = { load };
   })();
 
   /* ================= RELATÓRIOS — categorias com dados 100% reaproveitados =================

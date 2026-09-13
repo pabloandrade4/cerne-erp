@@ -10,7 +10,7 @@ const { test, describe, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
 const ml = require('../lib/mercadolivre');
-const { buscarPromocoesDaConta } = require('../lib/mlPromocoes');
+const { buscarPromocoesDaConta, buscarItensDaPromocao } = require('../lib/mlPromocoes');
 
 describe('buscarPromocoesDaConta — diagnóstico (12/09/2026)', () => {
   const apiGetOriginal = ml.apiGet;
@@ -54,5 +54,42 @@ describe('buscarPromocoesDaConta — diagnóstico (12/09/2026)', () => {
     assert.equal(r.status, null);
     assert.equal(r.erro, 'Tempo limite excedido.');
     assert.equal(r.detalheApi, null);
+  });
+});
+
+// Confirmado AO VIVO em 13/09/2026 (conta real PFEMBALAGEMS): o app já tem
+// permissão pra essa API — GET /seller-promotions/users/{id}?app_version=v2
+// devolveu 6 promoções reais e ativas (LIGHTNING, SMART x2, SELLER_CAMPAIGN,
+// SELLER_COUPON_CAMPAIGN, DEAL). Próximo dado real a confirmar: os ITENS de
+// cada uma (preço/desconto/produto), por isso buscarItensDaPromocao abaixo.
+describe('buscarItensDaPromocao — diagnóstico dos itens de uma promoção (13/09/2026)', () => {
+  const apiGetOriginal = ml.apiGet;
+  afterEach(() => { ml.apiGet = apiGetOriginal; });
+
+  test('sucesso: manda promotion_type + user_id + app_version=v2 e devolve o corpo real, sem recalcular nada', async () => {
+    const corpoReal = { results: [{ id: 'MLB111', price: 90, original_price: 100 }] };
+    let chamadaComPath = null;
+    ml.apiGet = async (path) => { chamadaComPath = path; return corpoReal; };
+
+    const r = await buscarItensDaPromocao('token-abc', '2486380051', 'P-MLB18049186', 'DEAL');
+
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.data, corpoReal);
+    assert.equal(chamadaComPath, '/seller-promotions/promotions/P-MLB18049186/items?promotion_type=DEAL&user_id=2486380051&app_version=v2');
+  });
+
+  test('erro da API: nunca lança — devolve status/erro/detalhe reais', async () => {
+    ml.apiGet = async () => {
+      const err = new Error('promotion not found');
+      err.status = 404;
+      err.data = { message: 'promotion not found' };
+      throw err;
+    };
+
+    const r = await buscarItensDaPromocao('token-abc', '2486380051', 'X-INEXISTENTE', 'DEAL');
+
+    assert.equal(r.ok, false);
+    assert.equal(r.status, 404);
+    assert.equal(r.erro, 'promotion not found');
   });
 });
