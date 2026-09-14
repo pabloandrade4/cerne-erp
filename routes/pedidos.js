@@ -636,7 +636,14 @@ async function detalharPedidoShopee(id, res) {
   });
 
   const valorVenda = toNum(pedido.valor_total);
-  const freteVendedor = toNum(pedido.frete_real);
+  // Frete do vendedor: CORRIGIDO em 14/09/2026 — antes usava
+  // `pedido.frete_real` (actual_shipping_fee) como custo do vendedor, mas o
+  // usuário confirmou (comparando com outro sistema) que na Shopee o
+  // vendedor NUNCA paga frete, só comissão/taxas. `frete_real` não é um
+  // custo do vendedor nesse marketplace — por isso sempre 0 aqui (fato real
+  // do modelo da Shopee, nunca "dado faltando"; ver mesmo ajuste em
+  // lib/relatorioVendas.js/serializarPedido).
+  const freteVendedor = 0;
   // Fase 2b (14/09/2026, pedido explícito do usuário: "quero igual ao
   // mercado livre, mas com as taxas e comissões da shopee") — comissão real
   // vinda de payment/get_escrow_detail_batch (lib/shopeeSync.js), salva em
@@ -663,7 +670,6 @@ async function detalharPedidoShopee(id, res) {
 
   if (comissaoEstimada) pendencias.push('A comissão da Shopee deste pedido ainda é uma ESTIMATIVA (tabela oficial de comissão da Shopee) — o repasse real ainda não foi liberado. Quando ele chegar, a margem passa a usar o valor real automaticamente.');
   else if (taxaVenda === null) pendencias.push('A Shopee ainda não processou/liberou o repasse deste pedido, e não foi possível estimar a comissão (nenhum item com valor sincronizado) — a margem fica "pendente" até um dos dois existir.');
-  if (freteVendedor === null) pendencias.push('A Shopee não retornou o custo de frete do vendedor deste pedido.');
 
   const custoProdutoFinal = itens.length && custoCompleto ? Math.round(custoProdutoTotal * 100) / 100 : null;
 
