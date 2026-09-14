@@ -1356,6 +1356,27 @@ ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS status_campanha VARCHAR(20);
 ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS orcamento_automatico BOOLEAN;
 ALTER TABLE ads_metricas_anuncio ADD COLUMN IF NOT EXISTS status_anuncio VARCHAR(20);
 
+-- Métricas de campanha adicionais (14/09/2026, pedido explícito do usuário
+-- — "estude sobre todas as métricas que tem dentro do Mercado Livre") —
+-- confirmadas na documentação oficial (developers.mercadolibre.com.ar/
+-- en_us/product-ads-us-read, campo "metrics" do objeto de campanha) como
+-- existentes e JÁ disponíveis via `metrics`, só nunca pedidas/gravadas
+-- antes (ver METRICS_CAMPANHA em lib/mlAds.js). Puramente aditivo — nenhuma
+-- chamada nova à API além de incluir esses nomes no parâmetro `metrics`
+-- que a sincronização de campanhas já faz. São a base real (nunca
+-- inventada) pra lib/ia/adsDecisor.js só sugerir "aumentar orçamento"
+-- quando o motivo real de perder exibição É orçamento (não ranking/leilão),
+-- e pra citar o ACOS de referência do próprio Mercado Livre na explicação.
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS sov NUMERIC(6,2); -- share of voice: % das vendas totais que vieram de Ads
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS fatia_impressoes_pct NUMERIC(6,2); -- impression_share
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS fatia_impressoes_topo_pct NUMERIC(6,2); -- top_impression_share
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS impressoes_perdidas_orcamento_pct NUMERIC(6,2); -- lost_impression_share_by_budget
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS impressoes_perdidas_ranking_pct NUMERIC(6,2); -- lost_impression_share_by_ad_rank
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS acos_benchmark NUMERIC(6,2); -- ACOS de referência do próprio Mercado Livre pra campanhas com bom desempenho
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS vendas_organicas_qtd NUMERIC(12,2); -- organic_units_quantity
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS vendas_organicas_valor NUMERIC(12,2); -- organic_units_amount
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS acos_alvo_topo_busca NUMERIC(6,2); -- acos_top_search_target (campo do objeto campanha, não de "metrics" — confirmado no mesmo exemplo oficial)
+
 -- Histórico de decisões do agente "Ads e Performance" — uma linha por
 -- SITUAÇÃO em aberto (não uma linha por ciclo): enquanto ninguém decide, a
 -- mesma situação (um anúncio ou uma campanha) mantém UMA linha "pendente",
