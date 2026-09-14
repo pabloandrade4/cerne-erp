@@ -802,22 +802,6 @@ CREATE TABLE IF NOT EXISTS radar_alertas (
 );
 CREATE INDEX IF NOT EXISTS idx_radar_alertas_empresa_status ON radar_alertas(empresa_id, status, severidade);
 
--- CORREÇÃO (01/09/2026, ativação da Central de Alertas — Etapa 7 pedida
--- pelo usuário, ver docs/04-alteracoes.md): a tela pede 4 status
--- (Novo/Visualizado/Resolvido/Ignorado), mas a coluna `status` acima só
--- aceitava 2 ('aberto'/'resolvido'). Retrofit explícito (mesmo padrão já
--- usado neste arquivo pra contas_bancarias/despesas_fixas.ativo — nunca
--- só dentro do CREATE TABLE, que é no-op numa tabela que já existe):
--- adiciona 'ignorado' como 3º valor de status, e duas colunas novas pra
--- derivar Novo (visualizado_em IS NULL) x Visualizado (preenchido) sem
--- precisar de mais uma coluna de status paralela. Nome do constraint é o
--- nome automático que o Postgres já deu (`<tabela>_<coluna>_check`,
--- confirmado localmente) — o DROP+ADD é seguro rodar de novo (idempotente).
-ALTER TABLE radar_alertas ADD COLUMN IF NOT EXISTS visualizado_em TIMESTAMPTZ;
-ALTER TABLE radar_alertas ADD COLUMN IF NOT EXISTS ignorado_em TIMESTAMPTZ;
-ALTER TABLE radar_alertas DROP CONSTRAINT IF EXISTS radar_alertas_status_check;
-ALTER TABLE radar_alertas ADD CONSTRAINT radar_alertas_status_check CHECK (status IN ('aberto', 'resolvido', 'ignorado'));
-
 -- Estado do Radar por empresa (1 linha por empresa) — usado pra: 1) provar
 -- que o radar roda mesmo sem ninguém com o ERP aberto (ultima_execucao_em
 -- persiste no banco, sobrevive a reiniciar o servidor); 2) guardar o
@@ -984,6 +968,25 @@ CREATE TABLE IF NOT EXISTS despesas_fixas (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- CORREÇÃO (31/08/2026) — Fluxo de Caixa (e a tela de Despesas Fixas)
+-- retornando 500 em produção: "column \"ativo\" does not exist". Causa
+-- raiz: a tabela `despesas_fixas` já existia no banco de produção de
+-- ANTES da coluna `ativo` ter sido adicionada na definição acima — como
+-- essa coluna foi colocada direto dentro do CREATE TABLE (em vez de um
+-- ALTER TABLE separado, que é o padrão usado em todo o resto deste
+-- arquivo — ver exemplo logo abaixo, em despesa_fixa_id), o
+-- `CREATE TABLE IF NOT EXISTS` nunca teve efeito nenhum nesse banco (a
+-- tabela já existia) e a coluna nunca foi criada de verdade lá. Este
+-- ALTER retroativo resolve pra qualquer banco nessa mesma situação, sem
+-- apagar nem alterar nenhuma despesa fixa já cadastrada — toda despesa
+-- fixa existente passa a valer como `ativo = true` (era exatamente esse
+-- o comportamento implícito antes dessa coluna existir: não havia
+-- conceito de "inativa", então nenhuma despesa existente pode ter sido
+-- pensada como tal). Continua seguro rodar de novo (IF NOT EXISTS) —
+-- em bancos que já têm a coluna (criados depois que ela entrou no
+-- CREATE TABLE acima), este ALTER não faz nada.
+ALTER TABLE despesas_fixas ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT true;
+
 -- Vínculo entre a conta a pagar GERADA automaticamente e a despesa fixa que
 -- a originou — coluna adicionada em contas_pagar (tabela já existente,
 -- por isso ALTER + ADD COLUMN IF NOT EXISTS, mesmo padrão já usado neste
@@ -1019,249 +1022,3 @@ CREATE TABLE IF NOT EXISTS fluxo_caixa_saldo_inicial (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- ============================================================
--- Etapa: Saldo bancário automático a partir de extrato (31/08/2026)
--- ============================================================
--- contas_bancarias / extrato_importacoes / extrato_movimentos JÁ EXISTIAM em
--- produção antes desta etapa (criadas fora deste arquivo). Os CREATE TABLE
--- IF NOT EXISTS abaixo são só para deixar o schema.sql completo em qualquer
--- ambiente NOVO (ex.: um banco de testes do zero) — em produção eles são
--- no-op, exatamente como o resto deste arquivo. NÃO recriam nem apagam nada.
---
--- O saldo bancário (saldo_atual/saldo_data/saldo_atualizado_em) é sempre
--- SUBSTITUÍDO pelo "saldo final" identificado no extrato mais recente
--- confirmado — nunca somado a movimentos importados separadamente (ver
--- lib/contasBancarias.js#confirmarImportacao e lib/fluxoCaixa.js). Um
--- extrato com data de saldo mais antiga que a já registrada nunca regride o
--- saldo sozinho (só com confirmação explícita do usuário — ver
--- forcarSubstituicaoSaldo em confirmarImportacao).
-CREATE TABLE IF NOT EXISTS contas_bancarias (
-  id                    SERIAL PRIMARY KEY,
-  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
-  nome                  VARCHAR(200) NOT NULL,
-  banco                 VARCHAR(100),
-  agencia               VARCHAR(20),
-  conta                 VARCHAR(30),
-  ativa                 BOOLEAN NOT NULL DEFAULT TRUE,
-  saldo_atual           NUMERIC(14,2),
-  saldo_data            DATE,
-  saldo_atualizado_em   TIMESTAMPTZ,
-  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Retrofit explícito e separado do CREATE TABLE acima (mesmo padrão já usado
--- para users.ativo e contas_pagar.despesa_fixa_id neste arquivo) — pedido
--- explicitamente pelo usuário para nunca repetir o incidente em que uma
--- coluna só existia dentro de um CREATE TABLE IF NOT EXISTS e por isso
--- nunca era aplicada num banco onde a tabela já existia (ver o mesmo caso
--- em despesas_fixas.ativo, mais acima neste arquivo).
-ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atual NUMERIC(14,2);
-ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_data DATE;
-ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atualizado_em TIMESTAMPTZ;
-
--- CORREÇÃO (01/09/2026, diagnóstico do módulo Ads/banco de dados — ver
--- docs/04-alteracoes.md): o retrofit acima (28/08→31/08/2026) esqueceu de
--- incluir banco/agencia/conta — exatamente o mesmo incidente que ele
--- documenta ter corrigido para saldo_atual/saldo_data/saldo_atualizado_em,
--- só que para estas 3 colunas. Confirmado em produção via erro real do
--- Postgres: `error: column "conta" does not exist` (código 42703),
--- disparado por lib/contasBancarias.js#listarContasBancarias, que já
--- seleciona banco/agencia/conta desde que a tabela existe neste arquivo —
--- essas colunas nunca tinham sido de fato criadas no banco de produção
--- (só existiam dentro do CREATE TABLE IF NOT EXISTS acima, que é no-op
--- numa tabela que já existia antes deste arquivo).
-ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS banco VARCHAR(100);
-ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS agencia VARCHAR(20);
-ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS conta VARCHAR(30);
-
--- Uma linha por arquivo de extrato realmente confirmado (a prévia/análise
--- não grava nada — só o passo de confirmação). arquivo_hash é o SHA-256 do
--- arquivo inteiro; a combinação (conta_bancaria_id, arquivo_hash) é o que
--- permite reimportar o mesmo arquivo sem duplicar (reconfirma/atualiza o
--- saldo em vez de gravar tudo de novo — ver confirmarImportacao).
-CREATE TABLE IF NOT EXISTS extrato_importacoes (
-  id                      SERIAL PRIMARY KEY,
-  empresa_id              INTEGER NOT NULL REFERENCES empresas(id),
-  conta_bancaria_id       INTEGER NOT NULL REFERENCES contas_bancarias(id),
-  arquivo_nome            VARCHAR(255),
-  arquivo_hash            VARCHAR(128),
-  formato                 VARCHAR(20),
-  saldo_final             NUMERIC(14,2),
-  saldo_data              DATE,
-  quantidade_movimentos   INTEGER NOT NULL DEFAULT 0,
-  quantidade_importada    INTEGER NOT NULL DEFAULT 0,
-  quantidade_duplicada    INTEGER NOT NULL DEFAULT 0,
-  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(conta_bancaria_id, arquivo_hash)
-);
-
--- Cada movimentação individual de um extrato confirmado. fingerprint (hash
--- de data+tipo+descrição+valor, com um contador para desempatar
--- movimentações idênticas no mesmo dia — ver lib/extratoBancario.js) é a
--- trava de não-duplicação por conta: ON CONFLICT (conta_bancaria_id,
--- fingerprint) DO NOTHING garante que reimportar o mesmo extrato nunca
--- duplica uma movimentação já gravada.
-CREATE TABLE IF NOT EXISTS extrato_movimentos (
-  id                  SERIAL PRIMARY KEY,
-  importacao_id       INTEGER REFERENCES extrato_importacoes(id),
-  empresa_id          INTEGER NOT NULL REFERENCES empresas(id),
-  conta_bancaria_id   INTEGER NOT NULL REFERENCES contas_bancarias(id),
-  data                DATE NOT NULL,
-  descricao           VARCHAR(500),
-  tipo                VARCHAR(10) NOT NULL, -- entrada | saida
-  valor               NUMERIC(14,2) NOT NULL,
-  fingerprint         VARCHAR(64) NOT NULL,
-  conciliado          BOOLEAN NOT NULL DEFAULT false,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(conta_bancaria_id, fingerprint)
-);
-
--- ============================================================
--- Etapa: Categorias financeiras + DRE detalhada + conciliação simples
--- (31/08/2026)
--- ============================================================
--- Plano de contas do próprio usuário (antes só existia como texto livre em
--- contas_pagar.categoria/despesas_fixas.categoria, sem cadastro real — ver
--- CATEGORIAS_SUGERIDAS duplicada em lib/contasPagar.js e
--- lib/despesasFixas.js). Esta tabela NÃO substitui a coluna de texto livre
--- em nenhum lugar — ela é adicionada por cima (contas_pagar.categoria_id
--- abaixo), pra nunca quebrar um lançamento antigo que só tem o texto.
---
--- categoria_pai_id: um único nível de subcategoria (uma subcategoria nunca
--- tem filha própria — pedido explícito do usuário de "não criar
--- complexidade desnecessária"). Categoria nunca é apagada de verdade
--- (excluir um DELETE quebraria o histórico de lançamentos já categorizados)
--- — só "ativa=false" (mesmo padrão de despesas_fixas.ativo/contas_bancarias.ativa).
-CREATE TABLE IF NOT EXISTS categorias_financeiras (
-  id                  SERIAL PRIMARY KEY,
-  empresa_id          INTEGER NOT NULL REFERENCES empresas(id),
-  nome                VARCHAR(100) NOT NULL,
-  categoria_pai_id    INTEGER REFERENCES categorias_financeiras(id),
-  ativa               BOOLEAN NOT NULL DEFAULT true,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- contas_pagar e extrato_movimentos JÁ EXISTIAM — retrofit em colunas
--- separadas (ALTER ... ADD COLUMN IF NOT EXISTS), nunca dentro de um CREATE
--- TABLE, mesma regra documentada mais acima neste arquivo (incidente
--- despesas_fixas.ativo) e reaplicada na etapa do saldo bancário.
---
--- contas_pagar.categoria_id: aponta pro cadastro real de categoria, mas a
--- coluna de texto `categoria` continua existindo e sendo preenchida em
--- paralelo (lib/contasPagar.js mantém as duas em sincronia) — nunca quebra
--- busca/relatório antigo que lê `categoria` como texto.
--- contas_pagar.conta_bancaria_id: só ROTULA de qual conta saiu o dinheiro
--- (rastreio/relatório) — NUNCA altera contas_bancarias.saldo_atual. Quem
--- manda no saldo real da conta continua sendo exclusivamente o saldo final
--- do extrato importado (ver etapa anterior); lançar uma conta a pagar como
--- paga não soma nem subtrai desse saldo, pra nunca ter duas fórmulas de
--- saldo bancário concorrendo.
-ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS categoria_id INTEGER REFERENCES categorias_financeiras(id);
-ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS conta_bancaria_id INTEGER REFERENCES contas_bancarias(id);
-
--- extrato_movimentos.categoria_id: permite categorizar um lançamento que
--- aparece SÓ no extrato (nunca virou conta a pagar) — ex.: tarifa bancária,
--- cobrança de um serviço que só existe no extrato.
--- extrato_movimentos.conta_pagar_id / conta_receber_id: o vínculo de
--- conciliação — quando preenchido, este movimento do extrato JÁ está
--- contado através da conta a pagar/receber correspondente, então a DRE e o
--- detalhamento (lib/despesasFinanceiras.js) NUNCA somam os dois ao mesmo
--- tempo (ver comentário lá — filtro `conta_pagar_id IS NULL`).
--- extrato_movimentos.transferencia_interna: marca uma movimentação como
--- transferência entre contas da própria empresa (ex.: Nubank → Mercado
--- Pago) — nunca entra como despesa/receita na DRE nem no Fluxo de Caixa.
-ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS categoria_id INTEGER REFERENCES categorias_financeiras(id);
-ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS conta_pagar_id INTEGER REFERENCES contas_pagar(id);
-ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS conta_receber_id INTEGER REFERENCES contas_receber(id);
-
--- ============================================================
--- Etapa: IA de Promoções — Fase A (13/09/2026)
--- Pedido do usuário: módulo que analisa anúncios do Mercado Livre e
--- recomenda entrar/sair de promoções olhando a margem REAL — mas hoje o
--- aplicativo cadastrado no Mercado Livre Developers tem (segundo o próprio
--- usuário) só permissão de LEITURA, então esta primeira fase é só a base:
--- nenhuma tabela/coluna aqui guarda nada que a IA "decidiu aplicar" de
--- verdade — isso só existe a partir da Fase B/E (ver docs/plano-ia-promocoes).
--- ============================================================
-
--- ml_contas.escopo_oauth: guarda O TEXTO EXATO que o Mercado Livre devolve
--- no campo `scope` da resposta de autenticação (ex.: "offline_access read
--- write") — capturado de graça tanto na conexão inicial
--- (routes/integracoes.js#/callback) quanto em toda renovação de token
--- (lib/mlSync.js#getContaComTokenValido), sem nenhuma chamada nova à API.
--- ATENÇÃO (documentado em lib/mlPermissoes.js): esse campo é só
--- INFORMATIVO — ver por que ele sozinho não prova que a Central de
--- Promoções aceita escrita. Quem manda de verdade é
--- config_promocoes.permite_escrita_ml, controlado manualmente pelo usuário.
-ALTER TABLE ml_contas ADD COLUMN IF NOT EXISTS escopo_oauth VARCHAR(255);
-
--- Configuração da IA de Promoções, por empresa. `permite_escrita_ml` nasce
--- SEMPRE false e só deve virar true manualmente pelo usuário, depois de
--- confirmar (no painel do Mercado Livre Developers) que a Central de
--- Promoções foi liberada para leitura E escrita, E de reconectar a conta
--- (novo OAuth) — reautorizar é obrigatório porque um token já emitido não
--- ganha permissão nova sozinho. Nenhum código desta primeira fase executa
--- ação de escrita de verdade; esta coluna só existe pra já deixar a
--- arquitetura pronta pra quando isso for construído (Fase E).
-CREATE TABLE IF NOT EXISTS config_promocoes (
-  empresa_id           INTEGER PRIMARY KEY REFERENCES empresas(id),
-  margem_minima_pct    NUMERIC(5,2) NOT NULL DEFAULT 14,   -- % — abaixo disso a IA marca "NÃO RECOMENDADA"
-  desconto_maximo_pct  NUMERIC(5,2),                        -- opcional — trava futura do modo automático (Fase E)
-  estoque_minimo       INTEGER,                             -- opcional — idem
-  vendas_minimas_30d   INTEGER,                             -- opcional — idem ("não mexer com menos de X vendas")
-  permite_full         BOOLEAN NOT NULL DEFAULT true,
-  permite_proprio      BOOLEAN NOT NULL DEFAULT true,
-  modo_ia              VARCHAR(30) NOT NULL DEFAULT 'somente_analisar',
-    -- 'somente_analisar' | 'sugerir_aprovar' | 'automatico' — só
-    -- 'somente_analisar' funciona nesta fase; os outros dois exigem escrita
-    -- liberada (Fase E) e ficam bloqueados no backend até lá.
-  permite_escrita_ml   BOOLEAN NOT NULL DEFAULT false,
-  atualizado_em        TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS transferencia_interna BOOLEAN NOT NULL DEFAULT false;
-
--- IA de Promoções — Fase B (13/09/2026): resultado já calculado do ciclo
--- automático (lib/ia/promocoesCiclo.js, roda a cada 1h — pedido explícito do
--- usuário: "a cada uma hora a ia tem que busca novas promoções"). A tela
--- SEMPRE lê daqui (nunca recalcula ao vivo) — uma linha por item de
--- promoção, com a margem REAL já calculada (nunca só o % de desconto).
--- `margem_incompleta`/`motivo_incompleto` existem porque a regra do usuário
--- é nunca fabricar um número quando falta um dado real (SKU não
--- identificado, produto sem custo cadastrado, SKU sem histórico de vendas
--- suficiente para estimar comissão/frete) — ver lib/promocoesMotor.js.
-CREATE TABLE IF NOT EXISTS promocoes_analises (
-  id                              SERIAL PRIMARY KEY,
-  empresa_id                      INTEGER NOT NULL REFERENCES empresas(id),
-  conta_id                        INTEGER NOT NULL REFERENCES ml_contas(id),
-  promotion_id                    VARCHAR(80) NOT NULL,
-  promotion_type                  VARCHAR(60) NOT NULL,
-  promotion_label                 VARCHAR(255),
-  ml_item_id                      VARCHAR(40) NOT NULL,
-  status_item_ml                  VARCHAR(40),
-  titulo                          TEXT,
-  imagem_url                      TEXT,
-  sku                             VARCHAR(120),
-  preco_normal                    NUMERIC(12,2),
-  preco_promo                     NUMERIC(12,2),
-  origem_preco_promo              VARCHAR(40),
-  desconto_pct                    NUMERIC(6,2),
-  desconto_bancado_meli_pct       NUMERIC(6,2),
-  desconto_bancado_vendedor_pct   NUMERIC(6,2),
-  custo_produto                   NUMERIC(12,2),
-  tarifas_estimadas               NUMERIC(12,2),
-  frete_vendedor_estimado         NUMERIC(12,2),
-  imposto_estimado                NUMERIC(12,2),
-  margem_real                     NUMERIC(12,2),
-  margem_real_pct                 NUMERIC(6,2),
-  margem_minima_pct_usada         NUMERIC(5,2),
-  margem_incompleta               BOOLEAN NOT NULL DEFAULT false,
-  motivo_incompleto               TEXT,
-  classificacao_codigo            VARCHAR(30),
-  classificacao_label             VARCHAR(40),
-  atualizado_em                   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (conta_id, promotion_id, ml_item_id)
-);
-CREATE INDEX IF NOT EXISTS idx_promocoes_analises_empresa ON promocoes_analises (empresa_id);

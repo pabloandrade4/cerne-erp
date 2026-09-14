@@ -1463,3 +1463,153 @@ CREATE INDEX IF NOT EXISTS idx_ia_decisoes_promocoes_empresa ON ia_decisoes_prom
 CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_decisoes_promocoes_pendente
   ON ia_decisoes_promocoes (conta_id, promotion_id, ml_item_id)
   WHERE status_decisao = 'pendente';
+
+-- ============================================================================
+-- "Daily dos Agentes" — Etapa 1: SÓ SCHEMA (14/09/2026, pedido explícito do
+-- usuário). Fundação para uma reunião automática diária (09:00) em que um
+-- Agente Coordenador chama os especialistas existentes (Ads e Performance,
+-- Promoções — Buy Box/SAC/Riscos Operacionais entram quando existirem de
+-- verdade como agentes, nunca como placeholder) e cruza os achados de cada
+-- um em conclusões determinísticas, nunca texto inventado.
+--
+-- IMPORTANTE: nesta etapa NENHUM código lê ou escreve nestas tabelas ainda —
+-- nem o scheduler, nem o Coordenador, nem a rota `/decisoes` existente de
+-- Ads/Promoções foram alterados. É só a estrutura, aprovada e entregue
+-- separada de qualquer lógica nova, pra poder ser conferida sozinha antes da
+-- Etapa 2 (implementação dos especialistas) começar. Tudo abaixo é aditivo:
+-- tabelas novas + colunas novas opcionais nas tabelas de decisão que já
+-- funcionam (`ia_decisoes_ads`, `ia_decisoes_promocoes`), sem tocar em
+-- nenhuma coluna/índice/comportamento já existente.
+-- ============================================================================
+
+-- Uma linha por reunião diária. `reuniao_anterior_id` é como cada
+-- especialista sabe "o que mudou desde a última vez" sem precisar guardar
+-- estado em nenhum outro lugar. Uma reunião por empresa por dia civil
+-- (`data_referencia` é a data no fuso da empresa, não um timestamp).
+CREATE TABLE IF NOT EXISTS ia_reunioes_diarias (
+  id                    SERIAL PRIMARY KEY,
+  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
+  data_referencia       DATE NOT NULL,
+  reuniao_anterior_id   INTEGER REFERENCES ia_reunioes_diarias(id),
+  status                VARCHAR(20) NOT NULL DEFAULT 'em_andamento', -- em_andamento|concluida|falhou
+  erro                  TEXT,
+  iniciada_em           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finalizada_em         TIMESTAMPTZ,
+  criado_em             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_reunioes_diarias_empresa_dia
+  ON ia_reunioes_diarias (empresa_id, data_referencia);
+
+-- Um achado por linha — o que cada especialista relatou na reunião
+-- (problema/oportunidade/risco/alteração desde a última reunião). `dados` é
+-- o JSONB com os números reais que sustentam o achado (nunca uma frase sem
+-- lastro). Quando o achado já corresponde a uma sugestão de ação concreta
+-- que existe nas tabelas de decisão de hoje, `decisao_tabela`/`decisao_id`
+-- apontam pra lá — a Daily nunca duplica o fluxo de aprovar/recusar que já
+-- funciona, só referencia. `decisao_tabela` é texto (não FK) porque aponta
+-- pra uma de duas tabelas hoje (`ia_decisoes_ads` ou `ia_decisoes_promocoes`)
+-- e mais no futuro, conforme novos agentes ganharem tabela própria.
+CREATE TABLE IF NOT EXISTS ia_achados_diarios (
+  id                SERIAL PRIMARY KEY,
+  reuniao_id        INTEGER NOT NULL REFERENCES ia_reunioes_diarias(id),
+  agente_codigo     VARCHAR(40) NOT NULL REFERENCES ia_agentes(codigo),
+  tipo              VARCHAR(20) NOT NULL, -- problema|oportunidade|risco|alteracao
+  titulo            VARCHAR(255) NOT NULL,
+  descricao         TEXT,
+  dados             JSONB,
+  prioridade        VARCHAR(10), -- critica|alta|media|baixa — nulo quando é só informativo
+  sku               VARCHAR(120),
+  campanha_id       VARCHAR(50),
+  pedido_id         VARCHAR(50), -- para agentes futuros (SAC/Reclamações), sem uso ainda
+  decisao_tabela    VARCHAR(40), -- 'ia_decisoes_ads' | 'ia_decisoes_promocoes' | NULL
+  decisao_id        INTEGER,
+  criado_em         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_achados_diarios_reuniao ON ia_achados_diarios (reuniao_id, agente_codigo);
+
+-- Conclusões do Coordenador ao CRUZAR achados de agentes diferentes (o
+-- exemplo do próprio usuário: Ads acusa margem baixa num SKU + Promoções
+-- acusa desconto ativo no mesmo SKU + Buy Box confirma preço competitivo ->
+-- "reduza o desconto antes de reduzir Ads"). `regra_codigo` identifica qual
+-- regra determinística do Coordenador disparou (auditável — nunca "a IA
+-- decidiu" sem explicação) e `achados_relacionados` guarda os IDs reais de
+-- `ia_achados_diarios` que embasam a conclusão, pra nunca virar texto solto
+-- sem lastro nos dados.
+CREATE TABLE IF NOT EXISTS ia_correlacoes_diarias (
+  id                     SERIAL PRIMARY KEY,
+  reuniao_id             INTEGER NOT NULL REFERENCES ia_reunioes_diarias(id),
+  regra_codigo           VARCHAR(60) NOT NULL,
+  achados_relacionados   JSONB NOT NULL, -- array de ids de ia_achados_diarios
+  conclusao              TEXT NOT NULL,
+  decisao_tabela         VARCHAR(40),
+  decisao_id             INTEGER,
+  prioridade             VARCHAR(10),
+  criado_em              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_correlacoes_diarias_reuniao ON ia_correlacoes_diarias (reuniao_id);
+
+-- Generaliza o `resultado_snapshot`/`resultado_avaliado_em` que já existe
+-- hoje em ia_decisoes_ads/ia_decisoes_promocoes (continua existindo e
+-- funcionando exatamente como hoje, sem nenhuma mudança) para MÚLTIPLOS
+-- checkpoints — pedido explícito do usuário: resultado imediato, 24h, 3
+-- dias e 7 dias. `decisao_tabela` é texto (não FK) pelo mesmo motivo de
+-- ia_achados_diarios — aponta pra uma das tabelas de decisão existentes.
+-- Índice único garante que cada checkpoint só é preenchido uma vez por
+-- decisão (mesmo padrão de segurança que `resultado_avaliado_em IS NULL` já
+-- usa hoje).
+CREATE TABLE IF NOT EXISTS ia_decisoes_resultados_historico (
+  id                SERIAL PRIMARY KEY,
+  decisao_tabela    VARCHAR(40) NOT NULL, -- 'ia_decisoes_ads' | 'ia_decisoes_promocoes'
+  decisao_id        INTEGER NOT NULL,
+  checkpoint        VARCHAR(10) NOT NULL, -- imediato|24h|3d|7d
+  snapshot          JSONB,
+  avaliado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  criado_em         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_decisoes_resultados_checkpoint
+  ON ia_decisoes_resultados_historico (decisao_tabela, decisao_id, checkpoint);
+
+-- Nível de permissão por tipo de ação de cada agente — pedido explícito do
+-- usuário: "os agentes não devem ganhar autorização irrestrita... cada tipo
+-- de ação deverá possuir sua própria permissão". NESTA ETAPA A TABELA É
+-- INERTE: nenhum código lê `nivel_permissao` pra decidir executar nada
+-- sozinho — toda ação continua 100% manual (aprovar/alterar/recusar pelos
+-- mesmos botões que já existem). Ela só existe desde já pra você poder ver/
+-- auditar o nível atual de cada tipo de ação, e pra uma fase futura de
+-- autonomia não precisar inventar essa estrutura do zero. Semeada com todo
+-- `tipo_acao` que os decisores já produzem hoje (ver lib/ia/adsDecisor.js e
+-- lib/ia/promocoesDecisor.js), todos como 'approval_required' (ação
+-- concreta e executável) ou 'recommend_only' (sugestão que não corresponde
+-- a uma execução direta no Mercado Livre) — nunca 'auto_execute' nesta
+-- etapa.
+CREATE TABLE IF NOT EXISTS ia_permissoes_acao (
+  id                SERIAL PRIMARY KEY,
+  agente_codigo     VARCHAR(40) NOT NULL REFERENCES ia_agentes(codigo),
+  tipo_acao         VARCHAR(40) NOT NULL,
+  nivel_permissao   VARCHAR(20) NOT NULL DEFAULT 'approval_required', -- recommend_only|approval_required|auto_execute
+  atualizado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_permissoes_acao ON ia_permissoes_acao (agente_codigo, tipo_acao);
+INSERT INTO ia_permissoes_acao (agente_codigo, tipo_acao, nivel_permissao) VALUES
+  ('ads_performance', 'pausar_anuncio', 'approval_required'),
+  ('ads_performance', 'colocar_sku_em_campanha', 'recommend_only'),
+  ('ads_performance', 'pausar_campanha', 'approval_required'),
+  ('ads_performance', 'diminuir_orcamento', 'approval_required'),
+  ('ads_performance', 'ativar_campanha', 'approval_required'),
+  ('ads_performance', 'aumentar_orcamento', 'approval_required'),
+  ('promocoes', 'entrar_promocao', 'approval_required'),
+  ('promocoes', 'nao_entrar_promocao', 'recommend_only'),
+  ('promocoes', 'sair_promocao', 'approval_required'),
+  ('promocoes', 'revisar_preco', 'approval_required')
+ON CONFLICT (agente_codigo, tipo_acao) DO NOTHING;
+
+-- Colunas aditivas em ia_decisoes_ads/ia_decisoes_promocoes — nenhuma coluna
+-- existente é alterada. `reuniao_id` fica NULL para decisões geradas pelo
+-- ciclo normal de sincronização (como hoje) e só é preenchido quando a
+-- decisão nasce de uma Daily. `confianca_ia` fica propositalmente NULL até
+-- existir um mecanismo real de cálculo baseado no histórico de decisões do
+-- usuário — nunca um número fabricado só para preencher a tela.
+ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS reuniao_id INTEGER REFERENCES ia_reunioes_diarias(id);
+ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS confianca_ia NUMERIC(5,2);
+ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS reuniao_id INTEGER REFERENCES ia_reunioes_diarias(id);
+ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS confianca_ia NUMERIC(5,2);
