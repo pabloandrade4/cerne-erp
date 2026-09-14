@@ -2106,6 +2106,11 @@
             + '<button class="btn-secondary" id="shopeeReconnectBtn" type="button">'+svg('link')+'<span>Reconectar</span></button>'
             + (state.syncResultShopee ? '<span class="field-hint" style="margin:0;">'+state.syncResultShopee.importados+' de '+state.syncResultShopee.totalEncontrados+' pedido(s) dos últimos '+state.syncResultShopee.periodo.dias+' dias importados/atualizados'+(state.syncResultShopee.erros.length? (', '+state.syncResultShopee.erros.length+' com erro'):'')+'.</span>' : '<span class="field-hint" style="margin:0;">A sincronização traz os pedidos dos últimos 60 dias. Ainda sem cálculo de margem/comissão (só os dados do pedido).</span>')
           + '</div>'
+          // Sincronização automática (14/09/2026, ver lib/shopeeSyncScheduler.js)
+          // — roda sozinha no servidor de tempos em tempos, sem precisar
+          // clicar no botão acima; o botão continua existindo pra forçar uma
+          // sincronização na hora, ou pra puxar de novo os 60 dias inteiros.
+          + '<div class="field-hint" style="margin-top:6px; display:flex; align-items:center; gap:6px;">'+svg('refreshCw')+'<span>Sincronização automática ativa: pedidos novos ou com status atualizado entram sozinhos, sem precisar clicar.</span></div>'
         + '</div>'
         // Listagem simples dos pedidos já sincronizados — só os campos reais
         // que a Shopee manda, nenhum cálculo (Fase 2, futura, cuida da
