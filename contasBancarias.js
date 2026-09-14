@@ -1,251 +1,120 @@
-function poolPadrao(){ return require('../db/pool'); }
-const { dataCalendarioISO } = require('./periodo');
-const { normalizarData } = require('./contasPagarImportacao');
-const categoriasFinanceiras = require('./categoriasFinanceiras');
+const express = require('express');
+const contas = require('../lib/contasBancarias');
+const extrato = require('../lib/extratoBancario');
 
-function round2(n){ return Math.round(Number(n)*100)/100; }
-function isoData(v){ return v ? dataCalendarioISO(v) : null; }
-function soDigitos(v){ return String(v||'').replace(/\D/g,''); }
-function bancoNormalizado(v){ const s=String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,''); if(s.includes('nubank')||s.includes('nupagamentos')||s.includes('nufinanceira')) return 'nubank'; if(s.includes('mercadopago')) return 'mercadopago'; return s; }
-
-
-function resolverSaldoBase(saldoBancario, saldoManual){
-  if(saldoBancario && saldoBancario.valor!==null && saldoBancario.valor!==undefined){
-    return {...saldoBancario, fonte:'bancario'};
-  }
-  if(saldoManual && saldoManual.valor!==null && saldoManual.valor!==undefined){
-    return {...saldoManual, fonte:'manual'};
-  }
-  return null;
+const router = express.Router();
+function decodeArquivo(body){
+  const nomeArquivo=String(body.nomeArquivo||'').trim();
+  const base64=String(body.arquivoBase64||'').replace(/^data:[^;]+;base64,/, '');
+  if(!nomeArquivo) throw new Error('Informe o nome do arquivo.');
+  if(!base64) throw new Error('Envie o arquivo do extrato.');
+  const buffer=Buffer.from(base64,'base64');
+  if(!buffer.length) throw new Error('Arquivo vazio.');
+  if(buffer.length > 10*1024*1024) throw new Error('O extrato deve ter no máximo 10 MB.');
+  return {nomeArquivo,buffer};
 }
 
-async function listarContasBancarias({empresaId}, db=null){
-  const id=Number(empresaId); if(!id) return [];
-  db = db || poolPadrao();
-  // A coluna real na tabela (criada fora do schema.sql, antes desta etapa) é
-  // "ativa", não "ativo" — daqui pra baixo o código inteiro continua falando
-  // "ativo" (mesmo nome usado em despesas_fixas/empresas/users), só o SQL
-  // que sabe do nome real da coluna via "AS ativo". Ver CORREÇÃO (31/08/2026)
-  // no schema.sql e docs do incidente do Fluxo de Caixa.
-  const {rows}=await db.query(`SELECT id, empresa_id, nome, banco, agencia, conta, ativa AS ativo, saldo_atual, saldo_data, saldo_atualizado_em
-    FROM contas_bancarias WHERE empresa_id=$1 ORDER BY ativa DESC, nome`,[id]);
-  return rows.map(r=>({id:Number(r.id),empresaId:Number(r.empresa_id),nome:r.nome,banco:r.banco,agencia:r.agencia,conta:r.conta,ativo:r.ativo!==false,
-    saldoAtual:r.saldo_atual===null?null:Number(r.saldo_atual),saldoData:isoData(r.saldo_data),saldoAtualizadoEm:r.saldo_atualizado_em||null}));
-}
-
-async function saldoConsolidado(empresaId, db=null){
-  const id=Number(empresaId); if(!id) return null;
-  db = db || poolPadrao();
-  let rows;
-  try {
-    // Mesma correção de nome de coluna ("ativa" no banco, "ativo" no código)
-    // usada em listarContasBancarias acima.
-    ({rows}=await db.query(`SELECT id, nome, banco, ativa AS ativo, saldo_atual, saldo_data FROM contas_bancarias WHERE empresa_id=$1 ORDER BY nome`,[id]));
-  } catch (err) {
-    // O módulo bancário não pode derrubar o Fluxo de Caixa inteiro durante
-    // um deploy/migração. Em bancos antigos, a tabela pode existir sem as
-    // colunas de saldo adicionadas na ML39. Nessa janela usamos o fallback
-    // de saldo manual (ou "não informado") e o próximo boot/migrate corrige
-    // a estrutura com ALTER ... ADD COLUMN IF NOT EXISTS no schema.sql.
-    if (err && (err.code === '42P01' || err.code === '42703')) {
-      console.warn('[contas-bancarias] schema bancário ainda não compatível; fluxo seguirá sem saldo bancário:', err.message);
-      return null;
-    }
-    throw err;
-  }
-  const ativas=rows.filter(r=>r.ativo!==false);
-  const conhecidas=ativas.filter(r=>r.saldo_atual!==null&&r.saldo_atual!==undefined&&r.saldo_data);
-  if(!conhecidas.length) return null;
-  const valor=round2(conhecidas.reduce((s,r)=>s+Number(r.saldo_atual),0));
-  const datas=conhecidas.map(r=>isoData(r.saldo_data)).filter(Boolean).sort();
-  return {valor,dataReferencia:datas[datas.length-1]||null,contasComSaldo:conhecidas.length,contasSemSaldo:ativas.length-conhecidas.length,
-    contas:conhecidas.map(r=>({id:Number(r.id),nome:r.nome,banco:r.banco,saldoAtual:Number(r.saldo_atual),saldoData:isoData(r.saldo_data)}))};
-}
-
-async function criarContaBancaria(body, db=null){
-  const errors={}; const empresaId=Number(body.empresaId); const nome=String(body.nome||'').trim();
-  if(!empresaId) errors.empresaId='Selecione a empresa.'; if(!nome) errors.nome='Informe o nome da conta.';
-  if(Object.keys(errors).length) return {errors};
-  db = db || poolPadrao();
-  const banco=String(body.banco||'').trim()||null, agencia=String(body.agencia||'').trim()||null, conta=String(body.conta||'').trim()||null;
-  const {rows}=await db.query(`INSERT INTO contas_bancarias (empresa_id,nome,banco,agencia,conta) VALUES ($1,$2,$3,$4,$5) RETURNING *`,[empresaId,nome,banco,agencia,conta]);
-  const r=rows[0]; return {conta:{id:Number(r.id),empresaId:Number(r.empresa_id),nome:r.nome,banco:r.banco,agencia:r.agencia,conta:r.conta,ativo:r.ativa!==false,saldoAtual:r.saldo_atual===null?null:Number(r.saldo_atual),saldoData:isoData(r.saldo_data)}};
-}
-
-async function confirmarImportacao(payload, pool=null){
-  const empresaId=Number(payload.empresaId), contaBancariaId=Number(payload.contaBancariaId);
-  if(!empresaId||!contaBancariaId) throw new Error('Empresa e conta bancária são obrigatórias.');
-  const saldoDataNormalizada = payload.saldoData ? normalizarData(payload.saldoData) : null;
-  if(payload.saldoData && !saldoDataNormalizada) throw new Error('A data do saldo final é inválida.');
-  const temSaldoFinal = payload.saldoFinal!==null && payload.saldoFinal!==undefined && payload.saldoFinal!=='';
-  const saldoFinalNumero = temSaldoFinal ? Number(payload.saldoFinal) : null;
-  if(temSaldoFinal && !Number.isFinite(saldoFinalNumero)) throw new Error('O saldo final é inválido.');
-  // Proteção pedida pelo usuário: um extrato com data de saldo mais antiga
-  // que o saldo já registrado NUNCA regride o saldo da conta sozinho. Só
-  // substitui se quem está importando confirmar explicitamente que quer
-  // isso (forcarSubstituicaoSaldo=true, vindo de um clique de confirmação
-  // na tela, nunca automático).
-  const forcarSubstituicaoSaldo = payload.forcarSubstituicaoSaldo===true;
-  pool = pool || poolPadrao();
-  const client=await pool.connect();
+router.get('/', async (req,res,next)=>{
   try{
-    await client.query('BEGIN');
-    const {rows:contas}=await client.query('SELECT id, empresa_id, banco, conta, saldo_atual, saldo_data FROM contas_bancarias WHERE id=$1 AND empresa_id=$2 FOR UPDATE',[contaBancariaId,empresaId]);
-    if(!contas.length) throw new Error('Conta bancária não encontrada para esta empresa.');
-    const conta=contas[0];
-    const bancoCadastrado=bancoNormalizado(conta.banco);
-    const bancoDetectado=bancoNormalizado(payload.bancoDetectado);
-    if(bancoCadastrado && bancoDetectado && bancoCadastrado!==bancoDetectado){
-      throw new Error('O banco detectado no extrato não corresponde ao banco da conta selecionada. Confira a conta antes de importar.');
-    }
-    const contaCadastrada=soDigitos(conta.conta);
-    const contaDetectada=soDigitos(payload.contaDetectada);
-    if(contaCadastrada && contaDetectada && contaCadastrada!==contaDetectada){
-      throw new Error('A conta detectada no extrato não corresponde à conta bancária selecionada. Confira a conta antes de importar.');
-    }
-    const hash=String(payload.arquivoHash||'').trim();
-    if(hash){
-      const {rows:ja}=await client.query('SELECT id FROM extrato_importacoes WHERE conta_bancaria_id=$1 AND arquivo_hash=$2 LIMIT 1',[contaBancariaId,hash]);
-      if(ja.length){
-        const importacaoId=Number(ja[0].id);
-        let saldoAtualizado=false, saldoIgnoradoPorSerMaisAntigo=false;
-        if(temSaldoFinal&&saldoDataNormalizada){
-          await client.query('UPDATE extrato_importacoes SET saldo_final=$1, saldo_data=$2 WHERE id=$3',[saldoFinalNumero,saldoDataNormalizada,importacaoId]);
-          const saldoDataAtual=isoData(conta.saldo_data);
-          if(forcarSubstituicaoSaldo || !saldoDataAtual || String(saldoDataNormalizada)>=saldoDataAtual){
-            await client.query(`UPDATE contas_bancarias SET saldo_atual=$1,saldo_data=$2,saldo_atualizado_em=now(),updated_at=now() WHERE id=$3`,[saldoFinalNumero,saldoDataNormalizada,contaBancariaId]);
-            saldoAtualizado=true;
-          } else {
-            saldoIgnoradoPorSerMaisAntigo=true;
-          }
-        }
-        await client.query('COMMIT');
-        return {jaImportado:true,importacaoId,importadas:0,duplicidades:0,saldoAtualizado,saldoIgnoradoPorSerMaisAntigo,
-          mensagemSaldoIgnorado:saldoIgnoradoPorSerMaisAntigo?'Este extrato possui data anterior ao saldo bancário atualmente registrado.':null};
-      }
-    }
-    const {rows:impRows}=await client.query(`INSERT INTO extrato_importacoes
-      (empresa_id,conta_bancaria_id,arquivo_nome,arquivo_hash,formato,saldo_final,saldo_data,quantidade_movimentos,quantidade_importada,quantidade_duplicada)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,0) RETURNING id`,[
-        empresaId,contaBancariaId,String(payload.nomeArquivo||'extrato'),hash||null,String(payload.formato||'').slice(0,20)||null,
-        temSaldoFinal?saldoFinalNumero:null,saldoDataNormalizada,(payload.movimentos||[]).length
-      ]);
-    const importacaoId=Number(impRows[0].id); let importadas=0,duplicidades=0;
-    for(const m of (payload.movimentos||[])){
-      const {rows}=await client.query(`INSERT INTO extrato_movimentos
-        (importacao_id,empresa_id,conta_bancaria_id,data,descricao,tipo,valor,fingerprint)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-        ON CONFLICT (conta_bancaria_id,fingerprint) DO NOTHING RETURNING id`,[
-          importacaoId,empresaId,contaBancariaId,m.data,String(m.descricao||'Movimentação bancária').slice(0,500),m.tipo,Number(m.valor),m.fingerprint
-        ]);
-      if(rows.length) importadas++; else duplicidades++;
-    }
-    let saldoAtualizado=false, saldoIgnoradoPorSerMaisAntigo=false;
-    if(temSaldoFinal&&saldoDataNormalizada){
-      const saldoDataAtual=isoData(conta.saldo_data);
-      if(forcarSubstituicaoSaldo || !saldoDataAtual || String(saldoDataNormalizada)>=saldoDataAtual){
-        await client.query(`UPDATE contas_bancarias SET saldo_atual=$1,saldo_data=$2,saldo_atualizado_em=now(),updated_at=now() WHERE id=$3`,[saldoFinalNumero,saldoDataNormalizada,contaBancariaId]);
-        saldoAtualizado=true;
-      } else {
-        saldoIgnoradoPorSerMaisAntigo=true;
-      }
-    }
-    await client.query('UPDATE extrato_importacoes SET quantidade_importada=$1, quantidade_duplicada=$2 WHERE id=$3',[importadas,duplicidades,importacaoId]);
-    await client.query('COMMIT');
-    return {jaImportado:false,importacaoId,importadas,duplicidades,saldoAtualizado,saldoIgnoradoPorSerMaisAntigo,
-      mensagemSaldoIgnorado:saldoIgnoradoPorSerMaisAntigo?'Este extrato possui data anterior ao saldo bancário atualmente registrado.':null};
-  }catch(err){ try{await client.query('ROLLBACK');}catch(_){} throw err; }
-  finally{ client.release(); }
-}
+    if(!req.query.empresaId) return res.status(400).json({error:'Informe empresaId.'});
+    const [lista,saldo]=await Promise.all([
+      contas.listarContasBancarias({empresaId:req.query.empresaId}),
+      contas.saldoConsolidado(req.query.empresaId),
+    ]);
+    res.json({contas:lista,saldoConsolidado:saldo});
+  }catch(err){next(err);}
+});
 
-// (31/08/2026) Passa a expor também categoria_id/conta_pagar_id/
-// conta_receber_id/transferencia_interna — as mesmas colunas que
-// lib/despesasFinanceiras.js usa pra nunca duplicar uma despesa: um
-// movimento com conta_pagar_id preenchido já está contado do lado de
-// contas_pagar (nunca de novo aqui); transferencia_interna=true nunca é
-// despesa em lugar nenhum.
-async function listarMovimentos({empresaId,contaBancariaId,limite=100}, db=null){
-  db = db || poolPadrao();
-  const params=[Number(empresaId)]; let where='empresa_id=$1';
-  if(Number(contaBancariaId)){params.push(Number(contaBancariaId));where+=` AND conta_bancaria_id=$${params.length}`;}
-  params.push(Math.min(Math.max(Number(limite)||100,1),500));
-  const {rows}=await db.query(`SELECT id,conta_bancaria_id,data,descricao,tipo,valor,conciliado,categoria_id,conta_pagar_id,conta_receber_id,transferencia_interna,created_at FROM extrato_movimentos WHERE ${where} ORDER BY data DESC,id DESC LIMIT $${params.length}`,params);
-  return rows.map(r=>({id:Number(r.id),contaBancariaId:Number(r.conta_bancaria_id),data:isoData(r.data),descricao:r.descricao,tipo:r.tipo,valor:Number(r.valor),
-    conciliado:!!r.conciliado,categoriaId:r.categoria_id?Number(r.categoria_id):null,contaPagarId:r.conta_pagar_id?Number(r.conta_pagar_id):null,
-    contaReceberId:r.conta_receber_id?Number(r.conta_receber_id):null,transferenciaInterna:!!r.transferencia_interna,createdAt:r.created_at}));
-}
+router.post('/', async (req,res,next)=>{
+  try{
+    const r=await contas.criarContaBancaria(req.body);
+    if(r.errors) return res.status(400).json({errors:r.errors});
+    res.status(201).json(r);
+  }catch(err){next(err);}
+});
 
-// Marca/desmarca um movimento do extrato como transferência interna entre
-// contas da própria empresa (ex.: PIX entre duas contas do próprio CNPJ) —
-// nunca entra na DRE nem no detalhamento de despesas, dos dois lados (ver
-// `em.transferencia_interna = false` em
-// lib/despesasFinanceiras.js#listarDespesasDetalhadas). Independente de
-// conta_pagar_id/conta_receber_id — os três marcadores nunca se sobrepõem
-// por regra de negócio (um movimento marcado como transferência não deveria
-// também estar vinculado a uma conta a pagar/receber), mas o código não
-// impede fisicamente isso pra não travar uma correção manual do usuário.
-async function marcarTransferenciaInterna(movimentoId, {empresaId, transferenciaInterna}, db=null){
-  db = db || poolPadrao();
-  const id=Number(movimentoId), emp=Number(empresaId);
-  if(!id||!emp) return {notFound:true};
-  const {rows}=await db.query(`UPDATE extrato_movimentos SET transferencia_interna=$1 WHERE id=$2 AND empresa_id=$3 RETURNING id`,
-    [transferenciaInterna===true, id, emp]);
-  if(!rows.length) return {notFound:true};
-  return {ok:true};
-}
+router.get('/movimentos', async (req,res,next)=>{
+  try{
+    if(!req.query.empresaId) return res.status(400).json({error:'Informe empresaId.'});
+    const movimentos=await contas.listarMovimentos({empresaId:req.query.empresaId,contaBancariaId:req.query.contaBancariaId,limite:req.query.limite});
+    res.json({movimentos});
+  }catch(err){next(err);}
+});
 
-// Conciliação simples (manual): vincula um movimento do extrato a uma conta
-// a pagar já existente, pro caso em que a importação automática (por
-// fingerprint) não bateu sozinha. A partir daqui,
-// extrato_movimentos.conta_pagar_id passa a excluir esse movimento de
-// listarDespesasDetalhadas — ele já é contado do lado de contas_pagar, nunca
-// duas vezes. `conciliado` (coluna que já existia antes desta etapa) vira
-// true só como indicador visual na tela de extrato.
-async function vincularContaPagar(movimentoId, contaPagarId, {empresaId}, db=null){
-  db = db || poolPadrao();
-  const id=Number(movimentoId), cpId=Number(contaPagarId), emp=Number(empresaId);
-  if(!cpId) return {errors:{contaPagarId:'Informe a conta a pagar.'}};
-  if(!id||!emp) return {notFound:true};
-  const {rows:cp}=await db.query('SELECT id FROM contas_pagar WHERE id=$1 AND empresa_id=$2',[cpId,emp]);
-  if(!cp.length) return {errors:{contaPagarId:'Conta a pagar não encontrada nesta empresa.'}};
-  const {rows}=await db.query(`UPDATE extrato_movimentos SET conta_pagar_id=$1, conciliado=true WHERE id=$2 AND empresa_id=$3 RETURNING id`,
-    [cpId, id, emp]);
-  if(!rows.length) return {notFound:true};
-  return {ok:true};
-}
+router.post('/importar/analisar', async (req,res,next)=>{
+  try{
+    const {nomeArquivo,buffer}=decodeArquivo(req.body);
+    const a=await extrato.analisarArquivo({nomeArquivo,buffer});
+    res.json({analise:{formato:a.formato,banco:a.banco,conta:a.conta,saldoFinal:a.saldoFinal,saldoData:a.saldoData,quantidadeMovimentos:a.movimentos.length,
+      preview:a.movimentos.slice(0,20).map(({data,tipo,descricao,valor})=>({data,tipo,descricao,valor}))}});
+  }catch(err){res.status(400).json({error:err.message||'Não foi possível analisar o extrato.'});}
+});
 
-// Desfaz a conciliação manual acima — o movimento volta a aparecer em
-// listarDespesasDetalhadas (como saída de extrato, se ainda fizer sentido)
-// até ser vinculado de novo ou virar outra coisa.
-async function desvincularContaPagar(movimentoId, {empresaId}, db=null){
-  db = db || poolPadrao();
-  const id=Number(movimentoId), emp=Number(empresaId);
-  if(!id||!emp) return {notFound:true};
-  const {rows}=await db.query(`UPDATE extrato_movimentos SET conta_pagar_id=NULL, conciliado=false WHERE id=$1 AND empresa_id=$2 RETURNING id`,
-    [id, emp]);
-  if(!rows.length) return {notFound:true};
-  return {ok:true};
-}
-
-// Categoriza diretamente um movimento do extrato (ex.: uma tarifa bancária
-// que nunca vai virar uma conta a pagar) — é essa categoria_id que faz o
-// movimento aparecer agrupado corretamente no bloco por categoria da DRE
-// (ver lib/despesasFinanceiras.js#mapCategoria).
-async function definirCategoriaMovimento(movimentoId, categoriaId, {empresaId}, db=null){
-  db = db || poolPadrao();
-  const id=Number(movimentoId), emp=Number(empresaId);
-  if(!id||!emp) return {notFound:true};
-  let catId=null;
-  if(categoriaId){
-    const cat=await categoriasFinanceiras.buscarPorId(Number(categoriaId), emp, db);
-    if(!cat) return {errors:{categoriaId:'Categoria não encontrada nesta empresa.'}};
-    catId=cat.id;
+router.post('/importar/confirmar', async (req,res,next)=>{
+  try{
+    const empresaId=Number(req.body.empresaId),contaBancariaId=Number(req.body.contaBancariaId);
+    if(!empresaId||!contaBancariaId) return res.status(400).json({error:'Selecione a empresa e a conta bancária.'});
+    const {nomeArquivo,buffer}=decodeArquivo(req.body);
+    const a=await extrato.analisarArquivo({nomeArquivo,buffer});
+    if(req.body.saldoFinal!==undefined && req.body.saldoFinal!==null && String(req.body.saldoFinal).trim()!==''){
+      const manual=extrato.normalizarValor(req.body.saldoFinal);
+      if(manual===null) return res.status(400).json({error:'Saldo final inválido.'});
+      a.saldoFinal=manual;
+    }
+    if(req.body.saldoData) a.saldoData=String(req.body.saldoData);
+    if(a.saldoFinal===null||a.saldoFinal===undefined||!a.saldoData){
+      return res.status(400).json({error:'Não consegui identificar o saldo final e a data. Confira os campos antes de importar.'});
+    }
+    const forcarSubstituicaoSaldo = req.body.forcarSubstituicaoSaldo===true || req.body.forcarSubstituicaoSaldo==='true';
+    const r=await contas.confirmarImportacao({empresaId,contaBancariaId,nomeArquivo,arquivoHash:a.arquivoHash,formato:a.formato,saldoFinal:a.saldoFinal,saldoData:a.saldoData,bancoDetectado:a.banco,contaDetectada:a.conta,movimentos:a.movimentos,forcarSubstituicaoSaldo});
+    const saldoConsolidado=await contas.saldoConsolidado(empresaId);
+    res.json({...r,saldoFinal:a.saldoFinal,saldoData:a.saldoData,saldoConsolidado});
+  }catch(err){
+    if(/obrigat|não encontrada|não corresponde|inválid|identificar|formato|PDF não reconhecido/i.test(err.message||'')) return res.status(400).json({error:err.message});
+    next(err);
   }
-  const {rows}=await db.query(`UPDATE extrato_movimentos SET categoria_id=$1 WHERE id=$2 AND empresa_id=$3 RETURNING id`,
-    [catId, id, emp]);
-  if(!rows.length) return {notFound:true};
-  return {ok:true};
-}
+});
 
-module.exports={resolverSaldoBase,listarContasBancarias,saldoConsolidado,criarContaBancaria,confirmarImportacao,listarMovimentos,
-  marcarTransferenciaInterna,vincularContaPagar,desvincularContaPagar,definirCategoriaMovimento};
+// (31/08/2026) Ajustes finos num movimento do extrato — categoria,
+// transferência interna, e conciliação manual com uma conta a pagar. Toda a
+// regra (e a explicação de por que isso nunca duplica despesa na DRE) mora
+// em lib/contasBancarias.js.
+router.patch('/movimentos/:id/categoria', async (req,res,next)=>{
+  try{
+    if(!req.body.empresaId) return res.status(400).json({error:'Informe empresaId.'});
+    const r=await contas.definirCategoriaMovimento(req.params.id, req.body.categoriaId||null, {empresaId:req.body.empresaId});
+    if(r.notFound) return res.status(404).json({error:'Movimentação não encontrada.'});
+    if(r.errors) return res.status(400).json({errors:r.errors});
+    res.json(r);
+  }catch(err){next(err);}
+});
+
+router.patch('/movimentos/:id/transferencia', async (req,res,next)=>{
+  try{
+    if(!req.body.empresaId) return res.status(400).json({error:'Informe empresaId.'});
+    const r=await contas.marcarTransferenciaInterna(req.params.id, {empresaId:req.body.empresaId, transferenciaInterna:req.body.transferenciaInterna===true});
+    if(r.notFound) return res.status(404).json({error:'Movimentação não encontrada.'});
+    res.json(r);
+  }catch(err){next(err);}
+});
+
+router.patch('/movimentos/:id/conciliar', async (req,res,next)=>{
+  try{
+    if(!req.body.empresaId) return res.status(400).json({error:'Informe empresaId.'});
+    const r=await contas.vincularContaPagar(req.params.id, req.body.contaPagarId, {empresaId:req.body.empresaId});
+    if(r.notFound) return res.status(404).json({error:'Movimentação não encontrada.'});
+    if(r.errors) return res.status(400).json({errors:r.errors});
+    res.json(r);
+  }catch(err){next(err);}
+});
+
+router.patch('/movimentos/:id/desconciliar', async (req,res,next)=>{
+  try{
+    if(!req.body.empresaId) return res.status(400).json({error:'Informe empresaId.'});
+    const r=await contas.desvincularContaPagar(req.params.id, {empresaId:req.body.empresaId});
+    if(r.notFound) return res.status(404).json({error:'Movimentação não encontrada.'});
+    res.json(r);
+  }catch(err){next(err);}
+});
+
+module.exports=router;
