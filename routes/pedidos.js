@@ -647,21 +647,31 @@ async function detalharPedidoShopee(id, res) {
 
   const valorVenda = toNum(pedido.valor_total);
   const freteVendedor = toNum(pedido.frete_real);
+  // Fase 2b (14/09/2026, pedido explícito do usuário: "quero igual ao
+  // mercado livre, mas com as taxas e comissões da shopee") — comissão real
+  // vinda de payment/get_escrow_detail_batch (lib/shopeeSync.js), salva em
+  // shopee_pedidos.comissao_venda/taxa_transacao_pagamento/taxa_servico.
+  // NULL quando a Shopee ainda não processou/liberou o repasse deste
+  // pedido — nunca inventado (mesmo mecanismo de "pendente" já usado pro
+  // Mercado Livre logo abaixo).
+  const taxaVenda = toNum(pedido.comissao_venda);
+  const pagamentoTaxas = toNum(pedido.taxa_transacao_pagamento);
+  const pagamentoTaxaMarketplace = toNum(pedido.taxa_servico);
   // Cupom da Shopee ainda não é capturado nesta etapa (Fase 1) — 0, mesma
   // regra já documentada em lib/resultadoVenda.js/relatorioVendas.js pra
   // "sem cupom" (fato real conhecido, não dado faltando).
   const desconto = 0;
 
-  pendencias.push('A Shopee ainda não retorna a comissão/tarifas de venda deste pedido nesta etapa da integração (Fase 2b — repasse/escrow — ainda não implementada). A margem deste pedido fica "pendente" até essa fonte existir.');
+  if (taxaVenda === null) pendencias.push('A Shopee ainda não processou/liberou o repasse (comissão e tarifas de venda) deste pedido — a margem fica "pendente" até esse dado existir.');
   if (freteVendedor === null) pendencias.push('A Shopee não retornou o custo de frete do vendedor deste pedido.');
 
   const custoProdutoFinal = itens.length && custoCompleto ? Math.round(custoProdutoTotal * 100) / 100 : null;
 
   const { tarifasComponentes, tarifasTotal, imposto, resultado, calculoCompleto } = calcularResultadoVenda({
     valorVenda,
-    taxaVenda: null,
-    pagamentoTaxas: null,
-    pagamentoTaxaMarketplace: null,
+    taxaVenda,
+    pagamentoTaxas,
+    pagamentoTaxaMarketplace,
     freteVendedor,
     custoProduto: custoProdutoFinal,
     aliquotaImposto,
