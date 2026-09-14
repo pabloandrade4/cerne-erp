@@ -1,7 +1,7 @@
-// Pedidos importados do Mercado Livre: listagem, detalhe e relatório
-// exportável (com o cálculo financeiro preparado no Passo 3 — comissão real
-// da API, frete do vendedor real da API, imposto configurado pelo ERP e
-// custo do produto cadastrado).
+// Pedidos importados do Mercado Livre e da Shopee: listagem, detalhe e
+// relatório exportável (com o cálculo financeiro preparado no Passo 3 —
+// comissão real da API, frete do vendedor real da API, imposto configurado
+// pelo ERP e custo do produto cadastrado).
 //
 // A listagem e o relatório usam lib/relatorioVendas.js — a MESMA função
 // usada por Visão Geral e Financeiro (routes/relatorios.js) — pra nunca
@@ -11,6 +11,21 @@
 // alterados, nem duplicados: o relatório reaproveita exatamente as mesmas
 // funções (`buscarPedidosDoPeriodo`, `resumirPeriodo`), só filtrando o
 // array de pedidos já calculado antes de somar os totais.
+//
+// Shopee (14/09/2026, pedido explícito do usuário: "tudo que foi aplicado
+// no mercado livre pode e deve ser aplicado na shopee") — como
+// buscarPedidosDoPeriodo já une as duas lojas (ver relatorioVendas.js), a
+// listagem/exportação abaixo já incluem Shopee automaticamente. O que
+// precisou mudar aqui foi só o que é ESPECÍFICO desta rota: as opções de
+// filtro "Loja"/"Status" (buscarLojasDaEmpresa/buscarStatusDoPeriodo, que
+// antes consultavam só ml_contas/ml_pedidos) e o filtro por loja
+// (filtrarPedidos), que agora usa `contaKey` (formato
+// "mercado_livre:<id>"/"shopee:<id>" — ver comentário em
+// relatorioVendas.js#serializarPedido) em vez de `contaMlId` sozinho, pra
+// nunca arriscar confundir a loja #3 do Mercado Livre com a loja #3 da
+// Shopee. GET /:id (detalhe) também passou a aceitar esse mesmo formato de
+// chave composta, roteando pra ml_pedidos ou shopee_pedidos conforme o
+// prefixo.
 const express = require('express');
 const ExcelJS = require('exceljs');
 const pool = require('../db/pool');
@@ -33,7 +48,11 @@ const LIMITE_LISTAGEM = 500;
 function filtrarPedidos(pedidos, { contaId, status, busca }) {
   const alvo = busca ? busca.trim().toLowerCase() : '';
   return pedidos.filter((p) => {
-    if (contaId && String(p.contaMlId) !== String(contaId)) return false;
+    // contaId aqui é a `contaKey` composta ("mercado_livre:12"/"shopee:3" —
+    // ver relatorioVendas.js#serializarPedido), nunca mais um id de conta
+    // sozinho: um id sozinho poderia colidir entre as duas lojas (ver
+    // comentário no topo do arquivo).
+    if (contaId && p.contaKey !== contaId) return false;
     if (status && p.status !== status) return false;
     if (alvo) {
       const hitProduto = (p.produtoResumo || '').toLowerCase().includes(alvo);
@@ -45,28 +64,66 @@ function filtrarPedidos(pedidos, { contaId, status, busca }) {
 }
 
 // Opções reais para os filtros de Loja e Status — nunca uma lista fixa
-// "chutada": Loja vem das contas do Mercado Livre já conectadas à empresa;
-// Status vem dos status que realmente aparecem nos pedidos do período (não
-// existe lista fechada de status documentada — é o que a API do Mercado
-// Livre mandou). Consultas simples (sem as subqueries de itens/custo de
+// "chutada": Loja vem das contas do Mercado Livre E das lojas da Shopee já
+// conectadas à empresa (14/09/2026); Status vem dos status que realmente
+// aparecem nos pedidos do período, das duas origens (não existe lista
+// fechada de status documentada — é o que cada API mandou; os vocabulários
+// não se confundem porque o Mercado Livre usa minúsculas ("paid",
+// "cancelled"...) e a Shopee usa maiúsculas ("READY_TO_SHIP", "CANCELLED"...)).
+// `chave` é o mesmo formato de `contaKey` usado em relatorioVendas.js —
+// usado pelo filtro de loja acima (filtrarPedidos) e por GET /:id.
+// Consultas simples (sem as subqueries de itens/custo de
 // buscarPedidosDoPeriodo), então não pesam no carregamento da tela.
 async function buscarLojasDaEmpresa(empresaId) {
-  const { rows } = await pool.query(
-    'SELECT id, nickname FROM ml_contas WHERE empresa_id = $1 ORDER BY nickname',
-    [empresaId]
-  );
-  return rows.map((r) => ({ id: r.id, nickname: r.nickname }));
+  const [ml, shopee] = await Promise.all([
+    pool.query('SELECT id, nickname FROM ml_contas WHERE empresa_id = $1 ORDER BY nickname', [empresaId]),
+    pool.query('SELECT id, shop_name FROM shopee_contas WHERE empresa_id = $1 ORDER BY shop_name', [empresaId]),
+  ]);
+  const lojasMl = ml.rows.map((r) => ({ chave: `mercado_livre:${r.id}`, marketplace: 'mercado_livre', nickname: r.nickname }));
+  const lojasShopee = shopee.rows.map((r) => ({ chave: `shopee:${r.id}`, marketplace: 'shopee', nickname: r.shop_name || `Loja Shopee #${r.id}` }));
+  return [...lojasMl, ...lojasShopee];
 }
 
 async function buscarStatusDoPeriodo(empresaId, desde, ate) {
-  const { rows } = await pool.query(
-    `SELECT DISTINCT p.status FROM ml_pedidos p
-     JOIN ml_contas c ON c.id = p.conta_ml_id
-     WHERE c.empresa_id = $1 AND ${SQL_DATA_EFETIVA} >= $2 AND ${SQL_DATA_EFETIVA} < $3 AND p.status IS NOT NULL
-     ORDER BY p.status`,
-    [empresaId, desde, ate]
-  );
-  return rows.map((r) => r.status);
+  const [ml, shopee] = await Promise.all([
+    pool.query(
+      `SELECT DISTINCT p.status FROM ml_pedidos p
+       JOIN ml_contas c ON c.id = p.conta_ml_id
+       WHERE c.empresa_id = $1 AND ${SQL_DATA_EFETIVA} >= $2 AND ${SQL_DATA_EFETIVA} < $3 AND p.status IS NOT NULL`,
+      [empresaId, desde, ate]
+    ),
+    // Shopee ainda não distingue "criado" de "fechado" nesta etapa (Fase 1
+    // — ver lib/shopeeSync.js), então data_efetiva == data_criacao pra ela,
+    // exatamente como já é em SQL_UNIAO_PEDIDOS (relatorioVendas.js).
+    pool.query(
+      `SELECT DISTINCT p.order_status AS status FROM shopee_pedidos p
+       JOIN shopee_contas c ON c.id = p.conta_shopee_id
+       WHERE c.empresa_id = $1 AND p.data_criacao >= $2 AND p.data_criacao < $3 AND p.order_status IS NOT NULL`,
+      [empresaId, desde, ate]
+    ),
+  ]);
+  const status = new Set([...ml.rows.map((r) => r.status), ...shopee.rows.map((r) => r.status)]);
+  return [...status].sort();
+}
+
+// Nome da loja a partir da `contaKey` composta ("mercado_livre:12" /
+// "shopee:3") — usado só pro texto informativo do cabeçalho do relatório
+// exportado (nunca bloqueia a exportação se falhar).
+async function buscarNomeLoja(contaKey) {
+  if (!contaKey) return null;
+  const [marketplace, idStr] = String(contaKey).split(':');
+  const id = Number(idStr);
+  if (!id) return null;
+  try {
+    if (marketplace === 'shopee') {
+      const { rows } = await pool.query('SELECT shop_name FROM shopee_contas WHERE id = $1', [id]);
+      return rows.length ? rows[0].shop_name : null;
+    }
+    const { rows } = await pool.query('SELECT nickname FROM ml_contas WHERE id = $1', [id]);
+    return rows.length ? rows[0].nickname : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // GET /api/pedidos?empresaId=ID&periodo=30d&contaId=&status=&busca=
@@ -148,6 +205,7 @@ function formatarNomeArquivo(periodoCalc, extensao) {
 // tela Pedidos (produto/SKU resumidos quando o pedido tem mais de um item).
 const COLUNAS_RELATORIO = [
   { header: 'Data', key: 'data', width: 20 },
+  { header: 'Marketplace', key: 'marketplace', width: 14 },
   { header: 'Pedido', key: 'pedido', width: 16 },
   { header: 'Loja', key: 'loja', width: 18 },
   { header: 'Produto', key: 'produto', width: 38 },
@@ -155,7 +213,7 @@ const COLUNAS_RELATORIO = [
   { header: 'Quantidade', key: 'quantidade', width: 12, tipo: 'int' },
   { header: 'Valor da venda', key: 'valorVenda', width: 16, tipo: 'money' },
   { header: 'Descontos', key: 'descontos', width: 14, tipo: 'money' },
-  { header: 'Taxas/comissões ML', key: 'taxas', width: 18, tipo: 'money' },
+  { header: 'Taxas/comissões', key: 'taxas', width: 18, tipo: 'money' },
   { header: 'Frete comprador', key: 'freteComprador', width: 16, tipo: 'money' },
   { header: 'Frete vendedor', key: 'freteVendedor', width: 16, tipo: 'money' },
   { header: 'Imposto', key: 'imposto', width: 14, tipo: 'money' },
@@ -169,6 +227,7 @@ const COLUNAS_RELATORIO = [
 function linhaDoPedido(p) {
   return {
     data: fmtDataBR(p.dataCriacao),
+    marketplace: p.marketplace === 'shopee' ? 'Shopee' : 'Mercado Livre',
     pedido: p.mlOrderId,
     loja: p.loja || '',
     produto: p.produtoResumo || '',
@@ -352,10 +411,7 @@ router.get('/relatorio', async (req, res, next) => {
     try {
       const { rows: empresaRows } = await pool.query('SELECT nome_fantasia, razao_social FROM empresas WHERE id = $1', [empresaId]);
       if (empresaRows.length) empresaNome = empresaRows[0].nome_fantasia || empresaRows[0].razao_social;
-      if (contaId) {
-        const { rows: contaRows } = await pool.query('SELECT nickname FROM ml_contas WHERE id = $1', [contaId]);
-        if (contaRows.length) lojaNome = contaRows[0].nickname;
-      }
+      if (contaId) lojaNome = await buscarNomeLoja(contaId);
     } catch (e) { /* nome da empresa/loja é só informativo no cabeçalho do relatório — nunca bloqueia a exportação */ }
 
     const filtrosTexto = textoFiltros({ empresaNome, periodoCalc, lojaNome, status, busca });
@@ -377,144 +433,305 @@ router.get('/relatorio', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/pedidos/:id — detalhe completo + resultado financeiro (Passo 3)
+// Custo por SKU vem de `produtos` (tela Produtos, desde 24/08/2026 — ver
+// db/schema.sql e docs/02-decisoes.md) — mesma fonte usada em
+// lib/relatorioVendas.js, pra nunca divergir entre a lista de Pedidos e o
+// detalhe do pedido, seja Mercado Livre ou Shopee. Não filtra por
+// produtos.ativo (ver comentário em relatorioVendas.js sobre o mesmo ponto).
+async function buscarCustosPorSku(empresaId, skus) {
+  if (!skus.length) return {};
+  const { rows } = await pool.query(
+    'SELECT sku, custo FROM produtos WHERE empresa_id = $1 AND sku = ANY($2::text[])',
+    [empresaId, skus]
+  );
+  return Object.fromEntries(rows.map((c) => [c.sku, Number(c.custo)]));
+}
+
+// GET /api/pedidos/mercado_livre:ID — detalhe completo + resultado
+// financeiro do Mercado Livre (Passo 3). Sem mudança de comportamento desde
+// sempre — só passou a ser chamado a partir da `detailKey` composta (ver
+// dispatcher no fim do arquivo) em vez de um id numérico solto.
+async function detalharPedidoMercadoLivre(id, res) {
+  const { rows } = await pool.query(
+    `SELECT p.*, e.id AS empresa_id_real, c.nickname AS conta_nickname,
+            ${SQL_DESCONTO_CUPOM} AS desconto_cupom
+     FROM ml_pedidos p
+     JOIN ml_contas c ON c.id = p.conta_ml_id
+     JOIN empresas e ON e.id = c.empresa_id
+     WHERE p.id = $1`,
+    [id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  const pedido = rows[0];
+  const empresaId = pedido.empresa_id_real;
+
+  const { rows: itens } = await pool.query(
+    'SELECT * FROM ml_pedido_itens WHERE pedido_id = $1 ORDER BY id',
+    [pedido.id]
+  );
+
+  const skus = [...new Set(itens.map((i) => i.sku).filter(Boolean))];
+  const custosPorSku = await buscarCustosPorSku(empresaId, skus);
+
+  const { rows: configRows } = await pool.query(
+    'SELECT aliquota_imposto FROM config_financeiro WHERE empresa_id = $1',
+    [empresaId]
+  );
+  const aliquotaImposto = configRows.length ? Number(configRows[0].aliquota_imposto) : 0;
+
+  const pendencias = [];
+  let custoProdutoTotal = 0;
+  let custoCompleto = true;
+  const itensDetalhados = itens.map((it) => {
+    const qtd = it.quantidade || 0;
+    let custoUnitario = null;
+    if (!it.sku) {
+      custoCompleto = false;
+      pendencias.push(`Item "${it.titulo || it.ml_item_id}" não tem SKU informado pelo Mercado Livre — custo não pode ser vinculado.`);
+    } else if (custosPorSku[it.sku] === undefined) {
+      custoCompleto = false;
+      pendencias.push(`Custo do SKU "${it.sku}" ainda não foi cadastrado.`);
+    } else {
+      custoUnitario = custosPorSku[it.sku];
+      custoProdutoTotal += custoUnitario * qtd;
+    }
+    return {
+      id: it.id,
+      mlItemId: it.ml_item_id,
+      titulo: it.titulo,
+      sku: it.sku,
+      quantidade: qtd,
+      precoUnitario: toNum(it.preco_unitario),
+      precoUnitarioOriginal: toNum(it.preco_unitario_original),
+      valorTotalItem: toNum(it.valor_total_item),
+      taxaVenda: toNum(it.taxa_venda),
+      custoUnitario,
+      custoTotal: custoUnitario != null ? Math.round(custoUnitario * qtd * 100) / 100 : null,
+    };
+  });
+
+  const valorVenda = toNum(pedido.valor_total);
+  const taxaVenda = toNum(pedido.taxa_venda_total);
+  const pagamentoTaxas = toNum(pedido.pagamento_taxas);
+  const pagamentoTaxaMarketplace = toNum(pedido.pagamento_taxa_marketplace);
+  const freteVendedor = toNum(pedido.frete_vendedor);
+  const freteComprador = toNum(pedido.frete_comprador);
+  const desconto = toNum(pedido.desconto_cupom) || 0;
+
+  if (taxaVenda === null) pendencias.push('O Mercado Livre não retornou a comissão (sale_fee) deste pedido.');
+  if (freteVendedor === null) pendencias.push('O Mercado Livre não retornou o custo de frete do vendedor deste pedido.');
+
+  const custoProdutoFinal = itens.length && custoCompleto ? Math.round(custoProdutoTotal * 100) / 100 : null;
+
+  const { tarifasComponentes, tarifasTotal, imposto, resultado, calculoCompleto } = calcularResultadoVenda({
+    valorVenda,
+    taxaVenda,
+    pagamentoTaxas,
+    pagamentoTaxaMarketplace,
+    freteVendedor,
+    custoProduto: custoProdutoFinal,
+    aliquotaImposto,
+    desconto,
+  });
+  const margemPercentual = resultado !== null && valorVenda ? round2((resultado / valorVenda) * 100) : null;
+
+  res.json({
+    pedido: {
+      id: pedido.id,
+      marketplace: 'mercado_livre',
+      detailKey: `mercado_livre:${pedido.id}`,
+      empresaId,
+      loja: pedido.conta_nickname,
+      mlOrderId: String(pedido.ml_order_id),
+      packId: pedido.pack_id ? String(pedido.pack_id) : null,
+      dataCriacao: pedido.data_criacao,
+      dataFechamento: pedido.data_fechamento,
+      status: pedido.status,
+      statusDetail: pedido.status_detail,
+      compradorId: pedido.comprador_id ? String(pedido.comprador_id) : null,
+      compradorNickname: pedido.comprador_nickname,
+      moeda: pedido.moeda,
+      mlPaymentId: pedido.ml_payment_id ? String(pedido.ml_payment_id) : null,
+      mlShippingId: pedido.ml_shipping_id ? String(pedido.ml_shipping_id) : null,
+      envioStatus: pedido.envio_status,
+      envioLogisticMode: pedido.envio_logistic_mode,
+      envioLogisticType: pedido.envio_logistic_type,
+    },
+    itens: itensDetalhados,
+    resultadoFinanceiro: {
+      valorVenda,
+      desconto,
+      tarifasMl: { total: tarifasTotal, componentes: tarifasComponentes },
+      freteVendedor,
+      freteComprador,
+      imposto: { aliquota: aliquotaImposto, valor: imposto },
+      custoProduto: custoProdutoFinal,
+      resultado,
+      margemPercentual,
+      calculoCompleto,
+      pendencias,
+    },
+    auditoria: {
+      rawPedidoDisponivel: !!pedido.raw_pedido,
+      rawEnvioDisponivel: !!pedido.raw_envio,
+      rawCustosEnvioDisponivel: !!pedido.raw_custos_envio,
+    },
+  });
+}
+
+// GET /api/pedidos/shopee:ID — detalhe completo do pedido da Shopee
+// (14/09/2026, mesmo espírito do detalhe do Mercado Livre acima — "tudo que
+// foi aplicado no mercado livre pode e deve ser aplicado na shopee"). A
+// diferença real (nunca escondida, sempre como pendência explícita): a
+// Shopee ainda não retorna comissão/tarifas de venda nos dados já
+// sincronizados (Fase 1 — get_order_detail) — só um futuro endpoint de
+// repasse/escrow traria isso (Fase 2b, ainda não implementada). Por isso
+// taxaVenda/pagamentoTaxas/pagamentoTaxaMarketplace são sempre null aqui, o
+// que automaticamente deixa a margem "pendente" (mesmo mecanismo de custo de
+// SKU não cadastrado — nunca um valor inventado).
+async function detalharPedidoShopee(id, res) {
+  const { rows } = await pool.query(
+    `SELECT p.*, e.id AS empresa_id_real, c.shop_name AS conta_nickname
+     FROM shopee_pedidos p
+     JOIN shopee_contas c ON c.id = p.conta_shopee_id
+     JOIN empresas e ON e.id = c.empresa_id
+     WHERE p.id = $1`,
+    [id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  const pedido = rows[0];
+  const empresaId = pedido.empresa_id_real;
+
+  const { rows: itens } = await pool.query(
+    'SELECT * FROM shopee_pedido_itens WHERE pedido_id = $1 ORDER BY id',
+    [pedido.id]
+  );
+
+  const skus = [...new Set(itens.map((i) => i.sku).filter(Boolean))];
+  const custosPorSku = await buscarCustosPorSku(empresaId, skus);
+
+  const { rows: configRows } = await pool.query(
+    'SELECT aliquota_imposto FROM config_financeiro WHERE empresa_id = $1',
+    [empresaId]
+  );
+  const aliquotaImposto = configRows.length ? Number(configRows[0].aliquota_imposto) : 0;
+
+  const pendencias = [];
+  let custoProdutoTotal = 0;
+  let custoCompleto = true;
+  const itensDetalhados = itens.map((it) => {
+    const qtd = it.quantidade || 0;
+    let custoUnitario = null;
+    if (!it.sku) {
+      custoCompleto = false;
+      pendencias.push(`Item "${it.nome || it.item_id}" não tem SKU informado pela Shopee — custo não pode ser vinculado.`);
+    } else if (custosPorSku[it.sku] === undefined) {
+      custoCompleto = false;
+      pendencias.push(`Custo do SKU "${it.sku}" ainda não foi cadastrado.`);
+    } else {
+      custoUnitario = custosPorSku[it.sku];
+      custoProdutoTotal += custoUnitario * qtd;
+    }
+    return {
+      id: it.id,
+      itemId: it.item_id ? String(it.item_id) : null,
+      titulo: it.nome,
+      sku: it.sku,
+      quantidade: qtd,
+      precoUnitario: toNum(it.preco_unitario),
+      valorTotalItem: toNum(it.valor_total_item),
+      custoUnitario,
+      custoTotal: custoUnitario != null ? Math.round(custoUnitario * qtd * 100) / 100 : null,
+    };
+  });
+
+  const valorVenda = toNum(pedido.valor_total);
+  const freteVendedor = toNum(pedido.frete_real);
+  // Cupom da Shopee ainda não é capturado nesta etapa (Fase 1) — 0, mesma
+  // regra já documentada em lib/resultadoVenda.js/relatorioVendas.js pra
+  // "sem cupom" (fato real conhecido, não dado faltando).
+  const desconto = 0;
+
+  pendencias.push('A Shopee ainda não retorna a comissão/tarifas de venda deste pedido nesta etapa da integração (Fase 2b — repasse/escrow — ainda não implementada). A margem deste pedido fica "pendente" até essa fonte existir.');
+  if (freteVendedor === null) pendencias.push('A Shopee não retornou o custo de frete do vendedor deste pedido.');
+
+  const custoProdutoFinal = itens.length && custoCompleto ? Math.round(custoProdutoTotal * 100) / 100 : null;
+
+  const { tarifasComponentes, tarifasTotal, imposto, resultado, calculoCompleto } = calcularResultadoVenda({
+    valorVenda,
+    taxaVenda: null,
+    pagamentoTaxas: null,
+    pagamentoTaxaMarketplace: null,
+    freteVendedor,
+    custoProduto: custoProdutoFinal,
+    aliquotaImposto,
+    desconto,
+  });
+  const margemPercentual = resultado !== null && valorVenda ? round2((resultado / valorVenda) * 100) : null;
+
+  res.json({
+    pedido: {
+      id: pedido.id,
+      marketplace: 'shopee',
+      detailKey: `shopee:${pedido.id}`,
+      empresaId,
+      loja: pedido.conta_nickname,
+      mlOrderId: pedido.order_sn, // mesmo campo do Mercado Livre por compatibilidade com o frontend — valor já é o identificador da Shopee (order_sn)
+      packId: null,
+      dataCriacao: pedido.data_criacao,
+      dataFechamento: null, // Shopee ainda não distingue "criado" de "fechado" nesta etapa (Fase 1)
+      status: pedido.order_status,
+      statusDetail: null,
+      compradorId: pedido.comprador_user_id ? String(pedido.comprador_user_id) : null,
+      compradorNickname: pedido.comprador_username,
+      moeda: pedido.moeda,
+      metodoPagamento: pedido.metodo_pagamento,
+      mlPaymentId: null,
+      mlShippingId: null,
+      envioStatus: null,
+      envioLogisticMode: null,
+      envioLogisticType: pedido.transportadora,
+    },
+    itens: itensDetalhados,
+    resultadoFinanceiro: {
+      valorVenda,
+      desconto,
+      tarifasMl: { total: tarifasTotal, componentes: tarifasComponentes },
+      freteVendedor,
+      freteComprador: null, // a Shopee não separa frete pago pelo comprador nos campos já buscados nesta etapa
+      imposto: { aliquota: aliquotaImposto, valor: imposto },
+      custoProduto: custoProdutoFinal,
+      resultado,
+      margemPercentual,
+      calculoCompleto,
+      pendencias,
+    },
+    auditoria: {
+      rawPedidoDisponivel: !!pedido.raw_pedido,
+      rawEnvioDisponivel: false,
+      rawCustosEnvioDisponivel: false,
+    },
+  });
+}
+
+// GET /api/pedidos/:id — detalhe completo + resultado financeiro. `:id` é a
+// `detailKey` composta vinda de buscarPedidosDoPeriodo
+// ("mercado_livre:123"/"shopee:57" — ver relatorioVendas.js#serializarPedido
+// e o comentário no topo deste arquivo sobre por que um id sozinho não é
+// seguro entre as duas lojas). Um valor sem ":" é tratado como Mercado
+// Livre puro, pra nunca quebrar um link/favorito salvo antes desta mudança
+// (14/09/2026), quando `id` sozinho só existia pro Mercado Livre.
 router.get('/:id', async (req, res, next) => {
   try {
-    const { rows } = await pool.query(
-      `SELECT p.*, e.id AS empresa_id_real, c.nickname AS conta_nickname,
-              ${SQL_DESCONTO_CUPOM} AS desconto_cupom
-       FROM ml_pedidos p
-       JOIN ml_contas c ON c.id = p.conta_ml_id
-       JOIN empresas e ON e.id = c.empresa_id
-       WHERE p.id = $1`,
-      [req.params.id]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Pedido não encontrado.' });
-    const pedido = rows[0];
-    const empresaId = pedido.empresa_id_real;
-
-    const { rows: itens } = await pool.query(
-      'SELECT * FROM ml_pedido_itens WHERE pedido_id = $1 ORDER BY id',
-      [pedido.id]
-    );
-
-    // Custo por SKU vem de `produtos` (tela Produtos, desde 24/08/2026 — ver
-    // db/schema.sql e docs/02-decisoes.md) — mesma fonte usada em
-    // lib/relatorioVendas.js, pra nunca divergir entre a lista de Pedidos e
-    // o detalhe do pedido. Não filtra por produtos.ativo (ver comentário em
-    // relatorioVendas.js sobre o mesmo ponto).
-    const skus = [...new Set(itens.map((i) => i.sku).filter(Boolean))];
-    let custosPorSku = {};
-    if (skus.length) {
-      const { rows: custosRows } = await pool.query(
-        'SELECT sku, custo FROM produtos WHERE empresa_id = $1 AND sku = ANY($2::text[])',
-        [empresaId, skus]
-      );
-      custosPorSku = Object.fromEntries(custosRows.map((c) => [c.sku, Number(c.custo)]));
+    const chave = String(req.params.id || '');
+    const posDoisPontos = chave.indexOf(':');
+    const marketplace = posDoisPontos === -1 ? 'mercado_livre' : chave.slice(0, posDoisPontos);
+    const idBruto = posDoisPontos === -1 ? chave : chave.slice(posDoisPontos + 1);
+    if (marketplace === 'shopee') {
+      await detalharPedidoShopee(idBruto, res);
+    } else {
+      await detalharPedidoMercadoLivre(idBruto, res);
     }
-
-    const { rows: configRows } = await pool.query(
-      'SELECT aliquota_imposto FROM config_financeiro WHERE empresa_id = $1',
-      [empresaId]
-    );
-    const aliquotaImposto = configRows.length ? Number(configRows[0].aliquota_imposto) : 0;
-
-    const pendencias = [];
-    let custoProdutoTotal = 0;
-    let custoCompleto = true;
-    const itensDetalhados = itens.map((it) => {
-      const qtd = it.quantidade || 0;
-      let custoUnitario = null;
-      if (!it.sku) {
-        custoCompleto = false;
-        pendencias.push(`Item "${it.titulo || it.ml_item_id}" não tem SKU informado pelo Mercado Livre — custo não pode ser vinculado.`);
-      } else if (custosPorSku[it.sku] === undefined) {
-        custoCompleto = false;
-        pendencias.push(`Custo do SKU "${it.sku}" ainda não foi cadastrado.`);
-      } else {
-        custoUnitario = custosPorSku[it.sku];
-        custoProdutoTotal += custoUnitario * qtd;
-      }
-      return {
-        id: it.id,
-        mlItemId: it.ml_item_id,
-        titulo: it.titulo,
-        sku: it.sku,
-        quantidade: qtd,
-        precoUnitario: toNum(it.preco_unitario),
-        precoUnitarioOriginal: toNum(it.preco_unitario_original),
-        valorTotalItem: toNum(it.valor_total_item),
-        taxaVenda: toNum(it.taxa_venda),
-        custoUnitario,
-        custoTotal: custoUnitario != null ? Math.round(custoUnitario * qtd * 100) / 100 : null,
-      };
-    });
-
-    const valorVenda = toNum(pedido.valor_total);
-    const taxaVenda = toNum(pedido.taxa_venda_total);
-    const pagamentoTaxas = toNum(pedido.pagamento_taxas);
-    const pagamentoTaxaMarketplace = toNum(pedido.pagamento_taxa_marketplace);
-    const freteVendedor = toNum(pedido.frete_vendedor);
-    const freteComprador = toNum(pedido.frete_comprador);
-    const desconto = toNum(pedido.desconto_cupom) || 0;
-
-    if (taxaVenda === null) pendencias.push('O Mercado Livre não retornou a comissão (sale_fee) deste pedido.');
-    if (freteVendedor === null) pendencias.push('O Mercado Livre não retornou o custo de frete do vendedor deste pedido.');
-
-    const custoProdutoFinal = itens.length && custoCompleto ? Math.round(custoProdutoTotal * 100) / 100 : null;
-
-    const { tarifasComponentes, tarifasTotal, imposto, resultado, calculoCompleto } = calcularResultadoVenda({
-      valorVenda,
-      taxaVenda,
-      pagamentoTaxas,
-      pagamentoTaxaMarketplace,
-      freteVendedor,
-      custoProduto: custoProdutoFinal,
-      aliquotaImposto,
-      desconto,
-    });
-    const margemPercentual = resultado !== null && valorVenda ? round2((resultado / valorVenda) * 100) : null;
-
-    res.json({
-      pedido: {
-        id: pedido.id,
-        empresaId,
-        loja: pedido.conta_nickname,
-        mlOrderId: String(pedido.ml_order_id),
-        packId: pedido.pack_id ? String(pedido.pack_id) : null,
-        dataCriacao: pedido.data_criacao,
-        dataFechamento: pedido.data_fechamento,
-        status: pedido.status,
-        statusDetail: pedido.status_detail,
-        compradorId: pedido.comprador_id ? String(pedido.comprador_id) : null,
-        compradorNickname: pedido.comprador_nickname,
-        moeda: pedido.moeda,
-        mlPaymentId: pedido.ml_payment_id ? String(pedido.ml_payment_id) : null,
-        mlShippingId: pedido.ml_shipping_id ? String(pedido.ml_shipping_id) : null,
-        envioStatus: pedido.envio_status,
-        envioLogisticMode: pedido.envio_logistic_mode,
-        envioLogisticType: pedido.envio_logistic_type,
-      },
-      itens: itensDetalhados,
-      resultadoFinanceiro: {
-        valorVenda,
-        desconto,
-        tarifasMl: { total: tarifasTotal, componentes: tarifasComponentes },
-        freteVendedor,
-        freteComprador,
-        imposto: { aliquota: aliquotaImposto, valor: imposto },
-        custoProduto: custoProdutoFinal,
-        resultado,
-        margemPercentual,
-        calculoCompleto,
-        pendencias,
-      },
-      auditoria: {
-        rawPedidoDisponivel: !!pedido.raw_pedido,
-        rawEnvioDisponivel: !!pedido.raw_envio,
-        rawCustosEnvioDisponivel: !!pedido.raw_custos_envio,
-      },
-    });
   } catch (err) { next(err); }
 });
 
