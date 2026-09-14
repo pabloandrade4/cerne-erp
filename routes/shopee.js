@@ -87,6 +87,25 @@ router.get('/conectar', async (req, res) => {
     // A Shopee não tem parâmetro `state` nativo na URL de autorização — o
     // state vai embutido na própria redirectUri (ver lib/shopee.js).
     const redirectUri = `${getRedirectUri(req)}?state=${encodeURIComponent(state)}`;
+
+    // Diagnóstico temporário (14/09/2026, pedido do usuário) — investigando
+    // erro "wrong sign" persistente da Shopee mesmo após recolar a chave.
+    // NUNCA loga o valor da SHOPEE_PARTNER_KEY, só o comprimento e se ela
+    // tem espaço/quebra de linha sobrando (causa comum e invisível desse
+    // erro). partnerId não é segredo (já aparece na própria URL pública de
+    // autorização). Remover depois de resolver.
+    {
+      const pk = process.env.SHOPEE_PARTNER_KEY || '';
+      console.log(
+        '[Shopee][diagnóstico] host=%s partnerId="%s" partnerKeyLen=%d partnerKeyPrecisaTrim=%s redirectUri="%s"',
+        process.env.SHOPEE_HOST || 'partner.shopeemobile.com (padrão)',
+        process.env.SHOPEE_PARTNER_ID,
+        pk.length,
+        pk !== pk.trim() ? `SIM (tem ${pk.length - pk.trim().length} caractere(s) de espaço/quebra de linha sobrando)` : 'não',
+        redirectUri
+      );
+    }
+
     const url = shopee.buildAuthorizationUrl({
       partnerId: process.env.SHOPEE_PARTNER_ID,
       partnerKey: process.env.SHOPEE_PARTNER_KEY,
