@@ -147,8 +147,8 @@ router.get('/callback', async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO ml_contas (
          empresa_id, ml_user_id, nickname, email, site_id,
-         access_token_enc, refresh_token_enc, token_expires_at, status, ultimo_erro, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ativa',NULL, now())
+         access_token_enc, refresh_token_enc, token_expires_at, escopo_oauth, status, ultimo_erro, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ativa',NULL, now())
        ON CONFLICT (ml_user_id) DO UPDATE SET
          empresa_id = EXCLUDED.empresa_id,
          nickname = EXCLUDED.nickname,
@@ -157,6 +157,7 @@ router.get('/callback', async (req, res) => {
          access_token_enc = EXCLUDED.access_token_enc,
          refresh_token_enc = EXCLUDED.refresh_token_enc,
          token_expires_at = EXCLUDED.token_expires_at,
+         escopo_oauth = EXCLUDED.escopo_oauth,
          status = 'ativa',
          ultimo_erro = NULL,
          updated_at = now()
@@ -170,6 +171,9 @@ router.get('/callback', async (req, res) => {
         encrypt(tokenData.access_token),
         encrypt(tokenData.refresh_token),
         new Date(Date.now() + tokenData.expires_in * 1000),
+        // Guardado só pra diagnóstico (IA de Promoções, ver lib/mlPermissoes.js)
+        // — o texto exato que o Mercado Livre devolveu, nunca inventado.
+        tokenData.scope || null,
       ]
     );
 

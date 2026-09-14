@@ -79,10 +79,10 @@ async function buscarStatusDoPeriodo(empresaId, desde, ate) {
 // bateria o filtro mas não estava entre os 500 mais recentes.
 router.get('/', async (req, res, next) => {
   try {
-    const { empresaId, periodo, contaId, status, busca } = req.query;
+    const { empresaId, periodo, contaId, status, busca, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const temFiltroExtra = !!(contaId || status || (busca && busca.trim()));
 
     const { pedidos: base, totalNoPeriodo } = await buscarPedidosDoPeriodo({
@@ -331,11 +331,11 @@ function gerarCsv({ linhas, resumo, totalUnidades, vazio, filtrosTexto }) {
 // relatório sempre inclui TODOS os pedidos que batem o filtro.
 router.get('/relatorio', async (req, res, next) => {
   try {
-    const { empresaId, periodo, contaId, status, busca } = req.query;
+    const { empresaId, periodo, contaId, status, busca, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
     const formato = ['xlsx', 'csv'].includes(String(req.query.formato)) ? req.query.formato : 'xlsx';
 
-    const periodoCalc = calcularPeriodo(periodo);
+    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
     const { pedidos: todos } = await buscarPedidosDoPeriodo({
       empresaId,
       desde: periodoCalc.desde,

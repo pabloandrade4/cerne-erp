@@ -7,6 +7,7 @@ const { iniciarRenovacaoAutomatica: iniciarRenovacaoAutomaticaShopee } = require
 const { iniciarRadarDaIA } = require('./lib/ia/radarScheduler');
 const { iniciarSincronizacaoAutomaticaAds } = require('./lib/adsScheduler');
 const { iniciarGeracaoAutomaticaDeDespesasFixas } = require('./lib/despesasFixasScheduler');
+const { iniciarPromocoesIA } = require('./lib/ia/promocoesScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
@@ -123,6 +124,10 @@ async function start() {
     // sempre no servidor, nunca dependendo da tela estar aberta (ver
     // lib/despesasFixasScheduler.js).
     iniciarGeracaoAutomaticaDeDespesasFixas();
+    // IA de Promoções — busca promoções do Mercado Livre e recalcula a
+    // margem real a cada 1h, sempre no servidor, nunca dependendo da tela
+    // estar aberta (ver lib/ia/promocoesScheduler.js).
+    iniciarPromocoesIA();
   });
 }
 

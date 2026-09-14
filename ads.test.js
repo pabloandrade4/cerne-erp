@@ -331,3 +331,103 @@ describe(
     });
   }
 );
+
+// ============================================================
+// Período PERSONALIZADO (12/09/2026, pedido explícito do usuário): a
+// tabela por anúncio, pra um intervalo de datas arbitrário, busca a
+// métrica AO VIVO em vez de ler de ads_metricas_anuncio (que só tem as 5
+// janelas fixas pré-sincronizadas) — ver
+// lib/ads.js#buscarMetricasPorAnuncioAoVivo. Mocka só `ml.apiGet` (nunca
+// chama a API real), com uma conta e um token reais no banco de teste
+// (mesmo padrão do watchdog acima).
+// ============================================================
+describe(
+  'buscarMetricasPorAnuncio — período personalizado busca AO VIVO (12/09/2026)',
+  { skip: !TEM_BANCO && 'defina DATABASE_URL apontando pra um Postgres de teste já com o schema aplicado' },
+  () => {
+    const EMPRESA_PERS_ID = 954;
+    const CONTA_PERS_ID = 954;
+    let pool, ml, cryptoLib, adsLib, apiGetReal;
+
+    before(async () => {
+      if (!process.env.ML_TOKEN_KEY) process.env.ML_TOKEN_KEY = nodeCrypto.randomBytes(32).toString('base64');
+      pool = require('../db/pool');
+      ml = require('../lib/mercadolivre');
+      cryptoLib = require('../lib/crypto');
+      adsLib = require('../lib/ads');
+      apiGetReal = ml.apiGet;
+
+      await pool.query(
+        `INSERT INTO empresas (id, cnpj, razao_social, ativo) VALUES ($1,'77777777000282','EMPRESA TESTE ADS PERSONALIZADO',TRUE)
+         ON CONFLICT (id) DO NOTHING`,
+        [EMPRESA_PERS_ID]
+      );
+      await pool.query(
+        `INSERT INTO ml_contas (id, empresa_id, ml_user_id, nickname, site_id, access_token_enc, refresh_token_enc, token_expires_at, status)
+         VALUES ($1,$2,954000001,'LOJA PERSONALIZADO','MLB',$3,$4, now() + interval '6 hours', 'ativa')
+         ON CONFLICT (id) DO UPDATE SET status='ativa', ultimo_erro=NULL`,
+        [CONTA_PERS_ID, EMPRESA_PERS_ID, cryptoLib.encrypt('token-ok'), cryptoLib.encrypt('refresh-ok')]
+      );
+    });
+
+    after(async () => {
+      ml.apiGet = apiGetReal;
+      await pool.query('DELETE FROM ml_contas WHERE id = $1', [CONTA_PERS_ID]);
+      await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_PERS_ID]);
+      await pool.end();
+    });
+
+    test('busca ao vivo (nunca lê ads_metricas_anuncio) e devolve as métricas reais do intervalo pedido', async () => {
+      const chamadas = [];
+      ml.apiGet = async (path) => {
+        chamadas.push(path);
+        if (path.startsWith('/advertising/advertisers')) {
+          return { advertisers: [{ advertiser_id: 111, site_id: 'MLB', advertiser_name: 'LOJA TESTE' }] };
+        }
+        if (path.includes('/product_ads/campaigns/search')) {
+          return { results: [{ id: 222, name: 'Campanha Teste' }], paging: { total: 1 } };
+        }
+        if (path.includes('/product_ads/ads/search')) {
+          return {
+            results: [{ item_id: 'MLB999', campaign_id: 222, title: 'Anúncio Teste', metrics: { clicks: 10, prints: 100, cost: 5, total_amount: 50, cpc: 0.5, acos: 10, ctr: 10, cvr: 5, roas: 10 } }],
+            paging: { total: 1 },
+          };
+        }
+        throw new Error('path inesperado: ' + path);
+      };
+
+      const contasAtivas = [{ id: CONTA_PERS_ID, nickname: 'LOJA PERSONALIZADO', ml_user_id: 954000001, site_id: 'MLB', status: 'ativa' }];
+      const mapa = await adsLib.buscarMetricasPorAnuncio([CONTA_PERS_ID], 'personalizado', {
+        desde: '2026-09-01', ate: '2026-09-15', contasAtivas,
+      });
+
+      assert.ok(mapa.has('MLB999'), 'o item retornado pela API precisa aparecer no mapa, com a chave sendo o ml_item_id');
+      const item = mapa.get('MLB999');
+      assert.equal(item.investimento, 5);
+      assert.equal(item.faturamentoAtribuido, 50);
+      assert.equal(item.campanha, 'Campanha Teste', 'precisa resolver o nome da campanha pelo campaign_id, igual ao caminho já sincronizado');
+      assert.equal(item.loja, 'LOJA PERSONALIZADO');
+      assert.ok(chamadas.some((p) => p.includes('/product_ads/ads/search') && p.includes('date_from=2026-09-01') && p.includes('date_to=2026-09-15')), 'precisa chamar a API com o intervalo EXATO pedido pelo usuário, não uma das 5 janelas fixas');
+    });
+
+    test('conta sem token válido não quebra a busca — só fica sem dado (mapa vazio pra ela)', async () => {
+      ml.apiGet = async () => { throw new Error('não deveria nem tentar chamar a API'); };
+      const contasAtivas = [{ id: 999999, nickname: 'CONTA INEXISTENTE', ml_user_id: 1, site_id: 'MLB', status: 'ativa' }];
+      const mapa = await adsLib.buscarMetricasPorAnuncio([999999], 'personalizado', {
+        desde: '2026-09-01', ate: '2026-09-15', contasAtivas,
+      });
+      assert.equal(mapa.size, 0);
+    });
+
+    test('sem desde/ate/contasAtivas (chamada incompleta): devolve mapa vazio, nunca lança erro', async () => {
+      const mapa = await adsLib.buscarMetricasPorAnuncio([CONTA_PERS_ID], 'personalizado', {});
+      assert.equal(mapa.size, 0);
+    });
+
+    test('periodoChave diferente de "personalizado" continua lendo do banco (ads_metricas_anuncio), comportamento inalterado', async () => {
+      ml.apiGet = async () => { throw new Error('não deveria chamar a API pra uma janela fixa'); };
+      const mapa = await adsLib.buscarMetricasPorAnuncio([CONTA_PERS_ID], '30d');
+      assert.equal(mapa.size, 0, 'sem sincronização prévia pra esta conta em 30d, o mapa vem vazio do banco — nunca cai pro caminho ao vivo');
+    });
+  }
+);

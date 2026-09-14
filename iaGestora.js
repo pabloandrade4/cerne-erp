@@ -181,8 +181,10 @@ router.get('/radar-resumo', async (req, res, next) => {
 // ---------------- Perguntar (cria conversa na primeira pergunta) ----------------
 
 // POST /api/ia-gestora/perguntar
-// Body: { empresaId, periodo, pergunta, conversaId? }
-// `empresaId` e `periodo` são sempre os do cabeçalho (window.CerneFiltro no
+// Body: { empresaId, periodo, desde?, ate?, pergunta, conversaId? }
+// `desde`/`ate` (YYYY-MM-DD) só são usados quando periodo === 'personalizado'
+// (12/09/2026, mesmo período personalizado agora disponível em toda tela do
+// ERP — ver lib/periodo.js). `empresaId` e `periodo` são sempre os do cabeçalho (window.CerneFiltro no
 // front-end) — nunca uma escolha do modelo de IA (ver comentário em
 // lib/ia/ferramentas.js). Sem `conversaId`, cria uma conversa nova; com
 // `conversaId`, continua a conversa existente — o histórico enviado ao
@@ -192,7 +194,7 @@ router.get('/radar-resumo', async (req, res, next) => {
 // adulterado.
 router.post('/perguntar', async (req, res, next) => {
   try {
-    const { empresaId, periodo, pergunta, conversaId } = req.body || {};
+    const { empresaId, periodo, desde, ate, pergunta, conversaId } = req.body || {};
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
     if (!pergunta || !String(pergunta).trim()) return res.status(400).json({ error: 'Informe a pergunta.' });
     const perguntaTexto = String(pergunta).trim();
@@ -212,7 +214,7 @@ router.post('/perguntar', async (req, res, next) => {
       historico = msgsAnteriores.reverse();
     }
 
-    const resultado = await responderPergunta({ empresaId, periodoChave: periodo, pergunta: perguntaTexto, historico });
+    const resultado = await responderPergunta({ empresaId, periodoChave: periodo, desde, ate, pergunta: perguntaTexto, historico });
 
     if (!conversa) {
       const tituloInicial = (resultado.estrutura && resultado.estrutura.titulo) || perguntaTexto.slice(0, 60);
