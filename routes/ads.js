@@ -168,14 +168,20 @@ function linhaDecisaoAdsParaApi(row) {
   };
 }
 
-// GET /api/ads/decisoes?empresaId=&status=pendente|aprovada|alterada|recusada|expirada|todas
+// GET /api/ads/decisoes?empresaId=&status=pendente|aprovada|alterada|recusada|expirada|decidida|todas
+// status=decidida = tudo que NÃO está mais pendente (usado pela aba
+// "Histórico" da tela — sem isso, a tela de histórico ficava sujeita a ser
+// inundada só de pendentes e a LIMIT 300 podia nem chegar nas decisões já
+// tomadas quando há muita coisa pendente).
 router.get('/decisoes', async (req, res, next) => {
   try {
     const { empresaId, status } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
     const params = [empresaId];
     let filtroStatus = '';
-    if (status && status !== 'todas') {
+    if (status === 'decidida') {
+      filtroStatus = " AND d.status_decisao <> 'pendente'";
+    } else if (status && status !== 'todas') {
       params.push(status);
       filtroStatus = ' AND d.status_decisao = $2';
     }
