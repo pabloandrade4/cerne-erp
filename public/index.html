@@ -9635,7 +9635,7 @@
         const filtro = window.CerneFiltro.state;
         if(!filtro.empresaId){ state.itens = []; state.loading = false; render(); return; }
         state.loading = true; state.error = null; render();
-        try{ state.itens = await apiDecisoes(filtro.empresaId, state.aba === 'pendentes' ? 'pendente' : 'todas'); }
+        try{ state.itens = await apiDecisoes(filtro.empresaId, state.aba === 'pendentes' ? 'pendente' : 'decidida'); }
         catch(e){ state.error = e.message; state.itens = []; }
         state.loading = false; render();
       }
