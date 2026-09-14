@@ -1292,3 +1292,19 @@ CREATE INDEX IF NOT EXISTS idx_promocoes_analises_empresa ON promocoes_analises 
 -- mais a loja vende — index puramente aditivo, não muda nenhum resultado,
 -- só faz essas subconsultas irem direto nas linhas certas.
 CREATE INDEX IF NOT EXISTS idx_ml_pedido_itens_pedido_id ON ml_pedido_itens (pedido_id);
+
+-- ============================================================
+-- IA de Ads e Performance — Fase A (14/09/2026)
+-- ============================================================
+-- Primeiro dos 4 agentes de IA do Mercado Livre pedidos pelo usuário (Buy
+-- Box/Competitividade, SAC e Pós-Venda, Ads e Performance, Risco
+-- Operacional) — ver lib/ia/adsMotor.js para a explicação de por que este
+-- foi o escolhido pra começar (nenhum dado novo, nenhuma permissão nova).
+-- Mesmo padrão de `config_promocoes`: `margem_minima_pct` é o único ajuste
+-- que o usuário controla — abaixo disso a IA classifica como "AJUSTAR" (ou
+-- "PAUSAR" se o resultado após Ads for negativo).
+CREATE TABLE IF NOT EXISTS config_ads_ia (
+  empresa_id           INTEGER PRIMARY KEY REFERENCES empresas(id),
+  margem_minima_pct    NUMERIC(5,2) NOT NULL DEFAULT 10,
+  atualizado_em        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
