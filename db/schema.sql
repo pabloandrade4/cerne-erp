@@ -1275,3 +1275,20 @@ CREATE TABLE IF NOT EXISTS promocoes_analises (
   UNIQUE (conta_id, promotion_id, ml_item_id)
 );
 CREATE INDEX IF NOT EXISTS idx_promocoes_analises_empresa ON promocoes_analises (empresa_id);
+
+-- ============================================================
+-- Correção de performance (14/09/2026) — "Query read timeout"
+-- ============================================================
+-- Investigando por que a IA de Promoções (e outras telas que usam o mesmo
+-- período de vendas — Visão Geral, Financeiro, Pedidos, Relatórios, Margem
+-- por Anúncio) vinham falhando de vez em quando com "Query read timeout" em
+-- lib/relatorioVendas.js#buscarPedidosDoPeriodo: essa função faz, PARA CADA
+-- pedido do período, várias subconsultas em ml_pedido_itens filtrando por
+-- pedido_id (título/SKU resumidos, quantidade de itens/unidades, custo do
+-- produto) — e ml_pedido_itens nunca teve nenhum índice em pedido_id, só a
+-- chave estrangeira (que sozinha NÃO cria índice no Postgres). Ou seja: cada
+-- uma dessas subconsultas varria a tabela ml_pedido_itens INTEIRA, um
+-- pedido de cada vez. Com 90 dias de pedidos, isso piora ainda mais quanto
+-- mais a loja vende — index puramente aditivo, não muda nenhum resultado,
+-- só faz essas subconsultas irem direto nas linhas certas.
+CREATE INDEX IF NOT EXISTS idx_ml_pedido_itens_pedido_id ON ml_pedido_itens (pedido_id);
