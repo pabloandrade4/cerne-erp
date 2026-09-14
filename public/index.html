@@ -4024,6 +4024,17 @@
       if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
     }
+    // 14/09/2026, pedido explícito do usuário: "como podemos fazer para
+    // puxar o sku com o custo direto" — SKUs que já apareceram em pedidos
+    // reais (Mercado Livre + Shopee) desta empresa mas ainda não têm
+    // produto cadastrado (ver rota em routes/produtos.js). Usado só pra
+    // sugerir no cadastro/edição de produto — nunca preenche nada sozinho,
+    // o usuário sempre escolhe/confirma antes de salvar.
+    async function apiSugestoesSku(empresaId){
+      const res = await fetch('/api/produtos/sugestoes-sku?empresaId='+empresaId);
+      const body = await res.json().catch(()=>({}));
+      return (body && body.sugestoes) || [];
+    }
     async function apiConfig(path, opts){
       const res = await fetch('/api/config-financeiro'+path, { headers:{'Content-Type':'application/json'}, ...opts });
       let body = null; try{ body = await res.json(); }catch(e){}
@@ -4179,7 +4190,9 @@
           + '<form id="prdForm">'
             + '<div class="field"><label>Nome do produto</label><input type="text" id="fNome" placeholder="Ex: Caixa de papelão 50x24x15" value="'+(isEdit?escapeHtml(produto.nome):'')+'" maxlength="200">'
               + '<div class="field-error" id="eNome" style="display:none;"></div></div>'
-            + '<div class="field"><label>SKU</label><input type="text" id="fSku" placeholder="Ex: CX-50X24X15" value="'+(isEdit?escapeHtml(produto.sku):'')+'" maxlength="100">'
+            + '<div class="field"><label>SKU</label><input type="text" id="fSku" list="skuSugestoesList" placeholder="Ex: CX-50X24X15" value="'+(isEdit?escapeHtml(produto.sku):'')+'" maxlength="100">'
+              + '<datalist id="skuSugestoesList"></datalist>'
+              + '<div class="field-hint" id="skuSugestoesHint" style="margin-top:4px;"></div>'
               + '<div class="field-error" id="eSku" style="display:none;"></div></div>'
             + '<div class="field"><label>Custo (R$)</label><input type="text" inputmode="decimal" id="fCusto" placeholder="0,00" value="'+(isEdit?String(produto.custo).replace('.',','):'')+'">'
               + '<div class="field-error" id="eCusto" style="display:none;"></div></div>'
@@ -4199,6 +4212,38 @@
       document.getElementById('modalClose').addEventListener('click', close);
       document.getElementById('modalCancel').addEventListener('click', close);
       document.getElementById('fNome').focus();
+
+      // Sugestões de SKU puxadas direto dos pedidos (Mercado Livre + Shopee)
+      // — pedido explícito do usuário (14/09/2026): evita digitar o SKU na
+      // mão e errar (o que faz o custo nunca casar com a venda). Só
+      // sugere, nunca preenche nada sem o usuário escolher.
+      let sugestoesSku = [];
+      const fSkuInput = document.getElementById('fSku');
+      const skuHint = document.getElementById('skuSugestoesHint');
+      if(skuHint) skuHint.textContent = 'Carregando sugestões de SKU dos pedidos…';
+      apiSugestoesSku(state.empresaId).then(function(lista){
+        sugestoesSku = lista;
+        const datalist = document.getElementById('skuSugestoesList');
+        if(!datalist) return; // modal já foi fechado antes da resposta chegar
+        if(lista.length){
+          datalist.innerHTML = lista.map(function(s){
+            return '<option value="'+escapeHtml(s.sku)+'">'+escapeHtml(s.nomeSugerido||s.sku)+' — '+s.qtdPedidos+(s.qtdPedidos===1?' pedido':' pedidos')+' sem custo cadastrado</option>';
+          }).join('');
+          if(skuHint) skuHint.textContent = 'Comece a digitar pra ver SKUs que já apareceram em pedidos e ainda não têm custo cadastrado — escolher um da lista garante que bate certinho com a venda.';
+        } else if(skuHint) {
+          skuHint.textContent = isEdit ? '' : 'Nenhum SKU de pedido pendente de custo encontrado no momento — pode digitar o SKU manualmente.';
+        }
+      }).catch(function(){ if(skuHint) skuHint.textContent = ''; });
+
+      if(fSkuInput && !isEdit){
+        fSkuInput.addEventListener('input', function(){
+          const sugestao = sugestoesSku.find(function(s){ return s.sku === fSkuInput.value; });
+          const fNomeInput = document.getElementById('fNome');
+          if(sugestao && sugestao.nomeSugerido && fNomeInput && !fNomeInput.value.trim()){
+            fNomeInput.value = sugestao.nomeSugerido;
+          }
+        });
+      }
 
       const toggleBtn = document.getElementById('fAtivo');
       if(toggleBtn) toggleBtn.addEventListener('click', ()=>{
