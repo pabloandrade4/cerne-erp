@@ -802,6 +802,22 @@ CREATE TABLE IF NOT EXISTS radar_alertas (
 );
 CREATE INDEX IF NOT EXISTS idx_radar_alertas_empresa_status ON radar_alertas(empresa_id, status, severidade);
 
+-- CORREÇÃO (01/09/2026, ativação da Central de Alertas — Etapa 7 pedida
+-- pelo usuário, ver docs/04-alteracoes.md): a tela pede 4 status
+-- (Novo/Visualizado/Resolvido/Ignorado), mas a coluna `status` acima só
+-- aceitava 2 ('aberto'/'resolvido'). Retrofit explícito (mesmo padrão já
+-- usado neste arquivo pra contas_bancarias/despesas_fixas.ativo — nunca
+-- só dentro do CREATE TABLE, que é no-op numa tabela que já existe):
+-- adiciona 'ignorado' como 3º valor de status, e duas colunas novas pra
+-- derivar Novo (visualizado_em IS NULL) x Visualizado (preenchido) sem
+-- precisar de mais uma coluna de status paralela. Nome do constraint é o
+-- nome automático que o Postgres já deu (`<tabela>_<coluna>_check`,
+-- confirmado localmente) — o DROP+ADD é seguro rodar de novo (idempotente).
+ALTER TABLE radar_alertas ADD COLUMN IF NOT EXISTS visualizado_em TIMESTAMPTZ;
+ALTER TABLE radar_alertas ADD COLUMN IF NOT EXISTS ignorado_em TIMESTAMPTZ;
+ALTER TABLE radar_alertas DROP CONSTRAINT IF EXISTS radar_alertas_status_check;
+ALTER TABLE radar_alertas ADD CONSTRAINT radar_alertas_status_check CHECK (status IN ('aberto', 'resolvido', 'ignorado'));
+
 -- Estado do Radar por empresa (1 linha por empresa) — usado pra: 1) provar
 -- que o radar roda mesmo sem ninguém com o ERP aberto (ultima_execucao_em
 -- persiste no banco, sobrevive a reiniciar o servidor); 2) guardar o
@@ -968,25 +984,6 @@ CREATE TABLE IF NOT EXISTS despesas_fixas (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- CORREÇÃO (31/08/2026) — Fluxo de Caixa (e a tela de Despesas Fixas)
--- retornando 500 em produção: "column \"ativo\" does not exist". Causa
--- raiz: a tabela `despesas_fixas` já existia no banco de produção de
--- ANTES da coluna `ativo` ter sido adicionada na definição acima — como
--- essa coluna foi colocada direto dentro do CREATE TABLE (em vez de um
--- ALTER TABLE separado, que é o padrão usado em todo o resto deste
--- arquivo — ver exemplo logo abaixo, em despesa_fixa_id), o
--- `CREATE TABLE IF NOT EXISTS` nunca teve efeito nenhum nesse banco (a
--- tabela já existia) e a coluna nunca foi criada de verdade lá. Este
--- ALTER retroativo resolve pra qualquer banco nessa mesma situação, sem
--- apagar nem alterar nenhuma despesa fixa já cadastrada — toda despesa
--- fixa existente passa a valer como `ativo = true` (era exatamente esse
--- o comportamento implícito antes dessa coluna existir: não havia
--- conceito de "inativa", então nenhuma despesa existente pode ter sido
--- pensada como tal). Continua seguro rodar de novo (IF NOT EXISTS) —
--- em bancos que já têm a coluna (criados depois que ela entrou no
--- CREATE TABLE acima), este ALTER não faz nada.
-ALTER TABLE despesas_fixas ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT true;
-
 -- Vínculo entre a conta a pagar GERADA automaticamente e a despesa fixa que
 -- a originou — coluna adicionada em contas_pagar (tabela já existente,
 -- por isso ALTER + ADD COLUMN IF NOT EXISTS, mesmo padrão já usado neste
@@ -1022,3 +1019,597 @@ CREATE TABLE IF NOT EXISTS fluxo_caixa_saldo_inicial (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ============================================================
+-- Etapa: Saldo bancário automático a partir de extrato (31/08/2026)
+-- ============================================================
+-- contas_bancarias / extrato_importacoes / extrato_movimentos JÁ EXISTIAM em
+-- produção antes desta etapa (criadas fora deste arquivo). Os CREATE TABLE
+-- IF NOT EXISTS abaixo são só para deixar o schema.sql completo em qualquer
+-- ambiente NOVO (ex.: um banco de testes do zero) — em produção eles são
+-- no-op, exatamente como o resto deste arquivo. NÃO recriam nem apagam nada.
+--
+-- O saldo bancário (saldo_atual/saldo_data/saldo_atualizado_em) é sempre
+-- SUBSTITUÍDO pelo "saldo final" identificado no extrato mais recente
+-- confirmado — nunca somado a movimentos importados separadamente (ver
+-- lib/contasBancarias.js#confirmarImportacao e lib/fluxoCaixa.js). Um
+-- extrato com data de saldo mais antiga que a já registrada nunca regride o
+-- saldo sozinho (só com confirmação explícita do usuário — ver
+-- forcarSubstituicaoSaldo em confirmarImportacao).
+CREATE TABLE IF NOT EXISTS contas_bancarias (
+  id                    SERIAL PRIMARY KEY,
+  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
+  nome                  VARCHAR(200) NOT NULL,
+  banco                 VARCHAR(100),
+  agencia               VARCHAR(20),
+  conta                 VARCHAR(30),
+  ativa                 BOOLEAN NOT NULL DEFAULT TRUE,
+  saldo_atual           NUMERIC(14,2),
+  saldo_data            DATE,
+  saldo_atualizado_em   TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Retrofit explícito e separado do CREATE TABLE acima (mesmo padrão já usado
+-- para users.ativo e contas_pagar.despesa_fixa_id neste arquivo) — pedido
+-- explicitamente pelo usuário para nunca repetir o incidente em que uma
+-- coluna só existia dentro de um CREATE TABLE IF NOT EXISTS e por isso
+-- nunca era aplicada num banco onde a tabela já existia (ver o mesmo caso
+-- em despesas_fixas.ativo, mais acima neste arquivo).
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atual NUMERIC(14,2);
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_data DATE;
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS saldo_atualizado_em TIMESTAMPTZ;
+
+-- CORREÇÃO (01/09/2026, diagnóstico do módulo Ads/banco de dados — ver
+-- docs/04-alteracoes.md): o retrofit acima (28/08→31/08/2026) esqueceu de
+-- incluir banco/agencia/conta — exatamente o mesmo incidente que ele
+-- documenta ter corrigido para saldo_atual/saldo_data/saldo_atualizado_em,
+-- só que para estas 3 colunas. Confirmado em produção via erro real do
+-- Postgres: `error: column "conta" does not exist` (código 42703),
+-- disparado por lib/contasBancarias.js#listarContasBancarias, que já
+-- seleciona banco/agencia/conta desde que a tabela existe neste arquivo —
+-- essas colunas nunca tinham sido de fato criadas no banco de produção
+-- (só existiam dentro do CREATE TABLE IF NOT EXISTS acima, que é no-op
+-- numa tabela que já existia antes deste arquivo).
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS banco VARCHAR(100);
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS agencia VARCHAR(20);
+ALTER TABLE contas_bancarias ADD COLUMN IF NOT EXISTS conta VARCHAR(30);
+
+-- Uma linha por arquivo de extrato realmente confirmado (a prévia/análise
+-- não grava nada — só o passo de confirmação). arquivo_hash é o SHA-256 do
+-- arquivo inteiro; a combinação (conta_bancaria_id, arquivo_hash) é o que
+-- permite reimportar o mesmo arquivo sem duplicar (reconfirma/atualiza o
+-- saldo em vez de gravar tudo de novo — ver confirmarImportacao).
+CREATE TABLE IF NOT EXISTS extrato_importacoes (
+  id                      SERIAL PRIMARY KEY,
+  empresa_id              INTEGER NOT NULL REFERENCES empresas(id),
+  conta_bancaria_id       INTEGER NOT NULL REFERENCES contas_bancarias(id),
+  arquivo_nome            VARCHAR(255),
+  arquivo_hash            VARCHAR(128),
+  formato                 VARCHAR(20),
+  saldo_final             NUMERIC(14,2),
+  saldo_data              DATE,
+  quantidade_movimentos   INTEGER NOT NULL DEFAULT 0,
+  quantidade_importada    INTEGER NOT NULL DEFAULT 0,
+  quantidade_duplicada    INTEGER NOT NULL DEFAULT 0,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(conta_bancaria_id, arquivo_hash)
+);
+
+-- Cada movimentação individual de um extrato confirmado. fingerprint (hash
+-- de data+tipo+descrição+valor, com um contador para desempatar
+-- movimentações idênticas no mesmo dia — ver lib/extratoBancario.js) é a
+-- trava de não-duplicação por conta: ON CONFLICT (conta_bancaria_id,
+-- fingerprint) DO NOTHING garante que reimportar o mesmo extrato nunca
+-- duplica uma movimentação já gravada.
+CREATE TABLE IF NOT EXISTS extrato_movimentos (
+  id                  SERIAL PRIMARY KEY,
+  importacao_id       INTEGER REFERENCES extrato_importacoes(id),
+  empresa_id          INTEGER NOT NULL REFERENCES empresas(id),
+  conta_bancaria_id   INTEGER NOT NULL REFERENCES contas_bancarias(id),
+  data                DATE NOT NULL,
+  descricao           VARCHAR(500),
+  tipo                VARCHAR(10) NOT NULL, -- entrada | saida
+  valor               NUMERIC(14,2) NOT NULL,
+  fingerprint         VARCHAR(64) NOT NULL,
+  conciliado          BOOLEAN NOT NULL DEFAULT false,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(conta_bancaria_id, fingerprint)
+);
+
+-- ============================================================
+-- Etapa: Categorias financeiras + DRE detalhada + conciliação simples
+-- (31/08/2026)
+-- ============================================================
+-- Plano de contas do próprio usuário (antes só existia como texto livre em
+-- contas_pagar.categoria/despesas_fixas.categoria, sem cadastro real — ver
+-- CATEGORIAS_SUGERIDAS duplicada em lib/contasPagar.js e
+-- lib/despesasFixas.js). Esta tabela NÃO substitui a coluna de texto livre
+-- em nenhum lugar — ela é adicionada por cima (contas_pagar.categoria_id
+-- abaixo), pra nunca quebrar um lançamento antigo que só tem o texto.
+--
+-- categoria_pai_id: um único nível de subcategoria (uma subcategoria nunca
+-- tem filha própria — pedido explícito do usuário de "não criar
+-- complexidade desnecessária"). Categoria nunca é apagada de verdade
+-- (excluir um DELETE quebraria o histórico de lançamentos já categorizados)
+-- — só "ativa=false" (mesmo padrão de despesas_fixas.ativo/contas_bancarias.ativa).
+CREATE TABLE IF NOT EXISTS categorias_financeiras (
+  id                  SERIAL PRIMARY KEY,
+  empresa_id          INTEGER NOT NULL REFERENCES empresas(id),
+  nome                VARCHAR(100) NOT NULL,
+  categoria_pai_id    INTEGER REFERENCES categorias_financeiras(id),
+  ativa               BOOLEAN NOT NULL DEFAULT true,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- contas_pagar e extrato_movimentos JÁ EXISTIAM — retrofit em colunas
+-- separadas (ALTER ... ADD COLUMN IF NOT EXISTS), nunca dentro de um CREATE
+-- TABLE, mesma regra documentada mais acima neste arquivo (incidente
+-- despesas_fixas.ativo) e reaplicada na etapa do saldo bancário.
+--
+-- contas_pagar.categoria_id: aponta pro cadastro real de categoria, mas a
+-- coluna de texto `categoria` continua existindo e sendo preenchida em
+-- paralelo (lib/contasPagar.js mantém as duas em sincronia) — nunca quebra
+-- busca/relatório antigo que lê `categoria` como texto.
+-- contas_pagar.conta_bancaria_id: só ROTULA de qual conta saiu o dinheiro
+-- (rastreio/relatório) — NUNCA altera contas_bancarias.saldo_atual. Quem
+-- manda no saldo real da conta continua sendo exclusivamente o saldo final
+-- do extrato importado (ver etapa anterior); lançar uma conta a pagar como
+-- paga não soma nem subtrai desse saldo, pra nunca ter duas fórmulas de
+-- saldo bancário concorrendo.
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS categoria_id INTEGER REFERENCES categorias_financeiras(id);
+ALTER TABLE contas_pagar ADD COLUMN IF NOT EXISTS conta_bancaria_id INTEGER REFERENCES contas_bancarias(id);
+
+-- extrato_movimentos.categoria_id: permite categorizar um lançamento que
+-- aparece SÓ no extrato (nunca virou conta a pagar) — ex.: tarifa bancária,
+-- cobrança de um serviço que só existe no extrato.
+-- extrato_movimentos.conta_pagar_id / conta_receber_id: o vínculo de
+-- conciliação — quando preenchido, este movimento do extrato JÁ está
+-- contado através da conta a pagar/receber correspondente, então a DRE e o
+-- detalhamento (lib/despesasFinanceiras.js) NUNCA somam os dois ao mesmo
+-- tempo (ver comentário lá — filtro `conta_pagar_id IS NULL`).
+-- extrato_movimentos.transferencia_interna: marca uma movimentação como
+-- transferência entre contas da própria empresa (ex.: Nubank → Mercado
+-- Pago) — nunca entra como despesa/receita na DRE nem no Fluxo de Caixa.
+ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS categoria_id INTEGER REFERENCES categorias_financeiras(id);
+ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS conta_pagar_id INTEGER REFERENCES contas_pagar(id);
+ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS conta_receber_id INTEGER REFERENCES contas_receber(id);
+
+-- ============================================================
+-- Etapa: IA de Promoções — Fase A (13/09/2026)
+-- Pedido do usuário: módulo que analisa anúncios do Mercado Livre e
+-- recomenda entrar/sair de promoções olhando a margem REAL — mas hoje o
+-- aplicativo cadastrado no Mercado Livre Developers tem (segundo o próprio
+-- usuário) só permissão de LEITURA, então esta primeira fase é só a base:
+-- nenhuma tabela/coluna aqui guarda nada que a IA "decidiu aplicar" de
+-- verdade — isso só existe a partir da Fase B/E (ver docs/plano-ia-promocoes).
+-- ============================================================
+
+-- ml_contas.escopo_oauth: guarda O TEXTO EXATO que o Mercado Livre devolve
+-- no campo `scope` da resposta de autenticação (ex.: "offline_access read
+-- write") — capturado de graça tanto na conexão inicial
+-- (routes/integracoes.js#/callback) quanto em toda renovação de token
+-- (lib/mlSync.js#getContaComTokenValido), sem nenhuma chamada nova à API.
+-- ATENÇÃO (documentado em lib/mlPermissoes.js): esse campo é só
+-- INFORMATIVO — ver por que ele sozinho não prova que a Central de
+-- Promoções aceita escrita. Quem manda de verdade é
+-- config_promocoes.permite_escrita_ml, controlado manualmente pelo usuário.
+ALTER TABLE ml_contas ADD COLUMN IF NOT EXISTS escopo_oauth VARCHAR(255);
+
+-- Correção (14/09/2026): em pelo menos uma renovação de token real, o
+-- Mercado Livre devolveu um `scope` maior que 255 caracteres, o que
+-- derrubava a renovação inteira com "value too long for type character
+-- varying(255)" e travava a conta em status='erro' (o ciclo automático de
+-- renovação só tenta contas com status='ativa' — ver lib/syncScheduler.js).
+-- Como esse campo é só informativo (nunca é usado pra decidir nada, ver
+-- comentário acima e lib/mlPermissoes.js), não há motivo pra limitar o
+-- tamanho: troca pra TEXT, que não tem limite de caracteres no Postgres.
+ALTER TABLE ml_contas ALTER COLUMN escopo_oauth TYPE TEXT;
+
+-- Configuração da IA de Promoções, por empresa. `permite_escrita_ml` nasce
+-- SEMPRE false e só deve virar true manualmente pelo usuário, depois de
+-- confirmar (no painel do Mercado Livre Developers) que a Central de
+-- Promoções foi liberada para leitura E escrita, E de reconectar a conta
+-- (novo OAuth) — reautorizar é obrigatório porque um token já emitido não
+-- ganha permissão nova sozinho. Nenhum código desta primeira fase executa
+-- ação de escrita de verdade; esta coluna só existe pra já deixar a
+-- arquitetura pronta pra quando isso for construído (Fase E).
+CREATE TABLE IF NOT EXISTS config_promocoes (
+  empresa_id           INTEGER PRIMARY KEY REFERENCES empresas(id),
+  margem_minima_pct    NUMERIC(5,2) NOT NULL DEFAULT 14,   -- % — abaixo disso a IA marca "NÃO RECOMENDADA"
+  desconto_maximo_pct  NUMERIC(5,2),                        -- opcional — trava futura do modo automático (Fase E)
+  estoque_minimo       INTEGER,                             -- opcional — idem
+  vendas_minimas_30d   INTEGER,                             -- opcional — idem ("não mexer com menos de X vendas")
+  permite_full         BOOLEAN NOT NULL DEFAULT true,
+  permite_proprio      BOOLEAN NOT NULL DEFAULT true,
+  modo_ia              VARCHAR(30) NOT NULL DEFAULT 'somente_analisar',
+    -- 'somente_analisar' | 'sugerir_aprovar' | 'automatico' — só
+    -- 'somente_analisar' funciona nesta fase; os outros dois exigem escrita
+    -- liberada (Fase E) e ficam bloqueados no backend até lá.
+  permite_escrita_ml   BOOLEAN NOT NULL DEFAULT false,
+  atualizado_em        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS transferencia_interna BOOLEAN NOT NULL DEFAULT false;
+
+-- IA de Promoções — Fase B (13/09/2026): resultado já calculado do ciclo
+-- automático (lib/ia/promocoesCiclo.js, roda a cada 1h — pedido explícito do
+-- usuário: "a cada uma hora a ia tem que busca novas promoções"). A tela
+-- SEMPRE lê daqui (nunca recalcula ao vivo) — uma linha por item de
+-- promoção, com a margem REAL já calculada (nunca só o % de desconto).
+-- `margem_incompleta`/`motivo_incompleto` existem porque a regra do usuário
+-- é nunca fabricar um número quando falta um dado real (SKU não
+-- identificado, produto sem custo cadastrado, SKU sem histórico de vendas
+-- suficiente para estimar comissão/frete) — ver lib/promocoesMotor.js.
+CREATE TABLE IF NOT EXISTS promocoes_analises (
+  id                              SERIAL PRIMARY KEY,
+  empresa_id                      INTEGER NOT NULL REFERENCES empresas(id),
+  conta_id                        INTEGER NOT NULL REFERENCES ml_contas(id),
+  promotion_id                    VARCHAR(80) NOT NULL,
+  promotion_type                  VARCHAR(60) NOT NULL,
+  promotion_label                 VARCHAR(255),
+  ml_item_id                      VARCHAR(40) NOT NULL,
+  status_item_ml                  VARCHAR(40),
+  titulo                          TEXT,
+  imagem_url                      TEXT,
+  sku                             VARCHAR(120),
+  preco_normal                    NUMERIC(12,2),
+  preco_promo                     NUMERIC(12,2),
+  origem_preco_promo              VARCHAR(40),
+  desconto_pct                    NUMERIC(6,2),
+  desconto_bancado_meli_pct       NUMERIC(6,2),
+  desconto_bancado_vendedor_pct   NUMERIC(6,2),
+  custo_produto                   NUMERIC(12,2),
+  tarifas_estimadas               NUMERIC(12,2),
+  frete_vendedor_estimado         NUMERIC(12,2),
+  imposto_estimado                NUMERIC(12,2),
+  margem_real                     NUMERIC(12,2),
+  margem_real_pct                 NUMERIC(6,2),
+  margem_minima_pct_usada         NUMERIC(5,2),
+  margem_incompleta               BOOLEAN NOT NULL DEFAULT false,
+  motivo_incompleto               TEXT,
+  classificacao_codigo            VARCHAR(30),
+  classificacao_label             VARCHAR(40),
+  atualizado_em                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (conta_id, promotion_id, ml_item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_promocoes_analises_empresa ON promocoes_analises (empresa_id);
+
+-- ============================================================
+-- Correção de performance (14/09/2026) — "Query read timeout"
+-- ============================================================
+-- Investigando por que a IA de Promoções (e outras telas que usam o mesmo
+-- período de vendas — Visão Geral, Financeiro, Pedidos, Relatórios, Margem
+-- por Anúncio) vinham falhando de vez em quando com "Query read timeout" em
+-- lib/relatorioVendas.js#buscarPedidosDoPeriodo: essa função faz, PARA CADA
+-- pedido do período, várias subconsultas em ml_pedido_itens filtrando por
+-- pedido_id (título/SKU resumidos, quantidade de itens/unidades, custo do
+-- produto) — e ml_pedido_itens nunca teve nenhum índice em pedido_id, só a
+-- chave estrangeira (que sozinha NÃO cria índice no Postgres). Ou seja: cada
+-- uma dessas subconsultas varria a tabela ml_pedido_itens INTEIRA, um
+-- pedido de cada vez. Com 90 dias de pedidos, isso piora ainda mais quanto
+-- mais a loja vende — index puramente aditivo, não muda nenhum resultado,
+-- só faz essas subconsultas irem direto nas linhas certas.
+CREATE INDEX IF NOT EXISTS idx_ml_pedido_itens_pedido_id ON ml_pedido_itens (pedido_id);
+
+-- ============================================================
+-- IA de Ads e Performance — Fase A (14/09/2026)
+-- ============================================================
+-- Primeiro dos 4 agentes de IA do Mercado Livre pedidos pelo usuário (Buy
+-- Box/Competitividade, SAC e Pós-Venda, Ads e Performance, Risco
+-- Operacional) — ver lib/ia/adsMotor.js para a explicação de por que este
+-- foi o escolhido pra começar (nenhum dado novo, nenhuma permissão nova).
+-- Mesmo padrão de `config_promocoes`: `margem_minima_pct` é o único ajuste
+-- que o usuário controla — abaixo disso a IA classifica como "AJUSTAR" (ou
+-- "PAUSAR" se o resultado após Ads for negativo).
+CREATE TABLE IF NOT EXISTS config_ads_ia (
+  empresa_id           INTEGER PRIMARY KEY REFERENCES empresas(id),
+  margem_minima_pct    NUMERIC(5,2) NOT NULL DEFAULT 10,
+  atualizado_em        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- Agentes de IA — Fase 1: aprendizado com decisão humana (14/09/2026)
+-- ============================================================
+-- Pedido explícito do usuário: os agentes de IA (Ads e Performance,
+-- Promoções) não devem só classificar e mostrar — devem recomendar uma
+-- AÇÃO concreta e explicável, guardar a decisão do usuário sobre cada
+-- recomendação (aprovou/alterou/recusou) e, mais tarde, o resultado real
+-- dessa decisão — pra aprender com o padrão de decisão do usuário antes de
+-- qualquer execução automática (Fase 3, explicitamente NÃO implementada
+-- agora). NESTA FASE NENHUM CÓDIGO CHAMA A API DO MERCADO LIVRE PARA
+-- EXECUTAR NADA — só lê o que já está sincronizado e grava a decisão do
+-- usuário (ver lib/ia/adsDecisoesCiclo.js e lib/ia/promocoesDecisoesStore.js).
+--
+-- `ia_agentes` é só o registro de identidade de cada agente (nome/descrição/
+-- ícone) — pedido explícito do usuário: "para eu no futuro conseguir
+-- conversar com cada um separado". Nenhuma conversa é implementada agora,
+-- só a identidade que uma conversa futura vai precisar.
+CREATE TABLE IF NOT EXISTS ia_agentes (
+  id            SERIAL PRIMARY KEY,
+  codigo        VARCHAR(40) NOT NULL UNIQUE,
+  nome          VARCHAR(120) NOT NULL,
+  descricao     TEXT,
+  icone         VARCHAR(30),
+  ordem         INTEGER NOT NULL DEFAULT 0,
+  ativo         BOOLEAN NOT NULL DEFAULT true,
+  criado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO ia_agentes (codigo, nome, descricao, icone, ordem) VALUES
+  ('ads_performance', 'Ads e Performance', 'Analisa campanhas, anúncios e SKUs de Mercado Ads e recomenda orçamento, meta de ACOS, pausar/escalar campanhas e mover SKUs entre campanhas — você aprova, altera ou recusa cada sugestão.', 'megaphone', 1),
+  ('promocoes', 'Promoções', 'Analisa promoções do Mercado Livre e recomenda entrar, não entrar, sair ou revisar o preço promocional, sempre pela margem real — você aprova, altera ou recusa cada sugestão.', 'sparkle', 2)
+ON CONFLICT (codigo) DO NOTHING;
+
+-- Campos adicionais em ads_campanhas/ads_metricas_anuncio — puramente
+-- ADITIVO, nunca muda o que já é gravado/lido hoje (ver lib/ads.js). São o
+-- "orçamento e status reais atuais" que o agente de Ads precisa pra
+-- calcular uma sugestão de orçamento com valor concreto (ex.: "de R$150
+-- para R$100") em vez de só um percentual solto — confirmados como campos
+-- padrão do objeto de campanha/anúncio na documentação oficial do Mercado
+-- Ads (global-selling.mercadolibre.com/devsite/new-product-ads), nunca
+-- escritos por este ERP nesta fase, só lidos e guardados.
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS orcamento_diario NUMERIC(12,2);
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS acos_alvo NUMERIC(6,2);
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS estrategia VARCHAR(30);
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS status_campanha VARCHAR(20);
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS orcamento_automatico BOOLEAN;
+ALTER TABLE ads_metricas_anuncio ADD COLUMN IF NOT EXISTS status_anuncio VARCHAR(20);
+
+-- Métricas de campanha adicionais (14/09/2026, pedido explícito do usuário
+-- — "estude sobre todas as métricas que tem dentro do Mercado Livre") —
+-- confirmadas na documentação oficial (developers.mercadolibre.com.ar/
+-- en_us/product-ads-us-read, campo "metrics" do objeto de campanha) como
+-- existentes e JÁ disponíveis via `metrics`, só nunca pedidas/gravadas
+-- antes (ver METRICS_CAMPANHA em lib/mlAds.js). Puramente aditivo — nenhuma
+-- chamada nova à API além de incluir esses nomes no parâmetro `metrics`
+-- que a sincronização de campanhas já faz. São a base real (nunca
+-- inventada) pra lib/ia/adsDecisor.js só sugerir "aumentar orçamento"
+-- quando o motivo real de perder exibição É orçamento (não ranking/leilão),
+-- e pra citar o ACOS de referência do próprio Mercado Livre na explicação.
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS sov NUMERIC(6,2); -- share of voice: % das vendas totais que vieram de Ads
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS fatia_impressoes_pct NUMERIC(6,2); -- impression_share
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS fatia_impressoes_topo_pct NUMERIC(6,2); -- top_impression_share
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS impressoes_perdidas_orcamento_pct NUMERIC(6,2); -- lost_impression_share_by_budget
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS impressoes_perdidas_ranking_pct NUMERIC(6,2); -- lost_impression_share_by_ad_rank
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS acos_benchmark NUMERIC(6,2); -- ACOS de referência do próprio Mercado Livre pra campanhas com bom desempenho
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS vendas_organicas_qtd NUMERIC(12,2); -- organic_units_quantity
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS vendas_organicas_valor NUMERIC(12,2); -- organic_units_amount
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS acos_alvo_topo_busca NUMERIC(6,2); -- acos_top_search_target (campo do objeto campanha, não de "metrics" — confirmado no mesmo exemplo oficial)
+
+-- Histórico de decisões do agente "Ads e Performance" — uma linha por
+-- SITUAÇÃO em aberto (não uma linha por ciclo): enquanto ninguém decide, a
+-- mesma situação (um anúncio ou uma campanha) mantém UMA linha "pendente",
+-- só atualizada a cada ciclo com os números mais recentes (ver índice único
+-- parcial abaixo); assim que o usuário decide, a linha vira histórico
+-- definitivo e uma situação nova no mesmo anúncio/campanha abre uma linha
+-- NOVA — o histórico nunca é sobrescrito. `executado` fica sempre false
+-- nesta fase (nenhuma escrita real no Mercado Livre ainda).
+CREATE TABLE IF NOT EXISTS ia_decisoes_ads (
+  id                              SERIAL PRIMARY KEY,
+  empresa_id                      INTEGER NOT NULL REFERENCES empresas(id),
+  conta_id                        INTEGER NOT NULL REFERENCES ml_contas(id),
+  tipo_referencia                 VARCHAR(20) NOT NULL,  -- 'anuncio' | 'campanha'
+  ml_item_id                      VARCHAR(40),            -- preenchido quando tipo_referencia='anuncio'
+  campanha_id                     VARCHAR(50),
+  campanha_nome                   VARCHAR(255),
+  sku                             VARCHAR(120),
+  titulo                          TEXT,
+  tipo_acao                       VARCHAR(40) NOT NULL,   -- ver lib/ia/adsDecisor.js
+  motivo                          TEXT NOT NULL,          -- explicação legível — nunca "caixa preta"
+  snapshot_investimento           NUMERIC(12,2),
+  snapshot_faturamento_real       NUMERIC(12,2),
+  snapshot_roas                   NUMERIC(12,2),
+  snapshot_acos                   NUMERIC(12,2),
+  snapshot_margem_antes_ads       NUMERIC(12,2),
+  snapshot_margem_depois_ads      NUMERIC(12,2),
+  snapshot_margem_depois_ads_pct  NUMERIC(6,2),
+  snapshot_qtd_vendas             NUMERIC(12,2),
+  snapshot_orcamento_atual        NUMERIC(12,2),
+  snapshot_acos_alvo_atual        NUMERIC(6,2),
+  valor_sugerido_ia               JSONB NOT NULL,
+  valor_decidido_usuario          JSONB,
+  status_decisao                  VARCHAR(20) NOT NULL DEFAULT 'pendente', -- pendente|aprovada|alterada|recusada|expirada
+  decidido_em                     TIMESTAMPTZ,
+  decidido_por                    VARCHAR(180),
+  executado                       BOOLEAN NOT NULL DEFAULT false,
+  executado_em                    TIMESTAMPTZ,
+  resultado_snapshot              JSONB,
+  resultado_avaliado_em           TIMESTAMPTZ,
+  criado_em                       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em                   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_decisoes_ads_empresa ON ia_decisoes_ads (empresa_id, status_decisao);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_decisoes_ads_pendente
+  ON ia_decisoes_ads (conta_id, tipo_referencia, COALESCE(ml_item_id,''), COALESCE(campanha_id,''), tipo_acao)
+  WHERE status_decisao = 'pendente';
+
+-- Mesmo conceito acima, pro agente de Promoções — chave natural é
+-- (conta, promoção, item), igual a `promocoes_analises`.
+CREATE TABLE IF NOT EXISTS ia_decisoes_promocoes (
+  id                                SERIAL PRIMARY KEY,
+  empresa_id                        INTEGER NOT NULL REFERENCES empresas(id),
+  conta_id                          INTEGER NOT NULL REFERENCES ml_contas(id),
+  promotion_id                      VARCHAR(80) NOT NULL,
+  promotion_type                    VARCHAR(60) NOT NULL,
+  promotion_label                   VARCHAR(255),
+  ml_item_id                        VARCHAR(40) NOT NULL,
+  sku                                VARCHAR(120),
+  titulo                             TEXT,
+  tipo_acao                          VARCHAR(40) NOT NULL,  -- ver lib/ia/promocoesDecisor.js
+  motivo                             TEXT NOT NULL,
+  snapshot_preco_normal              NUMERIC(12,2),
+  snapshot_preco_promo               NUMERIC(12,2),
+  snapshot_desconto_pct              NUMERIC(6,2),
+  snapshot_custo_produto             NUMERIC(12,2),
+  snapshot_tarifas_estimadas         NUMERIC(12,2),
+  snapshot_frete_vendedor_estimado   NUMERIC(12,2),
+  snapshot_imposto_estimado          NUMERIC(12,2),
+  snapshot_margem_real               NUMERIC(12,2),
+  snapshot_margem_real_pct           NUMERIC(6,2),
+  valor_sugerido_ia                  JSONB NOT NULL,
+  valor_decidido_usuario             JSONB,
+  status_decisao                     VARCHAR(20) NOT NULL DEFAULT 'pendente',
+  decidido_em                        TIMESTAMPTZ,
+  decidido_por                       VARCHAR(180),
+  executado                          BOOLEAN NOT NULL DEFAULT false,
+  executado_em                       TIMESTAMPTZ,
+  resultado_snapshot                 JSONB,
+  resultado_avaliado_em              TIMESTAMPTZ,
+  criado_em                          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em                      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_decisoes_promocoes_empresa ON ia_decisoes_promocoes (empresa_id, status_decisao);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_decisoes_promocoes_pendente
+  ON ia_decisoes_promocoes (conta_id, promotion_id, ml_item_id)
+  WHERE status_decisao = 'pendente';
+
+-- ============================================================================
+-- "Daily dos Agentes" — Etapa 1: SÓ SCHEMA (14/09/2026, pedido explícito do
+-- usuário). Fundação para uma reunião automática diária (09:00) em que um
+-- Agente Coordenador chama os especialistas existentes (Ads e Performance,
+-- Promoções — Buy Box/SAC/Riscos Operacionais entram quando existirem de
+-- verdade como agentes, nunca como placeholder) e cruza os achados de cada
+-- um em conclusões determinísticas, nunca texto inventado.
+--
+-- IMPORTANTE: nesta etapa NENHUM código lê ou escreve nestas tabelas ainda —
+-- nem o scheduler, nem o Coordenador, nem a rota `/decisoes` existente de
+-- Ads/Promoções foram alterados. É só a estrutura, aprovada e entregue
+-- separada de qualquer lógica nova, pra poder ser conferida sozinha antes da
+-- Etapa 2 (implementação dos especialistas) começar. Tudo abaixo é aditivo:
+-- tabelas novas + colunas novas opcionais nas tabelas de decisão que já
+-- funcionam (`ia_decisoes_ads`, `ia_decisoes_promocoes`), sem tocar em
+-- nenhuma coluna/índice/comportamento já existente.
+-- ============================================================================
+
+-- Uma linha por reunião diária. `reuniao_anterior_id` é como cada
+-- especialista sabe "o que mudou desde a última vez" sem precisar guardar
+-- estado em nenhum outro lugar. Uma reunião por empresa por dia civil
+-- (`data_referencia` é a data no fuso da empresa, não um timestamp).
+CREATE TABLE IF NOT EXISTS ia_reunioes_diarias (
+  id                    SERIAL PRIMARY KEY,
+  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
+  data_referencia       DATE NOT NULL,
+  reuniao_anterior_id   INTEGER REFERENCES ia_reunioes_diarias(id),
+  status                VARCHAR(20) NOT NULL DEFAULT 'em_andamento', -- em_andamento|concluida|falhou
+  erro                  TEXT,
+  iniciada_em           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finalizada_em         TIMESTAMPTZ,
+  criado_em             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_reunioes_diarias_empresa_dia
+  ON ia_reunioes_diarias (empresa_id, data_referencia);
+
+-- Um achado por linha — o que cada especialista relatou na reunião
+-- (problema/oportunidade/risco/alteração desde a última reunião). `dados` é
+-- o JSONB com os números reais que sustentam o achado (nunca uma frase sem
+-- lastro). Quando o achado já corresponde a uma sugestão de ação concreta
+-- que existe nas tabelas de decisão de hoje, `decisao_tabela`/`decisao_id`
+-- apontam pra lá — a Daily nunca duplica o fluxo de aprovar/recusar que já
+-- funciona, só referencia. `decisao_tabela` é texto (não FK) porque aponta
+-- pra uma de duas tabelas hoje (`ia_decisoes_ads` ou `ia_decisoes_promocoes`)
+-- e mais no futuro, conforme novos agentes ganharem tabela própria.
+CREATE TABLE IF NOT EXISTS ia_achados_diarios (
+  id                SERIAL PRIMARY KEY,
+  reuniao_id        INTEGER NOT NULL REFERENCES ia_reunioes_diarias(id),
+  agente_codigo     VARCHAR(40) NOT NULL REFERENCES ia_agentes(codigo),
+  tipo              VARCHAR(20) NOT NULL, -- problema|oportunidade|risco|alteracao
+  titulo            VARCHAR(255) NOT NULL,
+  descricao         TEXT,
+  dados             JSONB,
+  prioridade        VARCHAR(10), -- critica|alta|media|baixa — nulo quando é só informativo
+  sku               VARCHAR(120),
+  campanha_id       VARCHAR(50),
+  pedido_id         VARCHAR(50), -- para agentes futuros (SAC/Reclamações), sem uso ainda
+  decisao_tabela    VARCHAR(40), -- 'ia_decisoes_ads' | 'ia_decisoes_promocoes' | NULL
+  decisao_id        INTEGER,
+  criado_em         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_achados_diarios_reuniao ON ia_achados_diarios (reuniao_id, agente_codigo);
+
+-- Conclusões do Coordenador ao CRUZAR achados de agentes diferentes (o
+-- exemplo do próprio usuário: Ads acusa margem baixa num SKU + Promoções
+-- acusa desconto ativo no mesmo SKU + Buy Box confirma preço competitivo ->
+-- "reduza o desconto antes de reduzir Ads"). `regra_codigo` identifica qual
+-- regra determinística do Coordenador disparou (auditável — nunca "a IA
+-- decidiu" sem explicação) e `achados_relacionados` guarda os IDs reais de
+-- `ia_achados_diarios` que embasam a conclusão, pra nunca virar texto solto
+-- sem lastro nos dados.
+CREATE TABLE IF NOT EXISTS ia_correlacoes_diarias (
+  id                     SERIAL PRIMARY KEY,
+  reuniao_id             INTEGER NOT NULL REFERENCES ia_reunioes_diarias(id),
+  regra_codigo           VARCHAR(60) NOT NULL,
+  achados_relacionados   JSONB NOT NULL, -- array de ids de ia_achados_diarios
+  conclusao              TEXT NOT NULL,
+  decisao_tabela         VARCHAR(40),
+  decisao_id             INTEGER,
+  prioridade             VARCHAR(10),
+  criado_em              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_correlacoes_diarias_reuniao ON ia_correlacoes_diarias (reuniao_id);
+
+-- Generaliza o `resultado_snapshot`/`resultado_avaliado_em` que já existe
+-- hoje em ia_decisoes_ads/ia_decisoes_promocoes (continua existindo e
+-- funcionando exatamente como hoje, sem nenhuma mudança) para MÚLTIPLOS
+-- checkpoints — pedido explícito do usuário: resultado imediato, 24h, 3
+-- dias e 7 dias. `decisao_tabela` é texto (não FK) pelo mesmo motivo de
+-- ia_achados_diarios — aponta pra uma das tabelas de decisão existentes.
+-- Índice único garante que cada checkpoint só é preenchido uma vez por
+-- decisão (mesmo padrão de segurança que `resultado_avaliado_em IS NULL` já
+-- usa hoje).
+CREATE TABLE IF NOT EXISTS ia_decisoes_resultados_historico (
+  id                SERIAL PRIMARY KEY,
+  decisao_tabela    VARCHAR(40) NOT NULL, -- 'ia_decisoes_ads' | 'ia_decisoes_promocoes'
+  decisao_id        INTEGER NOT NULL,
+  checkpoint        VARCHAR(10) NOT NULL, -- imediato|24h|3d|7d
+  snapshot          JSONB,
+  avaliado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  criado_em         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_decisoes_resultados_checkpoint
+  ON ia_decisoes_resultados_historico (decisao_tabela, decisao_id, checkpoint);
+
+-- Nível de permissão por tipo de ação de cada agente — pedido explícito do
+-- usuário: "os agentes não devem ganhar autorização irrestrita... cada tipo
+-- de ação deverá possuir sua própria permissão". NESTA ETAPA A TABELA É
+-- INERTE: nenhum código lê `nivel_permissao` pra decidir executar nada
+-- sozinho — toda ação continua 100% manual (aprovar/alterar/recusar pelos
+-- mesmos botões que já existem). Ela só existe desde já pra você poder ver/
+-- auditar o nível atual de cada tipo de ação, e pra uma fase futura de
+-- autonomia não precisar inventar essa estrutura do zero. Semeada com todo
+-- `tipo_acao` que os decisores já produzem hoje (ver lib/ia/adsDecisor.js e
+-- lib/ia/promocoesDecisor.js), todos como 'approval_required' (ação
+-- concreta e executável) ou 'recommend_only' (sugestão que não corresponde
+-- a uma execução direta no Mercado Livre) — nunca 'auto_execute' nesta
+-- etapa.
+CREATE TABLE IF NOT EXISTS ia_permissoes_acao (
+  id                SERIAL PRIMARY KEY,
+  agente_codigo     VARCHAR(40) NOT NULL REFERENCES ia_agentes(codigo),
+  tipo_acao         VARCHAR(40) NOT NULL,
+  nivel_permissao   VARCHAR(20) NOT NULL DEFAULT 'approval_required', -- recommend_only|approval_required|auto_execute
+  atualizado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_permissoes_acao ON ia_permissoes_acao (agente_codigo, tipo_acao);
+INSERT INTO ia_permissoes_acao (agente_codigo, tipo_acao, nivel_permissao) VALUES
+  ('ads_performance', 'pausar_anuncio', 'approval_required'),
+  ('ads_performance', 'colocar_sku_em_campanha', 'recommend_only'),
+  ('ads_performance', 'pausar_campanha', 'approval_required'),
+  ('ads_performance', 'diminuir_orcamento', 'approval_required'),
+  ('ads_performance', 'ativar_campanha', 'approval_required'),
+  ('ads_performance', 'aumentar_orcamento', 'approval_required'),
+  ('promocoes', 'entrar_promocao', 'approval_required'),
+  ('promocoes', 'nao_entrar_promocao', 'recommend_only'),
+  ('promocoes', 'sair_promocao', 'approval_required'),
+  ('promocoes', 'revisar_preco', 'approval_required')
+ON CONFLICT (agente_codigo, tipo_acao) DO NOTHING;
+
+-- Colunas aditivas em ia_decisoes_ads/ia_decisoes_promocoes — nenhuma coluna
+-- existente é alterada. `reuniao_id` fica NULL para decisões geradas pelo
+-- ciclo normal de sincronização (como hoje) e só é preenchido quando a
+-- decisão nasce de uma Daily. `confianca_ia` fica propositalmente NULL até
+-- existir um mecanismo real de cálculo baseado no histórico de decisões do
+-- usuário — nunca um número fabricado só para preencher a tela.
+ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS reuniao_id INTEGER REFERENCES ia_reunioes_diarias(id);
+ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS confianca_ia NUMERIC(5,2);
+ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS reuniao_id INTEGER REFERENCES ia_reunioes_diarias(id);
+ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS confianca_ia NUMERIC(5,2);

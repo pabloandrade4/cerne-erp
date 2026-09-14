@@ -25,6 +25,7 @@ const { buscarTodosAnunciosDaConta } = require('../mlAnuncios');
 const { buscarItensDoPeriodo } = require('../relatorioVendas');
 const { buscarPromocoesDaConta, buscarItensDaPromocao } = require('../mlPromocoes');
 const { calcularHistoricoPorSku, analisarItemPromocao, DIAS_HISTORICO_PADRAO } = require('../promocoesMotor');
+const { sincronizarDecisaoPromocao, expirarDecisoesPromocaoNaoTocadas, avaliarResultadosPromocoes } = require('./promocoesDecisoesStore');
 
 async function buscarConfigPromocoes(empresaId) {
   const { rows } = await pool.query('SELECT margem_minima_pct FROM config_promocoes WHERE empresa_id = $1', [empresaId]);
@@ -127,10 +128,37 @@ async function executarCicloPromocoesConta({ conta, custoPorSku, historicoPorSku
   }
   const promocoes = (respostaPromocoes.data && respostaPromocoes.data.results) || [];
 
+  // Diagnóstico temporário (14/09/2026, pedido do usuário: a tela estava
+  // trazendo anúncios de promoções que já não estão mais rodando) — loga o
+  // formato REAL que a API devolve pra cada promoção antes de decidir, com
+  // dado real (nunca adivinhado), qual campo representa "redução de
+  // tarifa"/comissão (pedido separado do usuário, ainda não implementado).
+  // Remover assim que confirmado.
+  console.log(
+    `[promoções ia][diagnóstico] conta ${conta.id} — ${promocoes.length} promoção(ões):`,
+    JSON.stringify(promocoes.map((p) => ({
+      id: p.id, type: p.type, status: p.status, name: p.name, title: p.title,
+      start_date: p.start_date, finish_date: p.finish_date, deadline: p.deadline,
+      benefits: p.benefits, fee: p.fee, commission: p.commission,
+    })))
+  );
+
+  // Regra pedida pelo usuário (14/09/2026): só analisar promoções que estão
+  // DE FATO rodando agora — nunca uma que já terminou (a API do Mercado
+  // Livre continua listando promoções antigas/encerradas junto das ativas,
+  // sempre com o `status` de cada uma). Toda promoção que não está mais
+  // "started" fica de fora do laço abaixo — e como `removerAnalisesForaDaLista`
+  // só mantém as chaves dos itens realmente processados aqui, o efeito
+  // prático é exatamente o pedido: assim que uma promoção para, os itens
+  // dela somem desta tela (voltam a ficar "sem promoção").
+  const promocoesRodando = promocoes.filter((p) => p.status === 'started');
+
   const chavesAtuais = [];
+  const idsDecisoesTocadas = []; // agente de IA "Promoções" Fase 1 (14/09/2026) — ver lib/ia/promocoesDecisoesStore.js
+  const linhasPorChave = new Map();
   let itensAnalisados = 0;
 
-  for (const promocao of promocoes) {
+  for (const promocao of promocoesRodando) {
     const promotionId = promocao.id;
     const promotionType = promocao.type;
     const promotionLabel = promocao.name || promocao.title || null;
@@ -169,12 +197,33 @@ async function executarCicloPromocoesConta({ conta, custoPorSku, historicoPorSku
       });
       await upsertAnalise(linha);
       chavesAtuais.push(promotionId + '::' + item.id);
+      linhasPorChave.set(conta.id + '::' + promotionId + '::' + item.id, linha);
       itensAnalisados += 1;
+
+      // Agente de IA "Promoções" Fase 1 (14/09/2026): transforma a
+      // classificação que acabou de ser calculada numa sugestão de ação
+      // concreta (ver lib/ia/promocoesDecisor.js). `sincronizarDecisaoPromocao`
+      // já protege contra erro sozinha (nunca lança) — nunca deve derrubar a
+      // análise principal, que já foi gravada acima.
+      const idDecisao = await sincronizarDecisaoPromocao(linha);
+      if (idDecisao) idsDecisoesTocadas.push(idDecisao);
     }
   }
 
   await removerAnalisesForaDaLista(conta.id, chavesAtuais);
-  return { promocoesEncontradas: promocoes.length, itensAnalisados };
+
+  // Fecha o ciclo de decisões desta conta: expira sugestões pendentes que
+  // não fazem mais sentido, e avalia o resultado real de decisões antigas
+  // já tomadas pelo usuário — nunca deixa uma falha aqui derrubar o
+  // resultado da análise principal (já concluída com sucesso acima).
+  try {
+    await expirarDecisoesPromocaoNaoTocadas(conta.id, idsDecisoesTocadas);
+    await avaliarResultadosPromocoes(conta.empresa_id, linhasPorChave);
+  } catch (err) {
+    console.error(`[Promoções IA][decisões] falha ao finalizar decisões da conta ${conta.id}: ${err.message}`);
+  }
+
+  return { promocoesEncontradas: promocoesRodando.length, itensAnalisados };
 }
 
 async function executarCicloPromocoesEmpresa(empresaId) {

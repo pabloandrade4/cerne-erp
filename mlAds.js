@@ -65,11 +65,32 @@ const METRICS_ADS = [
   'direct_units_quantity', 'indirect_units_quantity', 'units_quantity',
 ].join(',');
 
-// Métricas pedidas no endpoint de CAMPANHAS — só usado aqui pra resolver
-// id→nome; não recalculamos métrica de campanha nenhuma a partir disso
-// (o valor de investimento/ROAS/ACOS mostrado na tela é sempre por
-// anúncio, fonte única, ver lib/ads.js).
-const METRICS_CAMPANHA = 'cost';
+// Métricas pedidas no endpoint de CAMPANHAS — antes só 'cost' (usado aqui
+// pra resolver id→nome; não recalculamos métrica de campanha nenhuma a
+// partir disso, o valor de investimento/ROAS/ACOS mostrado na tela é
+// sempre por anúncio, fonte única, ver lib/ads.js). AMPLIADO em 14/09/2026
+// (pedido explícito do usuário — "estude sobre todas as métricas que tem
+// dentro do Mercado Livre"): a documentação oficial
+// (developers.mercadolibre.com.ar/en_us/product-ads-us-read) confirma que
+// o endpoint de campanhas também aceita, dentro do mesmo parâmetro
+// `metrics`, sinais que o endpoint de ANÚNCIOS não tem — só existem a
+// nível de campanha inteira: `sov` (fatia das vendas totais vindas de
+// Ads), `impression_share`/`top_impression_share` (quanto a campanha
+// aparece de verdade vs. quanto poderia aparecer), os dois motivos
+// separados de perder exibição — `lost_impression_share_by_budget`
+// (orçamento baixo) e `lost_impression_share_by_ad_rank` (perdeu no
+// leilão/relevância, aumentar orçamento não ajudaria) —, `acos_benchmark`
+// (ACOS de referência do próprio Mercado Livre) e vendas orgânicas
+// (`organic_units_quantity`/`organic_units_amount`). Usados por
+// lib/ia/adsDecisor.js pra só sugerir "aumentar orçamento" quando o motivo
+// real de perder exibição é orçamento, e pra citar o benchmark do Mercado
+// Livre na explicação — nunca inventados, só passados a mais neste mesmo
+// parâmetro que a sincronização já usa.
+const METRICS_CAMPANHA = [
+  'cost', 'sov', 'impression_share', 'top_impression_share',
+  'lost_impression_share_by_budget', 'lost_impression_share_by_ad_rank',
+  'acos_benchmark', 'organic_units_quantity', 'organic_units_amount',
+].join(',');
 
 // Extrai uma mensagem legível do corpo de erro real da API (formato comum
 // do Mercado Livre: { message, error, cause: [{ code, description }] }) —

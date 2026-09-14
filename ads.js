@@ -160,13 +160,66 @@ async function upsertAdsConta(contaId, { advertiserId, siteId, disponivel, motiv
   );
 }
 
+// CORREÇÃO (14/09/2026, agente de IA "Ads e Performance" Fase 1): além do
+// nome (já usado pra resolver campaign_id -> nome na tabela de anúncios),
+// agora também grava orçamento diário/meta de ACOS/estratégia/status da
+// campanha — campos que a própria API já devolve neste mesmo endpoint
+// (confirmado na documentação oficial, global-selling.mercadolibre.com/
+// devsite/new-product-ads), só que antes eram descartados. Nenhuma chamada
+// nova à API — só passamos a guardar o que já vinha na resposta. São a
+// base real (nunca inventada) pra lib/ia/adsDecisor.js sugerir um valor
+// concreto de orçamento (ex.: "de R$150 para R$100"), não só um percentual
+// solto. Puramente aditivo — nunca escrito de volta pro Mercado Livre.
+// CORREÇÃO (14/09/2026, "estude sobre todas as métricas que tem dentro do
+// Mercado Livre" — pedido explícito do usuário): além dos campos que já
+// vinham soltos no objeto da campanha (budget, acos_target, strategy,
+// status, automatic_budget), agora também lê o bloco `metrics`/
+// `metrics_summary` que a API já devolve neste mesmo endpoint quando
+// `METRICS_CAMPANHA` é ampliado (ver lib/mlAds.js) — confirmado no exemplo
+// oficial de resposta que essas métricas ficam ANINHADAS dentro de
+// "metrics", diferente de budget/acos_target/strategy que ficam soltos no
+// nível da campanha. `acos_top_search_target` também é um campo solto,
+// como acos_target — não é uma métrica. Nenhuma chamada nova à API, só
+// mais nomes no mesmo parâmetro `metrics` já usado. Puramente aditivo.
+// Diagnóstico temporário que existiu aqui (14/09/2026) foi removido em
+// 14/09/2026: confirmado (via lib/ia/adsDecisoesCiclo.js gerando decisões
+// reais sem nenhuma citação às métricas novas) que o Mercado Livre não está
+// devolvendo sov/impression_share/lost_impression_share_by_*/acos_benchmark
+// para esta conta — provavelmente por volume/tipo de campanha, não um bug
+// de extração (o código já lida com essas métricas ausentes sem inventar
+// nada, ver lib/ia/adsDecisor.js). Se a conta um dia passar a receber esses
+// campos, as colunas em ads_campanhas (db/schema.sql) já estão prontas para
+// recebê-los sem nenhuma mudança de código.
 async function gravarCampanhas(contaId, campanhas) {
   for (const c of campanhas || []) {
     if (c.id === undefined || c.id === null) continue;
+    const metrics = c.metrics_summary || c.metrics || {};
     await pool.query(
-      `INSERT INTO ads_campanhas (conta_id, campanha_id, nome, updated_at) VALUES ($1,$2,$3,now())
-       ON CONFLICT (conta_id, campanha_id) DO UPDATE SET nome = EXCLUDED.nome, updated_at = now()`,
-      [contaId, String(c.id), c.name || null]
+      `INSERT INTO ads_campanhas
+         (conta_id, campanha_id, nome, orcamento_diario, acos_alvo, estrategia, status_campanha, orcamento_automatico,
+          sov, fatia_impressoes_pct, fatia_impressoes_topo_pct, impressoes_perdidas_orcamento_pct, impressoes_perdidas_ranking_pct,
+          acos_benchmark, vendas_organicas_qtd, vendas_organicas_valor, acos_alvo_topo_busca, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,now())
+       ON CONFLICT (conta_id, campanha_id) DO UPDATE SET
+         nome = EXCLUDED.nome, orcamento_diario = EXCLUDED.orcamento_diario, acos_alvo = EXCLUDED.acos_alvo,
+         estrategia = EXCLUDED.estrategia, status_campanha = EXCLUDED.status_campanha,
+         orcamento_automatico = EXCLUDED.orcamento_automatico,
+         sov = EXCLUDED.sov, fatia_impressoes_pct = EXCLUDED.fatia_impressoes_pct,
+         fatia_impressoes_topo_pct = EXCLUDED.fatia_impressoes_topo_pct,
+         impressoes_perdidas_orcamento_pct = EXCLUDED.impressoes_perdidas_orcamento_pct,
+         impressoes_perdidas_ranking_pct = EXCLUDED.impressoes_perdidas_ranking_pct,
+         acos_benchmark = EXCLUDED.acos_benchmark, vendas_organicas_qtd = EXCLUDED.vendas_organicas_qtd,
+         vendas_organicas_valor = EXCLUDED.vendas_organicas_valor, acos_alvo_topo_busca = EXCLUDED.acos_alvo_topo_busca,
+         updated_at = now()`,
+      [
+        contaId, String(c.id), c.name || null,
+        toNum(c.budget), toNum(c.acos_target), c.strategy || null, c.status || null,
+        c.automatic_budget === undefined || c.automatic_budget === null ? null : !!c.automatic_budget,
+        toNum(metrics.sov), toNum(metrics.impression_share), toNum(metrics.top_impression_share),
+        toNum(metrics.lost_impression_share_by_budget), toNum(metrics.lost_impression_share_by_ad_rank),
+        toNum(metrics.acos_benchmark), toNum(metrics.organic_units_quantity), toNum(metrics.organic_units_amount),
+        toNum(c.acos_top_search_target),
+      ]
     );
   }
 }
@@ -178,18 +231,23 @@ async function gravarMetricasAnuncio(contaId, periodoChave, itens) {
     const { investimento, receita, qtd } = extrairInvestimentoEReceita(metrics);
     const mlItemId = String(item.item_id || item.id);
     const campanhaId = item.campaign_id !== undefined && item.campaign_id !== null ? String(item.campaign_id) : null;
+    // CORREÇÃO (14/09/2026, agente de IA "Ads e Performance" Fase 1): grava
+    // também `status` do anúncio dentro de Product Ads (active/paused/hold/
+    // idle/delegated/revoked — confirmado na documentação oficial), campo
+    // que a API já devolve e antes era descartado. Puramente aditivo.
     await pool.query(
       `INSERT INTO ads_metricas_anuncio
-         (conta_id, periodo_chave, ml_item_id, campanha_id, titulo, cliques, impressoes, cpc, investimento, acos_api, ctr_api, cvr_api, roas_api, faturamento_atribuido, qtd_atribuida, atualizado_em)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
+         (conta_id, periodo_chave, ml_item_id, campanha_id, titulo, status_anuncio, cliques, impressoes, cpc, investimento, acos_api, ctr_api, cvr_api, roas_api, faturamento_atribuido, qtd_atribuida, atualizado_em)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,now())
        ON CONFLICT (conta_id, periodo_chave, ml_item_id) DO UPDATE SET
-         campanha_id = EXCLUDED.campanha_id, titulo = EXCLUDED.titulo, cliques = EXCLUDED.cliques,
+         campanha_id = EXCLUDED.campanha_id, titulo = EXCLUDED.titulo, status_anuncio = EXCLUDED.status_anuncio,
+         cliques = EXCLUDED.cliques,
          impressoes = EXCLUDED.impressoes, cpc = EXCLUDED.cpc, investimento = EXCLUDED.investimento,
          acos_api = EXCLUDED.acos_api, ctr_api = EXCLUDED.ctr_api, cvr_api = EXCLUDED.cvr_api,
          roas_api = EXCLUDED.roas_api, faturamento_atribuido = EXCLUDED.faturamento_atribuido,
          qtd_atribuida = EXCLUDED.qtd_atribuida, atualizado_em = now()`,
       [
-        contaId, periodoChave, mlItemId, campanhaId, item.title || null,
+        contaId, periodoChave, mlItemId, campanhaId, item.title || null, item.status || null,
         toNum(metrics.clicks), toNum(metrics.prints), toNum(metrics.cpc), investimento, toNum(metrics.acos),
         toNum(metrics.ctr), toNum(metrics.cvr), toNum(metrics.roas), receita, qtd,
       ]
