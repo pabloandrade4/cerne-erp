@@ -16,22 +16,19 @@ const shopee = require('../lib/shopee');
 const shopeeSync = require('../lib/shopeeSync');
 const { generateState } = require('../lib/pkce'); // reaproveitado (geração de state é genérica, não é específica de PKCE/Mercado Livre)
 const { obterStatusRenovacao, renovarTokenDaConta } = require('../lib/shopeeTokenScheduler');
+// .trim() (14/09/2026, achado real via diagnóstico temporário): a
+// SHOPEE_PARTNER_KEY salva no Render veio com 1 caractere de espaço/quebra
+// de linha sobrando ao colar da tela da Shopee — o suficiente pra invalidar
+// a assinatura HMAC inteira ("wrong sign"), mesmo a chave "parecendo" certa.
+// Centralizado em lib/shopeeCredenciais.js (mesmo dia, depois do bug
+// reaparecer na sincronização e na renovação automática de token, que liam
+// process.env direto) — ver o comentário lá pra história completa.
+const { credencialShopee } = require('../lib/shopeeCredenciais');
 
 const router = express.Router();
 
 function getRedirectUri(req) {
   return process.env.SHOPEE_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/integracoes/shopee/callback`;
-}
-
-// .trim() (14/09/2026, achado real via diagnóstico temporário): a
-// SHOPEE_PARTNER_KEY salva no Render veio com 1 caractere de espaço/quebra
-// de linha sobrando ao colar da tela da Shopee — o suficiente pra invalidar
-// a assinatura HMAC inteira ("wrong sign"), mesmo a chave "parecendo" certa.
-// Aparamos aqui pra esse acidente de copiar/colar nunca mais quebrar a
-// conexão, mesmo que aconteça de novo numa futura troca de chave.
-function credencialShopee(nome) {
-  const v = process.env[nome];
-  return typeof v === 'string' ? v.trim() : v;
 }
 
 function shopeeConfigurado() {
