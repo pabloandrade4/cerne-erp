@@ -173,7 +173,10 @@ router.get('/callback', async (req, res) => {
         new Date(Date.now() + tokenData.expires_in * 1000),
         // Guardado só pra diagnóstico (IA de Promoções, ver lib/mlPermissoes.js)
         // — o texto exato que o Mercado Livre devolveu, nunca inventado.
-        tokenData.scope || null,
+        // .slice() de segurança: a coluna já é TEXT (sem limite), mas um
+        // valor absurdamente grande nunca deveria travar a conexão da conta
+        // por causa de um campo puramente informativo.
+        tokenData.scope ? String(tokenData.scope).slice(0, 2000) : null,
       ]
     );
 
