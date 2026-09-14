@@ -4,6 +4,7 @@ const express = require('express');
 const migrate = require('./db/migrate');
 const { iniciarSincronizacaoAutomatica } = require('./lib/syncScheduler');
 const { iniciarRenovacaoAutomatica: iniciarRenovacaoAutomaticaShopee } = require('./lib/shopeeTokenScheduler');
+const { iniciarSincronizacaoAutomaticaShopee } = require('./lib/shopeeSyncScheduler');
 const { iniciarRadarDaIA } = require('./lib/ia/radarScheduler');
 const { iniciarSincronizacaoAutomaticaAds } = require('./lib/adsScheduler');
 const { iniciarGeracaoAutomaticaDeDespesasFixas } = require('./lib/despesasFixasScheduler');
@@ -116,6 +117,11 @@ async function start() {
     // Renovação automática do token das lojas Shopee conectadas — mesma
     // ideia (sempre no servidor), ver lib/shopeeTokenScheduler.js.
     iniciarRenovacaoAutomaticaShopee();
+    // Sincronização automática dos PEDIDOS da Shopee (14/09/2026, pedido
+    // explícito do usuário: "igual ao mercado livre") — mesma ideia (sempre
+    // no servidor, nunca depende do navegador aberto), ver
+    // lib/shopeeSyncScheduler.js.
+    iniciarSincronizacaoAutomaticaShopee();
     // Radar da IA — acompanhamento contínuo de anúncios e do negócio,
     // sempre no servidor, nunca dependendo do navegador aberto (ver
     // lib/ia/radarScheduler.js).

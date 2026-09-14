@@ -1,7 +1,9 @@
 // Integração real com a Shopee (Open Platform v2): conectar via OAuth,
 // consultar status da(s) loja(s) conectada(s), renovar token e (desde
 // 14/09/2026, Fase 1 da sincronização de pedidos, ver lib/shopeeSync.js)
-// puxar os pedidos da loja. Mesmo desenho de routes/integracoes.js
+// puxar os pedidos da loja — manualmente (POST /:id/sincronizar, botão
+// "Sincronizar agora") ou sozinho, de tempos em tempos, sem precisar clicar
+// (lib/shopeeSyncScheduler.js, mesmo dia). Mesmo desenho de routes/integracoes.js
 // (Mercado Livre), sem duplicar nenhuma regra dele. IMPORTANTE: o cálculo
 // de margem/comissão/frete da Shopee ainda NÃO existe (Fase 2, depende de
 // ver os dados reais que a Shopee devolve pra esta conta primeiro) — por
@@ -16,6 +18,7 @@ const shopee = require('../lib/shopee');
 const shopeeSync = require('../lib/shopeeSync');
 const { generateState } = require('../lib/pkce'); // reaproveitado (geração de state é genérica, não é específica de PKCE/Mercado Livre)
 const { obterStatusRenovacao, renovarTokenDaConta } = require('../lib/shopeeTokenScheduler');
+const { obterStatusSincronizacaoAutomatica } = require('../lib/shopeeSyncScheduler');
 // .trim() (14/09/2026, achado real via diagnóstico temporário): a
 // SHOPEE_PARTNER_KEY salva no Render veio com 1 caractere de espaço/quebra
 // de linha sobrando ao colar da tela da Shopee — o suficiente pra invalidar
@@ -68,12 +71,32 @@ router.get('/', async (req, res, next) => {
 });
 
 // GET /api/integracoes/shopee/status-renovacao — estado (em memória do
-// servidor) do ciclo automático de renovação de token — mesmo espírito do
-// GET /api/integracoes/mercadolivre/status-automatico, mas aqui é só
-// renovação de token (não há sincronização de pedidos da Shopee ainda).
+// servidor) do ciclo automático de renovação de token.
 router.get('/status-renovacao', (req, res) => {
   const s = obterStatusRenovacao();
   res.json(s);
+});
+
+// GET /api/integracoes/shopee/status-sincronizacao — estado (em memória do
+// servidor) do ciclo automático de sincronização de PEDIDOS (14/09/2026,
+// ver lib/shopeeSyncScheduler.js) — mesmo espírito do
+// GET /api/integracoes/mercadolivre/status-automatico. Não confundir com
+// `ultimaSincronizacaoEm` de cada loja (já devolvido em serializeConta
+// acima, e usado na tela Marketplaces): este aqui é o "batimento cardíaco"
+// do job em si, independente de qual loja/empresa está selecionada.
+router.get('/status-sincronizacao', (req, res) => {
+  const s = obterStatusSincronizacaoAutomatica();
+  res.json({
+    ativo: s.ativo,
+    intervaloSegundos: Math.round(s.intervaloMs / 1000),
+    reconciliacaoDias: s.reconciliacaoDias,
+    emExecucao: s.emExecucao,
+    ultimaExecucaoEm: s.ultimaExecucaoEm,
+    ultimoCicloOk: s.ultimoCicloOk,
+    contasProcessadas: s.contasProcessadas,
+    contasComErro: s.contasComErro,
+    ultimoErroGeral: s.ultimoErroGeral,
+  });
 });
 
 // GET /api/integracoes/shopee/conectar?empresaId=ID — inicia o OAuth (redireciona pra Shopee)
