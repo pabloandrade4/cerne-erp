@@ -3220,6 +3220,20 @@
       const body = await res.json();
       return (body.contas && body.contas[0]) || null;
     }
+    // Shopee (14/09/2026, "tudo que foi aplicado no mercado livre pode e
+    // deve ser aplicado na shopee") — mesmo padrão da conta do Mercado
+    // Livre acima, só apontando pra rota da Shopee (routes/shopee.js).
+    async function apiContaShopeeDaEmpresa(empresaId){
+      const res = await fetch('/api/integracoes/shopee?empresaId='+empresaId);
+      const body = await res.json();
+      return (body.contas && body.contas[0]) || null;
+    }
+    async function apiShopeeSync(contaId){
+      const res = await fetch('/api/integracoes/shopee/'+contaId+'/sincronizar', { method:'POST' });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Falha ao sincronizar a Shopee.');
+      return body;
+    }
     // KPIs de topo (Pedidos/Vendas/Margem/Ticket médio/Cancelados) — mesma
     // fonte que Visão Geral já usa (/api/relatorios/resumo-vendas, que por
     // trás é resumirPeriodo() de lib/relatorioVendas.js — não recalculado
@@ -3334,7 +3348,7 @@
               : '')
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedLojaSelect">'
             + '<option value="">Todas as lojas</option>'
-            + state.filtrosDisponiveis.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+            + state.filtrosDisponiveis.lojas.map(l=>'<option value="'+escapeHtml(l.chave)+'" '+(l.chave===state.contaId?'selected':'')+'>'+escapeHtml((l.marketplace==='shopee'?'[Shopee] ':'[ML] ')+(l.nickname||l.chave))+'</option>').join('')
           + '</select></div>'
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedStatusSelect">'
             + '<option value="">Todos os status</option>'
@@ -3373,12 +3387,13 @@
         // Imposto continuam disponíveis — só que dentro do detalhe do pedido
         // (clique no ícone de olho), não mais como coluna aqui.
         html += '<div class="table-card"><div class="table-wrap"><table class="data-table compact-orders"><thead><tr>'
-          + '<th>Data</th><th>Pedido</th><th>Produto / SKU</th><th>Qtd.</th><th>Venda</th>'
+          + '<th>Data</th><th>Canal</th><th>Pedido</th><th>Produto / SKU</th><th>Qtd.</th><th>Venda</th>'
           + '<th>Taxas</th><th>Frete vend.</th><th>Custo</th>'
           + '<th>Margem R$</th><th>Margem %</th><th>Logística</th><th>Status</th><th></th>'
           + '</tr></thead><tbody>'
-          + state.items.map(p => '<tr data-row-detail="'+p.id+'" style="cursor:pointer;'+(p.cancelado?'opacity:.6;':'')+'">'
+          + state.items.map(p => '<tr data-row-detail="'+escapeHtml(p.detailKey)+'" style="cursor:pointer;'+(p.cancelado?'opacity:.6;':'')+'">'
             + '<td class="tab-nums">'+fmtDataCell(p.dataCriacao)+'</td>'
+            + '<td><span class="badge-status '+(p.marketplace==='shopee'?'off':'on')+'" style="display:inline-flex;" title="'+(p.marketplace==='shopee'?'Shopee':'Mercado Livre')+'"><span class="dot"></span>'+(p.marketplace==='shopee'?'Shopee':'ML')+'</span></td>'
             + '<td class="mono">'+escapeHtml(p.mlOrderId)+'</td>'
             + '<td class="produto-cell">'
               + '<div class="cell-stack"><span class="prod-title" title="'+escapeHtml(p.produtoResumo||'—')+'">'+escapeHtml(p.produtoResumo||'—')+(p.qtdItens>3?' +'+(p.qtdItens-3):'')+'</span>'
@@ -3393,7 +3408,7 @@
             + '<td class="mono">'+(p.calculoCompleto ? pctCell(p.margemPercentual) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
             + '<td class="cell-stack-sub" style="white-space:normal;">'+escapeHtml(p.envioLogisticType||'—')+'</td>'
             + '<td><span class="badge-status '+(p.status==='paid'?'on':(p.cancelado?'err':'off'))+'"><span class="dot"></span>'+escapeHtml(p.status||'—')+'</span></td>'
-            + '<td><div class="row-actions"><button class="row-ic-btn" data-detail="'+p.id+'" title="Ver detalhes (loja, imposto e mais)" type="button">'+svg('eye')+'</button></div></td>'
+            + '<td><div class="row-actions"><button class="row-ic-btn" data-detail="'+escapeHtml(p.detailKey)+'" title="Ver detalhes (loja, imposto e mais)" type="button">'+svg('eye')+'</button></div></td>'
           + '</tr>').join('')
           + '</tbody></table></div></div>'
           + (state.totalFiltrado > state.items.length
@@ -3426,10 +3441,28 @@
       if(syncBtn) syncBtn.addEventListener('click', async ()=>{
         syncBtn.disabled = true;
         try{
-          const conta = await apiContaDaEmpresa(state.empresaId);
-          if(!conta){ toast('Conecte o Mercado Livre desta empresa em Marketplaces primeiro.', 'error'); syncBtn.disabled=false; return; }
-          const result = await apiMlSync(conta.id);
-          toast(result.importados+' pedido(s) importados/atualizados.');
+          // Sincroniza as duas lojas conectadas desta empresa (Mercado Livre
+          // e Shopee), quando existirem — mesmo botão de sempre, agora
+          // cobrindo as duas (14/09/2026). Cada uma é isolada: se uma
+          // falhar, a outra ainda sincroniza normalmente.
+          const [contaMl, contaShopee] = await Promise.all([
+            apiContaDaEmpresa(state.empresaId),
+            apiContaShopeeDaEmpresa(state.empresaId),
+          ]);
+          if(!contaMl && !contaShopee){
+            toast('Conecte o Mercado Livre e/ou a Shopee desta empresa em Marketplaces primeiro.', 'error');
+            syncBtn.disabled = false; return;
+          }
+          const mensagens = [];
+          if(contaMl){
+            try{ const r = await apiMlSync(contaMl.id); mensagens.push(r.importados+' do Mercado Livre'); }
+            catch(err){ mensagens.push('Mercado Livre: '+err.message); }
+          }
+          if(contaShopee){
+            try{ const r = await apiShopeeSync(contaShopee.id); mensagens.push(r.importados+' da Shopee'); }
+            catch(err){ mensagens.push('Shopee: '+err.message); }
+          }
+          toast('Sincronizado — '+mensagens.join(' · ')+'.');
           await loadPedidos();
         }catch(err){ toast(err.message, 'error'); }
         syncBtn.disabled = false;
@@ -3482,6 +3515,13 @@
 
       const { pedido, itens, resultadoFinanceiro: rf } = data;
       const moeda = pedido.moeda;
+      // Shopee (14/09/2026): mesmo painel de sempre, só trocando os campos
+      // que são específicos de cada marketplace (ID de pagamento/envio do
+      // Mercado Livre não existem na Shopee, e vice-versa — nunca mostrar
+      // um rótulo "Mercado Livre" pra um pedido da Shopee nem inventar um
+      // ID que a Shopee não manda).
+      const isShopee = pedido.marketplace === 'shopee';
+      const canalLabel = isShopee ? 'Shopee' : 'Mercado Livre';
       const bdLine = (label, valor, negative) => '<div class="bd-row'+(negative?' neg':'')+'">'
         + '<span class="bd-label">'+label+'</span>'
         + '<span class="bd-value">'+(valor===null ? '<span style="color:var(--text-faint); font-style:italic; font-family:\'Public Sans\',sans-serif; font-weight:500;">indisponível</span>' : (negative?'− ':'')+money(Math.abs(valor),moeda))+'</span>'
@@ -3491,27 +3531,29 @@
         .map(c=> escapeHtml(c.label)+': '+money(c.valor,moeda)).join(' · ');
 
       const html = '<div class="side-panel-overlay" id="sidePanelOverlay"></div><div class="side-panel">'
-        + '<div class="modal-head"><div class="modal-title">Pedido #'+pedido.mlOrderId+'</div><button class="row-ic-btn" id="sidePanelClose" type="button">'+svg('x')+'</button></div>'
-        + '<div class="modal-sub">'+fmtDateTime(pedido.dataCriacao)+' · <span class="badge-status '+(pedido.status==='paid'?'on':'off')+'" style="display:inline-flex;"><span class="dot"></span>'+escapeHtml(pedido.status||'—')+'</span></div>'
+        + '<div class="modal-head"><div class="modal-title">Pedido #'+escapeHtml(pedido.mlOrderId)+'</div><button class="row-ic-btn" id="sidePanelClose" type="button">'+svg('x')+'</button></div>'
+        + '<div class="modal-sub">'+escapeHtml(canalLabel)+' · '+fmtDateTime(pedido.dataCriacao)+' · <span class="badge-status '+(pedido.status==='paid'?'on':'off')+'" style="display:inline-flex;"><span class="dot"></span>'+escapeHtml(pedido.status||'—')+'</span></div>'
 
         + '<div class="detail-section-title">Pedido</div>'
         + '<div class="detail-grid">'
           + '<div class="dg-item"><div class="dg-label">Loja</div><div class="dg-value'+(pedido.loja?'':' muted')+'">'+(escapeHtml(pedido.loja)||'—')+'</div></div>'
           + '<div class="dg-item"><div class="dg-label">Comprador</div><div class="dg-value">'+escapeHtml(pedido.compradorNickname||'—')+'</div></div>'
-          + '<div class="dg-item"><div class="dg-label">ID do pagamento</div><div class="dg-value'+(pedido.mlPaymentId?'':' muted')+'">'+(pedido.mlPaymentId||'indisponível')+'</div></div>'
-          + '<div class="dg-item"><div class="dg-label">ID do envio (shipment)</div><div class="dg-value'+(pedido.mlShippingId?'':' muted')+'">'+(pedido.mlShippingId||'sem envio')+'</div></div>'
-          + '<div class="dg-item"><div class="dg-label">Modalidade de logística</div><div class="dg-value'+(pedido.envioLogisticType?'':' muted')+'">'+(escapeHtml(pedido.envioLogisticType||pedido.envioLogisticMode)||'indisponível')+'</div></div>'
+          + (isShopee
+              ? '<div class="dg-item"><div class="dg-label">Forma de pagamento</div><div class="dg-value'+(pedido.metodoPagamento?'':' muted')+'">'+(escapeHtml(pedido.metodoPagamento)||'indisponível')+'</div></div>'
+              : '<div class="dg-item"><div class="dg-label">ID do pagamento</div><div class="dg-value'+(pedido.mlPaymentId?'':' muted')+'">'+(pedido.mlPaymentId||'indisponível')+'</div></div>'
+                + '<div class="dg-item"><div class="dg-label">ID do envio (shipment)</div><div class="dg-value'+(pedido.mlShippingId?'':' muted')+'">'+(pedido.mlShippingId||'sem envio')+'</div></div>')
+          + '<div class="dg-item"><div class="dg-label">'+(isShopee?'Transportadora':'Modalidade de logística')+'</div><div class="dg-value'+(pedido.envioLogisticType?'':' muted')+'">'+(escapeHtml(pedido.envioLogisticType||pedido.envioLogisticMode)||'indisponível')+'</div></div>'
         + '</div>'
 
         + '<div class="detail-section-title">Itens</div>'
-        + itens.map(it => '<div class="item-row"><div><div class="ir-title">'+escapeHtml(it.titulo||it.mlItemId||'—')+'</div>'
+        + itens.map(it => '<div class="item-row"><div><div class="ir-title">'+escapeHtml(it.titulo||it.mlItemId||it.itemId||'—')+'</div>'
             + '<div class="ir-sku">'+(it.sku?('SKU '+escapeHtml(it.sku)):'sem SKU informado')+' · qtd '+it.quantidade+'</div></div>'
             + '<div class="mono">'+(money(it.valorTotalItem,moeda)||'indisponível')+'</div></div>').join('')
 
         + '<div class="detail-section-title">Margem de contribuição desta venda</div>'
         + bdLine('Valor da venda', rf.valorVenda, false)
         + (rf.desconto ? bdLine('(−) Desconto (cupom do pagamento)', rf.desconto, true) : '')
-        + bdLine('(−) Taxas/comissões Mercado Livre', rf.tarifasMl.total, true)
+        + bdLine('(−) Taxas/comissões '+escapeHtml(canalLabel), rf.tarifasMl.total, true)
         + (tarifasSideNote ? '<div class="bd-side-note">'+tarifasSideNote+'</div>' : '')
         + bdLine('(−) Frete do vendedor', rf.freteVendedor, true)
         + bdLine('(−) Imposto configurado ('+rf.imposto.aliquota+'%)', rf.imposto.valor, true)
@@ -3522,8 +3564,10 @@
         + (rf.pendencias.length ? '<div class="bd-note">'+svg('alertCircle')+'<span>'+rf.pendencias.map(escapeHtml).join('<br>')+'</span></div>' : '')
 
         + '<div class="detail-section-title">Frete pago pelo comprador (informativo)</div>'
-        + bdLine('Frete comprador (receiver.cost)', rf.freteComprador, false)
-        + '<div class="bd-side-note">Não entra no cálculo do resultado acima — é o valor pago pelo comprador, separado do custo de frete do vendedor.</div>'
+        + bdLine(isShopee ? 'Frete comprador' : 'Frete comprador (receiver.cost)', rf.freteComprador, false)
+        + '<div class="bd-side-note">'+(isShopee
+            ? 'A Shopee ainda não separa esse valor nos dados já sincronizados nesta etapa da integração.'
+            : 'Não entra no cálculo do resultado acima — é o valor pago pelo comprador, separado do custo de frete do vendedor.')+'</div>'
 
         + '</div>';
 
