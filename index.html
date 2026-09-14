@@ -1176,6 +1176,8 @@
         bullets:['Conversão = pedidos ÷ visitas × 100','Ranking de mais/menos visitados e melhor/pior conversão','Gráficos de visitas x vendas e conversão no tempo','Nunca inventa número de visita'] },
       { id:'margemAnuncio', title:'Margem por Anúncio', icon:'wallet', desc:'Margem de contribuição real de cada anúncio, antes e depois do Ads — mesma fórmula de Pedidos, Financeiro e Relatórios.',
         bullets:['Faturamento, custo, imposto, tarifas e frete por anúncio','Resultado após Ads (margem − investimento)','Rankings de maior resultado, prejuízo e margem %','Sinaliza margem incompleta quando falta custo do SKU'] },
+      { id:'promocoesIa', title:'IA de Promoções', icon:'sparkle', desc:'A IA analisa seus anúncios do Mercado Livre e recomenda entrar ou sair de promoções, sempre calculando a margem real — nunca só pelo percentual de desconto.',
+        bullets:['Status da integração: leitura ou leitura e escrita','Margem mínima configurável por empresa','Recomendação explicada anúncio por anúncio (próxima etapa)','Nunca aplica nada sem permissão de escrita e sua confirmação'] },
       { id:'reports', title:'Relatórios', icon:'lineChart', action:'Novo relatório', desc:'Relatórios operacionais e financeiros configuráveis.',
         bullets:['Relatórios pré-configurados','Exportação em Excel e PDF','Filtros por empresa, canal e período','Relatórios agendados'] },
     ]},
@@ -1252,7 +1254,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','reports','iaGestora','alerts'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1313,6 +1315,7 @@
     else if(id === 'performanceAnuncios'){ inner += '<div id="performanceAnunciosRoot"></div>'; }
     else if(id === 'visitasConversao'){ inner += '<div id="visitasConversaoRoot"></div>'; }
     else if(id === 'margemAnuncio'){ inner += '<div id="margemAnuncioRoot"></div>'; }
+    else if(id === 'promocoesIa'){ inner += '<div id="promocoesIaRoot"></div>'; }
     else if(id === 'reports'){ inner += '<div id="relatoriosRoot"></div>'; }
     else if(id === 'alerts'){ inner += '<div id="alertasRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
@@ -1360,6 +1363,7 @@
     if(id === 'performanceAnuncios' && window.PerformanceAnuncios) window.PerformanceAnuncios.load(queryStr);
     if(id === 'visitasConversao' && window.VisitasConversao) window.VisitasConversao.load(queryStr);
     if(id === 'margemAnuncio' && window.MargemAnuncio) window.MargemAnuncio.load(queryStr);
+    if(id === 'promocoesIa' && window.PromocoesIA) window.PromocoesIA.load();
     if(id === 'reports' && window.Relatorios) window.Relatorios.load();
     if(id === 'alerts' && window.Alertas) window.Alertas.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
@@ -1411,9 +1415,21 @@
     { chave:'7d', label:'Últimos 7 dias' },
     { chave:'30d', label:'Últimos 30 dias' },
     { chave:'mes', label:'Este mês' },
+    // Adicionado em 12/09/2026 (pedido explícito do usuário): poder
+    // escolher qualquer intervalo de datas, não só os períodos prontos —
+    // em TODA aba que usa este filtro do cabeçalho (a maioria do ERP, ver
+    // lib/periodo.js). Mesma opção que Fluxo de Caixa/DRE já tinham no
+    // período PRÓPRIO deles.
+    { chave:'personalizado', label:'Personalizado' },
   ];
+  function hojeBRTStr(){
+    const BRT_OFFSET_MS = 3*60*60*1000;
+    const brt = new Date(Date.now() - BRT_OFFSET_MS);
+    const p = n => String(n).padStart(2,'0');
+    return brt.getUTCFullYear()+'-'+p(brt.getUTCMonth()+1)+'-'+p(brt.getUTCDate());
+  }
   window.CerneFiltro = (function(){
-    const state = { empresas:[], empresaId:null, loadingEmpresas:true, periodo:'30d' };
+    const state = { empresas:[], empresaId:null, loadingEmpresas:true, periodo:'30d', desdePersonalizado:null, atePersonalizado:null };
     const listeners = [];
     function onChange(fn){ listeners.push(fn); }
     function notify(){ listeners.forEach(fn=>{ try{ fn(state); }catch(e){} }); }
@@ -1459,19 +1475,51 @@
       lbl.textContent = emp ? (emp.nomeFantasia||emp.razaoSocial) : 'Nenhuma empresa ativa';
     }
 
+    function fmtDataBR(iso){
+      if(!iso) return '';
+      const partes = String(iso).slice(0,10).split('-');
+      return partes.length===3 ? (partes[2]+'/'+partes[1]) : iso;
+    }
+
+    // O formulário De/Até só aparece dentro do dropdown quando 'personalizado'
+    // já é a escolha atual — clicar em "Personalizado" na lista já ativa o
+    // período (com um valor padrão de datas) e mostra o formulário pra
+    // ajustar; reabrir o dropdown depois também mostra o formulário, sempre
+    // com as datas atualmente aplicadas, pra dar pra mudar sem escolher a
+    // opção de novo.
     function renderPeriodDropdown(){
       const dd = document.getElementById('periodDropdown');
       if(!dd) return;
+      const personalizadoAtivo = state.periodo === 'personalizado';
       dd.innerHTML = '<div class="dropdown-title">Período (Visão Geral)</div>' + HEADER_PERIODOS.map(p =>
         '<div class="dropdown-item" data-periodo="'+p.chave+'">'
           + '<div class="di-name">'+p.label+'</div>'
           + '<span class="dot'+(p.chave===state.periodo?'':' muted')+'"></span>'
         + '</div>'
-      ).join('');
+      ).join('')
+      + (personalizadoAtivo
+        ? '<div style="padding:10px 14px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;" onclick="event.stopPropagation()">'
+            + '<div class="field narrow" style="margin:0;"><label style="font-size:11px;">De</label><input type="date" id="headerPeriodoDesde" value="'+(state.desdePersonalizado||'')+'" style="width:132px;"></div>'
+            + '<div class="field narrow" style="margin:0;"><label style="font-size:11px;">Até</label><input type="date" id="headerPeriodoAte" value="'+(state.atePersonalizado||'')+'" style="width:132px;"></div>'
+            + '<button class="ghost-btn" id="headerPeriodoAplicar" type="button" style="cursor:pointer;opacity:1;">Aplicar</button>'
+          + '</div>'
+        : '');
       dd.querySelectorAll('[data-periodo]').forEach(item=>{
         item.addEventListener('click', (e)=>{
           e.stopPropagation();
           const chave = item.dataset.periodo;
+          if(chave === 'personalizado'){
+            // Fica com o dropdown aberto pra escolher/confirmar as datas —
+            // nunca fecha nem notifica só por clicar na opção.
+            if(!state.desdePersonalizado) state.desdePersonalizado = hojeBRTStr();
+            if(!state.atePersonalizado) state.atePersonalizado = hojeBRTStr();
+            const jaEstavaPersonalizado = state.periodo === 'personalizado';
+            state.periodo = 'personalizado';
+            renderPeriodDropdown();
+            updatePeriodLabel();
+            if(!jaEstavaPersonalizado) notify();
+            return;
+          }
           dd.classList.remove('open');
           if(chave === state.periodo) return;
           state.periodo = chave;
@@ -1480,13 +1528,37 @@
           notify();
         });
       });
+      const aplicar = document.getElementById('headerPeriodoAplicar');
+      if(aplicar){
+        aplicar.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const d = document.getElementById('headerPeriodoDesde').value;
+          const a = document.getElementById('headerPeriodoAte').value;
+          state.desdePersonalizado = d || state.desdePersonalizado || hojeBRTStr();
+          state.atePersonalizado = a || state.atePersonalizado || hojeBRTStr();
+          dd.classList.remove('open');
+          updatePeriodLabel();
+          notify();
+        });
+      }
+    }
+
+    // Reaproveitado por outras telas que precisam mostrar o período atual em
+    // texto (ex.: IA Gestora) — nunca duplica a lógica de formatação.
+    function periodoLabel(){
+      if(state.periodo === 'personalizado'){
+        return state.desdePersonalizado && state.atePersonalizado
+          ? (fmtDataBR(state.desdePersonalizado)+' – '+fmtDataBR(state.atePersonalizado))
+          : 'Personalizado';
+      }
+      const p = HEADER_PERIODOS.find(p => p.chave === state.periodo);
+      return p ? p.label : '';
     }
 
     function updatePeriodLabel(){
       const lbl = document.getElementById('periodLabel');
       if(!lbl) return;
-      const p = HEADER_PERIODOS.find(p => p.chave === state.periodo);
-      lbl.textContent = p ? p.label : '';
+      lbl.textContent = periodoLabel();
     }
 
     let empresasFetchEmAndamento = null;
@@ -1517,7 +1589,17 @@
     updatePeriodLabel();
     carregarEmpresas();
 
-    return { state, onChange, refreshEmpresas: carregarEmpresas };
+    // Fragmento de query string ('' ou '&desde=...&ate=...') pra toda tela
+    // que usa este filtro anexar na própria chamada de API sempre que o
+    // período for personalizado — nunca precisa duplicar a checagem
+    // `periodo==='personalizado'` em cada tela.
+    function periodoExtra(){
+      if(state.periodo !== 'personalizado') return '';
+      const d = state.desdePersonalizado || '', a = state.atePersonalizado || '';
+      return (d ? '&desde='+encodeURIComponent(d) : '') + (a ? '&ate='+encodeURIComponent(a) : '');
+    }
+
+    return { state, onChange, refreshEmpresas: carregarEmpresas, periodoExtra, periodoLabel };
   })();
 
   /* ---------- SINCRONIZAÇÃO AUTOMÁTICA DO MERCADO LIVRE (indicador discreto) ----------
@@ -2059,8 +2141,8 @@
     function pctFmt(v){ return v===null||v===undefined ? null : (v<0?'− ':'')+Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
     function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
 
-    async function apiResumo(empresaId, periodo){
-      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo);
+    async function apiResumo(empresaId, periodo, extra){
+      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os indicadores.');
       return body;
@@ -2071,8 +2153,8 @@
     // Empresas e Alertas & IA (lib/visaoGeralPainel.js). Buscado em
     // paralelo e com erro isolado: se este falhar, os indicadores/gráfico
     // principal (que não dependem dele) continuam aparecendo normalmente.
-    async function apiPainel(empresaId, periodo){
-      const res = await fetch('/api/visao-geral/painel?empresaId='+empresaId+'&periodo='+periodo);
+    async function apiPainel(empresaId, periodo, extra){
+      const res = await fetch('/api/visao-geral/painel?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os indicadores adicionais.');
       return body;
@@ -2082,9 +2164,10 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.error = null; state.painel = null; state.painelError = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; state.painelError = null; render();
+      const extra = window.CerneFiltro.periodoExtra();
       const [resumoResult, painelResult] = await Promise.allSettled([
-        apiResumo(filtro.empresaId, filtro.periodo),
-        apiPainel(filtro.empresaId, filtro.periodo),
+        apiResumo(filtro.empresaId, filtro.periodo, extra),
+        apiPainel(filtro.empresaId, filtro.periodo, extra),
       ]);
       if(resumoResult.status==='fulfilled'){ state.data = resumoResult.value; state.error = null; }
       else { state.data = null; state.error = resumoResult.reason.message; }
@@ -2522,12 +2605,14 @@
     const apiListarConversas = (empresaId) => apiIa('/conversas?empresaId='+empresaId);
     const apiAbrirConversa = (id) => apiIa('/conversas/'+id);
     const apiExcluirConversa = (id) => apiIa('/conversas/'+id, { method:'DELETE' });
-    const apiPerguntar = (empresaId, periodo, pergunta, conversaId) => apiIa('/perguntar', { method:'POST', body: JSON.stringify({ empresaId, periodo, pergunta, conversaId: conversaId||undefined }) });
+    // `desde`/`ate` só valem quando periodo==='personalizado' (mesma regra
+    // de lib/periodo.js) — passados sempre que o filtro do cabeçalho os tiver.
+    const apiPerguntar = (empresaId, periodo, pergunta, conversaId, desde, ate) => apiIa('/perguntar', { method:'POST', body: JSON.stringify({ empresaId, periodo, desde, ate, pergunta, conversaId: conversaId||undefined }) });
     const apiRadarResumo = (empresaId) => apiIa('/radar-resumo?empresaId='+empresaId);
     // Mesmo endpoint reaproveitado por Pedidos nesta sessão — não é uma rota
     // da IA Gestora, é o resumo geral de vendas já usado em outras telas.
-    async function apiResumoVendas(empresaId, periodo){
-      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo);
+    async function apiResumoVendas(empresaId, periodo, extra){
+      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Falha ao carregar os indicadores.');
       return body;
@@ -2539,9 +2624,7 @@
       return emp ? (emp.nomeFantasia || emp.razaoSocial) : null;
     }
     function periodoAtualLabel(){
-      const chave = window.CerneFiltro.state.periodo;
-      const def = HEADER_PERIODOS.find(p => p.chave === chave);
-      return def ? def.label : chave;
+      return window.CerneFiltro.periodoLabel();
     }
 
     async function carregarConversas(){
@@ -2576,7 +2659,7 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.resumoInsights = null; return; }
       state.loadingResumoInsights = true; render();
-      try{ state.resumoInsights = await apiResumoVendas(filtro.empresaId, filtro.periodo); }
+      try{ state.resumoInsights = await apiResumoVendas(filtro.empresaId, filtro.periodo, window.CerneFiltro.periodoExtra()); }
       catch(e){ state.resumoInsights = null; }
       state.loadingResumoInsights = false; render();
     }
@@ -2978,7 +3061,7 @@
       render();
 
       try{
-        const resp = await apiPerguntar(filtro.empresaId, filtro.periodo, texto, state.conversaId);
+        const resp = await apiPerguntar(filtro.empresaId, filtro.periodo, texto, state.conversaId, filtro.desdePersonalizado, filtro.atePersonalizado);
         const ehErro = resp.aviso === 'nao_configurada' || resp.aviso === 'erro_provedor' || resp.aviso === 'limite_rodadas';
         state.conversaId = resp.conversaId;
         state.messages.push({ id: resp.mensagemId, papel: 'assistente', texto: resp.resposta, estrutura: resp.estrutura, ferramentasUsadas: resp.ferramentasUsadas, aviso: resp.aviso, erro: ehErro });
@@ -3011,10 +3094,17 @@
       { chave:'7d', label:'Últimos 7 dias' },
       { chave:'30d', label:'Últimos 30 dias' },
       { chave:'mes', label:'Este mês' },
+      { chave:'personalizado', label:'Personalizado' },
     ];
-    const state = { empresas:[], empresaId:null, loadingEmpresas:false, periodo:'30d', contaId:'', status:'', busca:'',
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, periodo:'30d', desdePersonalizado:null, atePersonalizado:null, contaId:'', status:'', busca:'',
       items:[], totalNoPeriodo:0, totalFiltrado:0, periodoLabel:'', filtrosDisponiveis:{lojas:[],status:[]}, loading:false, error:null, gerandoRelatorio:false,
       resumo:null, loadingResumo:false };
+    function hojeBRT(){
+      const BRT_OFFSET_MS = 3*60*60*1000;
+      const brt = new Date(Date.now() - BRT_OFFSET_MS);
+      const p = n => String(n).padStart(2,'0');
+      return brt.getUTCFullYear()+'-'+p(brt.getUTCMonth()+1)+'-'+p(brt.getUTCDate());
+    }
 
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
@@ -3069,8 +3159,10 @@
     // filtros de loja/status/produto da tabela abaixo, porque essa rota não
     // tem esses filtros — nunca deixe de mostrar diferente do que os filtros
     // extras sugerem: por isso a nota abaixo dos cards).
-    async function apiResumoVendas(empresaId, periodo){
-      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo);
+    async function apiResumoVendas(empresaId, periodo, desde, ate){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
+      const res = await fetch('/api/relatorios/resumo-vendas?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Falha ao carregar os indicadores.');
       return body;
@@ -3078,13 +3170,14 @@
     async function loadResumo(){
       if(!state.empresaId){ state.resumo = null; return; }
       state.loadingResumo = true; render();
-      try{ state.resumo = await apiResumoVendas(state.empresaId, state.periodo); }
+      try{ state.resumo = await apiResumoVendas(state.empresaId, state.periodo, state.desdePersonalizado, state.atePersonalizado); }
       catch(err){ state.resumo = null; }
       state.loadingResumo = false; render();
     }
 
     function queryFiltrosAtuais(){
       const params = new URLSearchParams({ empresaId: state.empresaId, periodo: state.periodo });
+      if(state.periodo === 'personalizado'){ if(state.desdePersonalizado) params.set('desde', state.desdePersonalizado); if(state.atePersonalizado) params.set('ate', state.atePersonalizado); }
       if(state.contaId) params.set('contaId', state.contaId);
       if(state.status) params.set('status', state.status);
       if(state.busca.trim()) params.set('busca', state.busca.trim());
@@ -3163,6 +3256,14 @@
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedPeriodoSelect">'
             + PERIODOS.map(pr=>'<option value="'+pr.chave+'" '+(pr.chave===state.periodo?'selected':'')+'>'+pr.label+'</option>').join('')
           + '</select></div>'
+          + (state.periodo === 'personalizado'
+              ? '<div class="empresa-picker" style="margin-bottom:0;display:flex;gap:6px;align-items:center;">'
+                + '<input type="date" id="pedDesdeInput" value="'+(state.desdePersonalizado||'')+'" style="padding:6px 8px;">'
+                + '<span style="color:var(--text-muted);">até</span>'
+                + '<input type="date" id="pedAteInput" value="'+(state.atePersonalizado||'')+'" style="padding:6px 8px;">'
+                + '<button class="ghost-btn" id="pedAplicarPeriodo" type="button" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Aplicar</span></button>'
+              + '</div>'
+              : '')
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedLojaSelect">'
             + '<option value="">Todas as lojas</option>'
             + state.filtrosDisponiveis.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
@@ -3238,7 +3339,21 @@
       const sel = document.getElementById('pedEmpresaSelect');
       if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadResumo(); loadPedidos(); });
       const selPer = document.getElementById('pedPeriodoSelect');
-      if(selPer) selPer.addEventListener('change', ()=>{ state.periodo = selPer.value; loadResumo(); loadPedidos(); });
+      if(selPer) selPer.addEventListener('change', ()=>{
+        state.periodo = selPer.value;
+        if(state.periodo === 'personalizado'){
+          if(!state.desdePersonalizado) state.desdePersonalizado = hojeBRT();
+          if(!state.atePersonalizado) state.atePersonalizado = hojeBRT();
+        }
+        loadResumo(); loadPedidos();
+      });
+      const pedAplicarPeriodo = document.getElementById('pedAplicarPeriodo');
+      if(pedAplicarPeriodo) pedAplicarPeriodo.addEventListener('click', ()=>{
+        const d = document.getElementById('pedDesdeInput').value || hojeBRT();
+        const a = document.getElementById('pedAteInput').value || hojeBRT();
+        state.desdePersonalizado = d; state.atePersonalizado = a;
+        loadResumo(); loadPedidos();
+      });
       const syncBtn = document.getElementById('pedSyncBtn');
       if(syncBtn) syncBtn.addEventListener('click', async ()=>{
         syncBtn.disabled = true;
@@ -4937,6 +5052,7 @@
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
         if(state.status !== 'todos') params.set('status', state.status);
         if(state.search.trim()) params.set('search', state.search.trim());
         const data = await api('?'+params.toString(), { method:'GET' });
@@ -5484,6 +5600,7 @@
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
         if(state.status !== 'todos') params.set('status', state.status);
         if(state.search.trim()) params.set('search', state.search.trim());
         const data = await api('?'+params.toString(), { method:'GET' });
@@ -5746,6 +5863,7 @@
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
         const [data] = await Promise.all([ api('?'+params.toString()), loadContasBancarias() ]);
         state.recebimentos = data.recebimentos;
       }catch(err){ state.error = err.message || 'Não foi possível carregar os recebimentos.'; }
@@ -7066,6 +7184,7 @@
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
         if(state.status !== 'todos') params.set('status', state.status);
         if(state.search.trim()) params.set('search', state.search.trim());
         const data = await api('?'+params.toString(), { method:'GET' });
@@ -7243,6 +7362,7 @@
       state.loading = true; state.error = null; render();
       try{
         const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
         if(state.status !== 'todos') params.set('status', state.status);
         if(state.search.trim()) params.set('search', state.search.trim());
         const data = await api('?'+params.toString(), { method:'GET' });
@@ -7636,9 +7756,10 @@
     function intFmt(v){ return v===null||v===undefined ? pendenteSync() : Number(v).toLocaleString('pt-BR'); }
     function fmtDiaCurto(diaISO){ const [, m, d] = diaISO.split('-'); return d+'/'+m; }
 
-    async function apiAds(empresaId, periodo, contaId){
+    async function apiAds(empresaId, periodo, contaId, desde, ate){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
       const res = await fetch('/api/ads?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os dados de Ads.');
@@ -7669,7 +7790,7 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; render();
-      try{ state.data = await apiAds(filtro.empresaId, filtro.periodo, state.contaId); }
+      try{ state.data = await apiAds(filtro.empresaId, filtro.periodo, state.contaId, filtro.desdePersonalizado, filtro.atePersonalizado); }
       catch(err){ state.error = err.message; state.data = null; }
       state.loading = false; render();
     }
@@ -8017,11 +8138,12 @@
       + '</span>';
     }
 
-    async function apiPerformance(empresaId, periodo, contaId, sku, status){
+    async function apiPerformance(empresaId, periodo, contaId, sku, status, desde, ate){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
       if(sku) params.set('sku', sku);
       if(status) params.set('status', status);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
       const res = await fetch('/api/performance-anuncios?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Performance de Anúncios.');
@@ -8032,7 +8154,7 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; render();
-      try{ state.data = await apiPerformance(filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.status); }
+      try{ state.data = await apiPerformance(filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.status, filtro.desdePersonalizado, filtro.atePersonalizado); }
       catch(err){ state.error = err.message; state.data = null; }
       state.loading = false; render();
     }
@@ -8342,10 +8464,11 @@
       + '</span>';
     }
 
-    async function apiVisitas(empresaId, periodo, contaId, sku){
+    async function apiVisitas(empresaId, periodo, contaId, sku, desde, ate){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
       if(sku) params.set('sku', sku);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
       const res = await fetch('/api/visitas-conversao?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Visitas e Conversão.');
@@ -8356,7 +8479,7 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; render();
-      try{ state.data = await apiVisitas(filtro.empresaId, filtro.periodo, state.contaId, state.sku); }
+      try{ state.data = await apiVisitas(filtro.empresaId, filtro.periodo, state.contaId, state.sku, filtro.desdePersonalizado, filtro.atePersonalizado); }
       catch(err){ state.error = err.message; state.data = null; }
       state.loading = false; render();
     }
@@ -8703,10 +8826,11 @@
         + (ads.campanha?('<div class="cell-stack-sub">'+escapeHtml(ads.campanha)+'</div>'):'');
     }
 
-    async function apiMargem(empresaId, periodo, contaId, sku){
+    async function apiMargem(empresaId, periodo, contaId, sku, desde, ate){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
       if(sku) params.set('sku', sku);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
       const res = await fetch('/api/margem-anuncio?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Margem por Anúncio.');
@@ -8717,7 +8841,7 @@
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
       state.loading = true; state.error = null; render();
-      try{ state.data = await apiMargem(filtro.empresaId, filtro.periodo, state.contaId, state.sku); }
+      try{ state.data = await apiMargem(filtro.empresaId, filtro.periodo, state.contaId, state.sku, filtro.desdePersonalizado, filtro.atePersonalizado); }
       catch(err){ state.error = err.message; state.data = null; }
       state.loading = false; render();
     }
@@ -8972,6 +9096,330 @@
     window.MargemAnuncio = { load };
   })();
 
+  /* ================= IA DE PROMOÇÕES — Fase A + Fase B (13/09/2026) =================
+     Pedido do usuário: módulo que analisa promoções do Mercado Livre e
+     recomenda entrar/sair olhando a MARGEM REAL (nunca só o % de desconto).
+     Fase A: 1) o card "Integração Mercado Livre" (leitura vs.
+     leitura+escrita, pedido explícito do usuário na seção 0), nunca
+     decidido por adivinhação — ver lib/mlPermissoes.js; 2) a configuração
+     da margem mínima (seção 3).
+     Fase B (pedido explícito do usuário, mesmo dia: "dentro dessa pagina
+     quero que mostra todas as promoçoes juntos ao anuncios e a margem de
+     cada uma elas, e a cada uma hora a ia tem que busca novas promoções"):
+     3) a tabela com toda promoção + anúncio + margem real já calculada
+     (lib/promocoesMotor.js) e a classificação da IA (🟢/🟡/🔴/🔵/⚠️); os
+     dados vêm sempre de /api/promocoes/analise — já calculados pelo ciclo
+     automático que roda a cada 1h no servidor (lib/ia/promocoesScheduler.js,
+     nunca depende desta tela estar aberta) — com um botão "Atualizar agora"
+     pra forçar uma busca na hora. "Ver detalhes" sempre funciona; Aceitar/
+     Remover ficam desabilitados com a mensagem "AÇÃO NÃO DISPONÍVEL" —
+     pedido explícito do usuário — enquanto a escrita não estiver liberada
+     (ver card de Integração).
+     Usa o filtro do topo (window.CerneFiltro) pra empresa, mesmo padrão de
+     Margem por Anúncio/Ads/Performance de Anúncios. */
+  (function(){
+    const state = { statusIntegracao:null, loadingStatus:false, config:null, loadingConfig:false, salvando:false, error:null, analise:null, loadingAnalise:false, atualizandoAgora:false };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pctFmt(v){ return v===null||v===undefined ? '—' : (v<0?'− ':'')+Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      const d = new Date(v);
+      return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+    }
+    function thumbHTML(url){
+      if(!url) return '<span class="anuncio-thumb-placeholder" title="Sem imagem disponível">'+svg('box')+'</span>';
+      return '<span style="position:relative;display:inline-block;width:36px;height:36px;flex-shrink:0;">'
+        + '<img class="anuncio-thumb" src="'+escapeHtml(url)+'" alt="" loading="lazy" style="position:absolute;inset:0;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+        + '<span class="anuncio-thumb-placeholder" style="display:none;position:absolute;inset:0;">'+svg('box')+'</span>'
+      + '</span>';
+    }
+    const TIPO_PROMOCAO_LABEL = {
+      DEAL:'Oferta (Deal)', MARKETPLACE_CAMPAIGN:'Campanha do marketplace', PRICE_DISCOUNT:'Desconto de preço',
+      VOLUME:'Desconto por volume', DOD:'Oferta do dia', LIGHTNING:'Oferta relâmpago', PRE_NEGOTIATED:'Pré-negociada',
+      SELLER_CAMPAIGN:'Campanha do vendedor', SMART:'Smart', PRICE_MATCHING:'Igualação de preço',
+      UNHEALTHY_STOCK:'Estoque parado', SELLER_COUPON_CAMPAIGN:'Cupom do vendedor',
+    };
+    function tipoPromocaoLabel(t){ return TIPO_PROMOCAO_LABEL[t] || t || '—'; }
+    // Mesma classificação/emoji de lib/promocoesMotor.js#classificar — só
+    // repetida aqui pra exibição (o backend já manda o código e o rótulo
+    // prontos; o emoji é só cosmético, nunca decide nada sozinho no front).
+    const CLASSIFICACAO_COR = {
+      entrar:'var(--success)', manter:'var(--success)', oportunidade:'var(--copper)',
+      nao_recomendado:'var(--danger)', sair:'var(--danger)',
+      risco_margem:'var(--warning)', dados_insuficientes:'var(--warning)',
+    };
+    const CLASSIFICACAO_EMOJI = {
+      entrar:'🟢', manter:'🟡', oportunidade:'🔵', nao_recomendado:'🔴', sair:'🔴',
+      risco_margem:'⚠️', dados_insuficientes:'⚠️',
+    };
+    function badgeClassificacaoHTML(l){
+      const cor = CLASSIFICACAO_COR[l.classificacaoCodigo] || 'var(--text-faint)';
+      const emoji = CLASSIFICACAO_EMOJI[l.classificacaoCodigo] || '';
+      return '<span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:12.5px;color:'+cor+';" title="'+escapeHtml(l.motivoIncompleto||'')+'">'
+        + emoji+' '+escapeHtml(l.classificacaoLabel||'—')
+      + '</span>';
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+
+    async function apiGet(url){
+      const res = await fetch(url);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && (body.error||(body.errors&&JSON.stringify(body.errors)))) || 'Falha na requisição.');
+      return body;
+    }
+    async function apiStatusIntegracao(empresaId){ return apiGet('/api/promocoes/status-integracao?empresaId='+empresaId); }
+    async function apiConfig(empresaId){ return apiGet('/api/promocoes/config?empresaId='+empresaId); }
+    async function apiSalvarConfig(dados){
+      const res = await fetch('/api/promocoes/config', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(dados) });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && (body.error||(body.errors&&JSON.stringify(body.errors)))) || 'Falha ao salvar configuração.');
+      return body;
+    }
+    async function apiAnalise(empresaId){ return apiGet('/api/promocoes/analise?empresaId='+empresaId); }
+    async function apiAnalisarAgora(empresaId){
+      const res = await fetch('/api/promocoes/analisar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }) });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Falha ao buscar promoções agora.');
+      return body;
+    }
+
+    async function load(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.statusIntegracao=null; state.config=null; state.analise=null; state.loadingStatus=false; state.loadingConfig=false; state.loadingAnalise=false; render(); return; }
+      state.loadingStatus = true; state.loadingConfig = true; state.loadingAnalise = true; state.error = null; render();
+      try{
+        const [statusIntegracao, config, analise] = await Promise.all([
+          apiStatusIntegracao(filtro.empresaId),
+          apiConfig(filtro.empresaId),
+          apiAnalise(filtro.empresaId),
+        ]);
+        state.statusIntegracao = statusIntegracao;
+        state.config = config;
+        state.analise = analise;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar a IA de Promoções.'; }
+      state.loadingStatus = false; state.loadingConfig = false; state.loadingAnalise = false; render();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-promocoesIa');
+      if(page && page.classList.contains('active')) load();
+      else render();
+    });
+
+    // ---- card "Integração Mercado Livre" (seção 0 do pedido do usuário) ----
+    function cardIntegracaoHTML(){
+      const r = state.statusIntegracao && state.statusIntegracao.resumo;
+      const ok = !!(r && r.escritaDisponivel);
+      return '<div class="table-card" style="padding:20px;margin-bottom:14px;">'
+        + '<div class="panel-title" style="margin-bottom:14px;"><span class="panel-title-ic">'+svg('link')+'</span>Integração Mercado Livre</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:24px;margin-bottom:10px;">'
+          + '<div><div class="field-hint" style="margin:0 0 4px;">Status</div><div style="font-weight:600;">'+(ok?'🟢 Leitura e escrita disponíveis':'🟢 Leitura disponível')+'</div></div>'
+          + '<div><div class="field-hint" style="margin:0 0 4px;">Alteração de promoções</div><div style="font-weight:600;">'+(ok?'🟢 Escrita disponível':'🔴 Escrita não disponível')+'</div></div>'
+        + '</div>'
+        + '<div class="field-hint">'+escapeHtml((r && r.mensagem) || 'Seu aplicativo Mercado Livre possui atualmente acesso de leitura. A IA pode analisar e recomendar promoções, mas não pode alterá-las automaticamente.')+'</div>'
+      + '</div>';
+    }
+
+    // ---- configuração (seção 3/10 do pedido do usuário) ----
+    function cardConfigHTML(){
+      const c = state.config || {};
+      const modos = [
+        { v:'somente_analisar', label:'Somente analisar / recomendar' },
+        { v:'sugerir_aprovar', label:'Sugerir e aguardar aprovação' },
+        { v:'automatico', label:'Automático' },
+      ];
+      const permiteEscrita = !!(state.statusIntegracao && state.statusIntegracao.resumo && state.statusIntegracao.resumo.escritaDisponivel);
+      return '<div class="table-card" style="padding:20px;margin-bottom:14px;">'
+        + '<div class="panel-title" style="margin-bottom:14px;"><span class="panel-title-ic">'+svg('percent')+'</span>Configuração da IA de Promoções</div>'
+        + '<div class="inline-form" style="margin-top:0;align-items:flex-end;">'
+          + '<div class="field narrow"><label>Margem mínima permitida em promoção (%)</label><input type="number" id="promoMargemMinima" min="0" max="100" step="0.1" value="'+(c.margemMinimaPct!==undefined?c.margemMinimaPct:14)+'"></div>'
+          + '<button class="ghost-btn" id="promoSalvarConfig" type="button" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Salvar</span></button>'
+        + '</div>'
+        + '<div class="field-hint" style="margin-top:6px;">Quando uma promoção deixar a margem estimada abaixo deste número, a IA vai marcar como <strong>🔴 NÃO RECOMENDADA</strong>.</div>'
+        + '<div style="margin-top:18px;">'
+          + '<div class="field-hint" style="margin:0 0 8px;">Modo da IA</div>'
+          + modos.map(m => {
+              const disabled = m.v !== 'somente_analisar' && !permiteEscrita;
+              return '<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;'+(disabled?'opacity:.5;':'cursor:pointer;')+'" title="'+(disabled?'É necessário habilitar permissão de escrita na integração Mercado Livre.':'')+'">'
+                + '<input type="radio" name="promoModoIa" value="'+m.v+'" '+(c.modoIa===m.v?'checked':'')+' '+(disabled?'disabled':'')+'>'
+                + '<span>'+escapeHtml(m.label)+'</span>'
+              + '</label>';
+            }).join('')
+        + '</div>'
+      + '</div>';
+    }
+
+    // ---- tabela: todas as promoções junto com o anúncio e a margem real
+    // de cada uma (pedido explícito do usuário, 13/09/2026) — lê sempre de
+    // /api/promocoes/analise (já calculado pelo ciclo automático de hora em
+    // hora, lib/ia/promocoesCiclo.js; nunca recalcula ao vivo aqui). ----
+    function anuncioCellHTML(l){
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="promo-anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="anuncio-cell-flex">'
+        + thumbHTML(l.imagemUrl)
+        + '<div class="cell-stack">'
+          + '<span class="prod-title" title="'+escapeHtml(l.titulo||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.titulo||'(sem título)')+'</span>'
+          + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+        + '</div></div></a></td>';
+    }
+
+    function cardResumoAnaliseHTML(){
+      const a = state.analise;
+      const total = a ? a.totalItens : 0;
+      return '<div class="table-card" style="padding:16px 20px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;">'
+        + '<div>'
+          + '<div style="font-weight:600;">'+total+' item(ns) de promoção monitorado(s)</div>'
+          + '<div class="field-hint" style="margin-top:2px;">Atualizado automaticamente a cada 1 hora'+(a && a.ultimaAtualizacaoEm ? (' · última busca: '+fmtDataHora(a.ultimaAtualizacaoEm)) : '')+'.</div>'
+        + '</div>'
+        + '<button class="ghost-btn" id="promoAtualizarAgora" type="button" style="cursor:pointer;opacity:1;" '+(state.atualizandoAgora?'disabled':'')+'>'
+          + (state.atualizandoAgora ? '<span class="spin" style="width:13px;height:13px;"></span>' : svg('activity'))
+          + '<span>'+(state.atualizandoAgora?'Buscando…':'Atualizar agora')+'</span>'
+        + '</button>'
+      + '</div>';
+    }
+
+    function tabelaPromocoesHTML(linhas){
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Loja</th><th>Promoção</th><th>Status</th><th>Preço normal</th><th>Preço promo.</th>'
+        + '<th>Desconto</th><th>Margem real</th><th>Classificação</th><th></th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td>'+escapeHtml(tipoPromocaoLabel(l.promotionType))+(l.promotionLabel?('<div class="cell-stack-sub" style="color:var(--text-faint);">'+escapeHtml(l.promotionLabel)+'</div>'):'')+'</td>'
+          + '<td>'+(l.statusItemMl==='candidate' ? 'Candidata' : escapeHtml(l.statusItemMl||'—'))+'</td>'
+          + '<td class="mono">'+money(l.precoNormal)+'</td>'
+          + '<td class="mono">'+money(l.precoPromo)+'</td>'
+          + '<td class="mono">'+pctFmt(l.descontoPct)+'</td>'
+          + '<td class="mono" style="'+(l.margemRealPct!==null?(l.margemRealPct>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.margemIncompleta?'<span style="color:var(--text-faint);font-style:italic;" title="'+escapeHtml(l.motivoIncompleto||'')+'">dados insuficientes</span>':pctFmt(l.margemRealPct))+'</td>'
+          + '<td>'+badgeClassificacaoHTML(l)+'</td>'
+          + '<td style="white-space:nowrap;">'
+            + '<button class="row-ic-btn promo-ver-detalhes" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" type="button" title="Ver detalhes">'+svg('activity')+'</button>'
+            + ' <button class="row-ic-btn" type="button" disabled title="AÇÃO NÃO DISPONÍVEL: esta ação exige permissão de escrita na API do Mercado Livre. Atualmente sua aplicação possui apenas permissão de leitura." style="opacity:.4;cursor:not-allowed;">'+svg('checkCircle')+'</button>'
+            + ' <button class="row-ic-btn" type="button" disabled title="AÇÃO NÃO DISPONÍVEL: esta ação exige permissão de escrita na API do Mercado Livre. Atualmente sua aplicação possui apenas permissão de leitura." style="opacity:.4;cursor:not-allowed;">'+svg('x')+'</button>'
+          + '</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    function abrirDetalhePromocao(l){
+      window.AnuncioDetalheModal.abrir({
+        titulo: l.titulo, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, imagemUrl: l.imagemUrl, origem: 'promocoesIa',
+        campos: [
+          { label:'Promoção', value: tipoPromocaoLabel(l.promotionType) + (l.promotionLabel ? (' — '+l.promotionLabel) : '') },
+          { label:'Status na promoção', value: l.statusItemMl==='candidate' ? 'Candidata (ainda não aplicada)' : (l.statusItemMl||'—') },
+          { label:'Preço normal', html: money(l.precoNormal) },
+          { label:'Preço promocional', html: money(l.precoPromo) },
+          { label:'Desconto total', html: pctFmt(l.descontoPct) },
+          { label:'Desconto bancado pelo Mercado Livre', html: l.descontoBancadoMeliPct===null?'<span style="color:var(--text-faint);font-style:italic;">Mercado Livre não informou a divisão para este tipo de promoção</span>':pctFmt(l.descontoBancadoMeliPct) },
+          { label:'Desconto bancado pelo vendedor', html: pctFmt(l.descontoBancadoVendedorPct) },
+          { label:'— Cálculo da margem real —', html: '<hr style="border:none;border-top:1px solid var(--border-strong);margin:2px 0;">' },
+          { label:'Custo do produto', html: l.custoProduto===null?'<span style="color:var(--text-faint);font-style:italic;">não cadastrado</span>':money(l.custoProduto) },
+          { label:'Tarifas/comissão (estimada pelo histórico)', html: l.tarifasEstimadas===null?'—':money(l.tarifasEstimadas) },
+          { label:'Frete do vendedor (estimado pelo histórico)', html: l.freteVendedorEstimado===null?'—':money(l.freteVendedorEstimado) },
+          { label:'Imposto (estimado)', html: l.impostoEstimado===null?'—':money(l.impostoEstimado) },
+          { label:'Margem real (R$)', html: l.margemReal===null?'—':money(l.margemReal) },
+          { label:'Margem real (%)', html: l.margemRealPct===null?'—':pctFmt(l.margemRealPct) },
+          { label:'Margem mínima configurada', html: pctFmt(l.margemMinimaPctUsada) },
+          { label:'Classificação da IA', html: badgeClassificacaoHTML(l) },
+          { label:'Por que este dado pode estar incompleto', html: l.motivoIncompleto ? escapeHtml(l.motivoIncompleto) : '<span style="color:var(--text-faint);">Nenhum dado faltando.</span>' },
+          { label:'Última atualização', value: fmtDataHora(l.atualizadoEm) },
+        ],
+      });
+    }
+
+    function render(){
+      const root = document.getElementById('promocoesIaRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de usar a IA de Promoções.</p></div>';
+        return;
+      }
+      if(!filtro.empresaId){ root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('sparkle')+'</div><h2>Selecione uma empresa</h2></div>'; return; }
+
+      if((state.loadingStatus || state.loadingConfig) && !state.statusIntegracao){
+        root.innerHTML = '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando IA de Promoções…</span></div></div>';
+        return;
+      }
+      if(state.error){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="promoRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+        root.querySelector('#promoRetry').addEventListener('click', load);
+        return;
+      }
+
+      let html = cardIntegracaoHTML() + cardConfigHTML() + cardResumoAnaliseHTML();
+
+      if(state.loadingAnalise && !state.analise){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Buscando promoções…</span></div></div>';
+      } else if(state.analise && !state.analise.linhas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('sparkle')+'</div>'
+          + '<h2>Nenhuma promoção encontrada ainda</h2>'
+          + '<p class="lead">A busca automática roda a cada 1 hora. Você também pode clicar em <strong>Atualizar agora</strong> para forçar uma busca neste instante.</p></div>';
+      } else if(state.analise){
+        html += tabelaPromocoesHTML(state.analise.linhas);
+      }
+
+      root.innerHTML = html;
+
+      const btnAtualizarAgora = document.getElementById('promoAtualizarAgora');
+      if(btnAtualizarAgora) btnAtualizarAgora.addEventListener('click', async ()=>{
+        state.atualizandoAgora = true; render();
+        try{
+          await apiAnalisarAgora(filtro.empresaId);
+          state.analise = await apiAnalise(filtro.empresaId);
+          toast('Promoções atualizadas.');
+        }catch(err){ toast(err.message || 'Não foi possível buscar promoções agora.', 'error'); }
+        state.atualizandoAgora = false; render();
+      });
+
+      root.querySelectorAll('.promo-anuncio-link, .promo-ver-detalhes').forEach(el=>{
+        el.addEventListener('click', ()=>{
+          const mlItemId = el.dataset.mlItem;
+          const l = (state.analise && state.analise.linhas || []).find(x=>x.mlItemId===mlItemId);
+          if(l) abrirDetalhePromocao(l);
+        });
+      });
+
+      const btnSalvar = document.getElementById('promoSalvarConfig');
+      if(btnSalvar) btnSalvar.addEventListener('click', async ()=>{
+        const margemMinimaPct = Number(document.getElementById('promoMargemMinima').value);
+        if(!Number.isFinite(margemMinimaPct) || margemMinimaPct < 0 || margemMinimaPct > 100){
+          toast('Informe um percentual entre 0 e 100.', 'error'); return;
+        }
+        btnSalvar.disabled = true;
+        try{
+          state.config = await apiSalvarConfig({ empresaId: filtro.empresaId, margemMinimaPct });
+          toast('Configuração salva.');
+          render();
+        }catch(err){ toast(err.message, 'error'); }
+        finally{ if(btnSalvar) btnSalvar.disabled = false; }
+      });
+      root.querySelectorAll('input[name="promoModoIa"]').forEach(r=> r.addEventListener('change', async (e)=>{
+        try{
+          state.config = await apiSalvarConfig({ empresaId: filtro.empresaId, modoIa: e.target.value });
+          toast('Configuração salva.');
+        }catch(err){ toast(err.message, 'error'); }
+        render();
+      }));
+    }
+
+    window.PromocoesIA = { load };
+  })();
+
   /* ================= RELATÓRIOS — categorias com dados 100% reaproveitados =================
      Ativado em 25/08/2026. Regra central do usuário: os números aqui usam as
      MESMAS regras já usadas em Visão Geral/Pedidos/Financeiro (nenhum
@@ -9001,10 +9449,11 @@
       }catch(e){ return []; }
     }
 
-    async function apiCategoria(categoria, empresaId, periodo, contaId, sku, visaoProdutos){
+    async function apiCategoria(categoria, empresaId, periodo, contaId, sku, visaoProdutos, desde, ate){
       const params = new URLSearchParams({ empresaId, periodo });
       if(contaId) params.set('contaId', contaId);
       if(categoria === 'produtos' && visaoProdutos !== 'caixa' && sku.trim()) params.set('sku', sku.trim());
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
       const path = categoria === 'vendas-margem' ? '/api/relatorios/vendas-margem'
         : categoria === 'produtos' ? (visaoProdutos === 'caixa' ? '/api/relatorios/produtos-por-caixa' : '/api/relatorios/produtos')
         : '/api/relatorios/marketplaces';
@@ -9020,7 +9469,7 @@
       state.loading = true; state.error = null; render();
       try{
         const [dados, lojas] = await Promise.all([
-          apiCategoria(state.categoria, filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.visaoProdutos),
+          apiCategoria(state.categoria, filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.visaoProdutos, filtro.desdePersonalizado, filtro.atePersonalizado),
           apiLojas(filtro.empresaId),
         ]);
         state.data = dados;
@@ -9043,6 +9492,7 @@
       const params = new URLSearchParams({ categoria: state.categoria, empresaId: filtro.empresaId, periodo: filtro.periodo, formato });
       if(state.contaId) params.set('contaId', state.contaId);
       if(state.categoria === 'produtos' && state.sku.trim()) params.set('sku', state.sku.trim());
+      if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
       window.location.href = '/api/relatorios/exportar?'+params.toString();
     }
 

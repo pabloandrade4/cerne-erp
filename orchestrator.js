@@ -102,7 +102,7 @@ function normalizarHistorico(historico) {
 // test/iaOrchestrator.test.js), pra testar o laço de ferramentas sem
 // depender de rede/chave de API real neste ambiente de desenvolvimento (ver
 // docs/05-problemas-conhecidos.md).
-async function responderPergunta({ empresaId, periodoChave, pergunta, historico }, opts = {}) {
+async function responderPergunta({ empresaId, periodoChave, desde, ate, pergunta, historico }, opts = {}) {
   const t0 = Date.now();
 
   const empresa = await buscarEmpresa(empresaId);
@@ -124,7 +124,7 @@ async function responderPergunta({ empresaId, periodoChave, pergunta, historico 
     throw err;
   }
 
-  const ctx = criarContexto({ empresaId: empresa.id, periodoChave });
+  const ctx = criarContexto({ empresaId: empresa.id, periodoChave, desde, ate });
   const respostaBase = { empresa, periodo: { chave: ctx.periodoCalc.chave, label: ctx.periodoCalc.label } };
 
   const provedor = opts.provider || obterProvedorConfigurado();

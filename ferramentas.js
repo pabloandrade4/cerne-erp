@@ -127,8 +127,8 @@ function linhaResposta(linha) {
 // resto do ERP). Cache simples pra nunca buscar pedidos/itens do período
 // mais de uma vez, mesmo que o modelo chame várias ferramentas na mesma
 // pergunta.
-function criarContexto({ empresaId, periodoChave }) {
-  const periodoCalc = calcularPeriodo(periodoChave);
+function criarContexto({ empresaId, periodoChave, desde: desdeQuery, ate: ateQuery }) {
+  const periodoCalc = calcularPeriodo(periodoChave, { desde: desdeQuery, ate: ateQuery });
   const { desde: desdeStr, ate: ateStr } = periodoParaDatasBRT(periodoCalc);
   const empresaIdNum = Number(empresaId);
   let promessaPedidos = null;
