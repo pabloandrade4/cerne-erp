@@ -7735,7 +7735,7 @@
      Ads" (todas as vendas reais daquele SKU, que podem incluir venda
      orgânica, menos o investimento em Ads). */
   (function(){
-    const state = { loading:false, error:null, data:null, contaId:'', sort:'faturamento', sincronizando:false };
+    const state = { loading:false, error:null, data:null, contaId:'', sort:'faturamento', sincronizando:false, salvandoMargemMinima:false };
 
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
@@ -7764,6 +7764,36 @@
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os dados de Ads.');
       return body;
+    }
+
+    // ---- IA de Ads e Performance — config da margem mínima (mesmo padrão de
+    // GET/PUT /api/promocoes/config) — o valor atual vem sempre junto da
+    // resposta de /api/ads (campo margemMinimaPct), então só precisamos do
+    // PUT aqui pra salvar; depois de salvar recarregamos /api/ads pra
+    // reclassificar tudo (anúncio e campanha) com o novo mínimo. ----
+    async function apiSalvarMargemMinimaAds(empresaId, margemMinimaPct){
+      const res = await fetch('/api/ads/config-ia', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId, margemMinimaPct }) });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && (body.error||(body.errors&&JSON.stringify(body.errors)))) || 'Falha ao salvar a margem mínima.');
+      return body;
+    }
+
+    async function salvarMargemMinima(valorStr){
+      const filtro = window.CerneFiltro.state;
+      const valor = Number(valorStr);
+      if(!Number.isFinite(valor) || valor < 0 || valor > 100){
+        toast('Informe um percentual entre 0 e 100.', 'error'); return;
+      }
+      state.salvandoMargemMinima = true; render();
+      try{
+        await apiSalvarMargemMinimaAds(filtro.empresaId, valor);
+        toast('Margem mínima da IA de Ads atualizada.');
+        await loadAds();
+      }catch(err){
+        toast(err.message || 'Falha ao salvar a margem mínima.', 'error');
+      }finally{
+        state.salvandoMargemMinima = false; render();
+      }
     }
 
     async function apiSincronizarAds(){
@@ -7934,17 +7964,55 @@
         + '</tbody></table></div></div>';
     }
 
-    // ---- Visão 2: Resultado real do SKU após Ads — todas as vendas reais do SKU (pode incluir orgânica) menos o investimento em Ads ----
-    function statusBadge(l){
-      if(l.status==='lucrativo') return '<span style="color:var(--success);font-weight:600;">Lucrativo</span>';
-      if(l.status==='prejuizo') return '<span style="color:var(--danger);font-weight:600;">Prejuízo</span>';
-      if(l.status==='sem_dado_ads') return '<span style="color:var(--text-faint);font-style:italic;">Sem dado de Ads</span>';
-      return pendenteCusto();
+    // ---- IA de Ads e Performance — Fase A (14/09/2026): classificação em 5
+    // níveis (mesmo espírito de badgeClassificacaoHTML da IA de Promoções),
+    // substituindo o antigo status binário Lucrativo/Prejuízo. O backend
+    // (lib/ia/adsMotor.js) já manda classificacaoCodigo/Label/Emoji prontos
+    // pra cada anúncio e pra cada campanha — o front nunca decide sozinho. ----
+    const CLASSIFICACAO_COR_ADS = {
+      pausar:'var(--danger)', ajustar:'var(--warning)', manter:'var(--success)',
+      escalar:'var(--copper)', dados_insuficientes:'var(--text-faint)',
+    };
+    function classificacaoBadgeHTML(l){
+      const cor = CLASSIFICACAO_COR_ADS[l.classificacaoCodigo] || 'var(--text-faint)';
+      const titulo = l.classificacaoCodigo==='dados_insuficientes'
+        ? 'Falta custo do produto ou métrica de Ads ainda não sincronizada.'
+        : '';
+      return '<span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:12.5px;color:'+cor+';white-space:nowrap;" title="'+escapeHtml(titulo)+'">'
+        + (l.classificacaoEmoji||'')+' '+escapeHtml(l.classificacaoLabel||'—')
+      + '</span>';
     }
+
+    // ---- Resumo por Campanha — pedido explícito do usuário ("identificar
+    // campanhas boas e ruins"): soma (nunca recalcula) os mesmos números
+    // reais de cada anúncio, agrupado por campanha (lib/ia/adsMotor.js). ----
+    function tabelaCampanhasHTML(campanhas){
+      if(!campanhas || !campanhas.length){
+        return '<div class="field-hint" style="margin-bottom:8px;">Nenhum anúncio com campanha de Ads identificada neste período (vendas 100% orgânicas não entram neste resumo).</div>';
+      }
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Campanha</th><th>Loja</th><th>Qtd. anúncios</th><th>Investimento</th><th>Faturamento real</th>'
+        + '<th>ROAS</th><th>TACOS</th><th>Margem após Ads (%)</th><th>Classificação da IA</th>'
+        + '</tr></thead><tbody>'
+        + campanhas.map(c => '<tr>'
+          + '<td>'+escapeHtml(c.campanha||'—')+'</td>'
+          + '<td>'+escapeHtml(c.loja||'—')+'</td>'
+          + '<td class="mono">'+intFmt(c.qtdAnuncios)+'</td>'
+          + '<td class="mono">'+moneyOrPend(c.investimento)+'</td>'
+          + '<td class="mono">'+moneyOrPend(c.faturamentoReal)+'</td>'
+          + '<td class="mono">'+roasFmt(c.roas)+'</td>'
+          + '<td class="mono">'+pctFmt(c.tacos)+'</td>'
+          + '<td class="mono" style="'+(c.margemDepoisDoAdsPct!==null && c.margemDepoisDoAdsPct!==undefined?(c.margemDepoisDoAdsPct>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+pctFmt(c.margemDepoisDoAdsPct)+'</td>'
+          + '<td>'+classificacaoBadgeHTML(c)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    // ---- Visão 2: Resultado real do SKU após Ads — todas as vendas reais do SKU (pode incluir orgânica) menos o investimento em Ads ----
     function tabelaResultadoRealHTML(linhas){
       return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
         + '<th>Anúncio / SKU</th><th>Loja</th><th>Faturamento real (todas as vendas)</th><th>Gasto Ads</th><th>TACOS</th>'
-        + '<th>Margem antes do Ads</th><th>Resultado após Ads</th><th>Margem após Ads (%)</th><th>Status</th>'
+        + '<th>Margem antes do Ads</th><th>Resultado após Ads</th><th>Margem após Ads (%)</th><th>Classificação da IA</th>'
         + '</tr></thead><tbody>'
         + linhas.map(l => '<tr>'
           + anuncioCellHTML(l)
@@ -7955,7 +8023,7 @@
           + '<td class="mono">'+(l.semVendaReal ? '<span style="color:var(--text-faint);">—</span>' : (l.margemAntesDoAds===null ? pendenteCusto() : money(l.margemAntesDoAds)))+'</td>'
           + '<td class="mono" style="'+(l.margemDepoisDoAds!==null && l.margemDepoisDoAds!==undefined?(l.margemDepoisDoAds>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.margemDepoisDoAds===null||l.margemDepoisDoAds===undefined ? (l.semMetricasAds ? pendenteSync() : pendenteCusto()) : money(l.margemDepoisDoAds))+'</td>'
           + '<td class="mono">'+pctFmt(l.margemDepoisDoAdsPct)+'</td>'
-          + '<td>'+statusBadge(l)+'</td>'
+          + '<td>'+classificacaoBadgeHTML(l)+'</td>'
         + '</tr>').join('')
         + '</tbody></table></div></div>';
     }
@@ -7985,6 +8053,11 @@
               + OPCOES_ORDENACAO.map(o=>'<option value="'+o.valor+'" '+(o.valor===state.sort?'selected':'')+'>Ordenar por: '+escapeHtml(o.label)+'</option>').join('')
             + '</select></div>'
             + '<button class="primary-btn enabled" id="btnSincronizarAds" type="button" '+(state.sincronizando?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.sincronizando?'Sincronizando…':'Sincronizar agora')+'</span></button>'
+            + '<div style="display:flex;align-items:center;gap:6px;" title="Abaixo deste percentual de margem após Ads, a IA classifica o anúncio/campanha como AJUSTAR ou PAUSAR.">'
+              + '<label for="adsMargemMinimaInput" class="field-hint" style="margin:0;white-space:nowrap;">Margem mínima da IA (%)</label>'
+              + '<input type="number" id="adsMargemMinimaInput" min="0" max="100" step="0.1" value="'+escapeHtml(String(state.data.margemMinimaPct!==undefined && state.data.margemMinimaPct!==null ? state.data.margemMinimaPct : 10))+'" style="width:70px;">'
+              + '<button class="ghost-btn" id="adsSalvarMargemMinima" type="button" style="cursor:pointer;opacity:1;" '+(state.salvandoMargemMinima?'disabled':'')+'>'+svg('check')+'<span>'+(state.salvandoMargemMinima?'Salvando…':'Salvar')+'</span></button>'
+            + '</div>'
           + '</div>'
           + (state.data.sincronizacaoAutomatica ? '<span class="panel-note" style="font-size:12px;">Sincronização automática em segundo plano'+(state.data.sincronizacaoAutomatica.ultimaExecucaoEm ? (' — última execução: '+escapeHtml(fmtDateTime(state.data.sincronizacaoAutomatica.ultimaExecucaoEm))) : ' ainda não rodou um ciclo completo')+'.</span>' : '')
         + '</div>';
@@ -8019,7 +8092,10 @@
           + '<p class="lead">Não há vendas nem métricas de publicidade para "'+escapeHtml((state.data.periodo&&state.data.periodo.label)||'')+'". Escolha outro período ou verifique a sincronização de pedidos.</p></div>';
       } else if(state.data){
         const linhasOrdenadas = state.data.linhas.slice().sort(comparadorDe(state.sort));
-        html += '<div class="panel-title" style="margin:18px 0 8px;"><span class="panel-title-ic">'+svg('megaphone')+'</span>Performance atribuída Mercado Ads</div>'
+        html += '<div class="panel-title" style="margin:18px 0 8px;"><span class="panel-title-ic">'+svg('barChart')+'</span>Resumo por Campanha (IA de Ads e Performance)</div>'
+          + '<div class="field-hint" style="margin-bottom:8px;">Soma dos números reais de cada anúncio (nunca recalculados) agrupados por campanha, pra identificar rapidamente campanhas boas e ruins. 🔴 PAUSAR = resultado negativo após Ads · 🟠 AJUSTAR = positivo mas abaixo da margem mínima configurada acima · 🟡 MANTER = margem saudável · 🟢 ESCALAR = margem folgada, dá pra investir mais · ⚠️ DADOS INSUFICIENTES = falta custo do produto ou métrica de Ads. Anúncios sem campanha (venda orgânica) não entram aqui.</div>'
+          + tabelaCampanhasHTML(state.data.campanhas)
+          + '<div class="panel-title" style="margin:22px 0 8px;"><span class="panel-title-ic">'+svg('megaphone')+'</span>Performance atribuída Mercado Ads</div>'
           + '<div class="field-hint" style="margin-bottom:8px;">Investimento, vendas e receita que o Mercado Livre atribui diretamente à publicidade — dado real da API, nunca estimado.</div>'
           + tabelaAtribuidaHTML(linhasOrdenadas)
           + '<div class="panel-title" style="margin:22px 0 8px;"><span class="panel-title-ic">'+svg('wallet')+'</span>Resultado real do SKU após Ads</div>'
@@ -8036,6 +8112,9 @@
       if(selSort) selSort.addEventListener('change', ()=>{ state.sort = selSort.value; render(); });
       const btnSync = document.getElementById('btnSincronizarAds');
       if(btnSync) btnSync.addEventListener('click', sincronizarAgora);
+      const btnMargemMinima = document.getElementById('adsSalvarMargemMinima');
+      const inputMargemMinima = document.getElementById('adsMargemMinimaInput');
+      if(btnMargemMinima && inputMargemMinima) btnMargemMinima.addEventListener('click', ()=> salvarMargemMinima(inputMargemMinima.value));
     }
 
     window.Ads = { load };

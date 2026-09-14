@@ -4,11 +4,20 @@
 // GET abaixo NUNCA mais consulta a API do Mercado Livre ao vivo — lê
 // sempre do que lib/adsScheduler.js já sincronizou em background.
 const express = require('express');
+const pool = require('../db/pool');
 const { calcularPeriodo, periodoParaDatasBRT } = require('../lib/periodo');
 const { listarAds, sincronizarTodasAsContasAds } = require('../lib/ads');
 const { obterStatusSincronizacaoAds } = require('../lib/adsScheduler');
+const { classificarDesempenho, agregarPorCampanha } = require('../lib/ia/adsMotor');
 
 const router = express.Router();
+
+const MARGEM_MINIMA_PADRAO = 10;
+
+async function buscarMargemMinima(empresaId) {
+  const { rows } = await pool.query('SELECT margem_minima_pct FROM config_ads_ia WHERE empresa_id = $1', [empresaId]);
+  return rows.length ? Number(rows[0].margem_minima_pct) : MARGEM_MINIMA_PADRAO;
+}
 
 // GET /api/ads?empresaId=ID&periodo=30d&contaId=&desde=&ate=
 // `desde`/`ate` (YYYY-MM-DD) só valem quando periodo=personalizado (ver
@@ -50,11 +59,62 @@ router.get('/', async (req, res, next) => {
       hojeStr,
     });
 
+    // IA de Ads e Performance — Fase A (14/09/2026): classificação por
+    // anúncio (mesma regra usada no resumo por campanha abaixo) e o resumo
+    // agregado por campanha, pedido explícito do usuário ("identificar
+    // campanhas boas e ruins"). Nunca recalcula nenhum número — só
+    // classifica/soma o que `listarAds` já trouxe (ver lib/ia/adsMotor.js).
+    const margemMinimaPct = await buscarMargemMinima(empresaId);
+    const linhasComClassificacao = (resultado.linhas || []).map((l) => {
+      const classificacao = classificarDesempenho({ margemDepoisDoAdsPct: l.margemDepoisDoAdsPct, margemMinimaPct });
+      return {
+        ...l,
+        classificacaoCodigo: classificacao.codigo,
+        classificacaoLabel: classificacao.label,
+        classificacaoEmoji: classificacao.emoji,
+      };
+    });
+    const campanhas = agregarPorCampanha(linhasComClassificacao, margemMinimaPct);
+
     res.json({
       periodo: { chave: periodoCalc.chave, label: periodoCalc.label, desde: periodoCalc.desde, ate: periodoCalc.ate },
       sincronizacaoAutomatica: obterStatusSincronizacaoAds(),
       ...resultado,
+      linhas: linhasComClassificacao,
+      campanhas,
+      margemMinimaPct,
     });
+  } catch (err) { next(err); }
+});
+
+// GET /api/ads/config-ia?empresaId= — configuração da IA de Ads e
+// Performance (só a margem mínima, por enquanto — mesmo espírito de
+// GET /api/promocoes/config). Empresa sem linha salva ainda devolve o
+// padrão (nunca 404 — a tela sempre tem o que mostrar).
+router.get('/config-ia', async (req, res, next) => {
+  try {
+    const { empresaId } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    res.json({ empresaId: Number(empresaId), margemMinimaPct: await buscarMargemMinima(empresaId) });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/ads/config-ia { empresaId, margemMinimaPct }
+router.put('/config-ia', async (req, res, next) => {
+  try {
+    const { empresaId, margemMinimaPct } = req.body || {};
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const valor = Number(margemMinimaPct);
+    if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
+      return res.status(400).json({ errors: { margemMinimaPct: 'Informe um percentual entre 0 e 100.' } });
+    }
+    await pool.query(
+      `INSERT INTO config_ads_ia (empresa_id, margem_minima_pct, atualizado_em)
+       VALUES ($1, $2, now())
+       ON CONFLICT (empresa_id) DO UPDATE SET margem_minima_pct = EXCLUDED.margem_minima_pct, atualizado_em = now()`,
+      [empresaId, valor]
+    );
+    res.json({ empresaId: Number(empresaId), margemMinimaPct: valor });
   } catch (err) { next(err); }
 });
 
