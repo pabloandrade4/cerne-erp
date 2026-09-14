@@ -11,6 +11,7 @@ const { decrypt } = require('../lib/crypto');
 const { getContaComTokenValido } = require('../lib/mlSync');
 const { buscarPromocoesDaConta, buscarItensDaPromocao } = require('../lib/mlPromocoes');
 const { statusIntegracaoPromocoes } = require('../lib/mlPermissoes');
+const { executarCicloPromocoesEmpresa } = require('../lib/ia/promocoesCiclo');
 
 const router = express.Router();
 
@@ -243,6 +244,90 @@ router.get('/status-integracao', async (req, res, next) => {
           : 'Seu aplicativo Mercado Livre possui atualmente acesso de leitura. A IA pode analisar e recomendar promoções, mas não pode alterá-las automaticamente.',
       },
     });
+  } catch (e) { next(e); }
+});
+
+function linhaAnaliseParaApi(row) {
+  return {
+    contaId: row.conta_id,
+    loja: row.loja,
+    promotionId: row.promotion_id,
+    promotionType: row.promotion_type,
+    promotionLabel: row.promotion_label,
+    mlItemId: row.ml_item_id,
+    statusItemMl: row.status_item_ml,
+    titulo: row.titulo,
+    imagemUrl: row.imagem_url,
+    sku: row.sku,
+    precoNormal: row.preco_normal === null ? null : Number(row.preco_normal),
+    precoPromo: row.preco_promo === null ? null : Number(row.preco_promo),
+    origemPrecoPromo: row.origem_preco_promo,
+    descontoPct: row.desconto_pct === null ? null : Number(row.desconto_pct),
+    descontoBancadoMeliPct: row.desconto_bancado_meli_pct === null ? null : Number(row.desconto_bancado_meli_pct),
+    descontoBancadoVendedorPct: row.desconto_bancado_vendedor_pct === null ? null : Number(row.desconto_bancado_vendedor_pct),
+    custoProduto: row.custo_produto === null ? null : Number(row.custo_produto),
+    tarifasEstimadas: row.tarifas_estimadas === null ? null : Number(row.tarifas_estimadas),
+    freteVendedorEstimado: row.frete_vendedor_estimado === null ? null : Number(row.frete_vendedor_estimado),
+    impostoEstimado: row.imposto_estimado === null ? null : Number(row.imposto_estimado),
+    margemReal: row.margem_real === null ? null : Number(row.margem_real),
+    margemRealPct: row.margem_real_pct === null ? null : Number(row.margem_real_pct),
+    margemMinimaPctUsada: row.margem_minima_pct_usada === null ? null : Number(row.margem_minima_pct_usada),
+    margemIncompleta: row.margem_incompleta,
+    motivoIncompleto: row.motivo_incompleto,
+    classificacaoCodigo: row.classificacao_codigo,
+    classificacaoLabel: row.classificacao_label,
+    atualizadoEm: row.atualizado_em,
+  };
+}
+
+// GET /api/promocoes/analise?empresaId=&contaId=
+// Lê o resultado já calculado (gravado pelo ciclo automático — a cada 1h —
+// ou pelo botão "Atualizar agora" abaixo). Nunca calcula nada AO VIVO nesta
+// rota — ler é rápido e não depende da API do Mercado Livre responder na
+// hora; quem recalcula é sempre o mesmo ciclo (lib/ia/promocoesCiclo.js),
+// pra tela e automação nunca mostrarem números diferentes.
+router.get('/analise', async (req, res, next) => {
+  try {
+    const { empresaId, contaId } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+
+    const params = [empresaId];
+    let filtroConta = '';
+    if (contaId) {
+      params.push(contaId);
+      filtroConta = ' AND pa.conta_id = $2';
+    }
+
+    const { rows } = await pool.query(
+      `SELECT pa.*, c.nickname AS loja
+         FROM promocoes_analises pa
+         JOIN ml_contas c ON c.id = pa.conta_id
+        WHERE pa.empresa_id = $1 ${filtroConta}
+        ORDER BY pa.margem_incompleta ASC, pa.margem_real_pct ASC NULLS LAST, pa.atualizado_em DESC`,
+      params
+    );
+
+    const ultimaAtualizacaoEm = rows.reduce((max, r) => (!max || r.atualizado_em > max ? r.atualizado_em : max), null);
+
+    res.json({
+      empresaId: Number(empresaId),
+      linhas: rows.map(linhaAnaliseParaApi),
+      ultimaAtualizacaoEm,
+      totalItens: rows.length,
+    });
+  } catch (e) { next(e); }
+});
+
+// POST /api/promocoes/analisar  { empresaId }
+// Roda o mesmo ciclo automático (lib/ia/promocoesCiclo.js) na hora, pro
+// botão "Atualizar agora" da tela — sem precisar esperar o próximo disparo
+// da hora em hora. Só leitura na API do Mercado Livre, nunca escreve nada.
+router.post('/analisar', async (req, res, next) => {
+  try {
+    const { empresaId } = req.body || {};
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const resultado = await executarCicloPromocoesEmpresa(Number(empresaId));
+    res.json(resultado);
   } catch (e) { next(e); }
 });
 

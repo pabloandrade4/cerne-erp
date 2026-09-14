@@ -9096,23 +9096,71 @@
     window.MargemAnuncio = { load };
   })();
 
-  /* ================= IA DE PROMOÇÕES — Fase A (13/09/2026) =================
-     Pedido do usuário: módulo que analisa anúncios do Mercado Livre e
-     recomenda entrar/sair de promoções olhando a margem real. Esta
-     primeira fase NÃO tem o motor de análise ainda (precisa antes
-     confirmar, com dado real da API, o formato dos itens de cada
-     promoção — ver routes/promocoes.js#/diagnostico-itens) — mostra só:
-     1) o card "Integração Mercado Livre" (leitura vs. leitura+escrita,
-        pedido explícito do usuário na seção 0), nunca decidido por
-        adivinhação — ver lib/mlPermissoes.js;
-     2) a configuração da margem mínima (seção 3), que o motor de análise
-        (próxima fase) já vai usar assim que existir.
+  /* ================= IA DE PROMOÇÕES — Fase A + Fase B (13/09/2026) =================
+     Pedido do usuário: módulo que analisa promoções do Mercado Livre e
+     recomenda entrar/sair olhando a MARGEM REAL (nunca só o % de desconto).
+     Fase A: 1) o card "Integração Mercado Livre" (leitura vs.
+     leitura+escrita, pedido explícito do usuário na seção 0), nunca
+     decidido por adivinhação — ver lib/mlPermissoes.js; 2) a configuração
+     da margem mínima (seção 3).
+     Fase B (pedido explícito do usuário, mesmo dia: "dentro dessa pagina
+     quero que mostra todas as promoçoes juntos ao anuncios e a margem de
+     cada uma elas, e a cada uma hora a ia tem que busca novas promoções"):
+     3) a tabela com toda promoção + anúncio + margem real já calculada
+     (lib/promocoesMotor.js) e a classificação da IA (🟢/🟡/🔴/🔵/⚠️); os
+     dados vêm sempre de /api/promocoes/analise — já calculados pelo ciclo
+     automático que roda a cada 1h no servidor (lib/ia/promocoesScheduler.js,
+     nunca depende desta tela estar aberta) — com um botão "Atualizar agora"
+     pra forçar uma busca na hora. "Ver detalhes" sempre funciona; Aceitar/
+     Remover ficam desabilitados com a mensagem "AÇÃO NÃO DISPONÍVEL" —
+     pedido explícito do usuário — enquanto a escrita não estiver liberada
+     (ver card de Integração).
      Usa o filtro do topo (window.CerneFiltro) pra empresa, mesmo padrão de
      Margem por Anúncio/Ads/Performance de Anúncios. */
   (function(){
-    const state = { statusIntegracao:null, loadingStatus:false, config:null, loadingConfig:false, salvando:false, error:null };
+    const state = { statusIntegracao:null, loadingStatus:false, config:null, loadingConfig:false, salvando:false, error:null, analise:null, loadingAnalise:false, atualizandoAgora:false };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pctFmt(v){ return v===null||v===undefined ? '—' : (v<0?'− ':'')+Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      const d = new Date(v);
+      return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+    }
+    function thumbHTML(url){
+      if(!url) return '<span class="anuncio-thumb-placeholder" title="Sem imagem disponível">'+svg('box')+'</span>';
+      return '<span style="position:relative;display:inline-block;width:36px;height:36px;flex-shrink:0;">'
+        + '<img class="anuncio-thumb" src="'+escapeHtml(url)+'" alt="" loading="lazy" style="position:absolute;inset:0;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+        + '<span class="anuncio-thumb-placeholder" style="display:none;position:absolute;inset:0;">'+svg('box')+'</span>'
+      + '</span>';
+    }
+    const TIPO_PROMOCAO_LABEL = {
+      DEAL:'Oferta (Deal)', MARKETPLACE_CAMPAIGN:'Campanha do marketplace', PRICE_DISCOUNT:'Desconto de preço',
+      VOLUME:'Desconto por volume', DOD:'Oferta do dia', LIGHTNING:'Oferta relâmpago', PRE_NEGOTIATED:'Pré-negociada',
+      SELLER_CAMPAIGN:'Campanha do vendedor', SMART:'Smart', PRICE_MATCHING:'Igualação de preço',
+      UNHEALTHY_STOCK:'Estoque parado', SELLER_COUPON_CAMPAIGN:'Cupom do vendedor',
+    };
+    function tipoPromocaoLabel(t){ return TIPO_PROMOCAO_LABEL[t] || t || '—'; }
+    // Mesma classificação/emoji de lib/promocoesMotor.js#classificar — só
+    // repetida aqui pra exibição (o backend já manda o código e o rótulo
+    // prontos; o emoji é só cosmético, nunca decide nada sozinho no front).
+    const CLASSIFICACAO_COR = {
+      entrar:'var(--success)', manter:'var(--success)', oportunidade:'var(--copper)',
+      nao_recomendado:'var(--danger)', sair:'var(--danger)',
+      risco_margem:'var(--warning)', dados_insuficientes:'var(--warning)',
+    };
+    const CLASSIFICACAO_EMOJI = {
+      entrar:'🟢', manter:'🟡', oportunidade:'🔵', nao_recomendado:'🔴', sair:'🔴',
+      risco_margem:'⚠️', dados_insuficientes:'⚠️',
+    };
+    function badgeClassificacaoHTML(l){
+      const cor = CLASSIFICACAO_COR[l.classificacaoCodigo] || 'var(--text-faint)';
+      const emoji = CLASSIFICACAO_EMOJI[l.classificacaoCodigo] || '';
+      return '<span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:12.5px;color:'+cor+';" title="'+escapeHtml(l.motivoIncompleto||'')+'">'
+        + emoji+' '+escapeHtml(l.classificacaoLabel||'—')
+      + '</span>';
+    }
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
       const el = document.createElement('div');
@@ -9136,20 +9184,29 @@
       if(!res.ok) throw new Error((body && (body.error||(body.errors&&JSON.stringify(body.errors)))) || 'Falha ao salvar configuração.');
       return body;
     }
+    async function apiAnalise(empresaId){ return apiGet('/api/promocoes/analise?empresaId='+empresaId); }
+    async function apiAnalisarAgora(empresaId){
+      const res = await fetch('/api/promocoes/analisar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }) });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Falha ao buscar promoções agora.');
+      return body;
+    }
 
     async function load(){
       const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ state.statusIntegracao=null; state.config=null; state.loadingStatus=false; state.loadingConfig=false; render(); return; }
-      state.loadingStatus = true; state.loadingConfig = true; state.error = null; render();
+      if(!filtro.empresaId){ state.statusIntegracao=null; state.config=null; state.analise=null; state.loadingStatus=false; state.loadingConfig=false; state.loadingAnalise=false; render(); return; }
+      state.loadingStatus = true; state.loadingConfig = true; state.loadingAnalise = true; state.error = null; render();
       try{
-        const [statusIntegracao, config] = await Promise.all([
+        const [statusIntegracao, config, analise] = await Promise.all([
           apiStatusIntegracao(filtro.empresaId),
           apiConfig(filtro.empresaId),
+          apiAnalise(filtro.empresaId),
         ]);
         state.statusIntegracao = statusIntegracao;
         state.config = config;
+        state.analise = analise;
       }catch(err){ state.error = err.message || 'Não foi possível carregar a IA de Promoções.'; }
-      state.loadingStatus = false; state.loadingConfig = false; render();
+      state.loadingStatus = false; state.loadingConfig = false; state.loadingAnalise = false; render();
     }
 
     window.CerneFiltro.onChange(()=>{
@@ -9201,6 +9258,84 @@
       + '</div>';
     }
 
+    // ---- tabela: todas as promoções junto com o anúncio e a margem real
+    // de cada uma (pedido explícito do usuário, 13/09/2026) — lê sempre de
+    // /api/promocoes/analise (já calculado pelo ciclo automático de hora em
+    // hora, lib/ia/promocoesCiclo.js; nunca recalcula ao vivo aqui). ----
+    function anuncioCellHTML(l){
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="promo-anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="anuncio-cell-flex">'
+        + thumbHTML(l.imagemUrl)
+        + '<div class="cell-stack">'
+          + '<span class="prod-title" title="'+escapeHtml(l.titulo||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.titulo||'(sem título)')+'</span>'
+          + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+        + '</div></div></a></td>';
+    }
+
+    function cardResumoAnaliseHTML(){
+      const a = state.analise;
+      const total = a ? a.totalItens : 0;
+      return '<div class="table-card" style="padding:16px 20px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;">'
+        + '<div>'
+          + '<div style="font-weight:600;">'+total+' item(ns) de promoção monitorado(s)</div>'
+          + '<div class="field-hint" style="margin-top:2px;">Atualizado automaticamente a cada 1 hora'+(a && a.ultimaAtualizacaoEm ? (' · última busca: '+fmtDataHora(a.ultimaAtualizacaoEm)) : '')+'.</div>'
+        + '</div>'
+        + '<button class="ghost-btn" id="promoAtualizarAgora" type="button" style="cursor:pointer;opacity:1;" '+(state.atualizandoAgora?'disabled':'')+'>'
+          + (state.atualizandoAgora ? '<span class="spin" style="width:13px;height:13px;"></span>' : svg('activity'))
+          + '<span>'+(state.atualizandoAgora?'Buscando…':'Atualizar agora')+'</span>'
+        + '</button>'
+      + '</div>';
+    }
+
+    function tabelaPromocoesHTML(linhas){
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Loja</th><th>Promoção</th><th>Status</th><th>Preço normal</th><th>Preço promo.</th>'
+        + '<th>Desconto</th><th>Margem real</th><th>Classificação</th><th></th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td>'+escapeHtml(tipoPromocaoLabel(l.promotionType))+(l.promotionLabel?('<div class="cell-stack-sub" style="color:var(--text-faint);">'+escapeHtml(l.promotionLabel)+'</div>'):'')+'</td>'
+          + '<td>'+(l.statusItemMl==='candidate' ? 'Candidata' : escapeHtml(l.statusItemMl||'—'))+'</td>'
+          + '<td class="mono">'+money(l.precoNormal)+'</td>'
+          + '<td class="mono">'+money(l.precoPromo)+'</td>'
+          + '<td class="mono">'+pctFmt(l.descontoPct)+'</td>'
+          + '<td class="mono" style="'+(l.margemRealPct!==null?(l.margemRealPct>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.margemIncompleta?'<span style="color:var(--text-faint);font-style:italic;" title="'+escapeHtml(l.motivoIncompleto||'')+'">dados insuficientes</span>':pctFmt(l.margemRealPct))+'</td>'
+          + '<td>'+badgeClassificacaoHTML(l)+'</td>'
+          + '<td style="white-space:nowrap;">'
+            + '<button class="row-ic-btn promo-ver-detalhes" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" type="button" title="Ver detalhes">'+svg('activity')+'</button>'
+            + ' <button class="row-ic-btn" type="button" disabled title="AÇÃO NÃO DISPONÍVEL: esta ação exige permissão de escrita na API do Mercado Livre. Atualmente sua aplicação possui apenas permissão de leitura." style="opacity:.4;cursor:not-allowed;">'+svg('checkCircle')+'</button>'
+            + ' <button class="row-ic-btn" type="button" disabled title="AÇÃO NÃO DISPONÍVEL: esta ação exige permissão de escrita na API do Mercado Livre. Atualmente sua aplicação possui apenas permissão de leitura." style="opacity:.4;cursor:not-allowed;">'+svg('x')+'</button>'
+          + '</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    function abrirDetalhePromocao(l){
+      window.AnuncioDetalheModal.abrir({
+        titulo: l.titulo, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, imagemUrl: l.imagemUrl, origem: 'promocoesIa',
+        campos: [
+          { label:'Promoção', value: tipoPromocaoLabel(l.promotionType) + (l.promotionLabel ? (' — '+l.promotionLabel) : '') },
+          { label:'Status na promoção', value: l.statusItemMl==='candidate' ? 'Candidata (ainda não aplicada)' : (l.statusItemMl||'—') },
+          { label:'Preço normal', html: money(l.precoNormal) },
+          { label:'Preço promocional', html: money(l.precoPromo) },
+          { label:'Desconto total', html: pctFmt(l.descontoPct) },
+          { label:'Desconto bancado pelo Mercado Livre', html: l.descontoBancadoMeliPct===null?'<span style="color:var(--text-faint);font-style:italic;">Mercado Livre não informou a divisão para este tipo de promoção</span>':pctFmt(l.descontoBancadoMeliPct) },
+          { label:'Desconto bancado pelo vendedor', html: pctFmt(l.descontoBancadoVendedorPct) },
+          { label:'— Cálculo da margem real —', html: '<hr style="border:none;border-top:1px solid var(--border-strong);margin:2px 0;">' },
+          { label:'Custo do produto', html: l.custoProduto===null?'<span style="color:var(--text-faint);font-style:italic;">não cadastrado</span>':money(l.custoProduto) },
+          { label:'Tarifas/comissão (estimada pelo histórico)', html: l.tarifasEstimadas===null?'—':money(l.tarifasEstimadas) },
+          { label:'Frete do vendedor (estimado pelo histórico)', html: l.freteVendedorEstimado===null?'—':money(l.freteVendedorEstimado) },
+          { label:'Imposto (estimado)', html: l.impostoEstimado===null?'—':money(l.impostoEstimado) },
+          { label:'Margem real (R$)', html: l.margemReal===null?'—':money(l.margemReal) },
+          { label:'Margem real (%)', html: l.margemRealPct===null?'—':pctFmt(l.margemRealPct) },
+          { label:'Margem mínima configurada', html: pctFmt(l.margemMinimaPctUsada) },
+          { label:'Classificação da IA', html: badgeClassificacaoHTML(l) },
+          { label:'Por que este dado pode estar incompleto', html: l.motivoIncompleto ? escapeHtml(l.motivoIncompleto) : '<span style="color:var(--text-faint);">Nenhum dado faltando.</span>' },
+          { label:'Última atualização', value: fmtDataHora(l.atualizadoEm) },
+        ],
+      });
+    }
+
     function render(){
       const root = document.getElementById('promocoesIaRoot');
       if(!root) return;
@@ -9226,12 +9361,38 @@
         return;
       }
 
-      let html = cardIntegracaoHTML() + cardConfigHTML();
-      html += '<div class="empty-panel"><div class="empty-icon">'+svg('sparkle')+'</div>'
-        + '<h2>Motor de análise chega na próxima etapa</h2>'
-        + '<p class="lead">Depois de confirmar (com dado real da API) o formato dos itens de cada promoção, esta tela vai mostrar os anúncios analisados, oportunidades encontradas e a recomendação da IA para cada um — sempre calculada pela margem real, nunca só pelo percentual de desconto.</p></div>';
+      let html = cardIntegracaoHTML() + cardConfigHTML() + cardResumoAnaliseHTML();
+
+      if(state.loadingAnalise && !state.analise){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Buscando promoções…</span></div></div>';
+      } else if(state.analise && !state.analise.linhas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('sparkle')+'</div>'
+          + '<h2>Nenhuma promoção encontrada ainda</h2>'
+          + '<p class="lead">A busca automática roda a cada 1 hora. Você também pode clicar em <strong>Atualizar agora</strong> para forçar uma busca neste instante.</p></div>';
+      } else if(state.analise){
+        html += tabelaPromocoesHTML(state.analise.linhas);
+      }
 
       root.innerHTML = html;
+
+      const btnAtualizarAgora = document.getElementById('promoAtualizarAgora');
+      if(btnAtualizarAgora) btnAtualizarAgora.addEventListener('click', async ()=>{
+        state.atualizandoAgora = true; render();
+        try{
+          await apiAnalisarAgora(filtro.empresaId);
+          state.analise = await apiAnalise(filtro.empresaId);
+          toast('Promoções atualizadas.');
+        }catch(err){ toast(err.message || 'Não foi possível buscar promoções agora.', 'error'); }
+        state.atualizandoAgora = false; render();
+      });
+
+      root.querySelectorAll('.promo-anuncio-link, .promo-ver-detalhes').forEach(el=>{
+        el.addEventListener('click', ()=>{
+          const mlItemId = el.dataset.mlItem;
+          const l = (state.analise && state.analise.linhas || []).find(x=>x.mlItemId===mlItemId);
+          if(l) abrirDetalhePromocao(l);
+        });
+      });
 
       const btnSalvar = document.getElementById('promoSalvarConfig');
       if(btnSalvar) btnSalvar.addEventListener('click', async ()=>{
