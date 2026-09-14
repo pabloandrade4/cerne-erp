@@ -685,7 +685,7 @@ CREATE TABLE IF NOT EXISTS shopee_contas (
   token_expires_at         TIMESTAMPTZ NOT NULL,
   status                   VARCHAR(20) NOT NULL DEFAULT 'ativa', -- ativa | erro | desconectada
   ultimo_erro              TEXT,
-  ultima_sincronizacao_em  TIMESTAMPTZ,               -- reservado; sem pedidos nesta etapa, sempre NULL
+  ultima_sincronizacao_em  TIMESTAMPTZ,               -- última vez que os pedidos desta loja foram puxados (manual ou automático, ver lib/shopeeSync.js/lib/shopeeSyncScheduler.js)
   created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
