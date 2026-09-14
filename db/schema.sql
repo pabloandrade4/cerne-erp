@@ -739,6 +739,27 @@ CREATE TABLE IF NOT EXISTS shopee_pedidos (
   UNIQUE (conta_shopee_id, order_sn)
 );
 
+-- Fase 2b (14/09/2026, pedido explícito do usuário: "quero igual ao mercado
+-- livre, mas com as taxas e comissões da shopee") — repasse/comissão real de
+-- cada pedido, vinda de uma chamada SEPARADA da Shopee
+-- (payment/get_escrow_detail_batch — ver lib/shopee.js#obterDetalhesRepasse
+-- e lib/shopeeSync.js), porque a Shopee não devolve esse dado junto do
+-- pedido em si (get_order_detail). Mesmo princípio de sempre: campo NULL
+-- quando a Shopee ainda não liberou/devolveu o repasse daquele pedido
+-- (nunca um valor inventado) — igual a um pedido do Mercado Livre sem
+-- sale_fee retornado. raw_repasse guarda a resposta bruta da Shopee para
+-- aquele pedido (auditoria, mesmo padrão de raw_pedido).
+-- IMPORTANTE (mesma honestidade de sempre): esta é a PRIMEIRA vez que este
+-- projeto chama get_escrow_detail_batch — os nomes de campo abaixo seguem a
+-- documentação pública cruzada com SDKs de terceiros nesta etapa (ver
+-- comentário em lib/shopee.js), ainda não confirmados contra uma resposta
+-- real desta conta.
+ALTER TABLE shopee_pedidos ADD COLUMN IF NOT EXISTS comissao_venda NUMERIC(12,2); -- commission_fee (equivalente ao sale_fee/taxa_venda_total do Mercado Livre)
+ALTER TABLE shopee_pedidos ADD COLUMN IF NOT EXISTS taxa_transacao_pagamento NUMERIC(12,2); -- seller_transaction_fee (equivalente a pagamento_taxas do Mercado Livre)
+ALTER TABLE shopee_pedidos ADD COLUMN IF NOT EXISTS taxa_servico NUMERIC(12,2); -- service_fee (equivalente a pagamento_taxa_marketplace do Mercado Livre)
+ALTER TABLE shopee_pedidos ADD COLUMN IF NOT EXISTS valor_repasse NUMERIC(12,2); -- escrow_amount — informativo/auditoria, não entra no cálculo de margem
+ALTER TABLE shopee_pedidos ADD COLUMN IF NOT EXISTS raw_repasse JSONB;
+
 -- Itens de cada pedido da Shopee (item_list[] da API). Ao ressincronizar um
 -- pedido, os itens são substituídos pelos itens atuais da resposta — mesmo
 -- padrão de ml_pedido_itens.
