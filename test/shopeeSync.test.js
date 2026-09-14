@@ -87,12 +87,31 @@ describe(
       };
     }
 
+    // Fase 2b (14/09/2026): resposta padrão de get_escrow_detail_batch pros
+    // testes que não estão testando repasse especificamente — devolve
+    // comissão/tarifas fixas pra cada order_sn pedido, no mesmo formato
+    // usado por lib/shopeeSync.js#buscarRepassesDoLote.
+    function respostaEscrowPadrao(opts) {
+      const body = JSON.parse(opts.body);
+      return {
+        ok: true, status: 200,
+        json: async () => ({
+          response: body.order_sn_list.map((sn) => ({
+            escrow_detail: {
+              order_sn: sn,
+              order_income: { commission_fee: 4.5, seller_transaction_fee: 1.2, service_fee: 0.8, escrow_amount: 93.4 },
+            },
+          })),
+        }),
+      };
+    }
+
     test('sincronizarConta: 60 dias vira exatamente 4 janelas de 15 dias, cada order_sn encontrado é detalhado e gravado sem inventar campo nenhum', async () => {
       let chamadasListagem = 0;
       let chamadasDetalhe = 0;
       const janelasVistas = [];
 
-      mockShopeeFetch(async (url) => {
+      mockShopeeFetch(async (url, opts) => {
         if (url.pathname === '/api/v2/order/get_order_list') {
           chamadasListagem++;
           const timeFrom = url.searchParams.get('time_from');
@@ -138,6 +157,9 @@ describe(
             }),
           };
         }
+        if (url.pathname === '/api/v2/payment/get_escrow_detail_batch') {
+          return respostaEscrowPadrao(opts);
+        }
         throw new Error('endpoint da Shopee inesperado no teste: ' + url.pathname);
       });
 
@@ -164,6 +186,13 @@ describe(
       assert.equal(pedido.frete_estimado, null, 'campo que a Shopee não mandou fica NULL, nunca inventado');
       assert.ok(pedido.raw_pedido, 'payload bruto precisa estar salvo pra auditoria');
 
+      // Fase 2b: comissão/tarifas reais vindas do get_escrow_detail_batch
+      assert.equal(Number(pedido.comissao_venda), 4.5, 'commission_fee deveria ter sido gravado em comissao_venda');
+      assert.equal(Number(pedido.taxa_transacao_pagamento), 1.2, 'seller_transaction_fee deveria ter sido gravado em taxa_transacao_pagamento');
+      assert.equal(Number(pedido.taxa_servico), 0.8, 'service_fee deveria ter sido gravado em taxa_servico');
+      assert.equal(Number(pedido.valor_repasse), 93.4, 'escrow_amount deveria ter sido gravado em valor_repasse');
+      assert.ok(pedido.raw_repasse, 'payload bruto do repasse precisa estar salvo pra auditoria');
+
       const { rows: itens } = await pool.query('SELECT * FROM shopee_pedido_itens WHERE pedido_id = $1', [pedido.id]);
       assert.equal(itens.length, 1);
       assert.equal(itens[0].sku, 'SKU-SHOPEE-1');
@@ -177,7 +206,8 @@ describe(
     });
 
     test('sincronizarConta: ressincronizar o MESMO pedido nunca duplica (upsert) e substitui os itens pelos atuais', async () => {
-      mockShopeeFetch(async (url) => {
+      let chamadasEscrow = 0;
+      mockShopeeFetch(async (url, opts) => {
         if (url.pathname === '/api/v2/order/get_order_list') {
           return { ok: true, status: 200, json: async () => ({ response: { more: false, order_list: [{ order_sn: 'ORD-REPETIDO', order_status: 'READY_TO_SHIP' }] } }) };
         }
@@ -194,6 +224,10 @@ describe(
             }),
           };
         }
+        if (url.pathname === '/api/v2/payment/get_escrow_detail_batch') {
+          chamadasEscrow++;
+          return respostaEscrowPadrao(opts);
+        }
         throw new Error('endpoint inesperado: ' + url.pathname);
       });
 
@@ -207,17 +241,26 @@ describe(
       const { rows: itens } = await pool.query('SELECT * FROM shopee_pedido_itens WHERE pedido_id = $1', [rows[0].id]);
       assert.equal(itens.length, 1, 'itens antigos deveriam ter sido substituídos, nunca acumulados');
       assert.equal(itens[0].sku, 'SKU-NOVO');
+
+      // Fase 2b: a comissão já foi capturada na 1ª sincronização — a 2ª NÃO
+      // deveria buscar o repasse de novo (orderSnsPendentesDeRepasse filtra),
+      // e o valor real capturado antes tem que sobreviver (COALESCE).
+      assert.equal(chamadasEscrow, 1, 'a 2ª sincronização não deveria rebuscar o repasse de um pedido que já tem comissao_venda');
+      assert.equal(Number(rows[0].comissao_venda), 4.5, 'a comissão capturada na 1ª sincronização deveria ter sobrevivido à 2ª (COALESCE)');
     });
 
     test('sincronizarConta: erro numa janela (ex.: Shopee rejeita a chamada) não impede as demais, e fica registrado em erros', async () => {
       let chamadasListagem = 0;
-      mockShopeeFetch(async (url) => {
+      mockShopeeFetch(async (url, opts) => {
         if (url.pathname === '/api/v2/order/get_order_list') {
           chamadasListagem++;
           if (chamadasListagem === 2) {
             return { ok: true, status: 200, json: async () => ({ error: 'error_param', message: 'parâmetro inválido (simulado)' }) };
           }
           return { ok: true, status: 200, json: async () => ({ response: { more: false, order_list: [] } }) };
+        }
+        if (url.pathname === '/api/v2/payment/get_escrow_detail_batch') {
+          return respostaEscrowPadrao(opts);
         }
         throw new Error('endpoint inesperado: ' + url.pathname);
       });
@@ -229,6 +272,81 @@ describe(
 
       const { rows } = await pool.query('SELECT ultimo_erro FROM shopee_contas WHERE id = $1', [CONTA_ID]);
       assert.match(rows[0].ultimo_erro, /1 janela/);
+    });
+
+    test('orderSnsPendentesDeRepasse: filtra só os order_sn que ainda não têm comissao_venda gravada', async () => {
+      await pool.query(
+        `INSERT INTO shopee_pedidos (conta_shopee_id, order_sn, order_status, comissao_venda, raw_pedido)
+         VALUES ($1, 'ORD-JA-TEM-COMISSAO', 'SHIPPED', 4.5, '{}'::jsonb)
+         ON CONFLICT (conta_shopee_id, order_sn) DO UPDATE SET comissao_venda = 4.5`,
+        [CONTA_ID]
+      );
+      await pool.query(
+        `INSERT INTO shopee_pedidos (conta_shopee_id, order_sn, order_status, raw_pedido)
+         VALUES ($1, 'ORD-SEM-COMISSAO-AINDA', 'SHIPPED', '{}'::jsonb)
+         ON CONFLICT (conta_shopee_id, order_sn) DO UPDATE SET comissao_venda = NULL`,
+        [CONTA_ID]
+      );
+
+      const pendentes = await shopeeSync.orderSnsPendentesDeRepasse(
+        { id: CONTA_ID },
+        ['ORD-JA-TEM-COMISSAO', 'ORD-SEM-COMISSAO-AINDA', 'ORD-NUNCA-VISTO']
+      );
+
+      assert.deepEqual(
+        pendentes.slice().sort(),
+        ['ORD-NUNCA-VISTO', 'ORD-SEM-COMISSAO-AINDA'].sort(),
+        'só order_sn sem comissao_venda (ou nunca gravado) deveriam voltar como pendentes'
+      );
+    });
+
+    test('orderSnsPendentesDeRepasse: lista vazia devolve vazio sem consultar o banco', async () => {
+      const pendentes = await shopeeSync.orderSnsPendentesDeRepasse({ id: CONTA_ID }, []);
+      assert.deepEqual(pendentes, []);
+    });
+
+    test('buscarRepassesDoLote: resposta bem-sucedida vira um Map order_sn -> escrow_detail', async () => {
+      mockShopeeFetch(async (url, opts) => {
+        if (url.pathname === '/api/v2/payment/get_escrow_detail_batch') {
+          return respostaEscrowPadrao(opts);
+        }
+        throw new Error('endpoint inesperado: ' + url.pathname);
+      });
+
+      const mapa = await shopeeSync.buscarRepassesDoLote(
+        { id: CONTA_ID, shopee_shop_id: SHOP_ID },
+        'token-qualquer',
+        ['ORD-A', 'ORD-B']
+      );
+
+      assert.equal(mapa.size, 2);
+      assert.equal(mapa.get('ORD-A').order_income.commission_fee, 4.5);
+      assert.equal(mapa.get('ORD-B').order_income.commission_fee, 4.5);
+    });
+
+    test('buscarRepassesDoLote: falha na chamada da Shopee não derruba a sincronização — devolve Map vazio', async () => {
+      mockShopeeFetch(async (url) => {
+        if (url.pathname === '/api/v2/payment/get_escrow_detail_batch') {
+          return { ok: true, status: 200, json: async () => ({ error: 'error_server', message: 'erro simulado da Shopee' }) };
+        }
+        throw new Error('endpoint inesperado: ' + url.pathname);
+      });
+
+      const mapa = await shopeeSync.buscarRepassesDoLote(
+        { id: CONTA_ID, shopee_shop_id: SHOP_ID },
+        'token-qualquer',
+        ['ORD-C']
+      );
+
+      assert.equal(mapa.size, 0, 'em caso de erro, buscarRepassesDoLote nunca deve lançar — a comissão fica "pendente" e o pedido é importado mesmo assim');
+    });
+
+    test('buscarRepassesDoLote: lista vazia devolve Map vazio sem chamar a Shopee', async () => {
+      mockShopeeFetch(async () => {
+        throw new Error('não deveria ter chamado a Shopee com lista vazia de order_sn');
+      });
+      const mapa = await shopeeSync.buscarRepassesDoLote({ id: CONTA_ID, shopee_shop_id: SHOP_ID }, 'token-qualquer', []);
+      assert.equal(mapa.size, 0);
     });
   }
 );
