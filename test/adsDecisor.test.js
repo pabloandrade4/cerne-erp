@@ -92,4 +92,52 @@ describe('sugerirAcaoCampanha', () => {
     const r = sugerirAcaoCampanha({ campanha: { classificacaoCodigo: 'ajustar', margemDepoisDoAdsPct: 2 }, orcamentoAtual: 5, statusCampanhaAtual: 'active' });
     assert.equal(r, null); // 5 * 0.8 = 4, mas o piso é 5 -> orcamentoSugerido (5) não é < orcamentoAtual (5) -> sem sugestão
   });
+
+  // CORREÇÃO (14/09/2026, "estude sobre todas as métricas que tem dentro do
+  // Mercado Livre" — pedido explícito do usuário): métricas novas de
+  // campanha (impressão perdida por orçamento vs. ranking, ACOS de
+  // referência) — ver lib/ia/adsDecisor.js.
+  test('escalar + perda de impressão claramente por RANKING (não orçamento) -> nenhuma sugestão de aumentar orçamento (não deve ajudar)', () => {
+    const r = sugerirAcaoCampanha({
+      campanha: { classificacaoCodigo: 'escalar', margemDepoisDoAdsPct: 22 }, orcamentoAtual: 100, statusCampanhaAtual: 'active',
+      impressoesPerdidasOrcamentoPct: 1.2, impressoesPerdidasRankingPct: 18,
+    });
+    assert.equal(r, null);
+  });
+
+  test('escalar + perda de impressão claramente por ORÇAMENTO -> sugere aumentar orçamento e cita o número real no motivo', () => {
+    const r = sugerirAcaoCampanha({
+      campanha: { classificacaoCodigo: 'escalar', margemDepoisDoAdsPct: 22 }, orcamentoAtual: 100, statusCampanhaAtual: 'active',
+      impressoesPerdidasOrcamentoPct: 24.5, impressoesPerdidasRankingPct: 2,
+    });
+    assert.equal(r.tipoAcao, 'aumentar_orcamento');
+    assert.match(r.motivo, /24.5%/);
+  });
+
+  test('escalar + só um dos dois sinais de impressão perdida disponível -> não bloqueia (segue a lógica normal)', () => {
+    const r = sugerirAcaoCampanha({
+      campanha: { classificacaoCodigo: 'escalar', margemDepoisDoAdsPct: 22 }, orcamentoAtual: 100, statusCampanhaAtual: 'active',
+      impressoesPerdidasOrcamentoPct: 1.2, // sem impressoesPerdidasRankingPct — dado incompleto, nunca bloqueia sozinho
+    });
+    assert.equal(r.tipoAcao, 'aumentar_orcamento');
+  });
+
+  test('acosBenchmark informado -> motivo cita o ACOS de referência do Mercado Livre (ajustar e escalar)', () => {
+    const rAjustar = sugerirAcaoCampanha({
+      campanha: { classificacaoCodigo: 'ajustar', margemDepoisDoAdsPct: 6 }, orcamentoAtual: 150, statusCampanhaAtual: 'active',
+      acosBenchmark: 18.3,
+    });
+    assert.match(rAjustar.motivo, /18.3%/);
+
+    const rEscalar = sugerirAcaoCampanha({
+      campanha: { classificacaoCodigo: 'escalar', margemDepoisDoAdsPct: 22 }, orcamentoAtual: 100, statusCampanhaAtual: 'active',
+      acosBenchmark: 18.3,
+    });
+    assert.match(rEscalar.motivo, /18.3%/);
+  });
+
+  test('sem acosBenchmark -> motivo não menciona nenhum "ACOS de referência" (nunca inventa o número)', () => {
+    const r = sugerirAcaoCampanha({ campanha: { classificacaoCodigo: 'ajustar', margemDepoisDoAdsPct: 6 }, orcamentoAtual: 150, statusCampanhaAtual: 'active' });
+    assert.doesNotMatch(r.motivo, /referência/);
+  });
 });
