@@ -1,12 +1,19 @@
 // Integração real com a Shopee (Open Platform v2): conectar via OAuth,
-// consultar status da(s) loja(s) conectada(s) e renovar token. Por pedido
-// explícito do usuário, esta etapa NÃO importa pedidos, estoque, Ads nem
-// financeiro da Shopee — só autorização + status da conexão. Mesmo desenho
-// de routes/integracoes.js (Mercado Livre), sem duplicar nenhuma regra dele.
+// consultar status da(s) loja(s) conectada(s), renovar token e (desde
+// 14/09/2026, Fase 1 da sincronização de pedidos, ver lib/shopeeSync.js)
+// puxar os pedidos da loja. Mesmo desenho de routes/integracoes.js
+// (Mercado Livre), sem duplicar nenhuma regra dele. IMPORTANTE: o cálculo
+// de margem/comissão/frete da Shopee ainda NÃO existe (Fase 2, depende de
+// ver os dados reais que a Shopee devolve pra esta conta primeiro) — por
+// isso os pedidos da Shopee ainda não entram nas telas de Pedidos/
+// Relatórios/Financeiro (que são só do Mercado Livre); eles têm sua
+// própria listagem simples abaixo (GET /:id/pedidos), só com os campos
+// reais, sem inventar nenhum cálculo.
 const express = require('express');
 const pool = require('../db/pool');
 const { encrypt } = require('../lib/shopeeCrypto');
 const shopee = require('../lib/shopee');
+const shopeeSync = require('../lib/shopeeSync');
 const { generateState } = require('../lib/pkce'); // reaproveitado (geração de state é genérica, não é específica de PKCE/Mercado Livre)
 const { obterStatusRenovacao, renovarTokenDaConta } = require('../lib/shopeeTokenScheduler');
 
@@ -99,30 +106,12 @@ router.get('/conectar', async (req, res) => {
     // state vai embutido na própria redirectUri (ver lib/shopee.js).
     const redirectUri = `${getRedirectUri(req)}?state=${encodeURIComponent(state)}`;
 
-    // Diagnóstico temporário nº2 (14/09/2026) — o .trim() de pontas não
-    // resolveu, então pode haver um caractere estranho NO MEIO da chave
-    // (ex.: espaço invisível colado sem querer). NUNCA loga o valor real:
-    // troca todo caractere alfanumérico por "*" e revela só os caracteres
-    // fora de A-Z/a-z/0-9, mostrando o código Unicode deles e a posição —
-    // suficiente pra identificar o problema sem expor o segredo. Remover
-    // depois de resolver.
-    {
-      const mascarar = (s) => Array.from(s || '').map((ch, i) => {
-        if (/[A-Za-z0-9]/.test(ch)) return '*';
-        return `[pos${i}:U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}]`;
-      }).join('');
-      const bruta = process.env.SHOPEE_PARTNER_KEY || '';
-      const aparada = credencialShopee('SHOPEE_PARTNER_KEY') || '';
-      console.log(
-        '[Shopee][diagnóstico2] partnerKey bruta (len=%d): %s',
-        bruta.length, mascarar(bruta)
-      );
-      console.log(
-        '[Shopee][diagnóstico2] partnerKey após trim (len=%d): %s',
-        aparada.length, mascarar(aparada)
-      );
-    }
-
+    // Diagnóstico temporário (14/09/2026) que existiu aqui foi removido no
+    // mesmo dia: confirmado (via log mascarado, nunca expondo o valor real)
+    // que a SHOPEE_PARTNER_KEY salva no Render tinha 1 quebra de linha
+    // sobrando bem no final (posição 64 de 65) — o .trim() em
+    // credencialShopee() acima já resolve esse caso (e qualquer espaço/
+    // quebra de linha nas pontas de uma futura troca de chave).
     const url = shopee.buildAuthorizationUrl({
       partnerId: credencialShopee('SHOPEE_PARTNER_ID'),
       partnerKey: credencialShopee('SHOPEE_PARTNER_KEY'),
@@ -221,6 +210,55 @@ router.post('/:id/renovar-token', async (req, res, next) => {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
   }
+});
+
+// POST /api/integracoes/shopee/:id/sincronizar — Fase 1 (14/09/2026, pedido
+// explícito do usuário: "puxar os últimos 60 dias") — puxa e grava os
+// pedidos reais da loja (ver lib/shopeeSync.js). `dias` opcional (padrão
+// 60) só existe pra permitir um re-sync menor no futuro sem mexer em
+// código — o botão do front-end sempre manda 60.
+router.post('/:id/sincronizar', async (req, res, next) => {
+  try {
+    const dias = req.body && req.body.dias ? Number(req.body.dias) : 60;
+    const resultado = await shopeeSync.sincronizarConta(req.params.id, { diasAtras: dias });
+    res.json(resultado);
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// GET /api/integracoes/shopee/:id/pedidos — listagem simples dos pedidos já
+// sincronizados desta loja (Fase 1: só os campos reais que a Shopee manda —
+// nenhum cálculo de margem/comissão/frete ainda, ver comentário no topo do
+// arquivo). Mais recentes primeiro, limitada a 200 (mesmo espírito do
+// LIMITE_LISTAGEM de routes/pedidos.js — esta tela é só uma conferência
+// rápida, não um relatório completo).
+router.get('/:id/pedidos', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, order_sn, order_status, data_criacao, comprador_username,
+              valor_total, moeda, metodo_pagamento, transportadora
+         FROM shopee_pedidos
+        WHERE conta_shopee_id = $1
+        ORDER BY data_criacao DESC NULLS LAST, id DESC
+        LIMIT 200`,
+      [req.params.id]
+    );
+    res.json({
+      pedidos: rows.map((p) => ({
+        id: p.id,
+        orderSn: p.order_sn,
+        status: p.order_status,
+        dataCriacao: p.data_criacao,
+        compradorUsername: p.comprador_username,
+        valorTotal: p.valor_total !== null ? Number(p.valor_total) : null,
+        moeda: p.moeda,
+        metodoPagamento: p.metodo_pagamento,
+        transportadora: p.transportadora,
+      })),
+    });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;
