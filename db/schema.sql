@@ -1198,6 +1198,16 @@ ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS conta_receber_id INTEGER
 -- config_promocoes.permite_escrita_ml, controlado manualmente pelo usuário.
 ALTER TABLE ml_contas ADD COLUMN IF NOT EXISTS escopo_oauth VARCHAR(255);
 
+-- Correção (14/09/2026): em pelo menos uma renovação de token real, o
+-- Mercado Livre devolveu um `scope` maior que 255 caracteres, o que
+-- derrubava a renovação inteira com "value too long for type character
+-- varying(255)" e travava a conta em status='erro' (o ciclo automático de
+-- renovação só tenta contas com status='ativa' — ver lib/syncScheduler.js).
+-- Como esse campo é só informativo (nunca é usado pra decidir nada, ver
+-- comentário acima e lib/mlPermissoes.js), não há motivo pra limitar o
+-- tamanho: troca pra TEXT, que não tem limite de caracteres no Postgres.
+ALTER TABLE ml_contas ALTER COLUMN escopo_oauth TYPE TEXT;
+
 -- Configuração da IA de Promoções, por empresa. `permite_escrita_ml` nasce
 -- SEMPRE false e só deve virar true manualmente pelo usuário, depois de
 -- confirmar (no painel do Mercado Livre Developers) que a Central de
