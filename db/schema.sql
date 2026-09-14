@@ -1222,3 +1222,46 @@ CREATE TABLE IF NOT EXISTS config_promocoes (
   atualizado_em        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE extrato_movimentos ADD COLUMN IF NOT EXISTS transferencia_interna BOOLEAN NOT NULL DEFAULT false;
+
+-- IA de Promoções — Fase B (13/09/2026): resultado já calculado do ciclo
+-- automático (lib/ia/promocoesCiclo.js, roda a cada 1h — pedido explícito do
+-- usuário: "a cada uma hora a ia tem que busca novas promoções"). A tela
+-- SEMPRE lê daqui (nunca recalcula ao vivo) — uma linha por item de
+-- promoção, com a margem REAL já calculada (nunca só o % de desconto).
+-- `margem_incompleta`/`motivo_incompleto` existem porque a regra do usuário
+-- é nunca fabricar um número quando falta um dado real (SKU não
+-- identificado, produto sem custo cadastrado, SKU sem histórico de vendas
+-- suficiente para estimar comissão/frete) — ver lib/promocoesMotor.js.
+CREATE TABLE IF NOT EXISTS promocoes_analises (
+  id                              SERIAL PRIMARY KEY,
+  empresa_id                      INTEGER NOT NULL REFERENCES empresas(id),
+  conta_id                        INTEGER NOT NULL REFERENCES ml_contas(id),
+  promotion_id                    VARCHAR(80) NOT NULL,
+  promotion_type                  VARCHAR(60) NOT NULL,
+  promotion_label                 VARCHAR(255),
+  ml_item_id                      VARCHAR(40) NOT NULL,
+  status_item_ml                  VARCHAR(40),
+  titulo                          TEXT,
+  imagem_url                      TEXT,
+  sku                             VARCHAR(120),
+  preco_normal                    NUMERIC(12,2),
+  preco_promo                     NUMERIC(12,2),
+  origem_preco_promo              VARCHAR(40),
+  desconto_pct                    NUMERIC(6,2),
+  desconto_bancado_meli_pct       NUMERIC(6,2),
+  desconto_bancado_vendedor_pct   NUMERIC(6,2),
+  custo_produto                   NUMERIC(12,2),
+  tarifas_estimadas               NUMERIC(12,2),
+  frete_vendedor_estimado         NUMERIC(12,2),
+  imposto_estimado                NUMERIC(12,2),
+  margem_real                     NUMERIC(12,2),
+  margem_real_pct                 NUMERIC(6,2),
+  margem_minima_pct_usada         NUMERIC(5,2),
+  margem_incompleta               BOOLEAN NOT NULL DEFAULT false,
+  motivo_incompleto               TEXT,
+  classificacao_codigo            VARCHAR(30),
+  classificacao_label             VARCHAR(40),
+  atualizado_em                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (conta_id, promotion_id, ml_item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_promocoes_analises_empresa ON promocoes_analises (empresa_id);
