@@ -2201,7 +2201,13 @@
      duplicado antes: um seletor aqui dentro e outro no header, cada um com seu
      próprio estado). */
   (function(){
-    const state = { loading:false, error:null, data:null, painel:null, painelError:null };
+    // contaId/lojas (14/09/2026, pedido explícito do usuário: "em visão
+    // geral não tem o botão para selecionar qual loja ou todas as lojas" —
+    // mesmo bug relatado em Pedidos, mas aqui nem existia o seletor) — mesmo
+    // padrão de estado local já usado por Ads/Financeiro/Relatórios (cada
+    // tela guarda sua própria loja selecionada; só empresa/período vêm do
+    // filtro do header, ver comentário logo acima desta IIFE).
+    const state = { loading:false, error:null, data:null, painel:null, painelError:null, contaId:'', lojas:[] };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v, moeda){ return v===null||v===undefined ? null : (moeda==='BRL'||!moeda?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -2209,8 +2215,10 @@
     function pctFmt(v){ return v===null||v===undefined ? null : (v<0?'− ':'')+Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
     function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
 
-    async function apiResumo(empresaId, periodo, extra){
-      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
+    async function apiResumo(empresaId, periodo, extra, contaId){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      const res = await fetch('/api/relatorios/resumo-vendas?'+params.toString()+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os indicadores.');
       return body;
@@ -2221,6 +2229,10 @@
     // Empresas e Alertas & IA (lib/visaoGeralPainel.js). Buscado em
     // paralelo e com erro isolado: se este falhar, os indicadores/gráfico
     // principal (que não dependem dele) continuam aparecendo normalmente.
+    // NÃO recebe contaId de propósito (14/09/2026): "Por marketplace"
+    // compara lojas entre si, e Fluxo de Caixa/Alertas são da empresa
+    // inteira — só os indicadores vindos de apiResumo (hero + linha
+    // secundária) respeitam a loja selecionada nesta etapa.
     async function apiPainel(empresaId, periodo, extra){
       const res = await fetch('/api/visao-geral/painel?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
@@ -2228,13 +2240,33 @@
       return body;
     }
 
+    async function apiLojas(empresaId){
+      const res = await fetch('/api/relatorios/lojas?empresaId='+empresaId);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar as lojas.');
+      return (body && body.lojas) || [];
+    }
+
+    // Recarrega a lista de lojas só quando a empresa muda (nunca a cada
+    // troca de período) — e reseta a loja selecionada nesse caso, porque uma
+    // loja de outra empresa não existiria mais na lista.
+    let ultimaEmpresaIdLojas = null;
+    async function garantirLojasCarregadas(empresaId){
+      if(ultimaEmpresaIdLojas === empresaId) return;
+      ultimaEmpresaIdLojas = empresaId;
+      state.contaId = '';
+      try{ state.lojas = await apiLojas(empresaId); }
+      catch(e){ state.lojas = []; }
+    }
+
     async function loadResumo(){
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.error = null; state.painel = null; state.painelError = null; state.loading = false; render(); return; }
+      await garantirLojasCarregadas(filtro.empresaId);
       state.loading = true; state.error = null; state.painelError = null; render();
       const extra = window.CerneFiltro.periodoExtra();
       const [resumoResult, painelResult] = await Promise.allSettled([
-        apiResumo(filtro.empresaId, filtro.periodo, extra),
+        apiResumo(filtro.empresaId, filtro.periodo, extra, state.contaId),
         apiPainel(filtro.empresaId, filtro.periodo, extra),
       ]);
       if(resumoResult.status==='fulfilled'){ state.data = resumoResult.value; state.error = null; }
@@ -2309,7 +2341,9 @@
           note: resumo.faturamento.valor!==null ? 'Bruto no período (vendas não canceladas)' : (pendNota('essa informação', resumo.faturamento.pendentes) || 'Bruto no período (vendas não canceladas)'),
           valueHtml: resumo.faturamento.valor!==null ? escapeHtml(money(resumo.faturamento.valor, moeda)) : pendCurta(resumo.faturamento.pendentes) },
         { label:'Margem de contribuição (R$)', icon:'wallet', tint: resumo.margemContribuicao.valor===null ? 'muted' : (resumo.margemContribuicao.valor>=0?'success':'danger'), spark: spMargem,
-          note: resumo.margemContribuicao.valor!==null ? 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto' : (pendNota('custo cadastrado', resumo.margemContribuicao.pendentes) || 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto'),
+          note: resumo.margemContribuicao.valor!==null
+            ? (resumo.comComissaoEstimada ? (resumo.comComissaoEstimada===1?'Inclui 1 pedido Shopee com comissão estimada':'Inclui '+resumo.comComissaoEstimada+' pedidos Shopee com comissão estimada') : 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto')
+            : (pendNota('custo cadastrado', resumo.margemContribuicao.pendentes) || 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto'),
           valueHtml: resumo.margemContribuicao.valor!==null
             ? '<span class="'+(resumo.margemContribuicao.valor>=0?'pos':'neg')+'">'+escapeHtml(moneySigned(resumo.margemContribuicao.valor, moeda))+'</span>'
             : pendCurta(resumo.margemContribuicao.pendentes) },
@@ -2581,6 +2615,19 @@
 
       let html = '';
 
+      // Seletor de Loja (14/09/2026) — só aparece quando há mais de uma loja
+      // conectada (ML + Shopee juntas); com 0 ou 1 loja não faz diferença
+      // pro usuário escolher, então não polui a tela à toa. "Todas as lojas"
+      // sempre disponível pra voltar ao total da empresa.
+      if(state.lojas.length > 1){
+        html += '<div class="toolbar" style="margin-bottom:14px;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="ov2LojaSelect">'
+            + '<option value="">Todas as lojas</option>'
+            + state.lojas.map(l=>'<option value="'+escapeHtml(l.chave)+'" '+(l.chave===state.contaId?'selected':'')+'>'+escapeHtml((l.marketplace==='shopee'?'[Shopee] ':'[ML] ')+(l.nickname||l.chave))+'</option>').join('')
+          + '</select></div>'
+        + '</div>';
+      }
+
       if(filtro.loadingEmpresas || state.loading){
         html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando indicadores…</span></div></div>';
       } else if(state.error){
@@ -2592,6 +2639,7 @@
         html += sectionLabel('Indicadores principais — '+state.data.periodo.label)
           + heroKpisHTML(resumo, 'BRL', hasOrders, state.data.serieDiaria)
           + secondaryKpisHTML(resumo, 'BRL', hasOrders, state.painel, state.painelError)
+          + (state.contaId ? '<div class="field-hint" style="margin:-8px 0 14px;">"Por marketplace", Fluxo de Caixa e Alertas &amp; IA abaixo continuam considerando todas as lojas da empresa — só os indicadores acima e o gráfico de desempenho respeitam a loja selecionada.</div>' : '')
           + sectionLabel('Desempenho')
           + '<div class="ov2-row-chart">'
             + chartCardHTML(state.data)
@@ -2606,6 +2654,9 @@
       root.querySelectorAll('.alert-row').forEach(el => {
         el.addEventListener('click', (e) => { e.preventDefault(); const page = el.dataset.page; if(page) navigate(page); });
       });
+
+      const selLoja = document.getElementById('ov2LojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadResumo(); });
     }
 
     window.Overview = { load };
@@ -3237,13 +3288,16 @@
     // KPIs de topo (Pedidos/Vendas/Margem/Ticket médio/Cancelados) — mesma
     // fonte que Visão Geral já usa (/api/relatorios/resumo-vendas, que por
     // trás é resumirPeriodo() de lib/relatorioVendas.js — não recalculado
-    // aqui). Considera TODOS os pedidos da empresa+período (não aplica os
-    // filtros de loja/status/produto da tabela abaixo, porque essa rota não
-    // tem esses filtros — nunca deixe de mostrar diferente do que os filtros
-    // extras sugerem: por isso a nota abaixo dos cards).
-    async function apiResumoVendas(empresaId, periodo, desde, ate){
+    // aqui). Loja (contaId) é respeitada aqui também desde 14/09/2026
+    // (correção do bug relatado pelo usuário: "quando seleciona a loja as
+    // vendas, margem, pedidos, ticket médio e cancelados continuam como se
+    // tivesse selecionado todas as lojas") — só Status e Produto/SKU (filtros
+    // exclusivos da tabela) continuam de fora dos cards, por isso a nota
+    // abaixo deles quando algum desses dois está ativo.
+    async function apiResumoVendas(empresaId, periodo, desde, ate, contaId){
       const params = new URLSearchParams({ empresaId, periodo });
       if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
+      if(contaId) params.set('contaId', contaId);
       const res = await fetch('/api/relatorios/resumo-vendas?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Falha ao carregar os indicadores.');
@@ -3252,7 +3306,7 @@
     async function loadResumo(){
       if(!state.empresaId){ state.resumo = null; return; }
       state.loadingResumo = true; render();
-      try{ state.resumo = await apiResumoVendas(state.empresaId, state.periodo, state.desdePersonalizado, state.atePersonalizado); }
+      try{ state.resumo = await apiResumoVendas(state.empresaId, state.periodo, state.desdePersonalizado, state.atePersonalizado, state.contaId); }
       catch(err){ state.resumo = null; }
       state.loadingResumo = false; render();
     }
@@ -3301,7 +3355,7 @@
       const items = [
         { label:'Pedidos', icon:'cart', tint:'copper', valueHtml: String(r.qtdPedidos), note:state.resumo.periodo.label },
         { label:'Vendas (R$)', icon:'lineChart', tint:'success', valueHtml: moneyKpi(r.faturamento.valor), note:'Bruto, pedidos não cancelados' },
-        { label:'Margem (R$)', icon:'wallet', tint: r.margemContribuicao.valor===null?'muted':(r.margemContribuicao.valor>=0?'success':'danger'), valueHtml: moneyKpi(r.margemContribuicao.valor), note: r.margemContribuicao.pendentes ? r.margemContribuicao.pendentes+' pedido(s) sem custo' : 'Todos os pedidos com custo' },
+        { label:'Margem (R$)', icon:'wallet', tint: r.margemContribuicao.valor===null?'muted':(r.margemContribuicao.valor>=0?'success':'danger'), valueHtml: moneyKpi(r.margemContribuicao.valor), note: r.margemContribuicao.pendentes ? r.margemContribuicao.pendentes+' pedido(s) sem custo' : (r.comComissaoEstimada ? r.comComissaoEstimada+' pedido(s) Shopee com comissão estimada' : 'Todos os pedidos com custo') },
         { label:'Margem (%)', icon:'percent', tint:'purple', valueHtml: r.margemPercentual===null?'Pendente':r.margemPercentual.toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%', note:'Sobre o faturamento' },
         { label:'Ticket médio', icon:'activity', tint:'petrol', valueHtml: moneyKpi(ticketMedio), note:'Vendas ÷ pedidos' },
         { label:'Cancelados', icon:'alertCircle', tint: r.cancelados.quantidade>0?'danger':'muted', valueHtml: String(r.cancelados.quantidade), note: r.cancelados.valor ? moneyKpi(r.cancelados.valor)+' não contabilizado' : 'Nenhum no período' },
@@ -3314,8 +3368,8 @@
           + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
         + '</div>'
       ).join('') + '</div>'
-      + (state.contaId || state.status || state.busca.trim()
-          ? '<div class="field-hint" style="margin:-8px 0 14px;">Os indicadores acima consideram todos os pedidos de "'+escapeHtml(state.resumo.periodo.label)+'" — os filtros de loja/status/busca abaixo afetam só a tabela.</div>'
+      + (state.status || state.busca.trim()
+          ? '<div class="field-hint" style="margin:-8px 0 14px;">Os indicadores acima já consideram a loja selecionada, mas não os filtros de Status/Produto-SKU (esses afetam só a tabela abaixo).</div>'
           : '');
     }
 
@@ -3404,7 +3458,7 @@
             + '<td class="mono">'+cellMoney(p.tarifasMl,p.moeda,true)+'</td>'
             + '<td class="mono">'+(money(p.freteVendedor,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisp.</span>')+'</td>'
             + '<td class="mono">'+cellMoney(p.custoProduto,p.moeda,true)+'</td>'
-            + '<td class="mono" style="'+(p.margemContribuicao!==null?(p.margemContribuicao>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(p.calculoCompleto ? money(p.margemContribuicao,p.moeda) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
+            + '<td class="mono" style="'+(p.margemContribuicao!==null?(p.margemContribuicao>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(p.calculoCompleto ? (money(p.margemContribuicao,p.moeda)+(p.comissaoEstimada?' <span title="Comissão da Shopee ainda estimada — repasse real não confirmado" style="color:var(--text-faint);font-style:italic;">(estim.)</span>':'')) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
             + '<td class="mono">'+(p.calculoCompleto ? pctCell(p.margemPercentual) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
             + '<td class="cell-stack-sub" style="white-space:normal;">'+escapeHtml(p.envioLogisticType||'—')+'</td>'
             + '<td><span class="badge-status '+(p.status==='paid'?'on':(p.cancelado?'err':'off'))+'"><span class="dot"></span>'+escapeHtml(p.status||'—')+'</span></td>'
@@ -3468,7 +3522,7 @@
         syncBtn.disabled = false;
       });
       const selLoja = document.getElementById('pedLojaSelect');
-      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadPedidos(); });
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadResumo(); loadPedidos(); });
       const selStatus = document.getElementById('pedStatusSelect');
       if(selStatus) selStatus.addEventListener('change', ()=>{ state.status = selStatus.value; loadPedidos(); });
       const busca = document.getElementById('pedBuscaInput');
