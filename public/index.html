@@ -1920,14 +1920,19 @@
   /* ================= MARKETPLACES — Mercado Livre e Shopee (OAuth real) =================
      Shopee (25/08/2026): mesmo desenho do Mercado Livre acima — botão "Conectar
      Shopee" -> autorização oficial da Shopee Open Platform -> volta conectado.
-     Nesta etapa só autorização/status/renovação de token — sem importar
-     pedidos ainda (pedido explícito do usuário), por isso não existe botão
-     de sincronizar aqui, só "Renovar token" (a renovação já acontece sozinha
-     no servidor — ver lib/shopeeTokenScheduler.js). */
+     Pedidos da Shopee — Fase 1 (14/09/2026, pedido explícito do usuário:
+     "puxar os últimos 60 dias"): botão "Sincronizar agora" + listagem
+     simples logo abaixo do card, só com os campos reais que a Shopee manda
+     (nenhum cálculo de margem/comissão/frete ainda — isso é Fase 2, ver
+     lib/shopeeSync.js). De propósito NÃO entra na tela "Pedidos" (que é só
+     do Mercado Livre, com cálculo de margem próprio) — fica aqui, ao lado
+     do seletor de Empresa, pra não misturar com números que o usuário já
+     usa hoje. */
   (function(){
     const state = {
       empresas:[], empresaId:null, loadingEmpresas:false, conta:null, loadingConta:false, syncing:false, configurado:null, syncResult:null,
       contaShopee:null, loadingContaShopee:false, configuradoShopee:null, renovandoShopee:false,
+      syncingShopee:false, syncResultShopee:null, pedidosShopee:[], loadingPedidosShopee:false,
     };
 
     function toast(message, type){
@@ -1975,6 +1980,20 @@
         state.contaShopee = (data.contas && data.contas[0]) || null;
       }catch(e){ state.contaShopee = null; }
       state.loadingContaShopee = false; render();
+      if(state.contaShopee) await loadPedidosShopee();
+      else state.pedidosShopee = [];
+    }
+
+    // Fase 1 da sincronização de pedidos da Shopee (14/09/2026) — só lista o
+    // que já foi sincronizado (real, sem cálculo nenhum); não dispara sync.
+    async function loadPedidosShopee(){
+      if(!state.contaShopee) return;
+      state.loadingPedidosShopee = true; render();
+      try{
+        const data = await apiShopee('/'+state.contaShopee.id+'/pedidos');
+        state.pedidosShopee = (data && data.pedidos) || [];
+      }catch(e){ state.pedidosShopee = []; }
+      state.loadingPedidosShopee = false; render();
     }
 
     async function load(queryStr){
@@ -2082,10 +2101,33 @@
           + '</div>'
           + (cs.status==='erro' && cs.ultimoErro ? '<div class="bd-note">'+svg('alertCircle')+'<span>'+escapeHtml(cs.ultimoErro)+'</span></div>' : '')
           + '<div style="margin-top:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; width:100%;">'
-            + '<button class="btn-primary" id="shopeeRenovarBtn" type="button" '+(state.renovandoShopee?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.renovandoShopee?'Renovando…':'Renovar token')+'</span></button>'
+            + '<button class="btn-primary" id="shopeeSyncBtn" type="button" '+(state.syncingShopee?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.syncingShopee?'Sincronizando…':'Sincronizar agora')+'</span></button>'
+            + '<button class="btn-secondary" id="shopeeRenovarBtn" type="button" '+(state.renovandoShopee?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.renovandoShopee?'Renovando…':'Renovar token')+'</span></button>'
             + '<button class="btn-secondary" id="shopeeReconnectBtn" type="button">'+svg('link')+'<span>Reconectar</span></button>'
-            + '<span class="field-hint" style="margin:0;">O token é renovado automaticamente pelo servidor antes de vencer. Sincronização de pedidos da Shopee ainda não foi implementada nesta etapa.</span>'
+            + (state.syncResultShopee ? '<span class="field-hint" style="margin:0;">'+state.syncResultShopee.importados+' de '+state.syncResultShopee.totalEncontrados+' pedido(s) dos últimos '+state.syncResultShopee.periodo.dias+' dias importados/atualizados'+(state.syncResultShopee.erros.length? (', '+state.syncResultShopee.erros.length+' com erro'):'')+'.</span>' : '<span class="field-hint" style="margin:0;">A sincronização traz os pedidos dos últimos 60 dias. Ainda sem cálculo de margem/comissão (só os dados do pedido).</span>')
           + '</div>'
+        + '</div>'
+        // Listagem simples dos pedidos já sincronizados — só os campos reais
+        // que a Shopee manda, nenhum cálculo (Fase 2, futura, cuida da
+        // margem/comissão/frete, junto das telas de Pedidos/Relatórios).
+        + '<div style="margin-top:16px;">'
+          + (state.loadingPedidosShopee
+              ? '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando pedidos…</span></div></div>'
+              : !state.pedidosShopee.length
+                ? '<div class="empty-panel" style="padding:24px;"><p class="lead" style="margin:0;">Nenhum pedido sincronizado ainda desta loja. Clique em "Sincronizar agora" para puxar os últimos 60 dias.</p></div>'
+                : '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+                  + '<th>Data</th><th>Pedido</th><th>Comprador</th><th>Valor</th><th>Pagamento</th><th>Transportadora</th><th>Status</th>'
+                  + '</tr></thead><tbody>'
+                  + state.pedidosShopee.map(p => '<tr>'
+                      + '<td class="tab-nums">'+(fmtDateTime(p.dataCriacao) || '—')+'</td>'
+                      + '<td class="mono">'+escapeHtml(p.orderSn)+'</td>'
+                      + '<td>'+escapeHtml(p.compradorUsername || '—')+'</td>'
+                      + '<td class="tab-nums">'+(p.valorTotal!=null ? (p.moeda?p.moeda+' ':'')+Number(p.valorTotal).toFixed(2) : 'indisponível')+'</td>'
+                      + '<td>'+escapeHtml(p.metodoPagamento || '—')+'</td>'
+                      + '<td>'+escapeHtml(p.transportadora || '—')+'</td>'
+                      + '<td>'+escapeHtml(p.status || '—')+'</td>'
+                    + '</tr>').join('')
+                  + '</tbody></table></div></div>')
         + '</div>';
       } else {
         html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
@@ -2097,7 +2139,7 @@
       root.innerHTML = html;
 
       const sel = document.getElementById('mlEmpresaSelect');
-      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); state.syncResult = null; loadContaDaEmpresa(); loadContaShopeeDaEmpresa(); });
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); state.syncResult = null; state.syncResultShopee = null; state.pedidosShopee = []; loadContaDaEmpresa(); loadContaShopeeDaEmpresa(); });
       const connectBtn = document.getElementById('mlConnectBtn');
       if(connectBtn) connectBtn.addEventListener('click', ()=>{ window.location.href = '/api/integracoes/mercadolivre/conectar?empresaId='+state.empresaId; });
       const reconnectBtn = document.getElementById('mlReconnectBtn');
@@ -2127,6 +2169,17 @@
           await loadContaShopeeDaEmpresa();
         }catch(err){ toast(err.message, 'error'); }
         state.renovandoShopee = false; render();
+      });
+      const shopeeSyncBtn = document.getElementById('shopeeSyncBtn');
+      if(shopeeSyncBtn) shopeeSyncBtn.addEventListener('click', async ()=>{
+        state.syncingShopee = true; render();
+        try{
+          const result = await apiShopee('/'+state.contaShopee.id+'/sincronizar', { method:'POST' });
+          state.syncResultShopee = result;
+          toast(result.importados+' pedido(s) da Shopee importados/atualizados.'+(result.erros.length? (' '+result.erros.length+' com erro — veja o console do servidor.'):''), result.erros.length?'error':'success');
+          await loadPedidosShopee();
+        }catch(err){ toast(err.message, 'error'); }
+        state.syncingShopee = false; render();
       });
     }
 

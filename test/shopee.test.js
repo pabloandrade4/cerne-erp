@@ -329,6 +329,19 @@ describe(
     afterEach(() => { global.fetch = fetchOriginal; });
 
     after(async () => {
+      // Desde a Fase 1 da sincronização de pedidos (14/09/2026): apaga
+      // shopee_pedido_itens/shopee_pedidos ANTES de shopee_contas — senão a
+      // FK (shopee_pedidos.conta_shopee_id) impede o DELETE da conta.
+      await pool.query(
+        `DELETE FROM shopee_pedido_itens WHERE pedido_id IN (
+           SELECT id FROM shopee_pedidos WHERE conta_shopee_id IN (SELECT id FROM shopee_contas WHERE empresa_id = $1)
+         )`,
+        [EMPRESA_ID]
+      );
+      await pool.query(
+        'DELETE FROM shopee_pedidos WHERE conta_shopee_id IN (SELECT id FROM shopee_contas WHERE empresa_id = $1)',
+        [EMPRESA_ID]
+      );
       await pool.query('DELETE FROM shopee_contas WHERE empresa_id = $1', [EMPRESA_ID]);
       await pool.query('DELETE FROM shopee_oauth_states WHERE empresa_id = ANY($1)', [[EMPRESA_ID, EMPRESA_INATIVA_ID]]);
       await pool.query('DELETE FROM empresas WHERE id = ANY($1)', [[EMPRESA_ID, EMPRESA_INATIVA_ID]]);
@@ -469,6 +482,55 @@ describe(
 
       const { rows: novo } = await pool.query('SELECT access_token_enc FROM shopee_contas WHERE id=$1', [contaId]);
       assert.equal(shopeeCrypto.decrypt(novo[0].access_token_enc), 'AT-MANUAL');
+    });
+
+    // Fase 1 da sincronização de pedidos (14/09/2026) — POST /:id/sincronizar
+    // e GET /:id/pedidos. Cobertura detalhada da matemática de janelas/lotes
+    // e do upsert está em test/shopeeSync.test.js; aqui só confirma que as
+    // ROTAS HTTP chamam lib/shopeeSync.js corretamente e devolvem o formato
+    // esperado pelo front-end (Marketplaces).
+    test('POST /:id/sincronizar puxa e grava pedidos reais (rota HTTP chamando lib/shopeeSync.js de verdade)', async () => {
+      const { rows } = await pool.query('SELECT id FROM shopee_contas WHERE shopee_shop_id=777001');
+      const contaId = rows[0].id;
+      await pool.query(`UPDATE shopee_contas SET token_expires_at = now() + interval '3 hours' WHERE id=$1`, [contaId]);
+
+      mockShopeeFetch(async (urlStr) => {
+        const parsed = new URL(urlStr);
+        if (parsed.pathname === '/api/v2/order/get_order_list') {
+          return { ok: true, status: 200, json: async () => ({ response: { more: false, order_list: [{ order_sn: 'ORD-ROTA-1', order_status: 'READY_TO_SHIP' }] } }) };
+        }
+        if (parsed.pathname === '/api/v2/order/get_order_detail') {
+          return { ok: true, status: 200, json: async () => ({ response: { order_list: [{ order_sn: 'ORD-ROTA-1', order_status: 'READY_TO_SHIP', total_amount: 42, item_list: [] }] } }) };
+        }
+        throw new Error('endpoint inesperado: ' + parsed.pathname);
+      });
+
+      const res = await fetch(`${baseUrl}/api/integracoes/shopee/${contaId}/sincronizar`, { method: 'POST' });
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.periodo.dias, 60);
+      assert.ok(body.importados >= 1);
+      assert.deepEqual(body.erros, []);
+
+      const { rows: pedidos } = await pool.query('SELECT * FROM shopee_pedidos WHERE conta_shopee_id=$1 AND order_sn=$2', [contaId, 'ORD-ROTA-1']);
+      assert.equal(pedidos.length, 1);
+      assert.equal(Number(pedidos[0].valor_total), 42);
+    });
+
+    test('GET /:id/pedidos lista os pedidos já sincronizados, mais recentes primeiro, sem nenhum cálculo de margem (só os campos reais)', async () => {
+      const { rows } = await pool.query('SELECT id FROM shopee_contas WHERE shopee_shop_id=777001');
+      const contaId = rows[0].id;
+
+      const res = await fetch(`${baseUrl}/api/integracoes/shopee/${contaId}/pedidos`);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.ok(Array.isArray(body.pedidos));
+      const pedido = body.pedidos.find((p) => p.orderSn === 'ORD-ROTA-1');
+      assert.ok(pedido, 'pedido gravado no teste anterior deveria aparecer na listagem');
+      assert.equal(pedido.valorTotal, 42);
+      assert.equal(pedido.status, 'READY_TO_SHIP');
+      // nenhum campo de margem/comissão/frete calculado nesta Fase 1
+      assert.equal('margemContribuicao' in pedido, false);
     });
   }
 );
