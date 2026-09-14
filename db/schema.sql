@@ -669,10 +669,11 @@ CREATE INDEX IF NOT EXISTS ml_estoque_itens_empresa_tipo_idx ON ml_estoque_itens
 -- de ml_contas). access_token e refresh_token ficam sempre criptografados
 -- (nunca em texto puro) — ver server/lib/shopeeCrypto.js (chave própria,
 -- SHOPEE_TOKEN_KEY, nunca a mesma do Mercado Livre). O front-end nunca
--- recebe esses valores. Pedidos, estoque, Ads e financeiro da Shopee NÃO
--- fazem parte desta etapa — por isso não existe (ainda) nenhuma tabela de
--- pedido/estoque da Shopee; `ultima_sincronizacao_em` fica reservada para
--- quando a importação de pedidos for pedida (sempre NULL até lá).
+-- recebe esses valores. Estoque, Ads e financeiro da Shopee ainda NÃO fazem
+-- parte deste projeto. Pedidos: a partir de 14/09/2026 (Fase 1, pedido
+-- explícito do usuário), `ultima_sincronizacao_em` passa a ser preenchida —
+-- ver shopee_pedidos/shopee_pedido_itens e lib/shopeeSync.js, mais abaixo
+-- (fora desta seção, adicionadas junto da tabela shopee_oauth_states).
 CREATE TABLE IF NOT EXISTS shopee_contas (
   id                       SERIAL PRIMARY KEY,
   empresa_id               INTEGER NOT NULL REFERENCES empresas(id),
@@ -699,6 +700,59 @@ CREATE TABLE IF NOT EXISTS shopee_oauth_states (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- docs/02-decisoes.md.
+
+-- Pedidos importados da Shopee — Fase 1 da sincronização (14/09/2026,
+-- pedido explícito do usuário: "puxar os últimos 60 dias"). Mesmo princípio
+-- do Mercado Livre (ml_pedidos, acima): nunca duplica (UNIQUE
+-- conta_shopee_id + order_sn — uma nova sincronização faz UPSERT), nunca
+-- inventa valor (campo NULL quando a API não retornou o dado), e guarda o
+-- payload bruto (raw_pedido) para auditoria — ver lib/shopeeSync.js.
+-- IMPORTANTE: esta é a PRIMEIRA sincronização de pedidos da Shopee deste
+-- projeto — os campos normalizados abaixo seguem a documentação pública da
+-- API de Pedidos v2 da Shopee, ainda não confirmados contra pedidos reais
+-- desta conta. Nenhum cálculo de margem/comissão/frete é feito nesta etapa
+-- (Fase 2, ainda não construída, depende de ver os dados reais primeiro) —
+-- por isso os pedidos da Shopee ainda não entram nas tabelas/telas do
+-- Mercado Livre (ml_pedidos, routes/pedidos.js), só na sua própria listagem
+-- simples (GET /api/integracoes/shopee/:id/pedidos).
+CREATE TABLE IF NOT EXISTS shopee_pedidos (
+  id                   SERIAL PRIMARY KEY,
+  conta_shopee_id      INTEGER NOT NULL REFERENCES shopee_contas(id),
+  order_sn             VARCHAR(50) NOT NULL,
+  order_status         VARCHAR(30),
+  data_criacao         TIMESTAMPTZ,
+  data_atualizacao     TIMESTAMPTZ,
+  comprador_user_id    BIGINT,
+  comprador_username   VARCHAR(100),
+  valor_total          NUMERIC(12,2),
+  moeda                VARCHAR(5),
+  metodo_pagamento     VARCHAR(50),
+  transportadora       VARCHAR(100),
+  frete_estimado       NUMERIC(12,2),
+  frete_real           NUMERIC(12,2),
+
+  raw_pedido           JSONB,
+
+  criado_em            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em        TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  UNIQUE (conta_shopee_id, order_sn)
+);
+
+-- Itens de cada pedido da Shopee (item_list[] da API). Ao ressincronizar um
+-- pedido, os itens são substituídos pelos itens atuais da resposta — mesmo
+-- padrão de ml_pedido_itens.
+CREATE TABLE IF NOT EXISTS shopee_pedido_itens (
+  id                 SERIAL PRIMARY KEY,
+  pedido_id          INTEGER NOT NULL REFERENCES shopee_pedidos(id) ON DELETE CASCADE,
+  item_id            BIGINT,
+  nome               TEXT,
+  sku                VARCHAR(100),   -- model_sku (ou item_sku quando o anúncio não tem variação)
+  variacao_id        BIGINT,         -- model_id
+  quantidade         INTEGER,
+  preco_unitario     NUMERIC(12,2),
+  valor_total_item   NUMERIC(12,2)
+);
 
 -- ============================================================
 -- Etapa: IA Gestora — central de análise (histórico de conversas + login
