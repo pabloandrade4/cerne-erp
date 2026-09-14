@@ -88,6 +88,69 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/produtos/sugestoes-sku?empresaId=ID
+// 14/09/2026, pedido explícito do usuário: "como podemos fazer para puxar
+// o sku com o custo direto" — em vez de digitar o SKU na mão ao cadastrar
+// um produto novo (risco de erro de digitação, que faz o custo nunca
+// "casar" com a venda — mesmo problema de fundo do bug do frete de hoje,
+// mas pro lado do SKU), esta rota devolve os SKUs que JÁ apareceram em
+// pedidos reais (Mercado Livre + Shopee) desta empresa mas que AINDA não
+// têm produto cadastrado — exatamente a mesma lógica de casamento usada em
+// lib/relatorioVendas.js (pr.sku = pi.sku, comparação exata) pra sugerir só
+// SKUs que, se cadastrados aqui do jeito que aparecem no pedido, vão bater
+// certinho com o cálculo de margem. Nunca sugere um SKU que já está
+// cadastrado (por mais que o produto atual esteja sem custo por outro
+// motivo — essa rota é só pra SKU nunca visto em Produtos).
+router.get('/sugestoes-sku', async (req, res, next) => {
+  try {
+    const { empresaId } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+
+    const { rows } = await pool.query(
+      `WITH itens_ml AS (
+         SELECT pi.sku, pi.titulo AS nome, pi.pedido_id, p.data_criacao AS data_pedido
+         FROM ml_pedido_itens pi
+         JOIN ml_pedidos p ON p.id = pi.pedido_id
+         JOIN ml_contas c ON c.id = p.conta_ml_id
+         WHERE c.empresa_id = $1 AND pi.sku IS NOT NULL AND pi.sku <> ''
+       ),
+       itens_shopee AS (
+         SELECT pi.sku, pi.nome, pi.pedido_id, p.data_criacao AS data_pedido
+         FROM shopee_pedido_itens pi
+         JOIN shopee_pedidos p ON p.id = pi.pedido_id
+         JOIN shopee_contas c ON c.id = p.conta_shopee_id
+         WHERE c.empresa_id = $1 AND pi.sku IS NOT NULL AND pi.sku <> ''
+       ),
+       todos AS (
+         SELECT * FROM itens_ml
+         UNION ALL
+         SELECT * FROM itens_shopee
+       )
+       -- nome_sugerido usa o nome do PEDIDO MAIS RECENTE (por data_criacao,
+       -- nunca pela ordem de inserção/id — um pedido antigo pode ser
+       -- sincronizado depois de um mais novo) — desempate por pedido_id só
+       -- pra determinismo quando a data for idêntica.
+       SELECT sku,
+              (array_agg(nome ORDER BY data_pedido DESC NULLS LAST, pedido_id DESC))[1] AS nome_sugerido,
+              count(DISTINCT pedido_id) AS qtd_pedidos
+       FROM todos
+       WHERE sku NOT IN (SELECT sku FROM produtos WHERE empresa_id = $1)
+       GROUP BY sku
+       ORDER BY qtd_pedidos DESC, sku
+       LIMIT 500`,
+      [empresaId]
+    );
+
+    res.json({
+      sugestoes: rows.map((r) => ({
+        sku: r.sku,
+        nomeSugerido: r.nome_sugerido,
+        qtdPedidos: Number(r.qtd_pedidos),
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
 // GET /api/produtos/:id
 router.get('/:id', async (req, res, next) => {
   try {
