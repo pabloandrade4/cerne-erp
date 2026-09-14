@@ -41,6 +41,7 @@ const margemAnuncioRouter = require('./routes/margemAnuncio');
 const alertasRouter = require('./routes/alertas');
 const whatsappRouter = require('./routes/whatsapp');
 const promocoesRouter = require('./routes/promocoes');
+const iaAgentesRouter = require('./routes/iaAgentes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -83,6 +84,7 @@ app.use('/api/margem-anuncio', margemAnuncioRouter);
 app.use('/api/alertas', alertasRouter);
 app.use('/api/integracoes/whatsapp', whatsappRouter);
 app.use('/api/promocoes', promocoesRouter);
+app.use('/api/ia-agentes', iaAgentesRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));

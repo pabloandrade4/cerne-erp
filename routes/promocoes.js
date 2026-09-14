@@ -331,4 +331,95 @@ router.post('/analisar', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ============================================================
+// Agente de IA "Promoções" — Fase 1 (14/09/2026)
+// ============================================================
+// Histórico de decisões: DADOS → ANÁLISE (já existia) → RECOMENDAÇÃO
+// (lib/ia/promocoesDecisor.js) → DECISÃO DO USUÁRIO (aqui) → RESULTADO (ver
+// lib/ia/promocoesDecisoesStore.js#avaliarResultadosPromocoes) →
+// aprendizado (Fase 2, ainda não implementada). NUNCA executa nada no
+// Mercado Livre — só registra a decisão do usuário, mesmo quando aprovada.
+function linhaDecisaoPromocaoParaApi(row) {
+  return {
+    id: row.id,
+    empresaId: row.empresa_id,
+    contaId: row.conta_id,
+    loja: row.loja || null,
+    promotionId: row.promotion_id,
+    promotionType: row.promotion_type,
+    promotionLabel: row.promotion_label,
+    mlItemId: row.ml_item_id,
+    sku: row.sku,
+    titulo: row.titulo,
+    tipoAcao: row.tipo_acao,
+    motivo: row.motivo,
+    snapshot: {
+      precoNormal: row.snapshot_preco_normal === null ? null : Number(row.snapshot_preco_normal),
+      precoPromo: row.snapshot_preco_promo === null ? null : Number(row.snapshot_preco_promo),
+      descontoPct: row.snapshot_desconto_pct === null ? null : Number(row.snapshot_desconto_pct),
+      custoProduto: row.snapshot_custo_produto === null ? null : Number(row.snapshot_custo_produto),
+      tarifasEstimadas: row.snapshot_tarifas_estimadas === null ? null : Number(row.snapshot_tarifas_estimadas),
+      freteVendedorEstimado: row.snapshot_frete_vendedor_estimado === null ? null : Number(row.snapshot_frete_vendedor_estimado),
+      impostoEstimado: row.snapshot_imposto_estimado === null ? null : Number(row.snapshot_imposto_estimado),
+      margemReal: row.snapshot_margem_real === null ? null : Number(row.snapshot_margem_real),
+      margemRealPct: row.snapshot_margem_real_pct === null ? null : Number(row.snapshot_margem_real_pct),
+    },
+    valorSugeridoIa: row.valor_sugerido_ia,
+    valorDecididoUsuario: row.valor_decidido_usuario,
+    statusDecisao: row.status_decisao,
+    decididoEm: row.decidido_em,
+    decididoPor: row.decidido_por,
+    executado: row.executado,
+    resultadoSnapshot: row.resultado_snapshot,
+    resultadoAvaliadoEm: row.resultado_avaliado_em,
+    criadoEm: row.criado_em,
+    atualizadoEm: row.atualizado_em,
+  };
+}
+
+// GET /api/promocoes/decisoes?empresaId=&status=
+router.get('/decisoes', async (req, res, next) => {
+  try {
+    const { empresaId, status } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const params = [empresaId];
+    let filtroStatus = '';
+    if (status && status !== 'todas') {
+      params.push(status);
+      filtroStatus = ' AND d.status_decisao = $2';
+    }
+    const { rows } = await pool.query(
+      `SELECT d.*, c.nickname AS loja
+         FROM ia_decisoes_promocoes d
+         JOIN ml_contas c ON c.id = d.conta_id
+        WHERE d.empresa_id = $1 ${filtroStatus}
+        ORDER BY (d.status_decisao = 'pendente') DESC, d.atualizado_em DESC
+        LIMIT 300`,
+      params
+    );
+    res.json({ decisoes: rows.map(linhaDecisaoPromocaoParaApi) });
+  } catch (e) { next(e); }
+});
+
+// PUT /api/promocoes/decisoes/:id  { statusDecisao, valorDecididoUsuario?, decididoPor? }
+// Só registra a decisão — NUNCA chama a API do Mercado Livre.
+router.put('/decisoes/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { statusDecisao, valorDecididoUsuario, decididoPor } = req.body || {};
+    if (!['aprovada', 'alterada', 'recusada'].includes(statusDecisao)) {
+      return res.status(400).json({ error: 'statusDecisao inválido — use aprovada, alterada ou recusada.' });
+    }
+    const { rows } = await pool.query(
+      `UPDATE ia_decisoes_promocoes
+          SET status_decisao = $1, valor_decidido_usuario = $2, decidido_em = now(), decidido_por = $3, atualizado_em = now()
+        WHERE id = $4 AND status_decisao = 'pendente'
+        RETURNING *`,
+      [statusDecisao, valorDecididoUsuario ? JSON.stringify(valorDecididoUsuario) : null, decididoPor || null, id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Decisão não encontrada, ou já foi decidida antes.' });
+    res.json(linhaDecisaoPromocaoParaApi(rows[0]));
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
