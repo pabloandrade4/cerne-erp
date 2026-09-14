@@ -14,24 +14,32 @@ const express = require('express');
 const ExcelJS = require('exceljs');
 const pool = require('../db/pool');
 const { calcularPeriodo, periodoParaDatasBRT, diaBRT } = require('../lib/periodo');
-const { buscarPedidosDoPeriodo, resumirPeriodo, serieDiaria } = require('../lib/relatorioVendas');
+const { buscarPedidosDoPeriodo, resumirPeriodo, serieDiaria, filtrarPorContaKey, buscarLojasDaEmpresa } = require('../lib/relatorioVendas');
 const { relatorioVendasMargem, relatorioProdutos, relatorioProdutosPorCaixa, relatorioMarketplaces } = require('../lib/relatoriosAgregados');
 
 const router = express.Router();
 
-// GET /api/relatorios/resumo-vendas?empresaId=ID&periodo=30d
+// GET /api/relatorios/resumo-vendas?empresaId=ID&periodo=30d&contaId=
 // periodo: hoje | ontem | 7d | 30d (padrão) | mes
+// contaId (14/09/2026, correção do bug relatado pelo usuário: "quando
+// seleciona a loja as vendas, margem, pedidos, ticket médio e cancelados
+// continuam como se tivesse selecionado todas as lojas") — opcional, no
+// formato de `contaKey` ("mercado_livre:12"/"shopee:3", igual ao já usado
+// pelo filtro de loja da tabela de Pedidos em routes/pedidos.js). Quando
+// omitido, comportamento idêntico a antes (todas as lojas) — usado por
+// Visão Geral quando nenhuma loja específica está selecionada.
 router.get('/resumo-vendas', async (req, res, next) => {
   try {
-    const { empresaId, periodo, desde: desdeQuery, ate: ateQuery } = req.query;
+    const { empresaId, periodo, contaId, desde: desdeQuery, ate: ateQuery } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
 
     const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
-    const { pedidos, totalNoPeriodo } = await buscarPedidosDoPeriodo({
+    const { pedidos: todos, totalNoPeriodo } = await buscarPedidosDoPeriodo({
       empresaId,
       desde: periodoCalc.desde,
       ate: periodoCalc.ate,
     });
+    const pedidos = filtrarPorContaKey(todos, contaId);
 
     res.json({
       periodo: { chave: periodoCalc.chave, label: periodoCalc.label, desde: periodoCalc.desde, ate: periodoCalc.ate },
@@ -39,6 +47,21 @@ router.get('/resumo-vendas', async (req, res, next) => {
       resumo: resumirPeriodo(pedidos),
       serieDiaria: serieDiaria(pedidos),
     });
+  } catch (err) { next(err); }
+});
+
+// GET /api/relatorios/lojas?empresaId=ID
+// Lista de lojas (Mercado Livre + Shopee) da empresa, no formato de
+// `contaKey` — fonte do seletor de loja da Visão Geral (14/09/2026, pedido
+// explícito do usuário: "em visão geral não tem o botão para selecionar
+// qual loja") e reaproveitável por qualquer outra tela que precise da mesma
+// lista (mesma função já usada pelo seletor de loja de Pedidos).
+router.get('/lojas', async (req, res, next) => {
+  try {
+    const { empresaId } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const lojas = await buscarLojasDaEmpresa(empresaId);
+    res.json({ lojas });
   } catch (err) { next(err); }
 });
 

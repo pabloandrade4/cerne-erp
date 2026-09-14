@@ -31,7 +31,10 @@ const ExcelJS = require('exceljs');
 const pool = require('../db/pool');
 const { calcularResultadoVenda, round2 } = require('../lib/resultadoVenda');
 const { calcularPeriodo, diaBRT } = require('../lib/periodo');
-const { buscarPedidosDoPeriodo, resumirPeriodo, SQL_DATA_EFETIVA, SQL_DESCONTO_CUPOM } = require('../lib/relatorioVendas');
+const {
+  buscarPedidosDoPeriodo, resumirPeriodo, SQL_DATA_EFETIVA, SQL_DESCONTO_CUPOM,
+  filtrarPorContaKey, buscarLojasDaEmpresa, estimarComissaoShopeePedido,
+} = require('../lib/relatorioVendas');
 
 const router = express.Router();
 
@@ -47,12 +50,11 @@ const LIMITE_LISTAGEM = 500;
 // SKUs do pedido (mesma coluna combinada "Produto / SKU" da tela).
 function filtrarPedidos(pedidos, { contaId, status, busca }) {
   const alvo = busca ? busca.trim().toLowerCase() : '';
-  return pedidos.filter((p) => {
-    // contaId aqui é a `contaKey` composta ("mercado_livre:12"/"shopee:3" —
-    // ver relatorioVendas.js#serializarPedido), nunca mais um id de conta
-    // sozinho: um id sozinho poderia colidir entre as duas lojas (ver
-    // comentário no topo do arquivo).
-    if (contaId && p.contaKey !== contaId) return false;
+  // Loja: mesmo filtro por `contaKey` agora compartilhado com
+  // /api/relatorios/resumo-vendas (lib/relatorioVendas.js#filtrarPorContaKey)
+  // — ver comentário lá sobre por que um id de conta sozinho não é seguro.
+  const porLoja = filtrarPorContaKey(pedidos, contaId);
+  return porLoja.filter((p) => {
     if (status && p.status !== status) return false;
     if (alvo) {
       const hitProduto = (p.produtoResumo || '').toLowerCase().includes(alvo);
@@ -63,27 +65,14 @@ function filtrarPedidos(pedidos, { contaId, status, busca }) {
   });
 }
 
-// Opções reais para os filtros de Loja e Status — nunca uma lista fixa
-// "chutada": Loja vem das contas do Mercado Livre E das lojas da Shopee já
-// conectadas à empresa (14/09/2026); Status vem dos status que realmente
-// aparecem nos pedidos do período, das duas origens (não existe lista
-// fechada de status documentada — é o que cada API mandou; os vocabulários
-// não se confundem porque o Mercado Livre usa minúsculas ("paid",
-// "cancelled"...) e a Shopee usa maiúsculas ("READY_TO_SHIP", "CANCELLED"...)).
-// `chave` é o mesmo formato de `contaKey` usado em relatorioVendas.js —
-// usado pelo filtro de loja acima (filtrarPedidos) e por GET /:id.
-// Consultas simples (sem as subqueries de itens/custo de
-// buscarPedidosDoPeriodo), então não pesam no carregamento da tela.
-async function buscarLojasDaEmpresa(empresaId) {
-  const [ml, shopee] = await Promise.all([
-    pool.query('SELECT id, nickname FROM ml_contas WHERE empresa_id = $1 ORDER BY nickname', [empresaId]),
-    pool.query('SELECT id, shop_name FROM shopee_contas WHERE empresa_id = $1 ORDER BY shop_name', [empresaId]),
-  ]);
-  const lojasMl = ml.rows.map((r) => ({ chave: `mercado_livre:${r.id}`, marketplace: 'mercado_livre', nickname: r.nickname }));
-  const lojasShopee = shopee.rows.map((r) => ({ chave: `shopee:${r.id}`, marketplace: 'shopee', nickname: r.shop_name || `Loja Shopee #${r.id}` }));
-  return [...lojasMl, ...lojasShopee];
-}
-
+// Opções reais para o filtro de Status — nunca uma lista fixa "chutada":
+// vem dos status que realmente aparecem nos pedidos do período, das duas
+// origens (não existe lista fechada de status documentada — é o que cada
+// API mandou; os vocabulários não se confundem porque o Mercado Livre usa
+// minúsculas ("paid", "cancelled"...) e a Shopee usa maiúsculas
+// ("READY_TO_SHIP", "CANCELLED"...)). Opções de Loja agora vêm de
+// buscarLojasDaEmpresa em lib/relatorioVendas.js (14/09/2026, movida de
+// lá pra ser reaproveitada pelo seletor de loja da Visão Geral também).
 async function buscarStatusDoPeriodo(empresaId, desde, ate) {
   const [ml, shopee] = await Promise.all([
     pool.query(
@@ -583,12 +572,13 @@ async function detalharPedidoMercadoLivre(id, res) {
 // (14/09/2026, mesmo espírito do detalhe do Mercado Livre acima — "tudo que
 // foi aplicado no mercado livre pode e deve ser aplicado na shopee"). A
 // diferença real (nunca escondida, sempre como pendência explícita): a
-// Shopee ainda não retorna comissão/tarifas de venda nos dados já
-// sincronizados (Fase 1 — get_order_detail) — só um futuro endpoint de
-// repasse/escrow traria isso (Fase 2b, ainda não implementada). Por isso
-// taxaVenda/pagamentoTaxas/pagamentoTaxaMarketplace são sempre null aqui, o
-// que automaticamente deixa a margem "pendente" (mesmo mecanismo de custo de
-// SKU não cadastrado — nunca um valor inventado).
+// Shopee só devolve comissão/tarifas de venda numa chamada SEPARADA de
+// repasse/escrow (Fase 2b — payment/get_escrow_detail_batch, ver
+// lib/shopeeSync.js), depois que o repasse do pedido é processado/liberado —
+// nunca junto do pedido em si (get_order_detail, Fase 1). Enquanto esse
+// repasse não chega, taxaVenda/pagamentoTaxas/pagamentoTaxaMarketplace ficam
+// null aqui, o que automaticamente deixa a margem "pendente" (mesmo
+// mecanismo de custo de SKU não cadastrado — nunca um valor inventado).
 async function detalharPedidoShopee(id, res) {
   const { rows } = await pool.query(
     `SELECT p.*, e.id AS empresa_id_real, c.shop_name AS conta_nickname
@@ -652,17 +642,27 @@ async function detalharPedidoShopee(id, res) {
   // vinda de payment/get_escrow_detail_batch (lib/shopeeSync.js), salva em
   // shopee_pedidos.comissao_venda/taxa_transacao_pagamento/taxa_servico.
   // NULL quando a Shopee ainda não processou/liberou o repasse deste
-  // pedido — nunca inventado (mesmo mecanismo de "pendente" já usado pro
-  // Mercado Livre logo abaixo).
-  const taxaVenda = toNum(pedido.comissao_venda);
+  // pedido.
+  let taxaVenda = toNum(pedido.comissao_venda);
   const pagamentoTaxas = toNum(pedido.taxa_transacao_pagamento);
   const pagamentoTaxaMarketplace = toNum(pedido.taxa_servico);
+  // Estimativa (14/09/2026, pedido explícito do usuário: "quero que apareça
+  // a margem líquida", não "pendente" até o repasse) — só entra quando o
+  // repasse real ainda não confirmou nada. Ver TABELA_COMISSAO_SHOPEE_ESTIMADA
+  // em lib/relatorioVendas.js (mesma função usada na listagem de Pedidos e
+  // em Visão Geral/Relatórios, pra este detalhe nunca divergir do resto).
+  let comissaoEstimada = false;
+  if (taxaVenda === null) {
+    const estimativa = estimarComissaoShopeePedido(itens.map((it) => toNum(it.valor_total_item)));
+    if (estimativa !== null) { taxaVenda = estimativa; comissaoEstimada = true; }
+  }
   // Cupom da Shopee ainda não é capturado nesta etapa (Fase 1) — 0, mesma
   // regra já documentada em lib/resultadoVenda.js/relatorioVendas.js pra
   // "sem cupom" (fato real conhecido, não dado faltando).
   const desconto = 0;
 
-  if (taxaVenda === null) pendencias.push('A Shopee ainda não processou/liberou o repasse (comissão e tarifas de venda) deste pedido — a margem fica "pendente" até esse dado existir.');
+  if (comissaoEstimada) pendencias.push('A comissão da Shopee deste pedido ainda é uma ESTIMATIVA (tabela oficial de comissão da Shopee) — o repasse real ainda não foi liberado. Quando ele chegar, a margem passa a usar o valor real automaticamente.');
+  else if (taxaVenda === null) pendencias.push('A Shopee ainda não processou/liberou o repasse deste pedido, e não foi possível estimar a comissão (nenhum item com valor sincronizado) — a margem fica "pendente" até um dos dois existir.');
   if (freteVendedor === null) pendencias.push('A Shopee não retornou o custo de frete do vendedor deste pedido.');
 
   const custoProdutoFinal = itens.length && custoCompleto ? Math.round(custoProdutoTotal * 100) / 100 : null;
@@ -714,6 +714,10 @@ async function detalharPedidoShopee(id, res) {
       resultado,
       margemPercentual,
       calculoCompleto,
+      // 14/09/2026 — true quando a comissão usada acima (dentro de
+      // tarifasMl/resultado) é a estimativa da tabela oficial da Shopee, não
+      // o repasse real confirmado. Ver comentário acima de comissaoEstimada.
+      comissaoEstimada,
       pendencias,
     },
     auditoria: {
