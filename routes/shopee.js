@@ -16,8 +16,19 @@ function getRedirectUri(req) {
   return process.env.SHOPEE_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/integracoes/shopee/callback`;
 }
 
+// .trim() (14/09/2026, achado real via diagnóstico temporário): a
+// SHOPEE_PARTNER_KEY salva no Render veio com 1 caractere de espaço/quebra
+// de linha sobrando ao colar da tela da Shopee — o suficiente pra invalidar
+// a assinatura HMAC inteira ("wrong sign"), mesmo a chave "parecendo" certa.
+// Aparamos aqui pra esse acidente de copiar/colar nunca mais quebrar a
+// conexão, mesmo que aconteça de novo numa futura troca de chave.
+function credencialShopee(nome) {
+  const v = process.env[nome];
+  return typeof v === 'string' ? v.trim() : v;
+}
+
 function shopeeConfigurado() {
-  return Boolean(process.env.SHOPEE_PARTNER_ID && process.env.SHOPEE_PARTNER_KEY && process.env.SHOPEE_TOKEN_KEY);
+  return Boolean(credencialShopee('SHOPEE_PARTNER_ID') && credencialShopee('SHOPEE_PARTNER_KEY') && credencialShopee('SHOPEE_TOKEN_KEY'));
 }
 
 function serializeConta(row) {
@@ -88,27 +99,33 @@ router.get('/conectar', async (req, res) => {
     // state vai embutido na própria redirectUri (ver lib/shopee.js).
     const redirectUri = `${getRedirectUri(req)}?state=${encodeURIComponent(state)}`;
 
-    // Diagnóstico temporário (14/09/2026, pedido do usuário) — investigando
-    // erro "wrong sign" persistente da Shopee mesmo após recolar a chave.
-    // NUNCA loga o valor da SHOPEE_PARTNER_KEY, só o comprimento e se ela
-    // tem espaço/quebra de linha sobrando (causa comum e invisível desse
-    // erro). partnerId não é segredo (já aparece na própria URL pública de
-    // autorização). Remover depois de resolver.
+    // Diagnóstico temporário nº2 (14/09/2026) — o .trim() de pontas não
+    // resolveu, então pode haver um caractere estranho NO MEIO da chave
+    // (ex.: espaço invisível colado sem querer). NUNCA loga o valor real:
+    // troca todo caractere alfanumérico por "*" e revela só os caracteres
+    // fora de A-Z/a-z/0-9, mostrando o código Unicode deles e a posição —
+    // suficiente pra identificar o problema sem expor o segredo. Remover
+    // depois de resolver.
     {
-      const pk = process.env.SHOPEE_PARTNER_KEY || '';
+      const mascarar = (s) => Array.from(s || '').map((ch, i) => {
+        if (/[A-Za-z0-9]/.test(ch)) return '*';
+        return `[pos${i}:U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}]`;
+      }).join('');
+      const bruta = process.env.SHOPEE_PARTNER_KEY || '';
+      const aparada = credencialShopee('SHOPEE_PARTNER_KEY') || '';
       console.log(
-        '[Shopee][diagnóstico] host=%s partnerId="%s" partnerKeyLen=%d partnerKeyPrecisaTrim=%s redirectUri="%s"',
-        process.env.SHOPEE_HOST || 'partner.shopeemobile.com (padrão)',
-        process.env.SHOPEE_PARTNER_ID,
-        pk.length,
-        pk !== pk.trim() ? `SIM (tem ${pk.length - pk.trim().length} caractere(s) de espaço/quebra de linha sobrando)` : 'não',
-        redirectUri
+        '[Shopee][diagnóstico2] partnerKey bruta (len=%d): %s',
+        bruta.length, mascarar(bruta)
+      );
+      console.log(
+        '[Shopee][diagnóstico2] partnerKey após trim (len=%d): %s',
+        aparada.length, mascarar(aparada)
       );
     }
 
     const url = shopee.buildAuthorizationUrl({
-      partnerId: process.env.SHOPEE_PARTNER_ID,
-      partnerKey: process.env.SHOPEE_PARTNER_KEY,
+      partnerId: credencialShopee('SHOPEE_PARTNER_ID'),
+      partnerKey: credencialShopee('SHOPEE_PARTNER_KEY'),
       redirectUri,
     });
     res.redirect(url);
@@ -134,8 +151,8 @@ router.get('/callback', async (req, res) => {
     await pool.query('DELETE FROM shopee_oauth_states WHERE state = $1', [state]); // uso único
 
     const tokenData = await shopee.exchangeCodeForToken({
-      partnerId: process.env.SHOPEE_PARTNER_ID,
-      partnerKey: process.env.SHOPEE_PARTNER_KEY,
+      partnerId: credencialShopee('SHOPEE_PARTNER_ID'),
+      partnerKey: credencialShopee('SHOPEE_PARTNER_KEY'),
       code,
       shopId,
     });
@@ -147,8 +164,8 @@ router.get('/callback', async (req, res) => {
     let region = null;
     try {
       const info = await shopee.obterInfoLoja({
-        partnerId: process.env.SHOPEE_PARTNER_ID,
-        partnerKey: process.env.SHOPEE_PARTNER_KEY,
+        partnerId: credencialShopee('SHOPEE_PARTNER_ID'),
+        partnerKey: credencialShopee('SHOPEE_PARTNER_KEY'),
         accessToken: tokenData.access_token,
         shopId,
       });
