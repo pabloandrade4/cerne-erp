@@ -6,15 +6,18 @@
 // ambiente e (2) mandar uma mensagem de teste avulsa, sem precisar esperar
 // o Radar detectar algo.
 const express = require('express');
-const { whatsappConfigurado, enviarMensagemWhatsapp } = require('../lib/whatsapp');
+const { whatsappConfigurado, whatsappModeloAprovadoConfigurado, enviarMensagemWhatsapp } = require('../lib/whatsapp');
 
 const router = express.Router();
 
 // GET /api/integracoes/whatsapp/status — se TWILIO_ACCOUNT_SID/AUTH_TOKEN/
 // WHATSAPP_FROM/WHATSAPP_TO já foram configurados neste ambiente (nunca
-// devolve os valores em si, só se existem).
+// devolve os valores em si, só se existem). `modeloAprovado` (14/09/2026):
+// se TWILIO_WHATSAPP_CONTENT_SID também já foi configurado — quando true, o
+// envio funciona a qualquer hora, sem depender da janela de 24h do WhatsApp
+// (ver comentário em lib/whatsapp.js).
 router.get('/status', (req, res) => {
-  res.json({ configurado: whatsappConfigurado() });
+  res.json({ configurado: whatsappConfigurado(), modeloAprovado: whatsappModeloAprovadoConfigurado() });
 });
 
 // GET /api/integracoes/whatsapp/testar — manda uma mensagem de teste pro
