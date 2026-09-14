@@ -1308,3 +1308,137 @@ CREATE TABLE IF NOT EXISTS config_ads_ia (
   margem_minima_pct    NUMERIC(5,2) NOT NULL DEFAULT 10,
   atualizado_em        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ============================================================
+-- Agentes de IA — Fase 1: aprendizado com decisão humana (14/09/2026)
+-- ============================================================
+-- Pedido explícito do usuário: os agentes de IA (Ads e Performance,
+-- Promoções) não devem só classificar e mostrar — devem recomendar uma
+-- AÇÃO concreta e explicável, guardar a decisão do usuário sobre cada
+-- recomendação (aprovou/alterou/recusou) e, mais tarde, o resultado real
+-- dessa decisão — pra aprender com o padrão de decisão do usuário antes de
+-- qualquer execução automática (Fase 3, explicitamente NÃO implementada
+-- agora). NESTA FASE NENHUM CÓDIGO CHAMA A API DO MERCADO LIVRE PARA
+-- EXECUTAR NADA — só lê o que já está sincronizado e grava a decisão do
+-- usuário (ver lib/ia/adsDecisoesCiclo.js e lib/ia/promocoesDecisoesStore.js).
+--
+-- `ia_agentes` é só o registro de identidade de cada agente (nome/descrição/
+-- ícone) — pedido explícito do usuário: "para eu no futuro conseguir
+-- conversar com cada um separado". Nenhuma conversa é implementada agora,
+-- só a identidade que uma conversa futura vai precisar.
+CREATE TABLE IF NOT EXISTS ia_agentes (
+  id            SERIAL PRIMARY KEY,
+  codigo        VARCHAR(40) NOT NULL UNIQUE,
+  nome          VARCHAR(120) NOT NULL,
+  descricao     TEXT,
+  icone         VARCHAR(30),
+  ordem         INTEGER NOT NULL DEFAULT 0,
+  ativo         BOOLEAN NOT NULL DEFAULT true,
+  criado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO ia_agentes (codigo, nome, descricao, icone, ordem) VALUES
+  ('ads_performance', 'Ads e Performance', 'Analisa campanhas, anúncios e SKUs de Mercado Ads e recomenda orçamento, meta de ACOS, pausar/escalar campanhas e mover SKUs entre campanhas — você aprova, altera ou recusa cada sugestão.', 'megaphone', 1),
+  ('promocoes', 'Promoções', 'Analisa promoções do Mercado Livre e recomenda entrar, não entrar, sair ou revisar o preço promocional, sempre pela margem real — você aprova, altera ou recusa cada sugestão.', 'sparkle', 2)
+ON CONFLICT (codigo) DO NOTHING;
+
+-- Campos adicionais em ads_campanhas/ads_metricas_anuncio — puramente
+-- ADITIVO, nunca muda o que já é gravado/lido hoje (ver lib/ads.js). São o
+-- "orçamento e status reais atuais" que o agente de Ads precisa pra
+-- calcular uma sugestão de orçamento com valor concreto (ex.: "de R$150
+-- para R$100") em vez de só um percentual solto — confirmados como campos
+-- padrão do objeto de campanha/anúncio na documentação oficial do Mercado
+-- Ads (global-selling.mercadolibre.com/devsite/new-product-ads), nunca
+-- escritos por este ERP nesta fase, só lidos e guardados.
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS orcamento_diario NUMERIC(12,2);
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS acos_alvo NUMERIC(6,2);
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS estrategia VARCHAR(30);
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS status_campanha VARCHAR(20);
+ALTER TABLE ads_campanhas ADD COLUMN IF NOT EXISTS orcamento_automatico BOOLEAN;
+ALTER TABLE ads_metricas_anuncio ADD COLUMN IF NOT EXISTS status_anuncio VARCHAR(20);
+
+-- Histórico de decisões do agente "Ads e Performance" — uma linha por
+-- SITUAÇÃO em aberto (não uma linha por ciclo): enquanto ninguém decide, a
+-- mesma situação (um anúncio ou uma campanha) mantém UMA linha "pendente",
+-- só atualizada a cada ciclo com os números mais recentes (ver índice único
+-- parcial abaixo); assim que o usuário decide, a linha vira histórico
+-- definitivo e uma situação nova no mesmo anúncio/campanha abre uma linha
+-- NOVA — o histórico nunca é sobrescrito. `executado` fica sempre false
+-- nesta fase (nenhuma escrita real no Mercado Livre ainda).
+CREATE TABLE IF NOT EXISTS ia_decisoes_ads (
+  id                              SERIAL PRIMARY KEY,
+  empresa_id                      INTEGER NOT NULL REFERENCES empresas(id),
+  conta_id                        INTEGER NOT NULL REFERENCES ml_contas(id),
+  tipo_referencia                 VARCHAR(20) NOT NULL,  -- 'anuncio' | 'campanha'
+  ml_item_id                      VARCHAR(40),            -- preenchido quando tipo_referencia='anuncio'
+  campanha_id                     VARCHAR(50),
+  campanha_nome                   VARCHAR(255),
+  sku                             VARCHAR(120),
+  titulo                          TEXT,
+  tipo_acao                       VARCHAR(40) NOT NULL,   -- ver lib/ia/adsDecisor.js
+  motivo                          TEXT NOT NULL,          -- explicação legível — nunca "caixa preta"
+  snapshot_investimento           NUMERIC(12,2),
+  snapshot_faturamento_real       NUMERIC(12,2),
+  snapshot_roas                   NUMERIC(12,2),
+  snapshot_acos                   NUMERIC(12,2),
+  snapshot_margem_antes_ads       NUMERIC(12,2),
+  snapshot_margem_depois_ads      NUMERIC(12,2),
+  snapshot_margem_depois_ads_pct  NUMERIC(6,2),
+  snapshot_qtd_vendas             NUMERIC(12,2),
+  snapshot_orcamento_atual        NUMERIC(12,2),
+  snapshot_acos_alvo_atual        NUMERIC(6,2),
+  valor_sugerido_ia               JSONB NOT NULL,
+  valor_decidido_usuario          JSONB,
+  status_decisao                  VARCHAR(20) NOT NULL DEFAULT 'pendente', -- pendente|aprovada|alterada|recusada|expirada
+  decidido_em                     TIMESTAMPTZ,
+  decidido_por                    VARCHAR(180),
+  executado                       BOOLEAN NOT NULL DEFAULT false,
+  executado_em                    TIMESTAMPTZ,
+  resultado_snapshot              JSONB,
+  resultado_avaliado_em           TIMESTAMPTZ,
+  criado_em                       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em                   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_decisoes_ads_empresa ON ia_decisoes_ads (empresa_id, status_decisao);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_decisoes_ads_pendente
+  ON ia_decisoes_ads (conta_id, tipo_referencia, COALESCE(ml_item_id,''), COALESCE(campanha_id,''), tipo_acao)
+  WHERE status_decisao = 'pendente';
+
+-- Mesmo conceito acima, pro agente de Promoções — chave natural é
+-- (conta, promoção, item), igual a `promocoes_analises`.
+CREATE TABLE IF NOT EXISTS ia_decisoes_promocoes (
+  id                                SERIAL PRIMARY KEY,
+  empresa_id                        INTEGER NOT NULL REFERENCES empresas(id),
+  conta_id                          INTEGER NOT NULL REFERENCES ml_contas(id),
+  promotion_id                      VARCHAR(80) NOT NULL,
+  promotion_type                    VARCHAR(60) NOT NULL,
+  promotion_label                   VARCHAR(255),
+  ml_item_id                        VARCHAR(40) NOT NULL,
+  sku                                VARCHAR(120),
+  titulo                             TEXT,
+  tipo_acao                          VARCHAR(40) NOT NULL,  -- ver lib/ia/promocoesDecisor.js
+  motivo                             TEXT NOT NULL,
+  snapshot_preco_normal              NUMERIC(12,2),
+  snapshot_preco_promo               NUMERIC(12,2),
+  snapshot_desconto_pct              NUMERIC(6,2),
+  snapshot_custo_produto             NUMERIC(12,2),
+  snapshot_tarifas_estimadas         NUMERIC(12,2),
+  snapshot_frete_vendedor_estimado   NUMERIC(12,2),
+  snapshot_imposto_estimado          NUMERIC(12,2),
+  snapshot_margem_real               NUMERIC(12,2),
+  snapshot_margem_real_pct           NUMERIC(6,2),
+  valor_sugerido_ia                  JSONB NOT NULL,
+  valor_decidido_usuario             JSONB,
+  status_decisao                     VARCHAR(20) NOT NULL DEFAULT 'pendente',
+  decidido_em                        TIMESTAMPTZ,
+  decidido_por                       VARCHAR(180),
+  executado                          BOOLEAN NOT NULL DEFAULT false,
+  executado_em                       TIMESTAMPTZ,
+  resultado_snapshot                 JSONB,
+  resultado_avaliado_em              TIMESTAMPTZ,
+  criado_em                          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em                      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_decisoes_promocoes_empresa ON ia_decisoes_promocoes (empresa_id, status_decisao);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_decisoes_promocoes_pendente
+  ON ia_decisoes_promocoes (conta_id, promotion_id, ml_item_id)
+  WHERE status_decisao = 'pendente';

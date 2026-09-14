@@ -1181,6 +1181,12 @@
       { id:'reports', title:'Relatórios', icon:'lineChart', action:'Novo relatório', desc:'Relatórios operacionais e financeiros configuráveis.',
         bullets:['Relatórios pré-configurados','Exportação em Excel e PDF','Filtros por empresa, canal e período','Relatórios agendados'] },
     ]},
+    { id:'agentesIa', label:'Agentes IA', open:true, items:[
+      { id:'agenteAds', title:'Ads e Performance', icon:'megaphone', desc:'O agente de IA analisa suas campanhas e anúncios e sugere ações de orçamento, ACOS e pausa/escala — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
+        bullets:['Sugestões com base nos dados reais de cada campanha/anúncio','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
+      { id:'agentePromocoes', title:'Promoções', icon:'sparkle', desc:'O agente de IA identifica oportunidades de promoção, calcula a margem real e sugere entrar, não entrar ou alterar o preço — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
+        bullets:['Sugestões com base na margem real, nunca só no desconto','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
+    ]},
   ];
 
   const PAGES = {};
@@ -1254,7 +1260,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agenteAds','agentePromocoes'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1318,6 +1324,8 @@
     else if(id === 'promocoesIa'){ inner += '<div id="promocoesIaRoot"></div>'; }
     else if(id === 'reports'){ inner += '<div id="relatoriosRoot"></div>'; }
     else if(id === 'alerts'){ inner += '<div id="alertasRoot"></div>'; }
+    else if(id === 'agenteAds'){ inner += '<div id="agenteAdsRoot"></div>'; }
+    else if(id === 'agentePromocoes'){ inner += '<div id="agentePromocoesRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1366,6 +1374,8 @@
     if(id === 'promocoesIa' && window.PromocoesIA) window.PromocoesIA.load();
     if(id === 'reports' && window.Relatorios) window.Relatorios.load();
     if(id === 'alerts' && window.Alertas) window.Alertas.load();
+    if(id === 'agenteAds' && window.AgenteAds) window.AgenteAds.load();
+    if(id === 'agentePromocoes' && window.AgentePromocoes) window.AgentePromocoes.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -9497,6 +9507,338 @@
     }
 
     window.PromocoesIA = { load };
+  })();
+
+  /* ================= AGENTES DE IA — Fase 1 (14/09/2026) =================
+     Pedido explícito do usuário: uma aba dedicada "Agentes IA", com cada
+     agente separado — preparado para, no futuro, o usuário conseguir
+     "conversar com cada um separado" (nenhuma conversa é implementada
+     agora, só a identidade de cada agente, vinda de GET /api/ia-agentes).
+     Cada agente mostra: identidade, as sugestões PENDENTES (aprovar/
+     alterar/recusar) e o HISTÓRICO de decisões já tomadas + resultado real
+     quando já avaliado. Fluxo: DADOS → ANÁLISE → RECOMENDAÇÃO (já rodando
+     em segundo plano, ver lib/ia/adsDecisoesCiclo.js e
+     lib/ia/promocoesDecisoesStore.js) → DECISÃO DO USUÁRIO (aqui) →
+     RESULTADO → aprendizado (Fase 2, ainda não implementada).
+     IMPORTANTE: nenhuma decisão é executada no Mercado Livre nesta fase —
+     aprovar só REGISTRA a decisão (ver rotas .../decisoes no backend).
+     Os dois agentes (Ads e Performance, Promoções) usam a mesma estrutura
+     de tela — criarModuloAgenteDecisoes() monta cada um com seus próprios
+     endpoints/rótulos, pra nunca duplicar a lógica entre os dois. */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pctFmt(v){ return v===null||v===undefined ? '—' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      try{ const d = new Date(v); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '—'; }
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+
+    const STATUS_LABEL = { pendente:'Pendente', aprovada:'Aprovada', alterada:'Alterada', recusada:'Recusada', expirada:'Expirada' };
+    const STATUS_COR = { pendente:'var(--warning)', aprovada:'var(--success)', alterada:'var(--copper)', recusada:'var(--danger)', expirada:'var(--text-faint)' };
+
+    const TIPO_ACAO_LABEL = {
+      pausar_anuncio: 'Pausar anúncio',
+      colocar_sku_em_campanha: 'Considerar incluir em campanha',
+      pausar_campanha: 'Pausar campanha',
+      diminuir_orcamento: 'Diminuir orçamento',
+      aumentar_orcamento: 'Aumentar orçamento',
+      ativar_campanha: 'Ativar campanha',
+      entrar_promocao: 'Entrar na promoção',
+      nao_entrar_promocao: 'Não entrar na promoção',
+      sair_promocao: 'Sair da promoção',
+      revisar_preco: 'Revisar preço promocional',
+    };
+
+    function sugestaoResumoHTML(d){
+      const v = d.valorSugeridoIa || {};
+      const label = TIPO_ACAO_LABEL[d.tipoAcao] || d.tipoAcao;
+      let detalhe = '';
+      if(v.orcamentoAtual !== undefined && v.orcamentoSugerido !== undefined){
+        detalhe = ' — de ' + money(v.orcamentoAtual) + ' para ' + money(v.orcamentoSugerido);
+      } else if(v.precoPromoAtual !== undefined && v.precoPromoAtual !== null){
+        detalhe = ' — preço promocional atual: ' + money(v.precoPromoAtual);
+      }
+      return '<div><strong>'+escapeHtml(label)+'</strong>'+escapeHtml(detalhe)+'</div>'
+        + '<div class="cell-stack-sub" style="margin-top:3px;color:var(--text-muted);">'+escapeHtml(d.motivo||'')+'</div>';
+    }
+
+    function decisaoResumoHTML(d){
+      const cor = STATUS_COR[d.statusDecisao] || 'var(--text-faint)';
+      const label = STATUS_LABEL[d.statusDecisao] || d.statusDecisao;
+      let valorTxt = '';
+      const vd = d.valorDecididoUsuario;
+      if(vd && vd.orcamentoDecidido !== undefined) valorTxt = ' — ' + money(vd.orcamentoDecidido);
+      else if(vd && vd.precoPromoDecidido !== undefined) valorTxt = ' — ' + money(vd.precoPromoDecidido);
+      return '<span style="font-weight:700;color:'+cor+';">'+escapeHtml(label)+'</span>'+escapeHtml(valorTxt)
+        + (d.decididoEm ? '<div class="cell-stack-sub" style="margin-top:2px;">'+fmtDataHora(d.decididoEm)+(d.decididoPor?(' · '+escapeHtml(d.decididoPor)):'')+'</div>' : '');
+    }
+
+    function executadoHTML(d){
+      if(d.statusDecisao === 'recusada' || d.statusDecisao === 'expirada') return '<span style="color:var(--text-faint);">—</span>';
+      return '<span style="color:var(--text-faint);font-style:italic;" title="Fase 1: a IA só registra a decisão, nunca executa automaticamente no Mercado Livre.">Não executado (Fase 1)</span>';
+    }
+
+    function podeAlterarNumerico(d){
+      const v = d.valorSugeridoIa || {};
+      return v.orcamentoSugerido !== undefined || d.tipoAcao === 'revisar_preco';
+    }
+    function campoAlteracaoChave(d){ return d.tipoAcao === 'revisar_preco' ? 'precoPromoDecidido' : 'orcamentoDecidido'; }
+    function campoAlteracaoLabel(d){ return d.tipoAcao === 'revisar_preco' ? 'Novo preço promocional decidido (R$)' : 'Orçamento decidido (R$)'; }
+    function valorInicialAlteracao(d){
+      const v = d.valorSugeridoIa || {};
+      return v.orcamentoSugerido !== undefined ? v.orcamentoSugerido : '';
+    }
+
+    function criarModuloAgenteDecisoes(cfg){
+      const state = { agente:null, aba:'pendentes', itens:[], loading:false, error:null, editandoId:null, gerando:false };
+
+      async function apiAgente(){
+        const res = await fetch('/api/ia-agentes');
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) return null;
+        return ((body && body.agentes) || []).find((a)=> a.codigo === cfg.codigoAgente) || null;
+      }
+      async function apiDecisoes(empresaId, status){
+        const params = new URLSearchParams({ empresaId, status: status || 'todas' });
+        const res = await fetch(cfg.endpointDecisoes + '?' + params.toString());
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar as decisões.');
+        return (body && body.decisoes) || [];
+      }
+      async function apiDecidir(id, statusDecisao, valorDecididoUsuario){
+        const res = await fetch(cfg.endpointDecidir(id), {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ statusDecisao, valorDecididoUsuario, decididoPor: 'Pablo' }),
+        });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível registrar a decisão.');
+        return body;
+      }
+      async function apiGerarAgora(empresaId){
+        const res = await fetch(cfg.endpointGerarAgora, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }) });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Falha ao gerar sugestões agora.');
+        return body;
+      }
+
+      async function carregarDecisoes(){
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId){ state.itens = []; state.loading = false; render(); return; }
+        state.loading = true; state.error = null; render();
+        try{ state.itens = await apiDecisoes(filtro.empresaId, state.aba === 'pendentes' ? 'pendente' : 'todas'); }
+        catch(e){ state.error = e.message; state.itens = []; }
+        state.loading = false; render();
+      }
+
+      async function gerarAgora(){
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId) return;
+        state.gerando = true; render();
+        try{
+          await apiGerarAgora(filtro.empresaId);
+          toast('Sugestões atualizadas.');
+          await carregarDecisoes();
+        }catch(e){ toast(e.message || 'Falha ao gerar sugestões agora.', 'error'); }
+        finally{ state.gerando = false; render(); }
+      }
+
+      async function decidir(id, statusDecisao, valorDecididoUsuario){
+        try{
+          await apiDecidir(id, statusDecisao, valorDecididoUsuario);
+          toast(statusDecisao === 'recusada' ? 'Sugestão recusada.' : 'Decisão registrada.');
+          state.editandoId = null;
+          await carregarDecisoes();
+        }catch(e){ toast(e.message || 'Falha ao registrar decisão.', 'error'); }
+      }
+
+      async function load(){
+        if(!state.agente) state.agente = await apiAgente();
+        await carregarDecisoes();
+      }
+
+      window.CerneFiltro.onChange(()=>{
+        const page = document.getElementById('page-'+cfg.pageId);
+        if(page && page.classList.contains('active')) carregarDecisoes();
+        else render();
+      });
+
+      function tabelaPendentesHTML(itens){
+        let html = '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Atualizado em</th><th>'+escapeHtml(cfg.colunaReferenciaLabel)+'</th><th>Sugestão da IA (situação e motivo)</th><th></th>'
+          + '</tr></thead><tbody>';
+        itens.forEach((d)=>{
+          let acoes = '<button class="row-ic-btn" data-acao="aprovada" data-id="'+d.id+'" type="button" title="Aprovar — aceitar exatamente o que a IA sugeriu">'+svg('checkCircle')+'</button>';
+          if(podeAlterarNumerico(d)) acoes += ' <button class="row-ic-btn" data-acao="alterar-toggle" data-id="'+d.id+'" type="button" title="Alterar o valor sugerido">'+svg('edit')+'</button>';
+          acoes += ' <button class="row-ic-btn" data-acao="recusada" data-id="'+d.id+'" type="button" title="Recusar">'+svg('x')+'</button>';
+
+          html += '<tr>'
+            + '<td class="mono" style="white-space:nowrap;">'+fmtDataHora(d.atualizadoEm)+'</td>'
+            + '<td>'+cfg.referenciaHTML(d)+'</td>'
+            + '<td style="max-width:420px;">'+sugestaoResumoHTML(d)+'</td>'
+            + '<td style="white-space:nowrap;"><div class="row-actions">'+acoes+'</div></td>'
+          + '</tr>';
+
+          if(state.editandoId === d.id){
+            html += '<tr><td colspan="4" style="background:var(--surface-2);padding:12px 16px;">'
+              + '<div class="inline-form" style="margin:0;align-items:flex-end;">'
+                + '<div class="field narrow"><label>'+campoAlteracaoLabel(d)+'</label><input type="number" step="0.01" min="0" id="valorAlterado-'+d.id+'" value="'+escapeHtml(String(valorInicialAlteracao(d)))+'"></div>'
+                + '<button class="primary-btn enabled" data-acao="confirmar-alterar" data-id="'+d.id+'" type="button">'+svg('check')+'<span>Confirmar alteração</span></button>'
+                + '<button class="ghost-btn" data-acao="cancelar-alterar" data-id="'+d.id+'" type="button" style="cursor:pointer;opacity:1;"><span>Cancelar</span></button>'
+              + '</div>'
+            + '</td></tr>';
+          }
+        });
+        return html + '</tbody></table></div></div>';
+      }
+
+      function tabelaHistoricoHTML(itens){
+        return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>'+escapeHtml(cfg.colunaReferenciaLabel)+'</th><th>Sugestão da IA (situação e motivo)</th><th>Minha decisão</th><th>Ação executada</th><th>Resultado posterior</th>'
+          + '</tr></thead><tbody>'
+          + itens.map((d)=> '<tr>'
+            + '<td>'+cfg.referenciaHTML(d)+'</td>'
+            + '<td style="max-width:380px;">'+sugestaoResumoHTML(d)+'</td>'
+            + '<td>'+decisaoResumoHTML(d)+'</td>'
+            + '<td>'+executadoHTML(d)+'</td>'
+            + '<td>'+(d.resultadoAvaliadoEm ? cfg.resultadoHTML(d) : '<span style="color:var(--text-faint);font-style:italic;" title="A IA reavalia automaticamente alguns dias após a decisão.">Ainda não avaliado</span>')+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      function render(){
+        const root = document.getElementById(cfg.rootElId);
+        if(!root) return;
+        const filtro = window.CerneFiltro.state;
+
+        if(!filtro.loadingEmpresas && !filtro.empresas.length){
+          root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+            + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para usar este agente.</p></div>';
+          return;
+        }
+
+        const a = state.agente;
+        let html = '<div class="table-card" style="padding:20px;margin-bottom:14px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">'
+          + '<div class="kpi-hero-icon" style="flex-shrink:0;">'+svg((a && a.icone) || cfg.iconeFallback)+'</div>'
+          + '<div style="min-width:0;flex:1;">'
+            + '<div class="panel-title" style="margin:0 0 4px;">'+escapeHtml((a && a.nome) || cfg.nomeFallback)+'</div>'
+            + '<div class="field-hint" style="max-width:760px;">'+escapeHtml((a && a.descricao) || cfg.descricaoFallback)+'</div>'
+            + '<div class="field-hint" style="margin-top:8px;color:var(--text-faint);">Fase 1: a IA só analisa e recomenda — nenhuma ação é executada automaticamente no Mercado Livre. Toda decisão sua fica registrada no histórico, e é isso que o agente vai usar para aprender.</div>'
+          + '</div>'
+        + '</div>';
+
+        html += '<div class="toolbar">'
+          + '<div class="seg" id="'+cfg.rootElId+'Tabs">'
+            + '<button type="button" data-aba="pendentes" class="'+(state.aba==='pendentes'?'active':'')+'">Pendentes</button>'
+            + '<button type="button" data-aba="historico" class="'+(state.aba==='historico'?'active':'')+'">Histórico</button>'
+          + '</div>'
+          + '<button class="ghost-btn" id="'+cfg.rootElId+'GerarAgora" type="button" style="cursor:pointer;opacity:1;" '+(state.gerando?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.gerando?'Gerando…':'Gerar sugestões agora')+'</span></button>'
+        + '</div>';
+
+        if(state.loading){
+          html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+        } else if(state.error){
+          html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+            + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+        } else if(!state.itens.length){
+          html += '<div class="empty-panel"><div class="empty-icon">'+svg('checkCircle')+'</div>'
+            + '<h2>'+(state.aba==='pendentes' ? 'Nenhuma sugestão pendente' : 'Nenhuma decisão no histórico ainda')+'</h2>'
+            + '<p class="lead">'+(state.aba==='pendentes'
+                ? 'Quando a IA identificar uma ação recomendada, ela aparece aqui para você aprovar, alterar ou recusar.'
+                : 'Decisões que você aprovar, alterar ou recusar aparecem aqui, junto do resultado real assim que a IA reavaliar.')+'</p></div>';
+        } else {
+          html += state.aba === 'pendentes' ? tabelaPendentesHTML(state.itens) : tabelaHistoricoHTML(state.itens);
+        }
+
+        root.innerHTML = html;
+
+        const tabsEl = document.getElementById(cfg.rootElId+'Tabs');
+        if(tabsEl) tabsEl.querySelectorAll('button').forEach((b)=> b.addEventListener('click', ()=>{ state.aba = b.dataset.aba; state.editandoId = null; carregarDecisoes(); }));
+        const btnGerar = document.getElementById(cfg.rootElId+'GerarAgora');
+        if(btnGerar) btnGerar.addEventListener('click', gerarAgora);
+
+        root.querySelectorAll('[data-acao]').forEach((btn)=> btn.addEventListener('click', ()=>{
+          const id = Number(btn.dataset.id);
+          const acao = btn.dataset.acao;
+          if(acao === 'alterar-toggle'){ state.editandoId = state.editandoId === id ? null : id; render(); return; }
+          if(acao === 'cancelar-alterar'){ state.editandoId = null; render(); return; }
+          if(acao === 'confirmar-alterar'){
+            const input = document.getElementById('valorAlterado-'+id);
+            const valor = Number(input.value);
+            if(!Number.isFinite(valor) || valor < 0){ toast('Informe um valor válido.', 'error'); return; }
+            const d = state.itens.find((x)=> x.id === id);
+            if(!d) return;
+            decidir(id, 'alterada', { [campoAlteracaoChave(d)]: valor });
+            return;
+          }
+          if(acao === 'aprovada'){
+            const d = state.itens.find((x)=> x.id === id);
+            decidir(id, 'aprovada', d ? d.valorSugeridoIa : null);
+            return;
+          }
+          if(acao === 'recusada'){ decidir(id, 'recusada', null); return; }
+        }));
+      }
+
+      return { load };
+    }
+
+    // ---- Agente "Ads e Performance" ----
+    window.AgenteAds = criarModuloAgenteDecisoes({
+      codigoAgente: 'ads_performance',
+      pageId: 'agenteAds',
+      rootElId: 'agenteAdsRoot',
+      iconeFallback: 'megaphone',
+      nomeFallback: 'Ads e Performance',
+      descricaoFallback: 'Analisa campanhas, anúncios e SKUs de Mercado Ads e recomenda orçamento, meta de ACOS, pausar/escalar campanhas e mover SKUs entre campanhas.',
+      endpointDecisoes: '/api/ads/decisoes',
+      endpointDecidir: (id)=> '/api/ads/decisoes/'+id,
+      endpointGerarAgora: '/api/ads/decisoes/gerar-agora',
+      colunaReferenciaLabel: 'Anúncio / Campanha',
+      referenciaHTML: (d)=>{
+        const principal = d.titulo || d.campanhaNome || (d.tipoReferencia === 'campanha' ? 'Campanha' : 'Anúncio');
+        return '<div class="cell-stack"><span class="prod-title" title="'+escapeHtml(principal)+'">'+escapeHtml(principal)+'</span>'
+          + '<span class="cell-stack-sub mono">'+escapeHtml(d.sku || (d.campanhaNome && d.titulo ? d.campanhaNome : '') || (d.tipoReferencia==='campanha'?'Campanha':'sem SKU'))+'</span></div>';
+      },
+      resultadoHTML: (d)=>{
+        const r = d.resultadoSnapshot || {};
+        return '<div class="mono" style="'+(r.margemDepoisDoAdsPct!==null && r.margemDepoisDoAdsPct!==undefined ? (r.margemDepoisDoAdsPct>=0?'color:var(--success);':'color:var(--danger);') : '')+'">Margem após Ads: '+pctFmt(r.margemDepoisDoAdsPct)+'</div>'
+          + '<div class="cell-stack-sub">'+fmtDataHora(d.resultadoAvaliadoEm)+'</div>';
+      },
+    });
+
+    // ---- Agente "Promoções" ----
+    window.AgentePromocoes = criarModuloAgenteDecisoes({
+      codigoAgente: 'promocoes',
+      pageId: 'agentePromocoes',
+      rootElId: 'agentePromocoesRoot',
+      iconeFallback: 'sparkle',
+      nomeFallback: 'Promoções',
+      descricaoFallback: 'Analisa promoções do Mercado Livre e recomenda entrar, não entrar, sair ou revisar o preço promocional, sempre pela margem real.',
+      endpointDecisoes: '/api/promocoes/decisoes',
+      endpointDecidir: (id)=> '/api/promocoes/decisoes/'+id,
+      endpointGerarAgora: '/api/promocoes/analisar',
+      colunaReferenciaLabel: 'Anúncio / Promoção',
+      referenciaHTML: (d)=>{
+        return '<div class="cell-stack"><span class="prod-title" title="'+escapeHtml(d.titulo||'—')+'">'+escapeHtml(d.titulo || '(sem título)')+'</span>'
+          + '<span class="cell-stack-sub mono">'+escapeHtml(d.sku || 'sem SKU')+'</span>'
+          + '<span class="cell-stack-sub">'+escapeHtml(d.promotionLabel || d.promotionType || '')+'</span></div>';
+      },
+      resultadoHTML: (d)=>{
+        const r = d.resultadoSnapshot || {};
+        return '<div class="mono" style="'+(r.margemRealPct!==null && r.margemRealPct!==undefined ? (r.margemRealPct>=0?'color:var(--success);':'color:var(--danger);') : '')+'">Margem real: '+pctFmt(r.margemRealPct)+'</div>'
+          + '<div class="cell-stack-sub">'+fmtDataHora(d.resultadoAvaliadoEm)+'</div>';
+      },
+    });
   })();
 
   /* ================= RELATÓRIOS — categorias com dados 100% reaproveitados =================
