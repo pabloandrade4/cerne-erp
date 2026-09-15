@@ -44,6 +44,7 @@ const whatsappRouter = require('./routes/whatsapp');
 const promocoesRouter = require('./routes/promocoes');
 const iaAgentesRouter = require('./routes/iaAgentes');
 const dailyRouter = require('./routes/daily');
+const sacRouter = require('./routes/sac');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -88,6 +89,7 @@ app.use('/api/integracoes/whatsapp', whatsappRouter);
 app.use('/api/promocoes', promocoesRouter);
 app.use('/api/ia-agentes', iaAgentesRouter);
 app.use('/api/ia/daily', dailyRouter);
+app.use('/api/sac', sacRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));

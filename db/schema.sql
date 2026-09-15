@@ -1688,3 +1688,92 @@ ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS reuniao_id INTEGER REFERENC
 ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS confianca_ia NUMERIC(5,2);
 ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS reuniao_id INTEGER REFERENCES ia_reunioes_diarias(id);
 ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS confianca_ia NUMERIC(5,2);
+
+-- ============================================================================
+-- Agentes de SAC — Mercado Livre e Shopee (14/09/2026, pedido explícito do
+-- usuário: "vem diretamente do mercado livre e shopee... vamos fazer com
+-- todas as ia... por enquanto vai ser apenas leitura e analise... deve ter
+-- um agente para shopee e outro para o mercado livre").
+--
+-- Dois agentes SEPARADOS (nunca um só "SAC" genérico) — mesmo catálogo
+-- global `ia_agentes` já usado por ads_performance/promoções.
+INSERT INTO ia_agentes (codigo, nome, descricao, icone, ordem) VALUES
+  ('sac_mercado_livre', 'SAC Mercado Livre', 'Centraliza perguntas, mensagens pós-venda e reclamações do Mercado Livre, e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nada é enviado automaticamente.', 'inbox', 5),
+  ('sac_shopee', 'SAC Shopee', 'Centraliza mensagens e devoluções da Shopee, e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nada é enviado automaticamente.', 'inbox', 6)
+ON CONFLICT (codigo) DO NOTHING;
+
+-- Um atendimento real (pergunta pré-venda, mensagem pós-venda, reclamação ou
+-- devolução) por linha — SEMPRE por empresa (mesmo isolamento de
+-- ia_decisoes_ads/promocoes). Uma situação em aberto mantém UMA linha só
+-- (upsert pela chave natural abaixo, nunca duplica a cada ciclo de
+-- sincronização) — a mesma ideia de "situação" já usada em ia_decisoes_ads,
+-- só que aqui a "situação" é a conversa/pergunta/caso em si, identificada
+-- pelo id que o próprio marketplace usa (question_id/pack_id/claim_id/
+-- return_sn, conforme `tipo_origem`).
+-- `conta_id` aponta pra ml_contas.id OU shopee_contas.id conforme
+-- `marketplace` — sem FK direta de propósito (são tabelas diferentes por
+-- marketplace; a integridade real é garantida pelo código, nunca pelo
+-- banco, mesmo caso de `decisao_tabela`/`decisao_id` em
+-- ia_achados_diarios/ia_decisoes_resultados_historico acima).
+CREATE TABLE IF NOT EXISTS sac_atendimentos (
+  id                    SERIAL PRIMARY KEY,
+  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
+  marketplace           VARCHAR(20) NOT NULL CHECK (marketplace IN ('mercado_livre', 'shopee')),
+  conta_id              INTEGER NOT NULL,
+  tipo_origem           VARCHAR(20) NOT NULL CHECK (tipo_origem IN ('pergunta', 'mensagem', 'reclamacao', 'devolucao')),
+  id_externo            VARCHAR(80) NOT NULL, -- question_id | pack_id | claim_id | return_sn
+  pedido_ref            VARCHAR(60),          -- ml_order_id ou order_sn, quando existir (pergunta pré-venda não tem pedido)
+  sku                   VARCHAR(120),
+  produto_titulo        TEXT,
+  cliente_nome          VARCHAR(200),
+  cliente_id_externo    VARCHAR(60),
+  mensagem_cliente      TEXT NOT NULL,        -- mensagem mais recente do cliente (o histórico completo fica em raw_atendimento)
+  data_recebido         TIMESTAMPTZ NOT NULL, -- data/hora real da mensagem mais recente (nunca a data da sincronização)
+  status                VARCHAR(20) NOT NULL DEFAULT 'novo' CHECK (status IN ('novo', 'aguardando_resposta', 'respondido', 'resolvido')),
+  classificacao         VARCHAR(20) CHECK (classificacao IN ('duvida_simples', 'info_pedido', 'problema_entrega', 'reclamacao', 'insatisfeito', 'devolucao')),
+  urgente               BOOLEAN NOT NULL DEFAULT false,
+  raw_atendimento       JSONB,                -- payload bruto (histórico completo da conversa, quando aplicável) — auditoria, mesmo padrão de raw_pedido
+  criado_em             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, marketplace, tipo_origem, id_externo)
+);
+CREATE INDEX IF NOT EXISTS idx_sac_atendimentos_empresa ON sac_atendimentos(empresa_id, marketplace, status);
+
+-- Sugestão da IA + decisão do usuário pra cada atendimento — mesmo padrão de
+-- aprendizado de ia_decisoes_ads/promocoes: `resposta_sugerida_ia` é o que a
+-- IA escreveu, `resposta_final` é o que o usuário realmente decidiu
+-- (idêntica à sugestão quando aprovada sem mudar nada, diferente quando
+-- editada), e é esse par que serve de aprendizado futuro. `enviado` fica
+-- SEMPRE false nesta fase — pedido explícito do usuário em 14/09/2026
+-- ("por enquanto vai ser apenas leitura e analise"): nenhuma resposta é
+-- transmitida ao Mercado Livre/Shopee, aprovar aqui só REGISTRA a decisão
+-- (mesma ressalva já usada em ia_decisoes_ads/promocoes: "executado" nunca
+-- vira true nesta fase). Índice único parcial garante só uma sugestão
+-- PENDENTE por atendimento por vez — assim que decidida, uma reabertura do
+-- mesmo atendimento (nova mensagem do cliente) cria uma linha nova,
+-- preservando a decisão anterior como histórico definitivo.
+CREATE TABLE IF NOT EXISTS sac_respostas (
+  id                     SERIAL PRIMARY KEY,
+  atendimento_id         INTEGER NOT NULL REFERENCES sac_atendimentos(id) ON DELETE CASCADE,
+  resposta_sugerida_ia   TEXT,          -- NULL quando a IA não conseguiu gerar (ver motivo_sem_sugestao) — nunca um texto fabricado no lugar
+  motivo_sem_sugestao    TEXT,
+  resposta_final         TEXT,
+  status_decisao         VARCHAR(20) NOT NULL DEFAULT 'pendente' CHECK (status_decisao IN ('pendente', 'aprovada', 'editada', 'recusada')),
+  decidido_em            TIMESTAMPTZ,
+  decidido_por           VARCHAR(180),
+  enviado                BOOLEAN NOT NULL DEFAULT false,
+  criado_em              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sac_respostas_atendimento ON sac_respostas(atendimento_id, status_decisao);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sac_respostas_pendente ON sac_respostas(atendimento_id) WHERE status_decisao = 'pendente';
+
+-- Registro dos agentes de SAC em ia_permissoes_acao (tabela já existente,
+-- ainda INERTE — nenhum código lê nivel_permissao pra executar nada
+-- sozinho, ver comentário completo acima). `responder_atendimento` é a
+-- única ação que os agentes de SAC produzem — enviar a resposta ao
+-- marketplace — sempre 'approval_required' nesta fase.
+INSERT INTO ia_permissoes_acao (agente_codigo, tipo_acao, nivel_permissao) VALUES
+  ('sac_mercado_livre', 'responder_atendimento', 'approval_required'),
+  ('sac_shopee', 'responder_atendimento', 'approval_required')
+ON CONFLICT (agente_codigo, tipo_acao) DO NOTHING;
