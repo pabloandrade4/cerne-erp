@@ -827,6 +827,33 @@
   .hist-body b{ font-weight:700; }
   .hist-sub{ font-size:11px; color:var(--text-faint); margin-top:1px; }
 
+  /* ============ SAC (Mercado Livre / Shopee) — 14/09/2026 ============ */
+  .sac-item{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin-bottom:12px; }
+  .sac-item.urgente{ border-color:var(--danger); box-shadow:0 0 0 1px var(--danger) inset; }
+  .sac-item-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .sac-item-meta{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .sac-badge{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; background:var(--surface-2); color:var(--text-muted); border:1px solid var(--border); white-space:nowrap; }
+  .sac-badge.urgente{ background:var(--danger-soft); color:var(--danger); border-color:transparent; }
+  .sac-item-time{ font-size:11px; color:var(--text-faint); font-family:"JetBrains Mono",monospace; white-space:nowrap; }
+  .sac-item-contexto{ font-size:12px; color:var(--text-muted); margin-bottom:8px; }
+  .sac-item-contexto b{ color:var(--text); }
+  .sac-msg{ background:var(--surface-2); border-left:3px solid var(--border-strong); border-radius:6px; padding:10px 12px; font-size:13px; color:var(--text); line-height:1.5; margin-bottom:10px; white-space:pre-wrap; }
+  .sac-resposta-box{ background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:12px; }
+  .sac-resposta-label{ font-size:11px; font-weight:700; color:var(--text-faint); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px; }
+  .sac-resposta-box textarea{ width:100%; min-height:78px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; font:inherit; font-size:13px; color:var(--text); resize:vertical; }
+  .sac-resposta-box textarea:focus{ outline:none; border-color:var(--copper); }
+  .sac-sem-sugestao{ font-size:12.5px; color:var(--text-faint); font-style:italic; }
+  .sac-resposta-acoes{ display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .sac-resposta-disclaimer{ font-size:11px; color:var(--text-faint); margin-top:8px; }
+  .sac-decisao-final{ font-size:12.5px; }
+  .sac-decisao-final .status{ font-weight:700; }
+  .sac-kpi-strip{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:14px; }
+  .sac-kpi-box{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .sac-kpi-box b{ display:block; font-size:20px; font-weight:800; color:var(--text); }
+  .sac-kpi-box b.warn{ color:var(--warning); }
+  .sac-kpi-box b.danger{ color:var(--danger); }
+  .sac-kpi-box span{ font-size:11px; color:var(--text-faint); }
+
   /* ============ INTEGRAÇÕES / PEDIDOS / CUSTOS (Mercado Livre) ============ */
   /* 26/08/2026 — redesign visual: .empresa-picker select (usado em quase
      toda tela — Marketplaces, Produtos, Anúncios, Fornecedores, Pedidos,
@@ -1263,6 +1290,10 @@
         bullets:['Sugestões com base nos dados reais de cada campanha/anúncio','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
       { id:'agentePromocoes', title:'Promoções', icon:'sparkle', desc:'O agente de IA identifica oportunidades de promoção, calcula a margem real e sugere entrar, não entrar ou alterar o preço — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
         bullets:['Sugestões com base na margem real, nunca só no desconto','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
+      { id:'sacMercadoLivre', title:'SAC Mercado Livre', icon:'inbox', desc:'O agente centraliza perguntas, mensagens pós-venda e reclamações do Mercado Livre e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nenhuma resposta é enviada automaticamente.',
+        bullets:['Caixa de entrada única: perguntas, mensagens, reclamações e devoluções','A IA sugere a resposta — você sempre aprova, edita ou recusa antes','Nunca oferece reembolso, desconto ou cancela pedido sozinho','Cada decisão sua vira histórico de aprendizado do agente'] },
+      { id:'sacShopee', title:'SAC Shopee', icon:'inbox', desc:'O agente centraliza mensagens e devoluções da Shopee e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nenhuma resposta é enviada automaticamente.',
+        bullets:['Caixa de entrada única: mensagens e devoluções','A IA sugere a resposta — você sempre aprova, edita ou recusa antes','Nunca oferece reembolso, desconto ou cancela pedido sozinho','Cada decisão sua vira histórico de aprendizado do agente'] },
     ]},
   ];
 
@@ -1337,7 +1368,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','agenteAds','agentePromocoes'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','agenteAds','agentePromocoes','sacMercadoLivre','sacShopee'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1404,6 +1435,8 @@
     else if(id === 'agentesIaHub'){ inner += '<div id="agentesIaHubRoot"></div>'; }
     else if(id === 'agenteAds'){ inner += '<div id="agenteAdsRoot"></div>'; }
     else if(id === 'agentePromocoes'){ inner += '<div id="agentePromocoesRoot"></div>'; }
+    else if(id === 'sacMercadoLivre'){ inner += '<div id="sacMercadoLivreRoot"></div>'; }
+    else if(id === 'sacShopee'){ inner += '<div id="sacShopeeRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1455,6 +1488,8 @@
     if(id === 'agentesIaHub' && window.AgentesIaHub) window.AgentesIaHub.load();
     if(id === 'agenteAds' && window.AgenteAds) window.AgenteAds.load();
     if(id === 'agentePromocoes' && window.AgentePromocoes) window.AgentePromocoes.load();
+    if(id === 'sacMercadoLivre' && window.SacMercadoLivre) window.SacMercadoLivre.load();
+    if(id === 'sacShopee' && window.SacShopee) window.SacShopee.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -10121,6 +10156,339 @@
     });
   })();
 
+  /* ================= AGENTES DE SAC — Mercado Livre / Shopee (14/09/2026) =================
+     Pedido explícito do usuário: "vem diretamente do mercado livre e
+     shopee... vamos fazer com todas as ia... por enquanto vai ser apenas
+     leitura e analise... deve ter um agente para shopee e outro para o
+     mercado livre". Dois agentes SEPARADOS (nunca uma tela "SAC" genérica),
+     cada um na sua própria página, mas montados pela mesma fábrica
+     criarModuloAgenteSac() pra nunca duplicar a lógica entre os dois —
+     mesma ideia de criarModuloAgenteDecisoes() logo acima.
+
+     MODO SUPERVISIONADO — FASE 1 (regra do usuário que esta tela nunca
+     pode quebrar): a IA só SUGERE uma resposta. Aprovar/editar aqui só
+     REGISTRA a decisão (ver PUT /api/sac/respostas/:id/decisao) — nenhuma
+     resposta é enviada ao Mercado Livre/Shopee nesta fase. Cada card deixa
+     isso explícito (ver .sac-resposta-disclaimer).
+
+     Regra 3 do pedido ("não crie dados falsos, botões sem função ou APIs
+     simuladas"): todo atendimento vem de GET /api/sac/atendimentos (dado
+     real gravado por lib/ia/sacMercadoLivre.js/lib/ia/sacShopee.js a partir
+     da API de verdade) — quando a IA não conseguiu gerar uma sugestão
+     segura, o card mostra o motivo (nunca um texto de resposta inventado). */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      try{ const d = new Date(v); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '—'; }
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+
+    const TIPO_ORIGEM_LABEL = { pergunta:'Pergunta', mensagem:'Mensagem pós-venda', reclamacao:'Reclamação', devolucao:'Devolução' };
+    const CLASSIFICACAO_INFO = {
+      duvida_simples:   { emoji:'🟢', label:'Dúvida simples' },
+      info_pedido:       { emoji:'🔵', label:'Informação do pedido' },
+      problema_entrega:  { emoji:'🟡', label:'Problema de entrega' },
+      reclamacao:        { emoji:'🟠', label:'Reclamação' },
+      insatisfeito:      { emoji:'🔴', label:'Cliente insatisfeito' },
+      devolucao:         { emoji:'🟣', label:'Devolução' },
+    };
+    const STATUS_LABEL = { novo:'Novo', aguardando_resposta:'Aguardando resposta', respondido:'Respondido', resolvido:'Resolvido' };
+    const STATUS_DECISAO_LABEL = { aprovada:'Aprovada', editada:'Editada e aprovada', recusada:'Recusada' };
+    const STATUS_DECISAO_COR = { aprovada:'var(--success)', editada:'var(--copper)', recusada:'var(--danger)' };
+
+    function criarModuloAgenteSac(cfg){
+      const state = {
+        agente:null, itens:[], stats:null, loading:false, error:null,
+        tabTipo:'todos', filtroStatus:'abertos', busca:'', gerando:false,
+        editando:{}, // { [atendimentoId]: textoEditado }
+      };
+
+      async function apiAgente(){
+        const res = await fetch('/api/ia-agentes');
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) return null;
+        return ((body && body.agentes) || []).find((a)=> a.codigo === cfg.codigoAgente) || null;
+      }
+      async function apiAtendimentos(empresaId){
+        const params = new URLSearchParams({ empresaId, marketplace: cfg.marketplace });
+        if(state.tabTipo === 'urgentes') params.set('urgente', 'true');
+        else if(state.tabTipo !== 'todos') params.set('tipoOrigem', state.tabTipo);
+        if(state.filtroStatus === 'abertos'){ /* filtra no cliente abaixo — mistura novo+aguardando_resposta */ }
+        else if(state.filtroStatus !== 'todos') params.set('status', state.filtroStatus);
+        if(state.busca.trim()) params.set('busca', state.busca.trim());
+        const res = await fetch('/api/sac/atendimentos?' + params.toString());
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os atendimentos.');
+        let itens = (body && body.atendimentos) || [];
+        if(state.filtroStatus === 'abertos') itens = itens.filter((a)=> a.status === 'novo' || a.status === 'aguardando_resposta');
+        return itens;
+      }
+      async function apiStats(empresaId){
+        const res = await fetch('/api/sac/stats?' + new URLSearchParams({ empresaId, marketplace: cfg.marketplace }).toString());
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) return null;
+        return body;
+      }
+      async function apiDecidir(respostaId, statusDecisao, respostaFinal, empresaId){
+        const res = await fetch('/api/sac/respostas/' + respostaId + '/decisao', {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ empresaId, statusDecisao, respostaFinal, decididoPor:'Pablo' }),
+        });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível registrar a decisão.');
+        return body;
+      }
+      async function apiResolver(atendimentoId, empresaId){
+        const res = await fetch('/api/sac/atendimentos/' + atendimentoId + '/resolver', {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }),
+        });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível marcar como resolvido.');
+        return body;
+      }
+      async function apiGerarAgora(empresaId){
+        const res = await fetch('/api/sac/gerar-agora', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ empresaId, marketplace: cfg.marketplace }),
+        });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Falha ao sincronizar agora.');
+        return body;
+      }
+
+      async function carregar(){
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId){ state.itens = []; state.stats = null; state.loading = false; render(); return; }
+        state.loading = true; state.error = null; render();
+        try{
+          const [itens, stats] = await Promise.all([apiAtendimentos(filtro.empresaId), apiStats(filtro.empresaId)]);
+          state.itens = itens; state.stats = stats;
+        }catch(e){ state.error = e.message; state.itens = []; }
+        state.loading = false; render();
+      }
+
+      async function gerarAgora(){
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId) return;
+        state.gerando = true; render();
+        try{
+          const r = await apiGerarAgora(filtro.empresaId);
+          toast('Sincronizado: ' + (r.atendimentosNovos||0) + ' atendimento(s) novo(s), ' + (r.sugestoesGeradas||0) + ' sugestão(ões) gerada(s).');
+          await carregar();
+        }catch(e){ toast(e.message || 'Falha ao sincronizar agora.', 'error'); }
+        finally{ state.gerando = false; render(); }
+      }
+
+      async function decidir(atendimento, statusDecisao){
+        const filtro = window.CerneFiltro.state;
+        const respostaId = atendimento.respostaPendente && atendimento.respostaPendente.id;
+        if(!respostaId) return;
+        let respostaFinal = null;
+        if(statusDecisao !== 'recusada'){
+          const editado = state.editando[atendimento.id];
+          respostaFinal = editado !== undefined ? editado : (atendimento.respostaPendente.respostaSugeridaIa || '');
+          if(!respostaFinal.trim()){ toast('Escreva o texto da resposta antes de aprovar.', 'error'); return; }
+          if(editado !== undefined && editado !== atendimento.respostaPendente.respostaSugeridaIa) statusDecisao = 'editada';
+        }
+        try{
+          await apiDecidir(respostaId, statusDecisao, respostaFinal, filtro.empresaId);
+          toast(statusDecisao === 'recusada' ? 'Sugestão recusada.' : 'Decisão registrada — nada foi enviado automaticamente.');
+          delete state.editando[atendimento.id];
+          await carregar();
+        }catch(e){ toast(e.message || 'Falha ao registrar decisão.', 'error'); }
+      }
+
+      async function resolver(atendimento){
+        const filtro = window.CerneFiltro.state;
+        try{ await apiResolver(atendimento.id, filtro.empresaId); toast('Atendimento marcado como resolvido.'); await carregar(); }
+        catch(e){ toast(e.message || 'Falha ao marcar como resolvido.', 'error'); }
+      }
+
+      async function load(){
+        if(!state.agente) state.agente = await apiAgente();
+        await carregar();
+      }
+
+      window.CerneFiltro.onChange(()=>{
+        const page = document.getElementById('page-'+cfg.pageId);
+        if(page && page.classList.contains('active')) carregar();
+        else render();
+      });
+
+      function kpiStripHTML(){
+        const s = state.stats;
+        const box = (valor, label, classe)=> '<div class="sac-kpi-box"><b class="'+(classe||'')+'">'+(s ? valor : '—')+'</b><span>'+escapeHtml(label)+'</span></div>';
+        return '<div class="sac-kpi-strip">'
+          + box(s?s.atendimentosNovos:null, 'Novos')
+          + box(s?s.aguardandoResposta:null, 'Aguardando resposta', 'warn')
+          + box(s?s.respondidosHoje:null, 'Respondidos hoje')
+          + box(s?s.reclamacoesAbertas:null, 'Reclamações abertas', s&&s.reclamacoesAbertas>0?'danger':'')
+          + box(s?s.devolucoesAbertas:null, 'Devoluções abertas', s&&s.devolucoesAbertas>0?'danger':'')
+          + box(s&&s.tempoMedioRespostaMin!==null? s.tempoMedioRespostaMin+' min':'—', 'Tempo médio de resposta (hoje)')
+          + box(s?s.atendimentosCriticos:null, 'Críticos', s&&s.atendimentosCriticos>0?'danger':'')
+        + '</div>';
+      }
+
+      function abasHTML(){
+        const abas = [['todos','Todos'],['pergunta','Perguntas'],['mensagem','Pós-venda'],['reclamacao','Reclamações'],['devolucao','Devoluções'],['urgentes','Urgentes']];
+        return '<div class="seg" id="'+cfg.rootElId+'Tabs" style="margin-bottom:10px;">'
+          + abas.map(([v,l])=> '<button type="button" data-tab="'+v+'" class="'+(state.tabTipo===v?'active':'')+'">'+escapeHtml(l)+'</button>').join('')
+        + '</div>';
+      }
+
+      function toolbarHTML(){
+        return '<div class="agent-toolbar">'
+          + '<div class="search-box">'+svg('search')+'<input type="text" id="'+cfg.rootElId+'Busca" placeholder="Buscar por cliente, produto, SKU ou mensagem…" value="'+escapeHtml(state.busca)+'"></div>'
+          + '<select class="toolbar-select" id="'+cfg.rootElId+'Status">'
+            + ['abertos','todos','novo','aguardando_resposta','respondido','resolvido'].map((v)=>
+                '<option value="'+v+'" '+(state.filtroStatus===v?'selected':'')+'>'+(v==='abertos'?'Abertos (novo + aguardando)':v==='todos'?'Todos os status':STATUS_LABEL[v])+'</option>').join('')
+          + '</select>'
+          + '<button class="ghost-btn" id="'+cfg.rootElId+'GerarAgora" type="button" style="cursor:pointer;opacity:1;" '+(state.gerando?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.gerando?'Sincronizando…':'Sincronizar agora')+'</span></button>'
+        + '</div>';
+      }
+
+      function respostaBoxHTML(a){
+        if(a.ultimaDecisao && !a.respostaPendente){
+          const cor = STATUS_DECISAO_COR[a.ultimaDecisao.statusDecisao] || 'var(--text-faint)';
+          return '<div class="sac-resposta-box"><div class="sac-decisao-final">'
+            + '<span class="status" style="color:'+cor+';">'+escapeHtml(STATUS_DECISAO_LABEL[a.ultimaDecisao.statusDecisao] || a.ultimaDecisao.statusDecisao)+'</span>'
+            + (a.ultimaDecisao.respostaFinal ? '<div style="margin-top:6px;white-space:pre-wrap;">'+escapeHtml(a.ultimaDecisao.respostaFinal)+'</div>' : '')
+            + '<div class="cell-stack-sub" style="margin-top:6px;">'+fmtDataHora(a.ultimaDecisao.decididoEm)+(a.ultimaDecisao.decididoPor?(' · '+escapeHtml(a.ultimaDecisao.decididoPor)):'')+'</div>'
+            + '</div><div class="sac-resposta-disclaimer">'+svg('alertCircle')+' Só registrado — nenhuma resposta foi enviada ao '+(cfg.marketplace==='shopee'?'Shopee':'Mercado Livre')+' automaticamente (Modo supervisionado, Fase 1).</div>'
+          + '</div>';
+        }
+        if(!a.respostaPendente){
+          return '<div class="sac-resposta-box"><div class="sac-sem-sugestao">Sugestão ainda não gerada — clique em "Sincronizar agora" para a IA analisar este atendimento.</div></div>';
+        }
+        if(!a.respostaPendente.respostaSugeridaIa){
+          return '<div class="sac-resposta-box"><div class="sac-resposta-label">A IA não gerou uma resposta</div>'
+            + '<div class="sac-sem-sugestao">'+escapeHtml(a.respostaPendente.motivoSemSugestao || 'Situação exige análise humana.')+'</div></div>';
+        }
+        const textoAtual = state.editando[a.id] !== undefined ? state.editando[a.id] : a.respostaPendente.respostaSugeridaIa;
+        return '<div class="sac-resposta-box">'
+          + '<div class="sac-resposta-label">Sugestão da IA (você pode editar antes de aprovar)</div>'
+          + '<textarea data-atendimento="'+a.id+'">'+escapeHtml(textoAtual)+'</textarea>'
+          + '<div class="sac-resposta-acoes">'
+            + '<button class="primary-btn enabled" data-acao="aprovar" data-id="'+a.id+'" type="button">'+svg('checkCircle')+'<span>Aprovar</span></button>'
+            + '<button class="ghost-btn" data-acao="recusar" data-id="'+a.id+'" type="button" style="cursor:pointer;opacity:1;">'+svg('x')+'<span>Recusar</span></button>'
+          + '</div>'
+          + '<div class="sac-resposta-disclaimer">'+svg('alertCircle')+' Aprovar só REGISTRA a decisão — nenhuma resposta é enviada ao '+(cfg.marketplace==='shopee'?'Shopee':'Mercado Livre')+' automaticamente nesta fase (Modo supervisionado).</div>'
+        + '</div>';
+      }
+
+      function itemHTML(a){
+        const cls = CLASSIFICACAO_INFO[a.classificacao];
+        return '<div class="sac-item'+(a.urgente?' urgente':'')+'">'
+          + '<div class="sac-item-top">'
+            + '<div class="sac-item-meta">'
+              + '<span class="sac-badge">'+escapeHtml(TIPO_ORIGEM_LABEL[a.tipoOrigem]||a.tipoOrigem)+'</span>'
+              + (cls ? '<span class="sac-badge">'+cls.emoji+' '+escapeHtml(cls.label)+'</span>' : '')
+              + (a.urgente ? '<span class="sac-badge urgente">🔴 Urgente</span>' : '')
+              + '<span class="sac-badge">'+escapeHtml(STATUS_LABEL[a.status]||a.status)+'</span>'
+            + '</div>'
+            + '<div class="sac-item-time">'+fmtDataHora(a.dataRecebido)+'</div>'
+          + '</div>'
+          + '<div class="sac-item-contexto">'
+            + (a.clienteNome ? '<b>Cliente:</b> '+escapeHtml(a.clienteNome)+'  ' : '')
+            + (a.produtoTitulo ? '<b>Produto:</b> '+escapeHtml(a.produtoTitulo)+'  ' : '')
+            + (a.sku ? '<b>SKU:</b> '+escapeHtml(a.sku)+'  ' : '')
+            + (a.pedidoRef ? '<b>Pedido:</b> '+escapeHtml(a.pedidoRef) : '')
+          + '</div>'
+          + '<div class="sac-msg">'+escapeHtml(a.mensagemCliente)+'</div>'
+          + respostaBoxHTML(a)
+          + ((a.status==='respondido') ? '<div style="margin-top:8px;"><button class="ghost-btn" data-acao="resolver" data-id="'+a.id+'" type="button" style="cursor:pointer;opacity:1;">'+svg('checkCircle')+'<span>Marcar como resolvido</span></button></div>' : '')
+        + '</div>';
+      }
+
+      function render(){
+        const root = document.getElementById(cfg.rootElId);
+        if(!root) return;
+        const filtro = window.CerneFiltro.state;
+
+        if(!filtro.loadingEmpresas && !filtro.empresas.length){
+          root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+            + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para usar este agente.</p></div>';
+          return;
+        }
+
+        const a = state.agente;
+        let html = '<div class="table-card" style="padding:20px;margin-bottom:14px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">'
+          + '<div class="kpi-hero-icon" style="flex-shrink:0;">'+svg((a && a.icone) || cfg.iconeFallback)+'</div>'
+          + '<div style="min-width:0;flex:1;">'
+            + '<div class="panel-title" style="margin:0 0 4px;">'+escapeHtml((a && a.nome) || cfg.nomeFallback)+'</div>'
+            + '<div class="field-hint" style="max-width:760px;">'+escapeHtml((a && a.descricao) || cfg.descricaoFallback)+'</div>'
+            + '<div class="field-hint" style="margin-top:8px;color:var(--text-faint);">Modo supervisionado (Fase 1): a IA lê e analisa os atendimentos reais, e sugere uma resposta — ela nunca oferece reembolso, aprova devolução, cancela pedido, dá desconto, envia cupom ou promete prazo não confirmado. Você sempre aprova, edita ou recusa antes de qualquer coisa, e nada é enviado ao marketplace automaticamente nesta fase.</div>'
+          + '</div>'
+        + '</div>';
+
+        html += kpiStripHTML() + abasHTML() + toolbarHTML();
+
+        if(state.loading){
+          html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+        } else if(state.error){
+          html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+            + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+        } else if(!state.itens.length){
+          html += '<div class="empty-panel"><div class="empty-icon">'+svg('inbox')+'</div>'
+            + '<h2>Nenhum atendimento aqui</h2><p class="lead">Quando houver perguntas, mensagens, reclamações ou devoluções reais do '+(cfg.marketplace==='shopee'?'Shopee':'Mercado Livre')+', elas aparecem aqui. Clique em "Sincronizar agora" para buscar as mais recentes.</p></div>';
+        } else {
+          html += state.itens.map(itemHTML).join('');
+        }
+
+        root.innerHTML = html;
+
+        const tabsEl = document.getElementById(cfg.rootElId+'Tabs');
+        if(tabsEl) tabsEl.querySelectorAll('button').forEach((b)=> b.addEventListener('click', ()=>{ state.tabTipo = b.dataset.tab; carregar(); }));
+
+        const statusEl = document.getElementById(cfg.rootElId+'Status');
+        if(statusEl) statusEl.addEventListener('change', ()=>{ state.filtroStatus = statusEl.value; carregar(); });
+
+        const buscaEl = document.getElementById(cfg.rootElId+'Busca');
+        if(buscaEl){
+          let timer = null;
+          buscaEl.addEventListener('input', ()=>{ state.busca = buscaEl.value; clearTimeout(timer); timer = setTimeout(carregar, 400); });
+        }
+
+        const btnGerar = document.getElementById(cfg.rootElId+'GerarAgora');
+        if(btnGerar) btnGerar.addEventListener('click', gerarAgora);
+
+        root.querySelectorAll('textarea[data-atendimento]').forEach((ta)=> ta.addEventListener('input', ()=>{ state.editando[Number(ta.dataset.atendimento)] = ta.value; }));
+
+        root.querySelectorAll('[data-acao]').forEach((btn)=> btn.addEventListener('click', ()=>{
+          const id = Number(btn.dataset.id);
+          const acao = btn.dataset.acao;
+          const a = state.itens.find((x)=> x.id === id);
+          if(!a) return;
+          if(acao === 'aprovar') decidir(a, 'aprovada');
+          else if(acao === 'recusar') decidir(a, 'recusada');
+          else if(acao === 'resolver') resolver(a);
+        }));
+      }
+
+      return { load };
+    }
+
+    window.SacMercadoLivre = criarModuloAgenteSac({
+      codigoAgente: 'sac_mercado_livre', marketplace: 'mercado_livre', pageId: 'sacMercadoLivre', rootElId: 'sacMercadoLivreRoot',
+      iconeFallback: 'inbox', nomeFallback: 'SAC Mercado Livre',
+      descricaoFallback: 'Centraliza perguntas, mensagens pós-venda e reclamações do Mercado Livre, e sugere uma resposta pronta.',
+    });
+    window.SacShopee = criarModuloAgenteSac({
+      codigoAgente: 'sac_shopee', marketplace: 'shopee', pageId: 'sacShopee', rootElId: 'sacShopeeRoot',
+      iconeFallback: 'inbox', nomeFallback: 'SAC Shopee',
+      descricaoFallback: 'Centraliza mensagens e devoluções da Shopee, e sugere uma resposta pronta.',
+    });
+  })();
+
   /* ================= AGENTES DE IA — HUB (14/09/2026) =================
      Redesign completo da área "Agentes de IA" pedido pelo usuário (prints
      de referência + especificação numerada 1-13). ETAPA 2/3 do processo
@@ -10180,8 +10548,6 @@
     // ia_agentes, nunca com número/status real, sempre com o "Ver
     // detalhes" desabilitado e explicado.
     const EM_CONSTRUCAO = [
-      { codigo:'sac', nome:'SAC', icone:'inbox', area:'Atendimento', tint:'teal',
-        desc:'Vai analisar reclamações, mensagens e devoluções do Mercado Livre e da Shopee e sugerir respostas — ainda não existe como agente real.' },
       { codigo:'vendas_buybox', nome:'Vendas / Buy Box', icone:'store', area:'Vendas', tint:'copper',
         desc:'Vai acompanhar concorrência de preço e Buy Box dos seus anúncios — ainda não existe como agente real.' },
       { codigo:'estoque', nome:'Estoque', icone:'layers', area:'Estoque', tint:'petrol',
@@ -10198,6 +10564,8 @@
     const META_REAIS = {
       ads_performance: { area:'Marketing / Ads', tint:'petrol', pagina:'agenteAds' },
       promocoes: { area:'Vendas', tint:'copper', pagina:'agentePromocoes' },
+      sac_mercado_livre: { area:'Atendimento', tint:'teal', pagina:'sacMercadoLivre' },
+      sac_shopee: { area:'Atendimento', tint:'teal', pagina:'sacShopee' },
     };
 
     const state = {
@@ -10407,15 +10775,17 @@
       + '</div>';
     }
 
-    const HIST_ICONE = { sugestao:'sparkle', aprovada:'checkCircle', alterada:'edit', recusada:'x', expirada:'clock', alerta:'alertCircle' };
-    const HIST_VERBO = { aprovada:'aprovou a sugestão', alterada:'alterou a sugestão', recusada:'recusou a sugestão', expirada:'deixou a sugestão expirar' };
-    const HIST_NOME_AGENTE = { ads_performance:'Ads e Performance', promocoes:'Promoções', radar:'Radar (Central de Alertas)' };
+    const HIST_ICONE = { sugestao:'sparkle', aprovada:'checkCircle', alterada:'edit', editada:'edit', recusada:'x', expirada:'clock', alerta:'alertCircle', atendimento_novo:'inbox' };
+    const HIST_VERBO = { aprovada:'aprovou a resposta', alterada:'alterou a sugestão', editada:'editou e aprovou a resposta', recusada:'recusou a sugestão', expirada:'deixou a sugestão expirar' };
+    const HIST_NOME_AGENTE = { ads_performance:'Ads e Performance', promocoes:'Promoções', radar:'Radar (Central de Alertas)', sac_mercado_livre:'SAC Mercado Livre', sac_shopee:'SAC Shopee' };
 
     function historicoEventoHTML(ev){
       const agente = HIST_NOME_AGENTE[ev.agenteCodigo] || ev.agenteCodigo;
       let corpo;
       if(ev.tipo === 'sugestao'){
         corpo = '<b>'+escapeHtml(agente)+'</b> sugeriu uma ação em <b>'+escapeHtml(ev.referencia)+'</b>';
+      } else if(ev.tipo === 'atendimento_novo'){
+        corpo = '<b>'+escapeHtml(agente)+'</b> recebeu um novo atendimento: <b>'+escapeHtml(ev.referencia)+'</b>';
       } else if(ev.tipo === 'alerta'){
         corpo = '<b>Radar</b> detectou: <b>'+escapeHtml(ev.referencia)+'</b>';
       } else {

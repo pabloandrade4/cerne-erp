@@ -96,7 +96,9 @@ describe(
       const res = await fetch(`${baseUrl}/api/ia-agentes/stats?empresaId=${EMPRESA_ID}`);
       assert.equal(res.status, 200);
       const body = await res.json();
-      assert.equal(body.kpis.agentesAtivos, 2);
+      // 4 agentes ativos hoje: ads_performance, promocoes, e os 2 novos de
+      // SAC (sac_mercado_livre, sac_shopee — 14/09/2026, ver db/schema.sql).
+      assert.equal(body.kpis.agentesAtivos, 4);
       assert.equal(body.kpis.tarefasHoje, 0);
       assert.equal(body.kpis.alertasImportantes, 0);
       const ads = body.agentes.find((a) => a.codigo === 'ads_performance');
