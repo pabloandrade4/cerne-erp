@@ -218,5 +218,72 @@ describe(
       assert.equal(body.contasProcessadas, 0);
       assert.equal(body.atendimentosNovos, 0);
     });
+
+    // 15/09/2026 — pedido explícito do usuário "nao quero ter que ficar
+    // sincronizando nada quero tudo automatico": GET /status-automatico
+    // (lib/ia/sacScheduler.js) precisa existir e devolver o formato que a
+    // tela usa (ver statusAutoHTML() em public/index.html) mesmo sem
+    // empresaId — é um estado GLOBAL do processo Node, não por empresa
+    // (mesmo padrão de GET /api/integracoes/mercadolivre/status-automatico).
+    test('GET /status-automatico devolve o formato esperado, sem exigir empresaId', async () => {
+      const res = await fetch(`${baseUrl}/api/sac/status-automatico`);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(typeof body.ativo, 'boolean');
+      assert.equal(typeof body.intervaloSegundos, 'number');
+      assert.ok(body.intervaloSegundos > 0);
+      assert.ok('mercadoLivre' in body);
+      assert.ok('shopee' in body);
+      assert.ok(Array.isArray(body.mercadoLivre.comErro));
+      assert.ok(Array.isArray(body.shopee.comErro));
+    });
+  }
+);
+
+// 15/09/2026 — cobre as versões "todas as empresas ativas" adicionadas a
+// lib/ia/sacCiclo.js pra alimentar o scheduler automático
+// (lib/ia/sacScheduler.js): a mesma prova de resiliência de
+// test/promocoesCiclo.test.js — uma empresa sem nenhuma conta ativa não é
+// erro, e o total de empresasProcessadas nunca inclui uma empresa inativa
+// nem uma de outro teste.
+describe(
+  'lib/ia/sacCiclo — executarCicloSacMercadoLivre/executarCicloSacShopee (todas as empresas ativas)',
+  { skip: !TEM_BANCO && 'defina DATABASE_URL apontando pra um Postgres de teste já com o schema aplicado' },
+  () => {
+    let pool, sacCiclo;
+    const ATIVA_1 = 977;
+    const ATIVA_2 = 978;
+    const INATIVA = 979;
+
+    before(async () => {
+      pool = require('../db/pool');
+      sacCiclo = require('../lib/ia/sacCiclo');
+      const seed = async (id, nome, ativo) => pool.query(
+        `INSERT INTO empresas (id, cnpj, razao_social, ativo) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (id) DO UPDATE SET ativo = $4`,
+        [id, String(97000000000000 + id).slice(0, 14), nome, ativo]
+      );
+      await seed(ATIVA_1, '[TESTE AUTOMATIZADO] Empresa SAC Scheduler 1', true);
+      await seed(ATIVA_2, '[TESTE AUTOMATIZADO] Empresa SAC Scheduler 2', true);
+      await seed(INATIVA, '[TESTE AUTOMATIZADO] Empresa SAC Scheduler Inativa', false);
+    });
+
+    after(async () => {
+      await pool.query('DELETE FROM empresas WHERE id = ANY($1)', [[ATIVA_1, ATIVA_2, INATIVA]]);
+    });
+
+    test('executarCicloSacMercadoLivre processa só as empresas ATIVAS (nenhuma tem conta, então tudo 0, sem erro)', async () => {
+      const resultado = await sacCiclo.executarCicloSacMercadoLivre();
+      assert.ok(resultado.empresasProcessadas >= 2, 'pelo menos as 2 empresas ativas de teste entram na contagem');
+      assert.equal(resultado.comErro.length, 0);
+      assert.equal(typeof resultado.atendimentosNovos, 'number');
+      assert.equal(typeof resultado.sugestoesGeradas, 'number');
+    });
+
+    test('executarCicloSacShopee processa só as empresas ATIVAS (nenhuma tem conta, então tudo 0, sem erro)', async () => {
+      const resultado = await sacCiclo.executarCicloSacShopee();
+      assert.ok(resultado.empresasProcessadas >= 2);
+      assert.equal(resultado.comErro.length, 0);
+    });
   }
 );

@@ -1290,10 +1290,10 @@
         bullets:['Sugestões com base nos dados reais de cada campanha/anúncio','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
       { id:'agentePromocoes', title:'Promoções', icon:'sparkle', desc:'O agente de IA identifica oportunidades de promoção, calcula a margem real e sugere entrar, não entrar ou alterar o preço — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
         bullets:['Sugestões com base na margem real, nunca só no desconto','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
-      { id:'sacMercadoLivre', title:'SAC Mercado Livre', icon:'inbox', desc:'O agente centraliza perguntas, mensagens pós-venda e reclamações do Mercado Livre e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nenhuma resposta é enviada automaticamente.',
-        bullets:['Caixa de entrada única: perguntas, mensagens, reclamações e devoluções','A IA sugere a resposta — você sempre aprova, edita ou recusa antes','Nunca oferece reembolso, desconto ou cancela pedido sozinho','Cada decisão sua vira histórico de aprendizado do agente'] },
-      { id:'sacShopee', title:'SAC Shopee', icon:'inbox', desc:'O agente centraliza mensagens e devoluções da Shopee e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nenhuma resposta é enviada automaticamente.',
-        bullets:['Caixa de entrada única: mensagens e devoluções','A IA sugere a resposta — você sempre aprova, edita ou recusa antes','Nunca oferece reembolso, desconto ou cancela pedido sozinho','Cada decisão sua vira histórico de aprendizado do agente'] },
+      { id:'sacMercadoLivre', title:'SAC Mercado Livre', icon:'inbox', desc:'O agente verifica sozinho, em background, as perguntas, mensagens pós-venda e reclamações do Mercado Livre e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nenhuma resposta é enviada automaticamente.',
+        bullets:['Verificação 100% automática — você não precisa clicar em nada','Caixa de entrada única: perguntas, mensagens, reclamações e devoluções','A IA sugere a resposta — você sempre aprova, edita ou recusa antes','Nunca oferece reembolso, desconto ou cancela pedido sozinho','Cada decisão sua vira histórico de aprendizado do agente'] },
+      { id:'sacShopee', title:'SAC Shopee', icon:'inbox', desc:'O agente verifica sozinho, em background, as mensagens e devoluções da Shopee e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nenhuma resposta é enviada automaticamente.',
+        bullets:['Verificação 100% automática — você não precisa clicar em nada','Caixa de entrada única: mensagens e devoluções','A IA sugere a resposta — você sempre aprova, edita ou recusa antes','Nunca oferece reembolso, desconto ou cancela pedido sozinho','Cada decisão sua vira histórico de aprendizado do agente'] },
     ]},
   ];
 
@@ -10210,6 +10210,8 @@
         agente:null, itens:[], stats:null, loading:false, error:null,
         tabTipo:'todos', filtroStatus:'abertos', busca:'', gerando:false,
         editando:{}, // { [atendimentoId]: textoEditado }
+        ultimoResultado:null, // resultado detalhado da última "Sincronizar agora" (ver ultimoResultadoHTML)
+        statusAuto:null, // estado do scheduler automático em background (ver lib/ia/sacScheduler.js e statusAutoHTML)
       };
 
       async function apiAgente(){
@@ -10264,6 +10266,18 @@
         if(!res.ok) throw new Error((body && body.error) || 'Falha ao sincronizar agora.');
         return body;
       }
+      // 15/09/2026 — pedido explícito do usuário "nao quero ter que ficar
+      // sincronizando nada quero tudo automatico": só LÊ o estado já
+      // calculado pelo servidor (GET /api/sac/status-automatico), o
+      // navegador nunca dispara nada sozinho — mesmo padrão do indicador
+      // "Sincronizado há Xs" do header (ver GET .../mercadolivre/status-automatico).
+      async function apiStatusAuto(){
+        try{
+          const res = await fetch('/api/sac/status-automatico');
+          if(!res.ok) return null;
+          return await res.json();
+        }catch(e){ return null; }
+      }
 
       async function carregar(){
         const filtro = window.CerneFiltro.state;
@@ -10282,10 +10296,43 @@
         state.gerando = true; render();
         try{
           const r = await apiGerarAgora(filtro.empresaId);
-          toast('Sincronizado: ' + (r.atendimentosNovos||0) + ' atendimento(s) novo(s), ' + (r.sugestoesGeradas||0) + ' sugestão(ões) gerada(s).');
+          state.ultimoResultado = r;
+          const temErro = (r.erros && r.erros.length) || Object.values(r.detalhesPorFonte||{}).some((d)=> d && (d.erro || (d.erros&&d.erros.length)));
+          toast('Sincronizado: ' + (r.atendimentosNovos||0) + ' atendimento(s) novo(s), ' + (r.sugestoesGeradas||0) + ' sugestão(ões) gerada(s).' + (temErro?' Veja os detalhes abaixo — houve erro em alguma fonte.':''), temErro?'error':'success');
           await carregar();
-        }catch(e){ toast(e.message || 'Falha ao sincronizar agora.', 'error'); }
+        }catch(e){ state.ultimoResultado = null; toast(e.message || 'Falha ao sincronizar agora.', 'error'); }
         finally{ state.gerando = false; render(); }
+      }
+
+      // Mostra o que aconteceu em CADA fonte na última sincronização (ver
+      // lib/ia/sacCiclo.js#detalhesPorFonte, 15/09/2026 — pedido implícito
+      // do usuário ao reportar "tem pós-venda pendente no Mercado Livre,
+      // mas no sistema não consta nada"): fica visível até a próxima
+      // sincronização, nunca só um toast que some em segundos — pra dar pra
+      // conferir com calma quantos pedidos/itens foram verificados e se
+      // alguma fonte devolveu erro.
+      function ultimoResultadoHTML(){
+        const r = state.ultimoResultado;
+        if(!r) return '';
+        const fontes = cfg.marketplace === 'shopee'
+          ? [['conversas','Conversas (chat)'],['devolucoes','Devoluções']]
+          : [['perguntas','Perguntas'],['mensagens','Mensagens pós-venda'],['reclamacoes','Reclamações']];
+        const linhas = fontes.map(([chave,label])=>{
+          const d = r.detalhesPorFonte ? r.detalhesPorFonte[chave] : null;
+          if(!d) return '<div><b>'+escapeHtml(label)+':</b> sem dados nesta sincronização.</div>';
+          let linha = '<div><b>'+escapeHtml(label)+':</b> ';
+          if(d.pedidosVerificados !== undefined) linha += d.pedidosVerificados+' pedido(s) verificado(s), ';
+          linha += (d.processadas||0)+' encontrada(s), '+(d.novos||0)+' nova(s)';
+          linha += '</div>';
+          if(d.erro) linha += '<div style="color:var(--danger);">⚠ '+escapeHtml(d.erro)+'</div>';
+          if(d.erros && d.erros.length) linha += d.erros.map((e)=> '<div style="color:var(--danger);">⚠ '+escapeHtml(e)+'</div>').join('');
+          return linha;
+        }).join('');
+        return '<div class="table-card" style="padding:14px 16px;margin-bottom:12px;font-size:12.5px;color:var(--text-muted);">'
+          + '<div style="font-weight:700;color:var(--text);margin-bottom:6px;">Última sincronização'+(r.contasProcessadas!==undefined?(' — '+r.contasProcessadas+' conta(s)'):'')+'</div>'
+          + linhas
+          + (r.erros && r.erros.length ? r.erros.map((e)=> '<div style="color:var(--danger);margin-top:4px;">⚠ Conta '+escapeHtml(String(e.contaId))+': '+escapeHtml(e.erro)+'</div>').join('') : '')
+        + '</div>';
       }
 
       async function decidir(atendimento, statusDecisao){
@@ -10315,7 +10362,25 @@
 
       async function load(){
         if(!state.agente) state.agente = await apiAgente();
+        state.statusAuto = await apiStatusAuto();
         await carregar();
+      }
+
+      // Texto curto avisando que a verificação roda sozinha em background
+      // (ver lib/ia/sacScheduler.js) — "Sincronizar agora" continua
+      // disponível como atalho manual, mas deixou de ser a única forma de
+      // atualizar a tela.
+      function statusAutoHTML(){
+        const s = state.statusAuto;
+        if(!s) return '';
+        const dados = cfg.marketplace === 'shopee' ? s.shopee : s.mercadoLivre;
+        const min = Math.max(1, Math.round((s.intervaloSegundos||0) / 60));
+        let texto = 'Verificação automática ativa — a cada ' + min + ' min, direto no servidor.';
+        if(s.ultimaExecucaoEm) texto += ' Última verificação: ' + fmtDataHora(s.ultimaExecucaoEm) + '.';
+        const temErro = dados && dados.comErro && dados.comErro.length;
+        return '<div class="field-hint" style="margin-top:8px;display:flex;align-items:center;gap:6px;'+(temErro?'color:var(--danger);':'')+'">'
+          + svg(temErro?'alertCircle':'checkCircle') + '<span>' + escapeHtml(texto) + (temErro?' Houve erro na última verificação automática — veja "Sincronizar agora" para tentar na hora.':'') + '</span>'
+        + '</div>';
       }
 
       window.CerneFiltro.onChange(()=>{
@@ -10352,7 +10417,7 @@
             + ['abertos','todos','novo','aguardando_resposta','respondido','resolvido'].map((v)=>
                 '<option value="'+v+'" '+(state.filtroStatus===v?'selected':'')+'>'+(v==='abertos'?'Abertos (novo + aguardando)':v==='todos'?'Todos os status':STATUS_LABEL[v])+'</option>').join('')
           + '</select>'
-          + '<button class="ghost-btn" id="'+cfg.rootElId+'GerarAgora" type="button" style="cursor:pointer;opacity:1;" '+(state.gerando?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.gerando?'Sincronizando…':'Sincronizar agora')+'</span></button>'
+          + '<button class="ghost-btn" id="'+cfg.rootElId+'GerarAgora" type="button" title="A verificação já roda sozinha em background — use aqui só se quiser checar agora, sem esperar." style="cursor:pointer;opacity:1;" '+(state.gerando?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.gerando?'Sincronizando…':'Verificar agora')+'</span></button>'
         + '</div>';
       }
 
@@ -10367,7 +10432,7 @@
           + '</div>';
         }
         if(!a.respostaPendente){
-          return '<div class="sac-resposta-box"><div class="sac-sem-sugestao">Sugestão ainda não gerada — clique em "Sincronizar agora" para a IA analisar este atendimento.</div></div>';
+          return '<div class="sac-resposta-box"><div class="sac-sem-sugestao">Sugestão ainda não gerada — a verificação automática cuida disso sozinha em instantes, ou clique em "Verificar agora" para não esperar.</div></div>';
         }
         if(!a.respostaPendente.respostaSugeridaIa){
           return '<div class="sac-resposta-box"><div class="sac-resposta-label">A IA não gerou uma resposta</div>'
@@ -10427,10 +10492,11 @@
             + '<div class="panel-title" style="margin:0 0 4px;">'+escapeHtml((a && a.nome) || cfg.nomeFallback)+'</div>'
             + '<div class="field-hint" style="max-width:760px;">'+escapeHtml((a && a.descricao) || cfg.descricaoFallback)+'</div>'
             + '<div class="field-hint" style="margin-top:8px;color:var(--text-faint);">Modo supervisionado (Fase 1): a IA lê e analisa os atendimentos reais, e sugere uma resposta — ela nunca oferece reembolso, aprova devolução, cancela pedido, dá desconto, envia cupom ou promete prazo não confirmado. Você sempre aprova, edita ou recusa antes de qualquer coisa, e nada é enviado ao marketplace automaticamente nesta fase.</div>'
+            + statusAutoHTML()
           + '</div>'
         + '</div>';
 
-        html += kpiStripHTML() + abasHTML() + toolbarHTML();
+        html += kpiStripHTML() + abasHTML() + toolbarHTML() + ultimoResultadoHTML();
 
         if(state.loading){
           html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
@@ -10439,7 +10505,7 @@
             + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
         } else if(!state.itens.length){
           html += '<div class="empty-panel"><div class="empty-icon">'+svg('inbox')+'</div>'
-            + '<h2>Nenhum atendimento aqui</h2><p class="lead">Quando houver perguntas, mensagens, reclamações ou devoluções reais do '+(cfg.marketplace==='shopee'?'Shopee':'Mercado Livre')+', elas aparecem aqui. Clique em "Sincronizar agora" para buscar as mais recentes.</p></div>';
+            + '<h2>Nenhum atendimento aqui</h2><p class="lead">Quando houver perguntas, mensagens, reclamações ou devoluções reais do '+(cfg.marketplace==='shopee'?'Shopee':'Mercado Livre')+', elas aparecem aqui sozinhas — a verificação automática roda em background. Clique em "Verificar agora" se quiser checar sem esperar.</p></div>';
         } else {
           html += state.itens.map(itemHTML).join('');
         }
