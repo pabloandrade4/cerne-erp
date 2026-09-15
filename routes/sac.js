@@ -11,6 +11,7 @@ const express = require('express');
 const router = express.Router();
 const sacStore = require('./../lib/ia/sacStore');
 const { executarCicloSacMercadoLivreEmpresa, executarCicloSacShopeeEmpresa } = require('../lib/ia/sacCiclo');
+const { obterStatusScheduler } = require('../lib/ia/sacScheduler');
 
 function marketplaceValido(m) {
   return sacStore.MARKETPLACES.includes(m);
@@ -112,6 +113,26 @@ router.post('/gerar-agora', async (req, res, next) => {
       : await executarCicloSacMercadoLivreEmpresa(Number(empresaId));
     res.json(resultado);
   } catch (err) { next(err); }
+});
+
+// GET /api/sac/status-automatico — estado (em memória do servidor) da
+// verificação automática em background (15/09/2026, pedido explícito do
+// usuário "nao quero ter que ficar sincronizando nada quero tudo
+// automatico" — ver lib/ia/sacScheduler.js). Mesmo padrão de
+// GET /api/integracoes/mercadolivre/status-automatico — usado pra mostrar
+// na tela "verificado automaticamente há Xs", com "Sincronizar agora"
+// como atalho manual (não a única forma de atualizar).
+router.get('/status-automatico', (req, res) => {
+  const s = obterStatusScheduler();
+  res.json({
+    ativo: s.ativo,
+    intervaloSegundos: Math.round(s.intervaloMs / 1000),
+    emExecucao: s.emExecucao,
+    ultimaExecucaoEm: s.ultimaExecucaoEm,
+    ultimoCicloOk: s.ultimoCicloOk,
+    mercadoLivre: s.mercadoLivre,
+    shopee: s.shopee,
+  });
 });
 
 module.exports = router;

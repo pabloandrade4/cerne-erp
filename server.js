@@ -9,6 +9,7 @@ const { iniciarRadarDaIA } = require('./lib/ia/radarScheduler');
 const { iniciarSincronizacaoAutomaticaAds } = require('./lib/adsScheduler');
 const { iniciarGeracaoAutomaticaDeDespesasFixas } = require('./lib/despesasFixasScheduler');
 const { iniciarPromocoesIA } = require('./lib/ia/promocoesScheduler');
+const { iniciarSacScheduler } = require('./lib/ia/sacScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
@@ -140,6 +141,14 @@ async function start() {
     // margem real a cada 1h, sempre no servidor, nunca dependendo da tela
     // estar aberta (ver lib/ia/promocoesScheduler.js).
     iniciarPromocoesIA();
+    // Agentes de SAC (Mercado Livre + Shopee) — verificação automática de
+    // novos atendimentos e geração de sugestões de resposta a cada 10min,
+    // sempre no servidor, nunca dependendo de alguém clicar em "Sincronizar
+    // agora" (pedido explícito do usuário, 15/09/2026: "nao quero ter que
+    // ficar sincronizando nada quero tudo automatico"). Continua 100% modo
+    // supervisionado — nada aqui envia mensagem nenhuma sozinho, só gera
+    // sugestão pendente de aprovação humana (ver lib/ia/sacScheduler.js).
+    iniciarSacScheduler();
   });
 }
 
