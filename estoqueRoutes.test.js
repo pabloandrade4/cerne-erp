@@ -109,6 +109,26 @@ describe(
       assert.equal(body.itens[0].estoqueDisponivel, 15);
     });
 
+    // 19/09/2026, pedido explícito do usuário: a tela Estoque Full precisa
+    // mostrar valor em R$, quantidade em caixas e a quebra por modelo/SKU —
+    // campo NOVO e aditivo (`fisico`), vindo de lib/estoqueFisico.js. O SKU
+    // 'CX-FULL' cadastrado no before() não tem vínculo salvo nem segue o
+    // padrão heurístico (não começa com dígitos), então nunca é chutado —
+    // continua "sem produto base identificado", nunca com custo/valor
+    // inventado.
+    test('GET /api/estoque-full inclui o bloco `fisico` (valor em R$, caixas, por modelo/SKU) — nunca inventa produto base/custo', async () => {
+      const res = await fetch(`${baseUrl}/api/estoque-full?empresaId=${EMPRESA_ID}`);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.ok(body.fisico, 'a rota precisa devolver o bloco fisico');
+      assert.equal(body.fisico.valorTotalACusto, null, 'sem produto base identificado -> nunca um valor inventado');
+      assert.equal(body.fisico.unidadesFisicas, 0);
+      assert.equal(body.fisico.unidadesSemProdutoBaseIdentificado, 15, 'as 15 unidades do MLB200 (sku CX-FULL) ficam sem produto base');
+      assert.equal(body.fisico.itens.length, 1);
+      assert.equal(body.fisico.itens[0].sku, 'CX-FULL');
+      assert.equal(body.fisico.itens[0].produtoBase, null);
+    });
+
     test('empresa sem nenhuma conta do Mercado Livre -> pendente "sem_conta", itens vazio (nunca inventa dado)', async () => {
       const res = await fetch(`${baseUrl}/api/estoque?empresaId=${EMPRESA_SEM_CONTA_ID}`);
       const body = await res.json();
