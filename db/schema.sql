@@ -1777,3 +1777,25 @@ INSERT INTO ia_permissoes_acao (agente_codigo, tipo_acao, nivel_permissao) VALUE
   ('sac_mercado_livre', 'responder_atendimento', 'approval_required'),
   ('sac_shopee', 'responder_atendimento', 'approval_required')
 ON CONFLICT (agente_codigo, tipo_acao) DO NOTHING;
+
+-- "Margem de conforto" da IA de Promoções — 15/09/2026, pedido explícito do
+-- usuário: "voce deve me trazer promoções do mesmo valor com uma margem
+-- igual ou valores abaixo com uma margem um pouco menor mas respeitando a
+-- margem minima". Antes, QUALQUER promoção com margem acima de
+-- margem_minima_pct (mesmo raspando o mínimo) era recomendada igual a uma
+-- sem desconto nenhum. Com este campo > 0, uma promoção com DESCONTO real
+-- (preço abaixo do normal) só é recomendada se a margem ficar acima de
+-- margem_minima_pct + margem_conforto_pct — uma exigência extra só pra
+-- quando a margem está sendo sacrificada por um desconto. Promoção no preço
+-- normal (sem desconto, margem igual à normal) continua exigindo só o
+-- mínimo, porque não há margem sendo sacrificada. Nasce em 0 (desligado —
+-- comportamento igual ao de antes) até o usuário configurar um valor na
+-- tela (ver routes/promocoes.js e lib/promocoesMotor.js#classificar).
+ALTER TABLE config_promocoes ADD COLUMN IF NOT EXISTS margem_conforto_pct NUMERIC(5,2) NOT NULL DEFAULT 0;
+
+-- Registra, em cada análise gravada, qual margem de conforto foi usada
+-- (mesmo espírito de margem_minima_pct_usada logo acima) — pra nunca
+-- esconder do usuário por que um item foi classificado NÃO RECOMENDADO
+-- mesmo com margem acima do mínimo puro (ver lib/promocoesMotor.js).
+ALTER TABLE promocoes_analises ADD COLUMN IF NOT EXISTS margem_conforto_pct_usada NUMERIC(5,2);
+ALTER TABLE promocoes_analises ADD COLUMN IF NOT EXISTS tem_desconto BOOLEAN NOT NULL DEFAULT false;
