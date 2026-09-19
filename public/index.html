@@ -508,6 +508,11 @@
   .sa-label-chip{ display:flex; align-items:center; gap:5px; background:var(--surface-raised); border:1px solid var(--border); border-radius:20px; padding:4px 10px 4px 7px; box-shadow:var(--shadow-sm); font-size:10.5px; font-weight:700; color:var(--text); }
   .sa-label-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
   .sa-label.is-selected .sa-label-chip{ border-color:var(--copper); box-shadow:0 0 0 2px var(--copper-soft); }
+  /* Letreiro fixo do setor (19/09/2026, pedido explícito do usuário: "5
+     zonas bem demarcadas com letreiro por setor") — nameplate permanente,
+     separado do .sa-label (chip de status que pode sumir/mudar), sempre
+     acima da parede da zona pra nunca ter dúvida de qual setor é qual. */
+  .sa-letreiro{ position:absolute; transform:translate(-50%,-100%); pointer-events:none; white-space:nowrap; background:rgba(15,19,32,.78); border:1px solid; border-radius:8px; padding:5px 12px; font-family:"Archivo",sans-serif; font-size:12px; font-weight:800; letter-spacing:.02em; text-transform:uppercase; transition:opacity .15s; }
   .sa-side-panel{ display:flex; flex-direction:column; gap:12px; }
   .sa-agent-row{ cursor:pointer; }
   .sa-agent-row.is-selected{ background:var(--surface-hover); border-radius:10px; }
@@ -1286,7 +1291,7 @@
       // Radar da IA, Promoções IA, SAC); esta tela só dá uma cara visual
       // pra esse status real (GET /api/agentes-3d/status), nunca inventa
       // um agente/dado que não exista de verdade.
-      { id:'salaAgentes', title:'Sala dos Agentes', icon:'box', desc:'Sala 3D mostrando, em tempo real, os processos automáticos que já rodam 24h por dia no servidor — sincronizações, Radar da IA, Promoções IA, SAC e a Daily (resumo diário por WhatsApp).' },
+      { id:'salaAgentes', title:'Sala dos Agentes', icon:'box', desc:'Sala 3D mostrando, em tempo real, os 5 agentes de IA que trabalham pra você: Promoções, Ads, Anúncios, Análise de Concorrente e SAC.' },
     ]},
     { id:'cadastros', label:'Cadastros', open:true, items:[
       { id:'companies', title:'Empresas', icon:'building', action:'Nova empresa', desc:'Cadastro das empresas e CNPJs que operam dentro do ERP.',
@@ -1367,6 +1372,12 @@
         bullets:['Sugestões com base nos dados reais de cada campanha/anúncio','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
       { id:'agentePromocoes', title:'Promoções', icon:'sparkle', desc:'O agente de IA identifica oportunidades de promoção, calcula a margem real e sugere entrar, não entrar ou alterar o preço — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
         bullets:['Sugestões com base na margem real, nunca só no desconto','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
+      // 19/09/2026, pedido explícito do usuário: "quero que pesquise os
+      // modelos de produtos que eu vendo e me entregue um relatório de
+      // preços mas só quero daqueles concorrentes que estão vendendo" — tela
+      // nova pra buscar concorrentes de um produto (ver lib/concorrente.js).
+      { id:'concorrente', title:'Análise de Concorrente', icon:'search', desc:'Escolha um produto seu e a IA busca, no Mercado Livre, quem mais está vendendo o mesmo produto agora — com preço, estoque e o nível de confiança de cada achado.',
+        bullets:['Busca pelo anúncio real que já vendeu o SKU, nunca um termo inventado','Prioriza o catálogo do Mercado Livre (mesmo produto garantido)','Sem catálogo, mostra candidatos por título — você confirma','Só entram concorrentes realmente vendendo agora (ativo + com estoque)'] },
     ]},
   ];
 
@@ -1441,7 +1452,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','agenteAds','agentePromocoes','sacMercadoLivre','sacShopee','salaAgentes'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','agenteAds','agentePromocoes','concorrente','sacMercadoLivre','sacShopee','salaAgentes'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1511,6 +1522,7 @@
     else if(id === 'agentesIaHub'){ inner += '<div id="agentesIaHubRoot"></div>'; }
     else if(id === 'agenteAds'){ inner += '<div id="agenteAdsRoot"></div>'; }
     else if(id === 'agentePromocoes'){ inner += '<div id="agentePromocoesRoot"></div>'; }
+    else if(id === 'concorrente'){ inner += '<div id="concorrenteRoot"></div>'; }
     else if(id === 'sacMercadoLivre'){ inner += '<div id="sacMercadoLivreRoot"></div>'; }
     else if(id === 'sacShopee'){ inner += '<div id="sacShopeeRoot"></div>'; }
     else if(id === 'salaAgentes'){ inner += '<div id="salaAgentesRoot"></div>'; }
@@ -1566,6 +1578,7 @@
     if(id === 'agentesIaHub' && window.AgentesIaHub) window.AgentesIaHub.load();
     if(id === 'agenteAds' && window.AgenteAds) window.AgenteAds.load();
     if(id === 'agentePromocoes' && window.AgentePromocoes) window.AgentePromocoes.load();
+    if(id === 'concorrente' && window.AgenteConcorrente) window.AgenteConcorrente.load();
     if(id === 'sacMercadoLivre' && window.SacMercadoLivre) window.SacMercadoLivre.load();
     if(id === 'sacShopee' && window.SacShopee) window.SacShopee.load();
     // Sala dos Agentes (cena 3D) é a única tela que precisa de um "unload"
@@ -11315,6 +11328,197 @@
     });
   })();
 
+  /* ================= ANÁLISE DE CONCORRENTE (19/09/2026) =================
+     Pedido explícito do usuário: "quero que pesquise os modelos de produtos
+     que eu vendo e me entregue um relatório de preços mas só quero daqueles
+     concorrentes que estão vendendo". Tela nova pra usar o backend já
+     pronto em lib/concorrente.js (GET /api/concorrente/buscar?empresaId&
+     produtoId) — sem uma tela, essa rota ficaria inacessível pra quem usa
+     o ERP. Fluxo: escolhe um produto já cadastrado (por nome ou SKU), pede
+     a busca, e a tela mostra o relatório — sempre com o nível de confiança
+     de cada concorrente (catálogo = mesmo produto garantido pelo próprio
+     Mercado Livre; candidato a confirmar = achado por título do anúncio,
+     você confirma se é de fato o mesmo produto antes de considerar
+     concorrente de verdade). Nunca inventa concorrente nem preço: quando a
+     busca não acha nada (ou o produto nunca vendeu pelo ML), mostra o
+     motivo real devolvido pela rota — igual ao resto do ERP.
+     LEMBRETE (mesmo aviso de lib/concorrente.js): esta é a primeira
+     integração deste projeto contra a busca pública do Mercado Livre,
+     ainda não testada contra a API de verdade (o ambiente de
+     desenvolvimento não tem acesso a api.mercadolibre.com) — se algum nome
+     de campo da API tiver mudado, o erro aparece aqui na tela (nunca falha
+     silenciosamente nem mostra um dado inventado). */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      try{ const d = new Date(v); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '—'; }
+    }
+    function fmtMoeda(v){
+      if(v === null || v === undefined || !Number.isFinite(Number(v))) return '—';
+      return Number(v).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+    }
+
+    const CONFIANCA_INFO = {
+      catalogo: { label:'Mesmo produto (catálogo Mercado Livre)', cor:'--success' },
+      candidato_a_confirmar: { label:'Candidato — confirme se é o mesmo produto', cor:'--warning' },
+    };
+
+    const state = {
+      produtos:[], buscaProduto:'', produtoSelecionadoId:null,
+      buscando:false, resultado:null, erro:null, debounceTimer:null,
+    };
+
+    async function apiProdutos(empresaId, search){
+      const params = new URLSearchParams({ empresaId, status:'ativos' });
+      if(search) params.set('search', search);
+      const res = await fetch('/api/produtos?'+params.toString());
+      const body = await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar os produtos.');
+      return body.produtos || [];
+    }
+
+    async function apiBuscarConcorrentes(empresaId, produtoId){
+      const params = new URLSearchParams({ empresaId, produtoId });
+      const res = await fetch('/api/concorrente/buscar?'+params.toString());
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível buscar concorrentes.');
+      return body;
+    }
+
+    async function carregarProdutos(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.produtos = []; render(); return; }
+      try{ state.produtos = await apiProdutos(filtro.empresaId, state.buscaProduto); }
+      catch(e){ state.produtos = []; }
+      render();
+    }
+
+    async function buscar(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId || !state.produtoSelecionadoId) return;
+      state.buscando = true; state.erro = null; state.resultado = null; render();
+      try{ state.resultado = await apiBuscarConcorrentes(filtro.empresaId, state.produtoSelecionadoId); }
+      catch(e){ state.erro = e.message || 'Não foi possível buscar concorrentes.'; }
+      finally{ state.buscando = false; render(); }
+    }
+
+    async function load(){
+      state.produtoSelecionadoId = null; state.resultado = null; state.erro = null; state.buscaProduto = '';
+      await carregarProdutos();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-concorrente');
+      if(page && page.classList.contains('active')){
+        state.produtoSelecionadoId = null; state.resultado = null; state.erro = null; state.buscaProduto = '';
+        carregarProdutos();
+      }
+    });
+
+    function resultadoHTML(){
+      const r = state.resultado;
+      if(r.modo === 'sem_dado'){
+        return '<div class="empty-panel"><div class="empty-icon" style="color:var(--warning);background:var(--warning-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2>Sem dado suficiente pra buscar</h2><p class="lead">'+escapeHtml(r.mensagem || 'Não foi possível buscar concorrentes para este produto.')+'</p></div>';
+      }
+      const modoLabel = r.modo === 'catalogo'
+        ? 'Busca por catálogo — o Mercado Livre garante que é o mesmo produto'
+        : 'Busca por título do anúncio — candidatos, confirme antes de considerar concorrente';
+      let html = '<div class="table-card" style="padding:18px 20px;margin-bottom:14px;">'
+        + '<div class="panel-title" style="margin:0 0 4px;">'+escapeHtml(r.produto.nome)+' <span class="mono" style="color:var(--text-faint);font-weight:600;">('+escapeHtml(r.produto.sku)+')</span></div>'
+        + '<div class="field-hint">'+escapeHtml(modoLabel)+'</div>'
+        + (r.itemBase ? '<div class="field-hint" style="margin-top:4px;">Anúncio usado como referência: "'+escapeHtml(r.itemBase.titulo)+'"</div>' : '')
+        + '<div class="field-hint" style="margin-top:4px;color:var(--text-faint);">Buscado em '+fmtDataHora(r.buscadoEm)+'</div>'
+      + '</div>';
+
+      if(!r.concorrentes.length){
+        return html + '<div class="empty-panel"><div class="empty-icon">'+svg('checkCircle')+'</div><h2>Nenhum concorrente vendendo agora</h2><p class="lead">A busca não encontrou nenhum outro vendedor ativo e com estoque pra este produto no momento.</p></div>';
+      }
+
+      html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Vendedor</th><th>Anúncio</th><th>Preço</th><th>Estoque</th><th>Confiança</th><th></th>'
+        + '</tr></thead><tbody>'
+        + r.concorrentes.map((c)=>{
+            const conf = CONFIANCA_INFO[c.confianca] || { label:c.confianca||'—', cor:'--text-faint' };
+            return '<tr>'
+              + '<td>'+escapeHtml(c.vendedorNickname || '—')+'</td>'
+              + '<td style="max-width:340px;"><span class="prod-title" title="'+escapeHtml(c.titulo||'')+'">'+escapeHtml(c.titulo || '—')+'</span></td>'
+              + '<td class="mono">'+fmtMoeda(c.preco)+'</td>'
+              + '<td class="mono">'+(c.estoqueDisponivel === null || c.estoqueDisponivel === undefined ? '—' : c.estoqueDisponivel)+'</td>'
+              + '<td><span class="badge-status" style="color:var('+conf.cor+');background:var('+conf.cor+'-soft);">'+escapeHtml(conf.label)+'</span></td>'
+              + '<td>'+(c.permalink ? '<a href="'+escapeHtml(c.permalink)+'" target="_blank" rel="noopener" class="row-ic-btn" title="Abrir anúncio no Mercado Livre">'+svg('link')+'</a>' : '')+'</td>'
+            + '</tr>';
+          }).join('')
+        + '</tbody></table></div></div>';
+      return html;
+    }
+
+    function render(){
+      const root = document.getElementById('concorrenteRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para usar a Análise de Concorrente.</p></div>';
+        return;
+      }
+
+      const produtoSelecionado = state.produtos.find((p)=> p.id === state.produtoSelecionadoId);
+
+      let html = '<div class="table-card" style="padding:20px;margin-bottom:14px;">'
+        + '<div class="panel-title" style="margin:0 0 4px;">Buscar concorrentes de um produto</div>'
+        + '<div class="field-hint" style="max-width:760px;margin-bottom:14px;">Escolha um produto já cadastrado — a busca usa o anúncio real que já vendeu esse SKU no Mercado Livre pra encontrar quem mais está vendendo o mesmo produto agora, nunca inventa um termo de busca.</div>'
+        + '<div class="inline-form" style="margin:0;">'
+          + '<div class="field" style="min-width:320px;"><label>Produto</label>'
+            + '<input type="text" id="concorrenteBuscaProduto" placeholder="Digite o nome ou SKU do produto…" value="'+escapeHtml(state.buscaProduto)+'" list="concorrenteProdutosList" autocomplete="off">'
+            + '<datalist id="concorrenteProdutosList">'
+              + state.produtos.map((p)=> '<option data-id="'+p.id+'" value="'+escapeHtml(p.nome)+' ('+escapeHtml(p.sku)+')"></option>').join('')
+            + '</datalist>'
+          + '</div>'
+          + '<button class="primary-btn'+(state.produtoSelecionadoId && !state.buscando ? ' enabled' : '')+'" id="concorrenteBuscarBtn" type="button" '+(!state.produtoSelecionadoId || state.buscando ? 'disabled' : '')+'>'
+            + svg(state.buscando ? 'refreshCw' : 'search')+'<span>'+(state.buscando ? 'Buscando…' : 'Buscar concorrentes')+'</span>'
+          + '</button>'
+        + '</div>'
+        + (produtoSelecionado ? '<div class="field-hint" style="margin-top:8px;">Selecionado: <strong>'+escapeHtml(produtoSelecionado.nome)+'</strong> <span class="mono">('+escapeHtml(produtoSelecionado.sku)+')</span></div>' : '')
+      + '</div>';
+
+      if(state.buscando){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Buscando no Mercado Livre…</span></div></div>';
+      } else if(state.erro){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível buscar</h2><p class="lead">'+escapeHtml(state.erro)+'</p></div>';
+      } else if(state.resultado){
+        html += resultadoHTML();
+      }
+
+      root.innerHTML = html;
+
+      const inputBusca = document.getElementById('concorrenteBuscaProduto');
+      if(inputBusca){
+        inputBusca.addEventListener('input', ()=>{
+          state.buscaProduto = inputBusca.value;
+          let achou = null;
+          document.querySelectorAll('#concorrenteProdutosList option').forEach((o)=>{
+            if(o.value === inputBusca.value) achou = Number(o.dataset.id);
+          });
+          state.produtoSelecionadoId = achou;
+          const btn = document.getElementById('concorrenteBuscarBtn');
+          if(btn) btn.disabled = !achou;
+          if(btn) btn.classList.toggle('enabled', !!achou);
+          clearTimeout(state.debounceTimer);
+          state.debounceTimer = setTimeout(carregarProdutos, 300);
+        });
+      }
+      const btnBuscar = document.getElementById('concorrenteBuscarBtn');
+      if(btnBuscar) btnBuscar.addEventListener('click', buscar);
+    }
+
+    window.AgenteConcorrente = { load };
+  })();
+
   /* ================= AGENTES DE IA — HUB (14/09/2026) =================
      Redesign completo da área "Agentes de IA" pedido pelo usuário (prints
      de referência + especificação numerada 1-13). ETAPA 2/3 do processo
@@ -11990,9 +12194,23 @@
     const THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js';
     const ORBIT_CDN = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
 
-    const LAYOUT_ORDEM = ['ml-pedidos','ml-estoque','shopee-pedidos','shopee-token','ads','despesas-fixas','radar-ia','promocoes-ia','sac-ia','daily'];
-    const CATEGORIA_TOKEN = { sincronizacao:'--copper', financeiro:'--teal', ia:'--purple' };
-    const CATEGORIA_LABEL = { sincronizacao:'Sincronização', financeiro:'Financeiro', ia:'Inteligência Artificial' };
+    // Reescrito em 19/09/2026 (pedido explícito do usuário: "sobre as IA não
+    // são aquelas... vou te passar quais são") — só os 5 setores pedidos,
+    // cada um com sua própria cor (ver routes/agentes3d.js#categoria) pra
+    // ficar fácil de diferenciar visualmente as 5 zonas da sala.
+    const LAYOUT_ORDEM = ['promocoes-ia','ads','anuncios-ia','concorrente-ia','sac-ia'];
+    const CATEGORIA_TOKEN = { promocoes:'--purple', ads:'--copper', anuncios:'--petrol', concorrente:'--warning', sac:'--teal' };
+    const CATEGORIA_LABEL = { promocoes:'Promoções', ads:'Ads', anuncios:'Anúncios', concorrente:'Análise de Concorrente', sac:'SAC' };
+    // Mapa estático id->categoria, espelhando routes/agentes3d.js (cada
+    // agente já nasce com sua categoria fixa lá). Precisa existir mesmo
+    // ANTES do primeiro /status responder, porque construirCena() roda a
+    // cor/letreiro de cada zona assim que a cena é montada — usa o dado ao
+    // vivo (state.agentesPorId) quando já existir, e cai neste mapa fixo
+    // como base honesta (nunca "adivinha" uma categoria nova).
+    const CATEGORIA_POR_ID = { 'promocoes-ia':'promocoes', 'ads':'ads', 'anuncios-ia':'anuncios', 'concorrente-ia':'concorrente', 'sac-ia':'sac' };
+    function categoriaDoAgente(id){
+      return (state.agentesPorId[id] && state.agentesPorId[id].categoria) || CATEGORIA_POR_ID[id] || null;
+    }
 
     const state = {
       shellPronta:false, cenaPronta:false, carregandoScripts:null,
@@ -12109,6 +12327,15 @@
     }
 
     // ---- Cena 3D ----
+    // Reescrito em 19/09/2026 (pedido explícito do usuário: "quero que faça
+    // uma sala 3D igual ou melhor... 5 zonas bem demarcadas com letreiro por
+    // setor, personagens mais trabalhados, iluminação melhor" — dentro do
+    // que dá pra fazer só com Three.js, sem depender de nenhum projeto
+    // externo de terceiros). 5 setores lado a lado (LAYOUT_ORDEM), cada um
+    // com: tapete + parede de fundo na cor do setor, luz spot colorida,
+    // divisória entre as zonas, e um personagem mais completo (braços,
+    // cadeira, luminária, planta) — tudo geometria simples do Three.js, sem
+    // nenhum asset externo pra baixar.
     function construirCena(){
       const THREE = window.THREE;
       const card = document.getElementById('saCanvasCard');
@@ -12117,10 +12344,10 @@
 
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(corToken('--page','#0A0C11'));
-      scene.fog = new THREE.Fog(scene.background.getHex(), 22, 42);
+      scene.fog = new THREE.Fog(scene.background.getHex(), 24, 46);
 
-      const camera = new THREE.PerspectiveCamera(42, largura/altura, 0.1, 100);
-      camera.position.set(9, 10, 12);
+      const camera = new THREE.PerspectiveCamera(40, largura/altura, 0.1, 120);
+      camera.position.set(0, 11, 17);
 
       const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
@@ -12128,45 +12355,82 @@
       card.insertBefore(renderer.domElement, card.firstChild);
 
       const controls = new THREE.OrbitControls(camera, renderer.domElement);
-      controls.target.set(0, 0.5, 0);
+      controls.target.set(0, 0.8, 0);
       controls.enableDamping = true; controls.dampingFactor = 0.08;
-      controls.minDistance = 6; controls.maxDistance = 26;
+      controls.minDistance = 7; controls.maxDistance = 30;
       controls.maxPolarAngle = Math.PI * 0.49;
       controls.update();
 
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x30323d, 0.95));
-      const sol = new THREE.DirectionalLight(0xffffff, 0.65);
-      sol.position.set(8, 14, 6);
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x30323d, 0.85));
+      const sol = new THREE.DirectionalLight(0xffffff, 0.55);
+      sol.position.set(6, 16, 8);
       scene.add(sol);
 
       const chao = new THREE.Mesh(
-        new THREE.PlaneGeometry(26, 20),
+        new THREE.PlaneGeometry(30, 18),
         new THREE.MeshStandardMaterial({ color: corToken('--surface-2','#191d26'), roughness:0.95 })
       );
       chao.rotation.x = -Math.PI/2;
       scene.add(chao);
 
-      const grade = new THREE.GridHelper(26, 26, corToken('--border','#262b37'), corToken('--border','#262b37'));
+      const grade = new THREE.GridHelper(30, 30, corToken('--border','#262b37'), corToken('--border','#262b37'));
       grade.position.y = 0.01;
       scene.add(grade);
 
       const paredeMat = new THREE.MeshStandardMaterial({ color: corToken('--surface','#13161d'), roughness:1 });
-      const paredeFundo = new THREE.Mesh(new THREE.PlaneGeometry(26, 8), paredeMat);
-      paredeFundo.position.set(0, 4, -10);
+      const paredeFundo = new THREE.Mesh(new THREE.PlaneGeometry(30, 8), paredeMat);
+      paredeFundo.position.set(0, 4, -8);
       scene.add(paredeFundo);
-      const paredeLado = new THREE.Mesh(new THREE.PlaneGeometry(20, 8), paredeMat);
-      paredeLado.position.set(-13, 4, 0); paredeLado.rotation.y = Math.PI/2;
-      scene.add(paredeLado);
 
-      // Grid 3x3 — mesma ordem/agrupamento de LAYOUT_ORDEM.
+      // 5 zonas lado a lado, uma por setor — mesma ordem de LAYOUT_ORDEM.
       const personagens = new Map();
-      const colunas = 3, espaco = 5.2;
+      const N = LAYOUT_ORDEM.length;
+      const espaco = 4.7;
+      const largZona = espaco - 0.5;
+
+      // Divisórias entre as zonas (N-1 pilares) — reforça a leitura de "5
+      // salas separadas" mesmo com o chão contínuo.
+      for(let i=1;i<N;i++){
+        const xDiv = (i - (N-1)/2) * espaco;
+        const pilar = new THREE.Mesh(
+          new THREE.BoxGeometry(0.14, 3, 2.6),
+          new THREE.MeshStandardMaterial({ color: corToken('--border','#262b37'), roughness:0.9 })
+        );
+        pilar.position.set(xDiv, 1.5, 0.2);
+        scene.add(pilar);
+      }
+
       LAYOUT_ORDEM.forEach((id, i) => {
-        const col = i % colunas, lin = Math.floor(i / colunas);
-        const x = (col - (colunas-1)/2) * espaco;
-        const z = (lin - 1) * espaco - 1;
+        const x = (i - (N-1)/2) * espaco;
+        const corHex = corToken(CATEGORIA_TOKEN[categoriaDoAgente(id)], '#888888');
+        const cor = new THREE.Color(corHex);
+
         const grupo = new THREE.Group();
-        grupo.position.set(x, 0, z);
+        grupo.position.set(x, 0, 0.2);
+
+        // Tapete da zona, na cor do setor — a "demarcação" pedida.
+        const tapete = new THREE.Mesh(
+          new THREE.PlaneGeometry(largZona, 3.6),
+          new THREE.MeshStandardMaterial({ color: cor, roughness:1, transparent:true, opacity:0.16 })
+        );
+        tapete.rotation.x = -Math.PI/2;
+        tapete.position.set(0, 0.015, 0.3);
+        grupo.add(tapete);
+
+        // Painel na parede de fundo, na cor do setor.
+        const painel = new THREE.Mesh(
+          new THREE.PlaneGeometry(largZona - 0.4, 2.2),
+          new THREE.MeshStandardMaterial({ color: cor, roughness:1, transparent:true, opacity:0.22 })
+        );
+        painel.position.set(0, 2.1, -7.85);
+        grupo.add(painel);
+
+        // Luz spot colorida apontando pra mesa — "iluminação melhor" pedida.
+        const spot = new THREE.SpotLight(cor, 1.1, 12, Math.PI/5, 0.5, 1.4);
+        spot.position.set(0, 5.5, 2.5);
+        spot.target.position.set(0, 0.8, 0.3);
+        grupo.add(spot);
+        grupo.add(spot.target);
 
         // Mesa
         const mesa = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.9), new THREE.MeshStandardMaterial({ color:'#8a6a45', roughness:0.8 }));
@@ -12178,13 +12442,39 @@
           grupo.add(perna);
         });
 
-        // Monitor (acende com a cor do agente quando está trabalhando)
+        // Monitor (acende com a cor do setor quando está trabalhando)
         const monitor = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.36, 0.05), new THREE.MeshStandardMaterial({ color:'#111318', emissive:new THREE.Color(0x000000) }));
         monitor.position.set(0, 1.12, -0.3);
         grupo.add(monitor);
 
-        // Personagem: corpo + cabeça, cor por categoria
-        const corpoMat = new THREE.MeshStandardMaterial({ color:0x888888 });
+        // Luminária de mesa — acende junto com o monitor.
+        const luminariaBase = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.09,0.06,10), new THREE.MeshStandardMaterial({ color:'#333' }));
+        luminariaBase.position.set(0.65, 0.84, -0.1);
+        grupo.add(luminariaBase);
+        const luminariaCupula = new THREE.Mesh(new THREE.ConeGeometry(0.12,0.16,12,1,true), new THREE.MeshStandardMaterial({ color:'#333', emissive:new THREE.Color(0x000000), side:THREE.DoubleSide }));
+        luminariaCupula.position.set(0.65, 1.1, -0.1);
+        luminariaCupula.rotation.x = Math.PI;
+        grupo.add(luminariaCupula);
+
+        // Cadeira
+        const cadeiraMat = new THREE.MeshStandardMaterial({ color:'#2c313d', roughness:0.8 });
+        const assento = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.08,0.55), cadeiraMat);
+        assento.position.set(0, 0.55, 0.95);
+        grupo.add(assento);
+        const encosto = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.08), cadeiraMat);
+        encosto.position.set(0, 0.85, 1.2);
+        grupo.add(encosto);
+
+        // Planta — um pouco de vida na zona.
+        const vaso = new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.11,0.22,10), new THREE.MeshStandardMaterial({ color:'#6b4a35' }));
+        vaso.position.set(-largZona/2 + 0.5, 0.11, -1.1);
+        grupo.add(vaso);
+        const folhas = new THREE.Mesh(new THREE.SphereGeometry(0.28,10,10), new THREE.MeshStandardMaterial({ color: corToken('--success','#3FB37E'), roughness:1 }));
+        folhas.position.set(-largZona/2 + 0.5, 0.5, -1.1);
+        grupo.add(folhas);
+
+        // Personagem: corpo + cabeça + 2 braços, cor do setor.
+        const corpoMat = new THREE.MeshStandardMaterial({ color: cor });
         const corpo = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.32, 0.85, 12), corpoMat);
         corpo.position.set(0, 1.18, 0.55);
         grupo.add(corpo);
@@ -12192,11 +12482,21 @@
         const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 16), cabecaMat);
         cabeca.position.set(0, 1.78, 0.55);
         grupo.add(cabeca);
+        [[-0.32,0],[0.32,0]].forEach(([bx]) => {
+          const braco = new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,0.55,8), corpoMat);
+          braco.position.set(bx, 1.1, 0.65);
+          braco.rotation.x = -0.5;
+          grupo.add(braco);
+        });
 
         scene.add(grupo);
-        personagens.set(id, { grupo, corpoMat, monitorMat: monitor.material, baseY: grupo.position.y, faseAnim: Math.random()*Math.PI*2 });
+        personagens.set(id, {
+          grupo, corpoMat, monitorMat: monitor.material, luminariaMat: luminariaCupula.material, spotLight: spot,
+          baseY: grupo.position.y, faseAnim: Math.random()*Math.PI*2,
+        });
 
-        // Rótulo HTML flutuante (posicionado via projeção de câmera a cada frame)
+        // Rótulo HTML flutuante — dobra como "letreiro" do setor (nome do
+        // agente maior/mais destacado que antes) e como status ao vivo.
         const label = document.createElement('div');
         label.className = 'sa-label'; label.dataset.agenteId = id;
         label.innerHTML = '<div class="sa-label-chip"><span class="sa-label-dot" style="background:#888;"></span><span class="sa-label-texto">'+escapeHtml(id)+'</span></div>';
@@ -12205,6 +12505,18 @@
         label.style.cursor = 'pointer';
         card.appendChild(label);
         personagens.get(id).labelEl = label;
+
+        // Placa fixa com o nome do setor, sempre visível acima da parede —
+        // separada do chip de status (que já mostra o nome também, mas some
+        // se o personagem sair da tela) pra sempre dar pra ler qual é qual.
+        const placa = document.createElement('div');
+        placa.className = 'sa-letreiro';
+        placa.textContent = CATEGORIA_LABEL[categoriaDoAgente(id)] || id;
+        placa.style.borderColor = corHex;
+        placa.style.color = corHex;
+        placa.dataset.agenteId = id;
+        card.appendChild(placa);
+        personagens.get(id).placaEl = placa;
       });
 
       state.three = { renderer, scene, camera, controls, personagens, clock: new THREE.Clock(), card };
@@ -12232,10 +12544,17 @@
         p.corpoMat.color = cor;
         if(a.emExecucao){
           p.monitorMat.emissive = cor; p.monitorMat.emissiveIntensity = 0.9;
+          if(p.luminariaMat){ p.luminariaMat.emissive = cor; p.luminariaMat.emissiveIntensity = 0.8; }
+          if(p.spotLight) p.spotLight.intensity = 1.7;
         } else if(a.ultimoCicloOk === false){
-          p.monitorMat.emissive = new THREE.Color(corToken('--danger','#DC2626')); p.monitorMat.emissiveIntensity = 0.5;
+          const corErro = new THREE.Color(corToken('--danger','#DC2626'));
+          p.monitorMat.emissive = corErro; p.monitorMat.emissiveIntensity = 0.5;
+          if(p.luminariaMat){ p.luminariaMat.emissive = corErro; p.luminariaMat.emissiveIntensity = 0.4; }
+          if(p.spotLight) p.spotLight.intensity = 0.9;
         } else {
           p.monitorMat.emissive = new THREE.Color(0x000000); p.monitorMat.emissiveIntensity = 0;
+          if(p.luminariaMat){ p.luminariaMat.emissive = new THREE.Color(0x000000); p.luminariaMat.emissiveIntensity = 0; }
+          if(p.spotLight) p.spotLight.intensity = 1.1;
         }
         const dot = p.labelEl.querySelector('.sa-label-dot');
         const corStatus = a.emExecucao ? hex : (a.ultimoCicloOk === false ? corToken('--danger') : corToken('--text-faint'));
@@ -12269,6 +12588,20 @@
         if(visivel){
           p.labelEl.style.left = ((pos.x*0.5+0.5) * rect.width) + 'px';
           p.labelEl.style.top = ((1 - (pos.y*0.5+0.5)) * rect.height) + 'px';
+        }
+
+        // Letreiro fixo do setor — projetado acima do painel na parede de
+        // fundo (mais alto que o chip de status), sempre visível junto da
+        // zona mesmo quando o personagem sai um pouco do enquadramento.
+        if(p.placaEl){
+          const posPlaca = new THREE.Vector3(0, 3.3, -7.85).add(p.grupo.position);
+          posPlaca.project(camera);
+          const placaVisivel = posPlaca.z < 1;
+          p.placaEl.style.display = placaVisivel ? '' : 'none';
+          if(placaVisivel){
+            p.placaEl.style.left = ((posPlaca.x*0.5+0.5) * rect.width) + 'px';
+            p.placaEl.style.top = ((1 - (posPlaca.y*0.5+0.5)) * rect.height) + 'px';
+          }
         }
       });
 
