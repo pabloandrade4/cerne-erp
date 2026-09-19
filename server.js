@@ -48,6 +48,7 @@ const iaAgentesRouter = require('./routes/iaAgentes');
 const dailyRouter = require('./routes/daily');
 const sacRouter = require('./routes/sac');
 const agentes3dRouter = require('./routes/agentes3d');
+const concorrenteRouter = require('./routes/concorrente');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -94,6 +95,7 @@ app.use('/api/ia-agentes', iaAgentesRouter);
 app.use('/api/ia/daily', dailyRouter);
 app.use('/api/sac', sacRouter);
 app.use('/api/agentes-3d', agentes3dRouter);
+app.use('/api/concorrente', concorrenteRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
