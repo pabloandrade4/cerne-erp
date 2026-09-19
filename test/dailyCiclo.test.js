@@ -16,6 +16,47 @@ const TEM_BANCO = !!process.env.DATABASE_URL;
 const EMPRESA_ID = 973;
 const CONTA_ID = 973;
 
+// formatarMensagemWhatsappDaily é função pura (nenhum banco/rede) — testada
+// fora do bloco TEM_BANCO, mesmo espírito de test/radar.test.js#formatarMensagemWhatsapp.
+describe('formatarMensagemWhatsappDaily — Etapa 4 (19/09/2026)', () => {
+  const { formatarMensagemWhatsappDaily } = require('../lib/ia/dailyCiclo');
+
+  test('zero achados: mensagem honesta de "tudo dentro do esperado", nunca inventa um problema', () => {
+    const texto = formatarMensagemWhatsappDaily({
+      empresaNome: 'PF Embalagens Teste', dataReferencia: '2026-09-19',
+      achadosPorAgente: { ads_performance: [], promocoes: [] }, nomesAgentes: {},
+    });
+    assert.match(texto, /Nenhum achado novo hoje/);
+    assert.match(texto, /PF Embalagens Teste/);
+  });
+
+  test('com achados: agrupa por agente (nome real, nunca o código), com emoji por prioridade e título real', () => {
+    const texto = formatarMensagemWhatsappDaily({
+      empresaNome: 'PF Embalagens Teste', dataReferencia: '2026-09-19',
+      achadosPorAgente: {
+        ads_performance: [
+          { titulo: 'Campanha X com resultado negativo', prioridade: 'alta' },
+          { titulo: 'Campanha Y pode escalar', prioridade: 'media' },
+        ],
+      },
+      nomesAgentes: { ads_performance: 'Ads e Performance' },
+    });
+    assert.match(texto, /\*Ads e Performance\* \(2\)/);
+    assert.match(texto, /🟠 Campanha X com resultado negativo/);
+    assert.match(texto, /🟡 Campanha Y pode escalar/);
+    assert.doesNotMatch(texto, /ads_performance/, 'nunca deve vazar o código interno do agente pro texto da mensagem');
+  });
+
+  test('corta em 8 achados por agente e avisa quantos ficaram de fora, nunca manda uma mensagem infinita', () => {
+    const achados = Array.from({ length: 12 }, (_, i) => ({ titulo: 'Achado ' + i, prioridade: 'baixa' }));
+    const texto = formatarMensagemWhatsappDaily({
+      empresaNome: 'Teste', dataReferencia: '2026-09-19',
+      achadosPorAgente: { ads_performance: achados }, nomesAgentes: {},
+    });
+    assert.match(texto, /… e mais 4\./);
+  });
+});
+
 describe(
   'Daily dos Agentes — Etapa 2 (especialistas + ciclo, sem Coordenador)',
   { skip: !TEM_BANCO && 'defina DATABASE_URL apontando pra um Postgres de teste (ver topo de relatorioVendas.integration.test.js)' },
@@ -172,6 +213,44 @@ describe(
       assert.equal(alteracoes[0].decisaoId, decisaoId);
       assert.equal(alteracoes[0].dados.statusDecisao, 'aprovada');
       assert.deepEqual(alteracoes[0].dados.valorDecididoUsuario, { confirmado: true });
+    });
+
+    test('executarDailyComNotificacao: sem WhatsApp configurado no ambiente, ainda assim marca como "tentado hoje" e nunca roda 2x no mesmo dia pra mesma empresa', async () => {
+      await pool.query(
+        `INSERT INTO ia_decisoes_ads (empresa_id, conta_id, tipo_referencia, campanha_id, campanha_nome, tipo_acao, motivo, valor_sugerido_ia, status_decisao)
+         VALUES ($1,$2,'campanha','C1','Campanha W','pausar_campanha','Negativo.', '{}', 'pendente')`,
+        [EMPRESA_ID, CONTA_ID]
+      );
+
+      const r1 = await dailyCiclo.executarDailyComNotificacao(EMPRESA_ID, { agora: new Date('2026-09-14T13:00:00Z') });
+      assert.equal(r1.pulado, undefined);
+      assert.equal(r1.totalAchados, 1);
+      assert.equal(r1.whatsapp.enviado, false);
+      assert.equal(r1.whatsapp.motivo, 'nao_configurado', 'ambiente de teste não tem TWILIO_* configurado — nunca finge que enviou');
+      assert.equal(r1.empresaNome, 'EMPRESA TESTE DAILY');
+
+      const r2 = await dailyCiclo.executarDailyComNotificacao(EMPRESA_ID, { agora: new Date('2026-09-14T18:00:00Z') });
+      assert.equal(r2.pulado, true);
+      assert.equal(r2.motivo, 'ja_enviado_hoje');
+
+      const { rows } = await pool.query('SELECT whatsapp_enviado_em FROM ia_reunioes_diarias WHERE empresa_id = $1 AND data_referencia = $2', [EMPRESA_ID, '2026-09-14']);
+      assert.ok(rows[0].whatsapp_enviado_em, 'a tentativa de envio (mesmo sem sucesso) precisa ficar marcada, pra nunca tentar de novo no mesmo dia');
+    });
+
+    test('executarDailyComNotificacao: quando a função de envio É injetada e funciona, whatsapp.enviado=true', async () => {
+      await pool.query(
+        `INSERT INTO ia_decisoes_promocoes (empresa_id, conta_id, promotion_id, promotion_type, promotion_label, ml_item_id, sku, tipo_acao, motivo, valor_sugerido_ia, status_decisao)
+         VALUES ($1,$2,'P1','SMART','Promo Z','MLB3','SKU-3','entrar_promocao','Margem boa.', '{}', 'pendente')`,
+        [EMPRESA_ID, CONTA_ID]
+      );
+      let textoEnviado = null;
+      const r1 = await dailyCiclo.executarDailyComNotificacao(EMPRESA_ID, {
+        agora: new Date('2026-09-15T13:00:00Z'),
+        enviarMensagemWhatsappFn: async (texto) => { textoEnviado = texto; return { enviado: true, sid: 'SM_TESTE' }; },
+      });
+      assert.equal(r1.whatsapp.enviado, true);
+      assert.equal(r1.whatsapp.sid, 'SM_TESTE');
+      assert.match(textoEnviado, /Promo Z/);
     });
 
     test('buscarUltimaReuniao: empresa sem nenhuma Daily ainda -> reuniao null (nunca inventa)', async () => {
