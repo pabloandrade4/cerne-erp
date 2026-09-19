@@ -28,7 +28,7 @@ router.get('/testar', async (req, res) => {
   if (!whatsappConfigurado()) {
     return res.status(400).json({ enviado: false, motivo: 'nao_configurado', mensagem: 'Configure TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM e TWILIO_WHATSAPP_TO nas variáveis de ambiente do servidor antes de testar.' });
   }
-  const resultado = await enviarMensagemWhatsapp('✅ Teste do Cerne ERP: se você recebeu esta mensagem, os avisos automáticos do Radar da IA (Financeiro, Estoque, Ads, Margem) vão chegar por aqui a partir de agora.');
+  const resultado = await enviarMensagemWhatsapp('✅ Teste do PF Embalagens: se você recebeu esta mensagem, os avisos automáticos do Radar da IA (Financeiro, Estoque, Ads, Margem) vão chegar por aqui a partir de agora.');
   res.status(resultado.enviado ? 200 : 502).json(resultado);
 });
 

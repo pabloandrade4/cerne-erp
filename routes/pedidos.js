@@ -280,7 +280,7 @@ function textoFiltros({ empresaNome, periodoCalc, lojaNome, status, busca }) {
 
 async function gerarXlsx({ linhas, resumo, totalUnidades, vazio, filtrosTexto }) {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Cerne ERP';
+  workbook.creator = 'PF Embalagens';
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet('Pedidos');
