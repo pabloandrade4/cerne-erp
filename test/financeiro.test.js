@@ -30,8 +30,16 @@ describe('Contas a Pagar / Contas a Receber / Recebimentos — 24/08/2026', { sk
     const pool = require('../db/pool');
 
     hoje = contasPagar.hojeBRT();
-    ontem = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    amanha = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    // CORREÇÃO (19/09/2026): calcular ontem/amanhã com toISOString() usa o
+    // dia em UTC, não em BRT (fuso usado por hojeBRT() e por todo o
+    // restante do projeto) — entre meia-noite e 3h da manhã em UTC, BRT
+    // (UTC-3) ainda está no dia anterior, e "ontem" em UTC virava igual a
+    // "hoje" em BRT, fazendo o teste abaixo falhar de forma intermitente
+    // (só nesse horário). periodo.diaBRT() usa o mesmo fuso de hojeBRT(),
+    // então ontem/amanha ficam sempre consistentes com "hoje", não importa
+    // a hora UTC em que os testes rodarem.
+    ontem = periodo.diaBRT(new Date(Date.now() - 24 * 60 * 60 * 1000));
+    amanha = periodo.diaBRT(new Date(Date.now() + 24 * 60 * 60 * 1000));
 
     const { rows } = await pool.query(
       `INSERT INTO fornecedores (empresa_id, razao_social, documento)

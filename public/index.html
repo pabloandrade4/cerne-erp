@@ -1284,16 +1284,22 @@
       { id:'reports', title:'Relatórios', icon:'lineChart', action:'Novo relatório', desc:'Relatórios operacionais e financeiros configuráveis.',
         bullets:['Relatórios pré-configurados','Exportação em Excel e PDF','Filtros por empresa, canal e período','Relatórios agendados'] },
     ]},
+    // 19/09/2026 — pedido explícito do usuário: "quero que excluir as abas
+    // de agentes de ia, sac shopee e mercado livre, deixar apenas ads e
+    // performance". Removidas do menu (e da navegação — ver PAGES/
+    // fallback pra 'overview' quando um id não existe mais em PAGES):
+    // 'Agentes de IA' (painel central), 'SAC Mercado Livre' e 'SAC Shopee'.
+    // Nada foi apagado por baixo — o backend (routes/sac.js,
+    // lib/ia/sacScheduler.js etc.) continua existindo e rodando; só a
+    // aba some do menu. A aba 'Promoções' (agentePromocoes) foi MANTIDA
+    // por enquanto — não foi citada explicitamente pelo usuário ao lado das
+    // outras 3, só a frase final "deixar apenas ads e performance"; avise
+    // se quiser que ela saia também.
     { id:'agentesIa', label:'Agentes IA', open:true, items:[
-      { id:'agentesIaHub', title:'Agentes de IA', icon:'sparkle', desc:'Painel central de todos os agentes de IA do Cerne ERP: status, pendências, alertas e histórico de decisões em um só lugar.' },
       { id:'agenteAds', title:'Ads e Performance', icon:'megaphone', desc:'O agente de IA analisa suas campanhas e anúncios e sugere ações de orçamento, ACOS e pausa/escala — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
         bullets:['Sugestões com base nos dados reais de cada campanha/anúncio','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
       { id:'agentePromocoes', title:'Promoções', icon:'sparkle', desc:'O agente de IA identifica oportunidades de promoção, calcula a margem real e sugere entrar, não entrar ou alterar o preço — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
         bullets:['Sugestões com base na margem real, nunca só no desconto','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
-      { id:'sacMercadoLivre', title:'SAC Mercado Livre', icon:'inbox', desc:'O agente verifica sozinho, em background, as perguntas, mensagens pós-venda e reclamações do Mercado Livre e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nenhuma resposta é enviada automaticamente.',
-        bullets:['Verificação 100% automática — você não precisa clicar em nada','Caixa de entrada única: perguntas, mensagens, reclamações e devoluções','A IA sugere a resposta — você sempre aprova, edita ou recusa antes','Nunca oferece reembolso, desconto ou cancela pedido sozinho','Cada decisão sua vira histórico de aprendizado do agente'] },
-      { id:'sacShopee', title:'SAC Shopee', icon:'inbox', desc:'O agente verifica sozinho, em background, as mensagens e devoluções da Shopee e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nenhuma resposta é enviada automaticamente.',
-        bullets:['Verificação 100% automática — você não precisa clicar em nada','Caixa de entrada única: mensagens e devoluções','A IA sugere a resposta — você sempre aprova, edita ou recusa antes','Nunca oferece reembolso, desconto ou cancela pedido sozinho','Cada decisão sua vira histórico de aprendizado do agente'] },
     ]},
   ];
 
@@ -6639,6 +6645,48 @@
       }));
     }
 
+    // Primeiro dia do mês corrente (BRT) — 19/09/2026, CORREÇÃO: usuário
+    // reportou "quando eu lanço em despesas fixas não está entrando no
+    // contas a pagar". Causa raiz: o formulário sugeria "hoje" como Data de
+    // início, e lib/despesasFixas.js#ocorrenciasNoIntervalo (backend) nunca
+    // gera uma ocorrência ANTES da Data de início — então uma despesa
+    // cadastrada hoje (ex: dia 19) com vencimento num dia que já passou
+    // neste mês (ex: dia 10) simplesmente pulava o mês inteiro, sem nenhum
+    // aviso, e só a próxima ocorrência (mês que vem) seria gerada. Corrigido
+    // sugerindo o 1º dia do mês corrente como padrão (assim a conta deste
+    // mês, se o dia de vencimento já passou, ainda entra), MAIS o preview
+    // abaixo ("Primeira conta gerada") pra nunca mais isso ficar escondido
+    // — o usuário sempre vê exatamente quando a primeira conta vai aparecer
+    // e pode ajustar a Data de início se quiser outra coisa.
+    function primeiroDiaDoMesCorrenteBRT(){
+      const [y,m] = hojeBRT().split('-');
+      return y+'-'+m+'-01';
+    }
+
+    // Reimplementação em JS (só pra preview, sem chamar o backend) do mesmo
+    // cálculo de lib/despesasFixas.js#ocorrenciasNoIntervalo, procurando só
+    // a PRIMEIRA ocorrência (nunca antes de dataInicio, respeitando
+    // dataFim) — mesma regra, mesma clampagem de "dia 31" no fim do mês.
+    function primeiraOcorrenciaISO(frequencia, diaVencimento, dataInicio, dataFim){
+      if(!dataInicio || !diaVencimento) return null;
+      function pad2(n){ return String(n).padStart(2,'0'); }
+      function ultimoDiaDoMes(ano,mes){ return new Date(Date.UTC(ano,mes,0)).getUTCDate(); }
+      function normalizarDiaMes(ano,mes,dia){ return Math.min(dia, ultimoDiaDoMes(ano,mes)); }
+      if(frequencia === 'semanal') return dataInicio; // backend: cursor começa em dataInicio
+      const [y0,m0] = dataInicio.split('-').map(Number);
+      const mesAnual = frequencia === 'anual' ? Number(dataInicio.slice(5,7)) : null;
+      let ano=y0, mes=m0;
+      for(let i=0;i<24;i++){ // até 24 meses à frente é mais que suficiente pra um preview
+        if(mesAnual === null || mes === mesAnual){
+          const dia = normalizarDiaMes(ano, mes, Number(diaVencimento));
+          const dataStr = ano+'-'+pad2(mes)+'-'+pad2(dia);
+          if(dataStr >= dataInicio && (!dataFim || dataStr <= dataFim)) return dataStr;
+        }
+        mes++; if(mes>12){ mes=1; ano++; }
+      }
+      return null;
+    }
+
     function openModal(despesa){
       const isEdit = !!despesa;
       const modalRoot = document.getElementById('modalRoot');
@@ -6667,11 +6715,12 @@
                 + '<div class="field-error" id="eDiaVencimento" style="display:none;"></div></div>'
             + '</div>'
             + '<div class="inline-form" style="margin-top:0;">'
-              + '<div class="field narrow"><label>Data de início</label><input type="date" id="fDataInicio" value="'+(isEdit?despesa.dataInicio:hoje)+'">'
+              + '<div class="field narrow"><label>Data de início</label><input type="date" id="fDataInicio" value="'+(isEdit?despesa.dataInicio:primeiroDiaDoMesCorrenteBRT())+'">'
                 + '<div class="field-error" id="eDataInicio" style="display:none;"></div></div>'
               + '<div class="field narrow"><label>Data de término <span class="opt">(se houver)</span></label><input type="date" id="fDataFim" value="'+(isEdit&&despesa.dataFim?despesa.dataFim:'')+'">'
                 + '<div class="field-error" id="eDataFim" style="display:none;"></div></div>'
             + '</div>'
+            + '<div class="field-hint" id="hintPrimeiraConta" style="margin:-4px 0 10px;"></div>'
             + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" value="'+(isEdit?escapeHtml(despesa.observacao||''):'')+'"></div>'
             + '<div class="modal-actions">'
               + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
@@ -6704,9 +6753,35 @@
           label.textContent = f === 'anual' ? 'Dia do mês (mês = mês da data de início)' : 'Dia do mês';
         }
       }
-      document.getElementById('fFrequencia').addEventListener('change', atualizarCampoDiaVencimento);
-      document.getElementById('fDataInicio').addEventListener('change', atualizarCampoDiaVencimento);
+
+      // Preview "Primeira conta gerada" — CORREÇÃO 19/09/2026 (ver comentário
+      // em primeiroDiaDoMesCorrenteBRT acima): nunca mais deixar o usuário
+      // descobrir só depois que a conta deste mês não vai aparecer.
+      function atualizarPreviewPrimeiraConta(){
+        const f = document.getElementById('fFrequencia').value;
+        const dataInicio = document.getElementById('fDataInicio').value;
+        const dataFim = document.getElementById('fDataFim').value;
+        const diaVencimento = f === 'semanal' ? (dataInicio ? diaDaSemanaISO(dataInicio) : null) : Number(document.getElementById('fDiaVencimento').value);
+        const hintEl = document.getElementById('hintPrimeiraConta');
+        if(!hintEl) return;
+        if(!dataInicio || !diaVencimento){ hintEl.textContent = ''; return; }
+        const primeira = primeiraOcorrenciaISO(f, diaVencimento, dataInicio, dataFim || null);
+        if(!primeira){
+          hintEl.textContent = 'Com a data de término informada, nenhuma conta seria gerada — revise as datas.';
+          hintEl.style.color = 'var(--danger)';
+          return;
+        }
+        const mesmoMesDeHoje = primeira.slice(0,7) === hoje.slice(0,7);
+        hintEl.style.color = '';
+        hintEl.innerHTML = 'Primeira conta a pagar gerada: <strong>'+fmtDate(primeira)+'</strong>'
+          + (mesmoMesDeHoje ? '' : ' <span style="color:var(--text-faint);">(ainda não é este mês — pra incluir a conta deste mês, use uma data de início mais cedo)</span>');
+      }
+      document.getElementById('fFrequencia').addEventListener('change', ()=>{ atualizarCampoDiaVencimento(); atualizarPreviewPrimeiraConta(); });
+      document.getElementById('fDataInicio').addEventListener('change', ()=>{ atualizarCampoDiaVencimento(); atualizarPreviewPrimeiraConta(); });
+      document.getElementById('fDiaVencimento').addEventListener('input', atualizarPreviewPrimeiraConta);
+      document.getElementById('fDataFim').addEventListener('change', atualizarPreviewPrimeiraConta);
       atualizarCampoDiaVencimento();
+      atualizarPreviewPrimeiraConta();
 
       apiCategorias().then(categorias=>{
         const dl = document.getElementById('dlCategoriasDespesaFixa');
@@ -9646,9 +9721,11 @@
         + '<div class="panel-title" style="margin-bottom:14px;"><span class="panel-title-ic">'+svg('percent')+'</span>Configuração da IA de Promoções</div>'
         + '<div class="inline-form" style="margin-top:0;align-items:flex-end;">'
           + '<div class="field narrow"><label>Margem mínima permitida em promoção (%)</label><input type="number" id="promoMargemMinima" min="0" max="100" step="0.1" value="'+(c.margemMinimaPct!==undefined?c.margemMinimaPct:14)+'"></div>'
+          + '<div class="field narrow"><label>Margem de conforto p/ promoção com desconto (pontos %)</label><input type="number" id="promoMargemConforto" min="0" max="100" step="0.1" value="'+(c.margemConfortoPct!==undefined?c.margemConfortoPct:0)+'"></div>'
           + '<button class="ghost-btn" id="promoSalvarConfig" type="button" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Salvar</span></button>'
         + '</div>'
         + '<div class="field-hint" style="margin-top:6px;">Quando uma promoção deixar a margem estimada abaixo deste número, a IA vai marcar como <strong>🔴 NÃO RECOMENDADA</strong>.</div>'
+        + '<div class="field-hint" style="margin-top:4px;">Margem de conforto (15/09/2026): pontos percentuais exigidos ACIMA da margem mínima, mas só pra promoções que têm desconto de verdade (preço abaixo do normal). Uma promoção no preço normal (sem desconto, margem igual à sua margem normal) continua exigindo só a margem mínima. Deixe em 0 para desligar — a IA volta a exigir só a margem mínima em qualquer caso.</div>'
         + '<div style="margin-top:18px;">'
           + '<div class="field-hint" style="margin:0 0 8px;">Modo da IA</div>'
           + modos.map(m => {
@@ -9733,6 +9810,7 @@
           { label:'Margem real (R$)', html: l.margemReal===null?'—':money(l.margemReal) },
           { label:'Margem real (%)', html: l.margemRealPct===null?'—':pctFmt(l.margemRealPct) },
           { label:'Margem mínima configurada', html: pctFmt(l.margemMinimaPctUsada) },
+          { label:'Margem de conforto exigida (tem desconto? '+(l.temDesconto?'sim':'não')+')', html: (l.margemConfortoPctUsada && l.temDesconto) ? (pctFmt(l.margemConfortoPctUsada) + ' — mínimo exigido nesta promoção: ' + pctFmt(Number(l.margemMinimaPctUsada||0) + Number(l.margemConfortoPctUsada||0))) : '<span style="color:var(--text-faint);">não se aplica</span>' },
           { label:'Classificação da IA', html: badgeClassificacaoHTML(l) },
           { label:'Por que este dado pode estar incompleto', html: l.motivoIncompleto ? escapeHtml(l.motivoIncompleto) : '<span style="color:var(--text-faint);">Nenhum dado faltando.</span>' },
           { label:'Última atualização', value: fmtDataHora(l.atualizadoEm) },
@@ -9801,12 +9879,16 @@
       const btnSalvar = document.getElementById('promoSalvarConfig');
       if(btnSalvar) btnSalvar.addEventListener('click', async ()=>{
         const margemMinimaPct = Number(document.getElementById('promoMargemMinima').value);
+        const margemConfortoPct = Number(document.getElementById('promoMargemConforto').value);
         if(!Number.isFinite(margemMinimaPct) || margemMinimaPct < 0 || margemMinimaPct > 100){
-          toast('Informe um percentual entre 0 e 100.', 'error'); return;
+          toast('Informe uma margem mínima entre 0 e 100.', 'error'); return;
+        }
+        if(!Number.isFinite(margemConfortoPct) || margemConfortoPct < 0 || margemConfortoPct > 100){
+          toast('Informe uma margem de conforto entre 0 e 100.', 'error'); return;
         }
         btnSalvar.disabled = true;
         try{
-          state.config = await apiSalvarConfig({ empresaId: filtro.empresaId, margemMinimaPct });
+          state.config = await apiSalvarConfig({ empresaId: filtro.empresaId, margemMinimaPct, margemConfortoPct });
           toast('Configuração salva.');
           render();
         }catch(err){ toast(err.message, 'error'); }

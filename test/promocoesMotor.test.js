@@ -93,6 +93,57 @@ describe('classificar — 5 estados determinísticos', () => {
   });
 });
 
+// 15/09/2026 — "margem de conforto": pedido explícito do usuário: "voce
+// deve me trazer promoções do mesmo valor com uma margem igual ou valores
+// abaixo com uma margem um pouco menor mas respeitando a margem minima".
+// Só se aplica a CANDIDATOS (ainda não ativos) COM desconto real — nunca a
+// quem já está ativo na promoção, e nunca a quem está no preço normal (sem
+// desconto, margem igual à margem normal do produto).
+describe('classificar — margem de conforto (pedido do usuário: preferir preço cheio, tolerar só um pouco de desconto)', () => {
+  const base = { margemIncompleta: false, margemMinimaPct: 14, margemConfortoPct: 5, statusItem: 'candidate' };
+
+  test('sem desconto (mesmo preço, margem igual à normal): só o mínimo puro vale, mesmo com conforto configurado', () => {
+    const r = classificar({ ...base, margemPromoPct: 16, temDesconto: false });
+    assert.equal(r.codigo, 'entrar');
+  });
+
+  test('com desconto e margem só um pouco acima do mínimo PURO (16, exigido é 19): NÃO RECOMENDADO', () => {
+    const r = classificar({ ...base, margemPromoPct: 16, temDesconto: true });
+    assert.equal(r.codigo, 'nao_recomendado');
+  });
+
+  test('com desconto e margem acima do mínimo + conforto (20 >= 19): ENTRAR', () => {
+    const r = classificar({ ...base, margemPromoPct: 20, temDesconto: true });
+    assert.equal(r.codigo, 'entrar');
+  });
+
+  test('com desconto e margem exatamente no limite (19 = 14+5): ENTRAR (>= é aceito)', () => {
+    const r = classificar({ ...base, margemPromoPct: 19, temDesconto: true });
+    assert.equal(r.codigo, 'entrar');
+  });
+
+  test('margemConfortoPct = 0 (desligado, padrão): comportamento idêntico a antes da regra, mesmo com desconto', () => {
+    const r = classificar({ ...base, margemConfortoPct: 0, margemPromoPct: 16, temDesconto: true });
+    assert.equal(r.codigo, 'entrar');
+  });
+
+  test('promoção já ATIVA nunca usa a margem de conforto (regra é só pra decidir ENTRAR)', () => {
+    // 16 ficaria NÃO RECOMENDADO como candidato com desconto (exigido 19),
+    // mas como item já ATIVO só precisa passar do mínimo puro (14) e não
+    // deveria mudar por causa da margem de conforto configurada.
+    const r = classificar({ ...base, statusItem: 'started', margemPromoPct: 20, temDesconto: true });
+    assert.equal(r.codigo, 'manter'); // 20 está acima do mínimo puro (14) e fora da faixa de risco (limite 16.1)
+  });
+
+  test('folga (OPORTUNIDADE) é calculada sobre o mínimo EXIGIDO (com conforto), não sobre o mínimo puro', () => {
+    // mínimo exigido = 19; folga = 19*1.5 = 28.5
+    const abaixoDaFolga = classificar({ ...base, margemPromoPct: 28, temDesconto: true });
+    const acimaDaFolga = classificar({ ...base, margemPromoPct: 29, temDesconto: true });
+    assert.equal(abaixoDaFolga.codigo, 'entrar');
+    assert.equal(acimaDaFolga.codigo, 'oportunidade');
+  });
+});
+
 describe('calcularHistoricoPorSku — média de comissão (%) e frete (por unidade), ignorando itens com dado faltando', () => {
   test('calcula média corretamente e ignora item sem tarifas/frete', () => {
     const itensPeriodo = [
@@ -144,6 +195,41 @@ describe('analisarItemPromocao — integra tudo e nunca fabrica margem sem dado 
     assert.equal(linha.classificacaoCodigo, 'oportunidade');
     // margem real é BEM diferente do desconto % (20%) — prova que não é só desconto
     assert.notEqual(linha.margemRealPct, linha.descontoPct);
+    assert.equal(linha.temDesconto, true); // preço promo (80) abaixo do normal (100)
+    assert.equal(linha.margemConfortoPctUsada, 0); // não foi passado -> 0 (desligado)
+  });
+
+  test('margem de conforto passa por analisarItemPromocao de ponta a ponta: desconto real + margem só um pouco acima do mínimo puro vira NÃO RECOMENDADO', () => {
+    const linha = analisarItemPromocao({
+      // preço promo 65: tarifas=6.5, frete=8, custo=30 -> resultado=65-6.5-8-30=20.5 -> 31.5% de margem
+      // mínimo puro 14 seria suficiente sozinho, mas com conforto 20 o exigido vira 34% -> abaixo, não recomendado
+      item: { id: 'MLB3', status: 'candidate', original_price: 100, suggested_discounted_price: 65 },
+      catalogEntry: { sku: 'SKU1', titulo: 'Produto Teste', imagemUrl: null, preco: 100 },
+      historicoPorSku,
+      custoPorSku,
+      aliquotaImposto: 0,
+      margemMinimaPct: 14,
+      margemConfortoPct: 20,
+      contexto: { empresaId: 2, contaId: 1, promotionId: 'P-2', promotionType: 'DEAL', promotionLabel: 'Teste' },
+    });
+    assert.equal(linha.temDesconto, true);
+    assert.equal(linha.margemConfortoPctUsada, 20);
+    assert.equal(linha.classificacaoCodigo, 'nao_recomendado');
+  });
+
+  test('sem desconto (preço promo = preço normal): margem de conforto não é exigida, mesmo configurada', () => {
+    const linha = analisarItemPromocao({
+      item: { id: 'MLB4', status: 'candidate', original_price: 100, suggested_discounted_price: 100 },
+      catalogEntry: { sku: 'SKU1', titulo: 'Produto Teste', imagemUrl: null, preco: 100 },
+      historicoPorSku,
+      custoPorSku,
+      aliquotaImposto: 0,
+      margemMinimaPct: 14,
+      margemConfortoPct: 20,
+      contexto: { empresaId: 2, contaId: 1, promotionId: 'P-3', promotionType: 'DEAL', promotionLabel: 'Teste' },
+    });
+    assert.equal(linha.temDesconto, false);
+    assert.notEqual(linha.classificacaoCodigo, 'nao_recomendado');
   });
 
   test('SKU sem custo cadastrado: margemIncompleta true, nunca calcula um número', () => {

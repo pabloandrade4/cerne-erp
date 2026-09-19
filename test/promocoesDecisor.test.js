@@ -26,6 +26,34 @@ describe('sugerirAcaoPromocao — item ainda candidato (não está na promoção
   test('dados_insuficientes -> nenhuma sugestão', () => {
     assert.equal(sugerirAcaoPromocao({ classificacaoCodigo: 'dados_insuficientes', statusItemMl: 'candidate' }), null);
   });
+
+  // 15/09/2026 — margem de conforto (ver lib/promocoesMotor.js#classificar):
+  // o motivo explica QUAL mínimo foi exigido, nunca esconde que uma
+  // exigência extra entrou em jogo pra promoções com desconto real.
+  test('nao_recomendado com margem de conforto ativa (desconto real) -> motivo explica o mínimo exigido, não só o configurado', () => {
+    const r = sugerirAcaoPromocao({
+      classificacaoCodigo: 'nao_recomendado', statusItemMl: 'candidate', margemRealPct: 16,
+      margemMinimaPctUsada: 14, margemConfortoPctUsada: 5, temDesconto: true,
+    });
+    assert.match(r.motivo, /conforto/);
+    assert.match(r.motivo, /19/); // 14 + 5
+  });
+
+  test('entrar com margem de conforto ativa -> motivo menciona a margem de conforto exigida', () => {
+    const r = sugerirAcaoPromocao({
+      classificacaoCodigo: 'entrar', statusItemMl: 'candidate', margemRealPct: 20,
+      margemMinimaPctUsada: 14, margemConfortoPctUsada: 5, temDesconto: true,
+    });
+    assert.match(r.motivo, /conforto/);
+  });
+
+  test('entrar SEM desconto (preço cheio) -> motivo não menciona conforto, mesmo com margemConfortoPctUsada configurada', () => {
+    const r = sugerirAcaoPromocao({
+      classificacaoCodigo: 'entrar', statusItemMl: 'candidate', margemRealPct: 20,
+      margemMinimaPctUsada: 14, margemConfortoPctUsada: 5, temDesconto: false,
+    });
+    assert.doesNotMatch(r.motivo, /conforto/);
+  });
 });
 
 describe('sugerirAcaoPromocao — item já ativo na promoção', () => {
