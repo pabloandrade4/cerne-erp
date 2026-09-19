@@ -24,6 +24,7 @@ function configPadrao(empresaId) {
   return {
     empresaId: Number(empresaId),
     margemMinimaPct: 14,
+    margemConfortoPct: 0,
     descontoMaximoPct: null,
     estoqueMinimo: null,
     vendasMinimas30d: null,
@@ -38,6 +39,7 @@ function linhaParaConfig(row) {
   return {
     empresaId: row.empresa_id,
     margemMinimaPct: Number(row.margem_minima_pct),
+    margemConfortoPct: Number(row.margem_conforto_pct) || 0,
     descontoMaximoPct: row.desconto_maximo_pct === null ? null : Number(row.desconto_maximo_pct),
     estoqueMinimo: row.estoque_minimo,
     vendasMinimas30d: row.vendas_minimas_30d,
@@ -155,6 +157,14 @@ router.put('/config', async (req, res, next) => {
     if (!Number.isFinite(margemMinimaPct) || margemMinimaPct < 0 || margemMinimaPct > 100) {
       return res.status(400).json({ errors: { margemMinimaPct: 'Informe um percentual entre 0 e 100.' } });
     }
+    // Margem de conforto (15/09/2026, pedido explícito do usuário) — pontos
+    // percentuais ACIMA da margem mínima, exigidos só quando a promoção tem
+    // desconto real (ver lib/promocoesMotor.js#classificar). 0 = desligado
+    // (comportamento igual ao de antes desta regra).
+    const margemConfortoPct = corpo.margemConfortoPct !== undefined ? Number(corpo.margemConfortoPct) : base.margemConfortoPct;
+    if (!Number.isFinite(margemConfortoPct) || margemConfortoPct < 0 || margemConfortoPct > 100) {
+      return res.status(400).json({ errors: { margemConfortoPct: 'Informe um percentual entre 0 e 100.' } });
+    }
     const modoIa = corpo.modoIa !== undefined ? corpo.modoIa : base.modoIa;
     if (!MODOS_IA_VALIDOS.includes(modoIa)) {
       return res.status(400).json({ errors: { modoIa: 'Modo inválido.' } });
@@ -173,11 +183,12 @@ router.put('/config', async (req, res, next) => {
 
     const { rows } = await pool.query(
       `INSERT INTO config_promocoes (
-         empresa_id, margem_minima_pct, desconto_maximo_pct, estoque_minimo, vendas_minimas_30d,
+         empresa_id, margem_minima_pct, margem_conforto_pct, desconto_maximo_pct, estoque_minimo, vendas_minimas_30d,
          permite_full, permite_proprio, modo_ia, permite_escrita_ml, atualizado_em
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now())
        ON CONFLICT (empresa_id) DO UPDATE SET
          margem_minima_pct = EXCLUDED.margem_minima_pct,
+         margem_conforto_pct = EXCLUDED.margem_conforto_pct,
          desconto_maximo_pct = EXCLUDED.desconto_maximo_pct,
          estoque_minimo = EXCLUDED.estoque_minimo,
          vendas_minimas_30d = EXCLUDED.vendas_minimas_30d,
@@ -190,6 +201,7 @@ router.put('/config', async (req, res, next) => {
       [
         empresaId,
         margemMinimaPct,
+        margemConfortoPct,
         corpo.descontoMaximoPct !== undefined ? corpo.descontoMaximoPct : base.descontoMaximoPct,
         corpo.estoqueMinimo !== undefined ? corpo.estoqueMinimo : base.estoqueMinimo,
         corpo.vendasMinimas30d !== undefined ? corpo.vendasMinimas30d : base.vendasMinimas30d,
@@ -272,6 +284,8 @@ function linhaAnaliseParaApi(row) {
     margemReal: row.margem_real === null ? null : Number(row.margem_real),
     margemRealPct: row.margem_real_pct === null ? null : Number(row.margem_real_pct),
     margemMinimaPctUsada: row.margem_minima_pct_usada === null ? null : Number(row.margem_minima_pct_usada),
+    margemConfortoPctUsada: row.margem_conforto_pct_usada === null ? null : Number(row.margem_conforto_pct_usada),
+    temDesconto: !!row.tem_desconto,
     margemIncompleta: row.margem_incompleta,
     motivoIncompleto: row.motivo_incompleto,
     classificacaoCodigo: row.classificacao_codigo,
