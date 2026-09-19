@@ -751,6 +751,109 @@
   .toast svg{ width:15px; height:15px; flex-shrink:0; }
   @keyframes toastIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
 
+  /* ============ AGENTES DE IA — HUB (14/09/2026) ============
+     Grade de cards dos agentes + toolbar de busca/filtros da tela
+     "Agentes de IA" (window.AgentesIaHub). Reaproveita as mesmas variáveis
+     de tint (--tint/--tint-soft) já usadas em .kpi-hero, pra manter a
+     identidade visual dark/neon do resto do ERP. */
+  .agent-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .agent-toolbar .search-box{ flex:1 1 220px; }
+  .toolbar-select{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:0 30px 0 12px; height:36px; font-size:12.5px; color:var(--text); font-family:inherit; appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2398A0B3' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 9px center; background-size:14px; cursor:pointer;
+  }
+  .toolbar-select:focus{ outline:none; border-color:var(--copper); }
+  .check-chip{
+    display:inline-flex; align-items:center; gap:7px; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:0 12px; height:36px; font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; user-select:none;
+  }
+  .check-chip input{ accent-color:var(--copper); width:14px; height:14px; cursor:pointer; }
+  .check-chip.active{ color:var(--text); border-color:var(--border-strong); background:var(--surface-hover); }
+
+  .agent-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:14px; margin-bottom:14px; }
+  .agent-card{
+    position:relative; overflow:hidden; display:flex; flex-direction:column; gap:13px;
+    background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:18px 20px;
+    transition:border-color .15s ease;
+  }
+  .agent-card::before{
+    content:''; position:absolute; inset:0 0 auto 0; height:3px;
+    background:var(--tint,var(--copper));
+  }
+  .agent-card:hover{ border-color:var(--border-strong); }
+  .agent-card.em-construcao{ border-style:dashed; }
+  .agent-card.em-construcao::before{ background:var(--text-faint); }
+  .agent-card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .agent-card-id{ display:flex; align-items:flex-start; gap:12px; min-width:0; }
+  .agent-card-name{ font-family:"Archivo",sans-serif; font-weight:800; font-size:15px; color:var(--text); line-height:1.25; }
+  .agent-card-area{ font-size:11px; color:var(--text-faint); font-weight:600; margin-top:2px; }
+  .agent-card-desc{ font-size:12px; color:var(--text-muted); line-height:1.5; }
+  .agent-card-stats{ display:flex; flex-wrap:wrap; gap:8px; }
+  .agent-card-stat{
+    display:flex; flex-direction:column; gap:1px; background:var(--surface-2); border:1px solid var(--border);
+    border-radius:10px; padding:7px 11px; min-width:78px;
+  }
+  .agent-card-stat b{ font-size:15px; font-weight:800; color:var(--text); font-family:"Archivo",sans-serif; }
+  .agent-card-stat span{ font-size:10.5px; color:var(--text-faint); font-weight:600; }
+  .agent-card-foot{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:auto; padding-top:2px; }
+  .agent-card-ultima{ font-size:10.5px; color:var(--text-faint); }
+
+  .ia-hub-hero{
+    position:relative; overflow:hidden; display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+    background:linear-gradient(135deg, var(--purple-soft) 0%, var(--surface-2) 65%);
+    border:1px solid var(--border); border-radius:18px; padding:22px 24px; margin-bottom:14px;
+  }
+  .ia-hub-hero-ic{
+    flex-shrink:0; width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    background:var(--purple-soft); color:var(--purple);
+  }
+  .ia-hub-hero-ic svg{ width:24px; height:24px; }
+  .ia-hub-hero-body{ flex:1; min-width:220px; }
+  .ia-hub-hero-title{ font-family:"Archivo",sans-serif; font-weight:800; font-size:16px; color:var(--text); margin-bottom:4px; }
+  .ia-hub-hero-sub{ font-size:12.5px; color:var(--text-muted); max-width:640px; line-height:1.5; }
+  .ia-hub-hero-stats{ display:flex; gap:16px; flex-wrap:wrap; margin-top:10px; }
+  .ia-hub-hero-stat b{ font-size:14px; color:var(--text); font-weight:800; }
+  .ia-hub-hero-stat span{ font-size:10.5px; color:var(--text-faint); font-weight:600; display:block; }
+
+  .hist-list{ display:flex; flex-direction:column; }
+  .hist-row{ display:flex; align-items:flex-start; gap:12px; padding:12px 4px; border-bottom:1px solid var(--border); }
+  .hist-row:last-child{ border-bottom:none; }
+  .hist-time{ flex-shrink:0; width:62px; font-size:11px; color:var(--text-faint); font-family:"JetBrains Mono",monospace; padding-top:2px; }
+  .hist-ic{ flex-shrink:0; width:26px; height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--tint-soft,var(--surface-2)); color:var(--tint,var(--text-muted)); }
+  .hist-ic svg{ width:13px; height:13px; }
+  .hist-body{ min-width:0; font-size:12.5px; color:var(--text); line-height:1.5; }
+  .hist-body b{ font-weight:700; }
+  .hist-sub{ font-size:11px; color:var(--text-faint); margin-top:1px; }
+
+  /* ============ SAC (Mercado Livre / Shopee) — 14/09/2026 ============ */
+  .sac-item{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin-bottom:12px; }
+  .sac-item.urgente{ border-color:var(--danger); box-shadow:0 0 0 1px var(--danger) inset; }
+  .sac-item-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .sac-item-meta{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .sac-badge{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; background:var(--surface-2); color:var(--text-muted); border:1px solid var(--border); white-space:nowrap; }
+  .sac-badge.urgente{ background:var(--danger-soft); color:var(--danger); border-color:transparent; }
+  .sac-item-time{ font-size:11px; color:var(--text-faint); font-family:"JetBrains Mono",monospace; white-space:nowrap; }
+  .sac-item-contexto{ font-size:12px; color:var(--text-muted); margin-bottom:8px; }
+  .sac-item-contexto b{ color:var(--text); }
+  .sac-msg{ background:var(--surface-2); border-left:3px solid var(--border-strong); border-radius:6px; padding:10px 12px; font-size:13px; color:var(--text); line-height:1.5; margin-bottom:10px; white-space:pre-wrap; }
+  .sac-resposta-box{ background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:12px; }
+  .sac-resposta-label{ font-size:11px; font-weight:700; color:var(--text-faint); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px; }
+  .sac-resposta-box textarea{ width:100%; min-height:78px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; font:inherit; font-size:13px; color:var(--text); resize:vertical; }
+  .sac-resposta-box textarea:focus{ outline:none; border-color:var(--copper); }
+  .sac-sem-sugestao{ font-size:12.5px; color:var(--text-faint); font-style:italic; }
+  .sac-resposta-acoes{ display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .sac-resposta-disclaimer{ font-size:11px; color:var(--text-faint); margin-top:8px; }
+  .sac-decisao-final{ font-size:12.5px; }
+  .sac-decisao-final .status{ font-weight:700; }
+  .sac-kpi-strip{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:14px; }
+  .sac-kpi-box{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .sac-kpi-box b{ display:block; font-size:20px; font-weight:800; color:var(--text); }
+  .sac-kpi-box b.warn{ color:var(--warning); }
+  .sac-kpi-box b.danger{ color:var(--danger); }
+  .sac-kpi-box span{ font-size:11px; color:var(--text-faint); }
+
   /* ============ INTEGRAÇÕES / PEDIDOS / CUSTOS (Mercado Livre) ============ */
   /* 26/08/2026 — redesign visual: .empresa-picker select (usado em quase
      toda tela — Marketplaces, Produtos, Anúncios, Fornecedores, Pedidos,
@@ -1132,6 +1235,13 @@
         bullets:['Múltiplas contas do Mercado Livre','Múltiplas lojas da Shopee','Status de sincronização por conta','Taxas e regras específicas de cada canal'] },
       { id:'products', title:'Produtos', icon:'box', action:'Novo produto', desc:'Cadastro de produtos: nome, SKU, custo e status — e a alíquota de imposto da empresa. Usados no cálculo de margem das vendas (Pedidos, Visão Geral, Financeiro e Relatórios); a margem não aparece aqui.',
         bullets:['Ficha técnica e custo do produto','Variações e SKUs','Vínculo com anúncios do ML e Shopee','Curva ABC de vendas'] },
+      // 19/09/2026, pedido explícito do usuário: a tela Estoque Full passou a
+      // mostrar valor em R$ e quantidade em caixas, mas isso depende de cada
+      // SKU de venda estar vinculado a um "produto base" (o modelo físico
+      // real, ex: CX-19X12X12) com um custo por caixa cadastrado — e não
+      // existia NENHUMA tela pra isso (só API, ver routes/produtosBase.js).
+      { id:'mapaProdutos', title:'Mapa de Produtos', icon:'link', action:'Novo produto base', desc:'O modelo físico por trás de cada SKU de venda (kit) — e quantas caixas cada kit representa. Usado pela Estoque Full (valor em R$ e caixas) e pelo Relatório de Produtos "Por Caixa".',
+        bullets:['Produto base: código, nome e custo por caixa','Vínculo: qual SKU de venda representa quantas caixas de qual produto base','Calculadora: custo do kit ÷ caixas no kit = custo por caixa','Sugestões automáticas a partir dos SKUs já vendidos, sem vínculo ainda'] },
       { id:'anuncios', title:'Anúncios', icon:'tag', action:'Atualizar', desc:'Anúncios reais das contas do Mercado Livre conectadas — título, SKU, loja, preço, estoque, status e tipo.',
         bullets:['Sincronizado ao vivo com o Mercado Livre','SKU, preço e estoque de cada anúncio','Vínculo com a loja/conta conectada','Edição de preço e estoque (próxima etapa)'] },
       { id:'suppliers', title:'Fornecedores', icon:'truck', action:'Novo fornecedor', desc:'Cadastro de fornecedores, condições comerciais e histórico de compras.',
@@ -1181,6 +1291,17 @@
       { id:'reports', title:'Relatórios', icon:'lineChart', action:'Novo relatório', desc:'Relatórios operacionais e financeiros configuráveis.',
         bullets:['Relatórios pré-configurados','Exportação em Excel e PDF','Filtros por empresa, canal e período','Relatórios agendados'] },
     ]},
+    // 19/09/2026 — pedido explícito do usuário: "quero que excluir as abas
+    // de agentes de ia, sac shopee e mercado livre, deixar apenas ads e
+    // performance". Removidas do menu (e da navegação — ver PAGES/
+    // fallback pra 'overview' quando um id não existe mais em PAGES):
+    // 'Agentes de IA' (painel central), 'SAC Mercado Livre' e 'SAC Shopee'.
+    // Nada foi apagado por baixo — o backend (routes/sac.js,
+    // lib/ia/sacScheduler.js etc.) continua existindo e rodando; só a
+    // aba some do menu. A aba 'Promoções' (agentePromocoes) foi MANTIDA
+    // por enquanto — não foi citada explicitamente pelo usuário ao lado das
+    // outras 3, só a frase final "deixar apenas ads e performance"; avise
+    // se quiser que ela saia também.
     { id:'agentesIa', label:'Agentes IA', open:true, items:[
       { id:'agenteAds', title:'Ads e Performance', icon:'megaphone', desc:'O agente de IA analisa suas campanhas e anúncios e sugere ações de orçamento, ACOS e pausa/escala — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
         bullets:['Sugestões com base nos dados reais de cada campanha/anúncio','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
@@ -1260,12 +1381,14 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agenteAds','agentePromocoes'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','agenteAds','agentePromocoes','sacMercadoLivre','sacShopee'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
     } else if(id === 'products'){
       inner += '<button class="primary-btn enabled" id="btnNewProduto" type="button">'+svg('plus')+'<span>Novo produto</span></button>';
+    } else if(id === 'mapaProdutos'){
+      inner += '<button class="primary-btn enabled" id="btnNewProdutoBase" type="button">'+svg('plus')+'<span>Novo produto base</span></button>';
     } else if(id === 'suppliers'){
       inner += '<button class="primary-btn enabled" id="btnNewFornecedor" type="button">'+svg('plus')+'<span>Novo fornecedor</span></button>';
     } else if(id === 'anuncios'){
@@ -1304,6 +1427,7 @@
     else if(id === 'orders'){ inner += '<div id="pedidosRoot"></div>'; }
     else if(id === 'finance'){ inner += '<div id="financeRoot"></div>'; }
     else if(id === 'products'){ inner += '<div id="produtosRoot"></div>'; }
+    else if(id === 'mapaProdutos'){ inner += '<div id="mapaProdutosRoot"></div>'; }
     else if(id === 'suppliers'){ inner += '<div id="fornecedoresRoot"></div>'; }
     else if(id === 'anuncios'){ inner += '<div id="anunciosRoot"></div>'; }
     else if(id === 'stock'){ inner += '<div id="estoqueRoot"></div>'; }
@@ -1324,8 +1448,11 @@
     else if(id === 'promocoesIa'){ inner += '<div id="promocoesIaRoot"></div>'; }
     else if(id === 'reports'){ inner += '<div id="relatoriosRoot"></div>'; }
     else if(id === 'alerts'){ inner += '<div id="alertasRoot"></div>'; }
+    else if(id === 'agentesIaHub'){ inner += '<div id="agentesIaHubRoot"></div>'; }
     else if(id === 'agenteAds'){ inner += '<div id="agenteAdsRoot"></div>'; }
     else if(id === 'agentePromocoes'){ inner += '<div id="agentePromocoesRoot"></div>'; }
+    else if(id === 'sacMercadoLivre'){ inner += '<div id="sacMercadoLivreRoot"></div>'; }
+    else if(id === 'sacShopee'){ inner += '<div id="sacShopeeRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1354,6 +1481,7 @@
     if(id === 'orders' && window.Pedidos) window.Pedidos.load();
     if(id === 'finance' && window.Financeiro) window.Financeiro.load();
     if(id === 'products' && window.Produtos) window.Produtos.load();
+    if(id === 'mapaProdutos' && window.MapaProdutos) window.MapaProdutos.load();
     if(id === 'suppliers' && window.Fornecedores) window.Fornecedores.load();
     if(id === 'anuncios' && window.Anuncios) window.Anuncios.load();
     if(id === 'stock' && window.Estoque) window.Estoque.load();
@@ -1374,8 +1502,11 @@
     if(id === 'promocoesIa' && window.PromocoesIA) window.PromocoesIA.load();
     if(id === 'reports' && window.Relatorios) window.Relatorios.load();
     if(id === 'alerts' && window.Alertas) window.Alertas.load();
+    if(id === 'agentesIaHub' && window.AgentesIaHub) window.AgentesIaHub.load();
     if(id === 'agenteAds' && window.AgenteAds) window.AgenteAds.load();
     if(id === 'agentePromocoes' && window.AgentePromocoes) window.AgentePromocoes.load();
+    if(id === 'sacMercadoLivre' && window.SacMercadoLivre) window.SacMercadoLivre.load();
+    if(id === 'sacShopee' && window.SacShopee) window.SacShopee.load();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -1920,14 +2051,19 @@
   /* ================= MARKETPLACES — Mercado Livre e Shopee (OAuth real) =================
      Shopee (25/08/2026): mesmo desenho do Mercado Livre acima — botão "Conectar
      Shopee" -> autorização oficial da Shopee Open Platform -> volta conectado.
-     Nesta etapa só autorização/status/renovação de token — sem importar
-     pedidos ainda (pedido explícito do usuário), por isso não existe botão
-     de sincronizar aqui, só "Renovar token" (a renovação já acontece sozinha
-     no servidor — ver lib/shopeeTokenScheduler.js). */
+     Pedidos da Shopee — Fase 1 (14/09/2026, pedido explícito do usuário:
+     "puxar os últimos 60 dias"): botão "Sincronizar agora" + listagem
+     simples logo abaixo do card, só com os campos reais que a Shopee manda
+     (nenhum cálculo de margem/comissão/frete ainda — isso é Fase 2, ver
+     lib/shopeeSync.js). De propósito NÃO entra na tela "Pedidos" (que é só
+     do Mercado Livre, com cálculo de margem próprio) — fica aqui, ao lado
+     do seletor de Empresa, pra não misturar com números que o usuário já
+     usa hoje. */
   (function(){
     const state = {
       empresas:[], empresaId:null, loadingEmpresas:false, conta:null, loadingConta:false, syncing:false, configurado:null, syncResult:null,
       contaShopee:null, loadingContaShopee:false, configuradoShopee:null, renovandoShopee:false,
+      syncingShopee:false, syncResultShopee:null, pedidosShopee:[], loadingPedidosShopee:false,
     };
 
     function toast(message, type){
@@ -1975,6 +2111,20 @@
         state.contaShopee = (data.contas && data.contas[0]) || null;
       }catch(e){ state.contaShopee = null; }
       state.loadingContaShopee = false; render();
+      if(state.contaShopee) await loadPedidosShopee();
+      else state.pedidosShopee = [];
+    }
+
+    // Fase 1 da sincronização de pedidos da Shopee (14/09/2026) — só lista o
+    // que já foi sincronizado (real, sem cálculo nenhum); não dispara sync.
+    async function loadPedidosShopee(){
+      if(!state.contaShopee) return;
+      state.loadingPedidosShopee = true; render();
+      try{
+        const data = await apiShopee('/'+state.contaShopee.id+'/pedidos');
+        state.pedidosShopee = (data && data.pedidos) || [];
+      }catch(e){ state.pedidosShopee = []; }
+      state.loadingPedidosShopee = false; render();
     }
 
     async function load(queryStr){
@@ -2082,10 +2232,38 @@
           + '</div>'
           + (cs.status==='erro' && cs.ultimoErro ? '<div class="bd-note">'+svg('alertCircle')+'<span>'+escapeHtml(cs.ultimoErro)+'</span></div>' : '')
           + '<div style="margin-top:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; width:100%;">'
-            + '<button class="btn-primary" id="shopeeRenovarBtn" type="button" '+(state.renovandoShopee?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.renovandoShopee?'Renovando…':'Renovar token')+'</span></button>'
+            + '<button class="btn-primary" id="shopeeSyncBtn" type="button" '+(state.syncingShopee?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.syncingShopee?'Sincronizando…':'Sincronizar agora')+'</span></button>'
+            + '<button class="btn-secondary" id="shopeeRenovarBtn" type="button" '+(state.renovandoShopee?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.renovandoShopee?'Renovando…':'Renovar token')+'</span></button>'
             + '<button class="btn-secondary" id="shopeeReconnectBtn" type="button">'+svg('link')+'<span>Reconectar</span></button>'
-            + '<span class="field-hint" style="margin:0;">O token é renovado automaticamente pelo servidor antes de vencer. Sincronização de pedidos da Shopee ainda não foi implementada nesta etapa.</span>'
+            + (state.syncResultShopee ? '<span class="field-hint" style="margin:0;">'+state.syncResultShopee.importados+' de '+state.syncResultShopee.totalEncontrados+' pedido(s) dos últimos '+state.syncResultShopee.periodo.dias+' dias importados/atualizados'+(state.syncResultShopee.erros.length? (', '+state.syncResultShopee.erros.length+' com erro'):'')+'.</span>' : '<span class="field-hint" style="margin:0;">A sincronização traz os pedidos dos últimos 60 dias. Ainda sem cálculo de margem/comissão (só os dados do pedido).</span>')
           + '</div>'
+          // Sincronização automática (14/09/2026, ver lib/shopeeSyncScheduler.js)
+          // — roda sozinha no servidor de tempos em tempos, sem precisar
+          // clicar no botão acima; o botão continua existindo pra forçar uma
+          // sincronização na hora, ou pra puxar de novo os 60 dias inteiros.
+          + '<div class="field-hint" style="margin-top:6px; display:flex; align-items:center; gap:6px;">'+svg('refreshCw')+'<span>Sincronização automática ativa: pedidos novos ou com status atualizado entram sozinhos, sem precisar clicar.</span></div>'
+        + '</div>'
+        // Listagem simples dos pedidos já sincronizados — só os campos reais
+        // que a Shopee manda, nenhum cálculo (Fase 2, futura, cuida da
+        // margem/comissão/frete, junto das telas de Pedidos/Relatórios).
+        + '<div style="margin-top:16px;">'
+          + (state.loadingPedidosShopee
+              ? '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando pedidos…</span></div></div>'
+              : !state.pedidosShopee.length
+                ? '<div class="empty-panel" style="padding:24px;"><p class="lead" style="margin:0;">Nenhum pedido sincronizado ainda desta loja. Clique em "Sincronizar agora" para puxar os últimos 60 dias.</p></div>'
+                : '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+                  + '<th>Data</th><th>Pedido</th><th>Comprador</th><th>Valor</th><th>Pagamento</th><th>Transportadora</th><th>Status</th>'
+                  + '</tr></thead><tbody>'
+                  + state.pedidosShopee.map(p => '<tr>'
+                      + '<td class="tab-nums">'+(fmtDateTime(p.dataCriacao) || '—')+'</td>'
+                      + '<td class="mono">'+escapeHtml(p.orderSn)+'</td>'
+                      + '<td>'+escapeHtml(p.compradorUsername || '—')+'</td>'
+                      + '<td class="tab-nums">'+(p.valorTotal!=null ? (p.moeda?p.moeda+' ':'')+Number(p.valorTotal).toFixed(2) : 'indisponível')+'</td>'
+                      + '<td>'+escapeHtml(p.metodoPagamento || '—')+'</td>'
+                      + '<td>'+escapeHtml(p.transportadora || '—')+'</td>'
+                      + '<td>'+escapeHtml(p.status || '—')+'</td>'
+                    + '</tr>').join('')
+                  + '</tbody></table></div></div>')
         + '</div>';
       } else {
         html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
@@ -2097,7 +2275,7 @@
       root.innerHTML = html;
 
       const sel = document.getElementById('mlEmpresaSelect');
-      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); state.syncResult = null; loadContaDaEmpresa(); loadContaShopeeDaEmpresa(); });
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); state.syncResult = null; state.syncResultShopee = null; state.pedidosShopee = []; loadContaDaEmpresa(); loadContaShopeeDaEmpresa(); });
       const connectBtn = document.getElementById('mlConnectBtn');
       if(connectBtn) connectBtn.addEventListener('click', ()=>{ window.location.href = '/api/integracoes/mercadolivre/conectar?empresaId='+state.empresaId; });
       const reconnectBtn = document.getElementById('mlReconnectBtn');
@@ -2128,6 +2306,17 @@
         }catch(err){ toast(err.message, 'error'); }
         state.renovandoShopee = false; render();
       });
+      const shopeeSyncBtn = document.getElementById('shopeeSyncBtn');
+      if(shopeeSyncBtn) shopeeSyncBtn.addEventListener('click', async ()=>{
+        state.syncingShopee = true; render();
+        try{
+          const result = await apiShopee('/'+state.contaShopee.id+'/sincronizar', { method:'POST' });
+          state.syncResultShopee = result;
+          toast(result.importados+' pedido(s) da Shopee importados/atualizados.'+(result.erros.length? (' '+result.erros.length+' com erro — veja o console do servidor.'):''), result.erros.length?'error':'success');
+          await loadPedidosShopee();
+        }catch(err){ toast(err.message, 'error'); }
+        state.syncingShopee = false; render();
+      });
     }
 
     window.Marketplaces = { load };
@@ -2143,7 +2332,13 @@
      duplicado antes: um seletor aqui dentro e outro no header, cada um com seu
      próprio estado). */
   (function(){
-    const state = { loading:false, error:null, data:null, painel:null, painelError:null };
+    // contaId/lojas (14/09/2026, pedido explícito do usuário: "em visão
+    // geral não tem o botão para selecionar qual loja ou todas as lojas" —
+    // mesmo bug relatado em Pedidos, mas aqui nem existia o seletor) — mesmo
+    // padrão de estado local já usado por Ads/Financeiro/Relatórios (cada
+    // tela guarda sua própria loja selecionada; só empresa/período vêm do
+    // filtro do header, ver comentário logo acima desta IIFE).
+    const state = { loading:false, error:null, data:null, painel:null, painelError:null, contaId:'', lojas:[] };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v, moeda){ return v===null||v===undefined ? null : (moeda==='BRL'||!moeda?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
@@ -2151,8 +2346,10 @@
     function pctFmt(v){ return v===null||v===undefined ? null : (v<0?'− ':'')+Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
     function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
 
-    async function apiResumo(empresaId, periodo, extra){
-      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
+    async function apiResumo(empresaId, periodo, extra, contaId){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      const res = await fetch('/api/relatorios/resumo-vendas?'+params.toString()+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os indicadores.');
       return body;
@@ -2163,6 +2360,10 @@
     // Empresas e Alertas & IA (lib/visaoGeralPainel.js). Buscado em
     // paralelo e com erro isolado: se este falhar, os indicadores/gráfico
     // principal (que não dependem dele) continuam aparecendo normalmente.
+    // NÃO recebe contaId de propósito (14/09/2026): "Por marketplace"
+    // compara lojas entre si, e Fluxo de Caixa/Alertas são da empresa
+    // inteira — só os indicadores vindos de apiResumo (hero + linha
+    // secundária) respeitam a loja selecionada nesta etapa.
     async function apiPainel(empresaId, periodo, extra){
       const res = await fetch('/api/visao-geral/painel?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
@@ -2170,13 +2371,33 @@
       return body;
     }
 
+    async function apiLojas(empresaId){
+      const res = await fetch('/api/relatorios/lojas?empresaId='+empresaId);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar as lojas.');
+      return (body && body.lojas) || [];
+    }
+
+    // Recarrega a lista de lojas só quando a empresa muda (nunca a cada
+    // troca de período) — e reseta a loja selecionada nesse caso, porque uma
+    // loja de outra empresa não existiria mais na lista.
+    let ultimaEmpresaIdLojas = null;
+    async function garantirLojasCarregadas(empresaId){
+      if(ultimaEmpresaIdLojas === empresaId) return;
+      ultimaEmpresaIdLojas = empresaId;
+      state.contaId = '';
+      try{ state.lojas = await apiLojas(empresaId); }
+      catch(e){ state.lojas = []; }
+    }
+
     async function loadResumo(){
       const filtro = window.CerneFiltro.state;
       if(!filtro.empresaId){ state.data = null; state.error = null; state.painel = null; state.painelError = null; state.loading = false; render(); return; }
+      await garantirLojasCarregadas(filtro.empresaId);
       state.loading = true; state.error = null; state.painelError = null; render();
       const extra = window.CerneFiltro.periodoExtra();
       const [resumoResult, painelResult] = await Promise.allSettled([
-        apiResumo(filtro.empresaId, filtro.periodo, extra),
+        apiResumo(filtro.empresaId, filtro.periodo, extra, state.contaId),
         apiPainel(filtro.empresaId, filtro.periodo, extra),
       ]);
       if(resumoResult.status==='fulfilled'){ state.data = resumoResult.value; state.error = null; }
@@ -2251,7 +2472,9 @@
           note: resumo.faturamento.valor!==null ? 'Bruto no período (vendas não canceladas)' : (pendNota('essa informação', resumo.faturamento.pendentes) || 'Bruto no período (vendas não canceladas)'),
           valueHtml: resumo.faturamento.valor!==null ? escapeHtml(money(resumo.faturamento.valor, moeda)) : pendCurta(resumo.faturamento.pendentes) },
         { label:'Margem de contribuição (R$)', icon:'wallet', tint: resumo.margemContribuicao.valor===null ? 'muted' : (resumo.margemContribuicao.valor>=0?'success':'danger'), spark: spMargem,
-          note: resumo.margemContribuicao.valor!==null ? 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto' : (pendNota('custo cadastrado', resumo.margemContribuicao.pendentes) || 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto'),
+          note: resumo.margemContribuicao.valor!==null
+            ? (resumo.comComissaoEstimada ? (resumo.comComissaoEstimada===1?'Inclui 1 pedido Shopee com comissão estimada':'Inclui '+resumo.comComissaoEstimada+' pedidos Shopee com comissão estimada') : 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto')
+            : (pendNota('custo cadastrado', resumo.margemContribuicao.pendentes) || 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto'),
           valueHtml: resumo.margemContribuicao.valor!==null
             ? '<span class="'+(resumo.margemContribuicao.valor>=0?'pos':'neg')+'">'+escapeHtml(moneySigned(resumo.margemContribuicao.valor, moeda))+'</span>'
             : pendCurta(resumo.margemContribuicao.pendentes) },
@@ -2523,6 +2746,19 @@
 
       let html = '';
 
+      // Seletor de Loja (14/09/2026) — só aparece quando há mais de uma loja
+      // conectada (ML + Shopee juntas); com 0 ou 1 loja não faz diferença
+      // pro usuário escolher, então não polui a tela à toa. "Todas as lojas"
+      // sempre disponível pra voltar ao total da empresa.
+      if(state.lojas.length > 1){
+        html += '<div class="toolbar" style="margin-bottom:14px;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="ov2LojaSelect">'
+            + '<option value="">Todas as lojas</option>'
+            + state.lojas.map(l=>'<option value="'+escapeHtml(l.chave)+'" '+(l.chave===state.contaId?'selected':'')+'>'+escapeHtml((l.marketplace==='shopee'?'[Shopee] ':'[ML] ')+(l.nickname||l.chave))+'</option>').join('')
+          + '</select></div>'
+        + '</div>';
+      }
+
       if(filtro.loadingEmpresas || state.loading){
         html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando indicadores…</span></div></div>';
       } else if(state.error){
@@ -2534,6 +2770,7 @@
         html += sectionLabel('Indicadores principais — '+state.data.periodo.label)
           + heroKpisHTML(resumo, 'BRL', hasOrders, state.data.serieDiaria)
           + secondaryKpisHTML(resumo, 'BRL', hasOrders, state.painel, state.painelError)
+          + (state.contaId ? '<div class="field-hint" style="margin:-8px 0 14px;">"Por marketplace", Fluxo de Caixa e Alertas &amp; IA abaixo continuam considerando todas as lojas da empresa — só os indicadores acima e o gráfico de desempenho respeitam a loja selecionada.</div>' : '')
           + sectionLabel('Desempenho')
           + '<div class="ov2-row-chart">'
             + chartCardHTML(state.data)
@@ -2548,6 +2785,9 @@
       root.querySelectorAll('.alert-row').forEach(el => {
         el.addEventListener('click', (e) => { e.preventDefault(); const page = el.dataset.page; if(page) navigate(page); });
       });
+
+      const selLoja = document.getElementById('ov2LojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadResumo(); });
     }
 
     window.Overview = { load };
@@ -3162,16 +3402,33 @@
       const body = await res.json();
       return (body.contas && body.contas[0]) || null;
     }
+    // Shopee (14/09/2026, "tudo que foi aplicado no mercado livre pode e
+    // deve ser aplicado na shopee") — mesmo padrão da conta do Mercado
+    // Livre acima, só apontando pra rota da Shopee (routes/shopee.js).
+    async function apiContaShopeeDaEmpresa(empresaId){
+      const res = await fetch('/api/integracoes/shopee?empresaId='+empresaId);
+      const body = await res.json();
+      return (body.contas && body.contas[0]) || null;
+    }
+    async function apiShopeeSync(contaId){
+      const res = await fetch('/api/integracoes/shopee/'+contaId+'/sincronizar', { method:'POST' });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Falha ao sincronizar a Shopee.');
+      return body;
+    }
     // KPIs de topo (Pedidos/Vendas/Margem/Ticket médio/Cancelados) — mesma
     // fonte que Visão Geral já usa (/api/relatorios/resumo-vendas, que por
     // trás é resumirPeriodo() de lib/relatorioVendas.js — não recalculado
-    // aqui). Considera TODOS os pedidos da empresa+período (não aplica os
-    // filtros de loja/status/produto da tabela abaixo, porque essa rota não
-    // tem esses filtros — nunca deixe de mostrar diferente do que os filtros
-    // extras sugerem: por isso a nota abaixo dos cards).
-    async function apiResumoVendas(empresaId, periodo, desde, ate){
+    // aqui). Loja (contaId) é respeitada aqui também desde 14/09/2026
+    // (correção do bug relatado pelo usuário: "quando seleciona a loja as
+    // vendas, margem, pedidos, ticket médio e cancelados continuam como se
+    // tivesse selecionado todas as lojas") — só Status e Produto/SKU (filtros
+    // exclusivos da tabela) continuam de fora dos cards, por isso a nota
+    // abaixo deles quando algum desses dois está ativo.
+    async function apiResumoVendas(empresaId, periodo, desde, ate, contaId){
       const params = new URLSearchParams({ empresaId, periodo });
       if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
+      if(contaId) params.set('contaId', contaId);
       const res = await fetch('/api/relatorios/resumo-vendas?'+params.toString());
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Falha ao carregar os indicadores.');
@@ -3180,7 +3437,7 @@
     async function loadResumo(){
       if(!state.empresaId){ state.resumo = null; return; }
       state.loadingResumo = true; render();
-      try{ state.resumo = await apiResumoVendas(state.empresaId, state.periodo, state.desdePersonalizado, state.atePersonalizado); }
+      try{ state.resumo = await apiResumoVendas(state.empresaId, state.periodo, state.desdePersonalizado, state.atePersonalizado, state.contaId); }
       catch(err){ state.resumo = null; }
       state.loadingResumo = false; render();
     }
@@ -3229,7 +3486,7 @@
       const items = [
         { label:'Pedidos', icon:'cart', tint:'copper', valueHtml: String(r.qtdPedidos), note:state.resumo.periodo.label },
         { label:'Vendas (R$)', icon:'lineChart', tint:'success', valueHtml: moneyKpi(r.faturamento.valor), note:'Bruto, pedidos não cancelados' },
-        { label:'Margem (R$)', icon:'wallet', tint: r.margemContribuicao.valor===null?'muted':(r.margemContribuicao.valor>=0?'success':'danger'), valueHtml: moneyKpi(r.margemContribuicao.valor), note: r.margemContribuicao.pendentes ? r.margemContribuicao.pendentes+' pedido(s) sem custo' : 'Todos os pedidos com custo' },
+        { label:'Margem (R$)', icon:'wallet', tint: r.margemContribuicao.valor===null?'muted':(r.margemContribuicao.valor>=0?'success':'danger'), valueHtml: moneyKpi(r.margemContribuicao.valor), note: r.margemContribuicao.pendentes ? r.margemContribuicao.pendentes+' pedido(s) sem custo' : (r.comComissaoEstimada ? r.comComissaoEstimada+' pedido(s) Shopee com comissão estimada' : 'Todos os pedidos com custo') },
         { label:'Margem (%)', icon:'percent', tint:'purple', valueHtml: r.margemPercentual===null?'Pendente':r.margemPercentual.toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%', note:'Sobre o faturamento' },
         { label:'Ticket médio', icon:'activity', tint:'petrol', valueHtml: moneyKpi(ticketMedio), note:'Vendas ÷ pedidos' },
         { label:'Cancelados', icon:'alertCircle', tint: r.cancelados.quantidade>0?'danger':'muted', valueHtml: String(r.cancelados.quantidade), note: r.cancelados.valor ? moneyKpi(r.cancelados.valor)+' não contabilizado' : 'Nenhum no período' },
@@ -3242,8 +3499,8 @@
           + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
         + '</div>'
       ).join('') + '</div>'
-      + (state.contaId || state.status || state.busca.trim()
-          ? '<div class="field-hint" style="margin:-8px 0 14px;">Os indicadores acima consideram todos os pedidos de "'+escapeHtml(state.resumo.periodo.label)+'" — os filtros de loja/status/busca abaixo afetam só a tabela.</div>'
+      + (state.status || state.busca.trim()
+          ? '<div class="field-hint" style="margin:-8px 0 14px;">Os indicadores acima já consideram a loja selecionada, mas não os filtros de Status/Produto-SKU (esses afetam só a tabela abaixo).</div>'
           : '');
     }
 
@@ -3276,7 +3533,7 @@
               : '')
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedLojaSelect">'
             + '<option value="">Todas as lojas</option>'
-            + state.filtrosDisponiveis.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+            + state.filtrosDisponiveis.lojas.map(l=>'<option value="'+escapeHtml(l.chave)+'" '+(l.chave===state.contaId?'selected':'')+'>'+escapeHtml((l.marketplace==='shopee'?'[Shopee] ':'[ML] ')+(l.nickname||l.chave))+'</option>').join('')
           + '</select></div>'
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedStatusSelect">'
             + '<option value="">Todos os status</option>'
@@ -3315,12 +3572,13 @@
         // Imposto continuam disponíveis — só que dentro do detalhe do pedido
         // (clique no ícone de olho), não mais como coluna aqui.
         html += '<div class="table-card"><div class="table-wrap"><table class="data-table compact-orders"><thead><tr>'
-          + '<th>Data</th><th>Pedido</th><th>Produto / SKU</th><th>Qtd.</th><th>Venda</th>'
+          + '<th>Data</th><th>Canal</th><th>Pedido</th><th>Produto / SKU</th><th>Qtd.</th><th>Venda</th>'
           + '<th>Taxas</th><th>Frete vend.</th><th>Custo</th>'
           + '<th>Margem R$</th><th>Margem %</th><th>Logística</th><th>Status</th><th></th>'
           + '</tr></thead><tbody>'
-          + state.items.map(p => '<tr data-row-detail="'+p.id+'" style="cursor:pointer;'+(p.cancelado?'opacity:.6;':'')+'">'
+          + state.items.map(p => '<tr data-row-detail="'+escapeHtml(p.detailKey)+'" style="cursor:pointer;'+(p.cancelado?'opacity:.6;':'')+'">'
             + '<td class="tab-nums">'+fmtDataCell(p.dataCriacao)+'</td>'
+            + '<td><span class="badge-status '+(p.marketplace==='shopee'?'off':'on')+'" style="display:inline-flex;" title="'+(p.marketplace==='shopee'?'Shopee':'Mercado Livre')+'"><span class="dot"></span>'+(p.marketplace==='shopee'?'Shopee':'ML')+'</span></td>'
             + '<td class="mono">'+escapeHtml(p.mlOrderId)+'</td>'
             + '<td class="produto-cell">'
               + '<div class="cell-stack"><span class="prod-title" title="'+escapeHtml(p.produtoResumo||'—')+'">'+escapeHtml(p.produtoResumo||'—')+(p.qtdItens>3?' +'+(p.qtdItens-3):'')+'</span>'
@@ -3331,11 +3589,11 @@
             + '<td class="mono">'+cellMoney(p.tarifasMl,p.moeda,true)+'</td>'
             + '<td class="mono">'+(money(p.freteVendedor,p.moeda)||'<span style="color:var(--text-faint);font-style:italic;">indisp.</span>')+'</td>'
             + '<td class="mono">'+cellMoney(p.custoProduto,p.moeda,true)+'</td>'
-            + '<td class="mono" style="'+(p.margemContribuicao!==null?(p.margemContribuicao>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(p.calculoCompleto ? money(p.margemContribuicao,p.moeda) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
+            + '<td class="mono" style="'+(p.margemContribuicao!==null?(p.margemContribuicao>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(p.calculoCompleto ? (money(p.margemContribuicao,p.moeda)+(p.comissaoEstimada?' <span title="Comissão da Shopee ainda estimada — repasse real não confirmado" style="color:var(--text-faint);font-style:italic;">(estim.)</span>':'')) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
             + '<td class="mono">'+(p.calculoCompleto ? pctCell(p.margemPercentual) : '<span style="color:var(--text-faint);font-style:italic;">pendente</span>')+'</td>'
             + '<td class="cell-stack-sub" style="white-space:normal;">'+escapeHtml(p.envioLogisticType||'—')+'</td>'
             + '<td><span class="badge-status '+(p.status==='paid'?'on':(p.cancelado?'err':'off'))+'"><span class="dot"></span>'+escapeHtml(p.status||'—')+'</span></td>'
-            + '<td><div class="row-actions"><button class="row-ic-btn" data-detail="'+p.id+'" title="Ver detalhes (loja, imposto e mais)" type="button">'+svg('eye')+'</button></div></td>'
+            + '<td><div class="row-actions"><button class="row-ic-btn" data-detail="'+escapeHtml(p.detailKey)+'" title="Ver detalhes (loja, imposto e mais)" type="button">'+svg('eye')+'</button></div></td>'
           + '</tr>').join('')
           + '</tbody></table></div></div>'
           + (state.totalFiltrado > state.items.length
@@ -3368,16 +3626,34 @@
       if(syncBtn) syncBtn.addEventListener('click', async ()=>{
         syncBtn.disabled = true;
         try{
-          const conta = await apiContaDaEmpresa(state.empresaId);
-          if(!conta){ toast('Conecte o Mercado Livre desta empresa em Marketplaces primeiro.', 'error'); syncBtn.disabled=false; return; }
-          const result = await apiMlSync(conta.id);
-          toast(result.importados+' pedido(s) importados/atualizados.');
+          // Sincroniza as duas lojas conectadas desta empresa (Mercado Livre
+          // e Shopee), quando existirem — mesmo botão de sempre, agora
+          // cobrindo as duas (14/09/2026). Cada uma é isolada: se uma
+          // falhar, a outra ainda sincroniza normalmente.
+          const [contaMl, contaShopee] = await Promise.all([
+            apiContaDaEmpresa(state.empresaId),
+            apiContaShopeeDaEmpresa(state.empresaId),
+          ]);
+          if(!contaMl && !contaShopee){
+            toast('Conecte o Mercado Livre e/ou a Shopee desta empresa em Marketplaces primeiro.', 'error');
+            syncBtn.disabled = false; return;
+          }
+          const mensagens = [];
+          if(contaMl){
+            try{ const r = await apiMlSync(contaMl.id); mensagens.push(r.importados+' do Mercado Livre'); }
+            catch(err){ mensagens.push('Mercado Livre: '+err.message); }
+          }
+          if(contaShopee){
+            try{ const r = await apiShopeeSync(contaShopee.id); mensagens.push(r.importados+' da Shopee'); }
+            catch(err){ mensagens.push('Shopee: '+err.message); }
+          }
+          toast('Sincronizado — '+mensagens.join(' · ')+'.');
           await loadPedidos();
         }catch(err){ toast(err.message, 'error'); }
         syncBtn.disabled = false;
       });
       const selLoja = document.getElementById('pedLojaSelect');
-      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadPedidos(); });
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadResumo(); loadPedidos(); });
       const selStatus = document.getElementById('pedStatusSelect');
       if(selStatus) selStatus.addEventListener('change', ()=>{ state.status = selStatus.value; loadPedidos(); });
       const busca = document.getElementById('pedBuscaInput');
@@ -3424,6 +3700,13 @@
 
       const { pedido, itens, resultadoFinanceiro: rf } = data;
       const moeda = pedido.moeda;
+      // Shopee (14/09/2026): mesmo painel de sempre, só trocando os campos
+      // que são específicos de cada marketplace (ID de pagamento/envio do
+      // Mercado Livre não existem na Shopee, e vice-versa — nunca mostrar
+      // um rótulo "Mercado Livre" pra um pedido da Shopee nem inventar um
+      // ID que a Shopee não manda).
+      const isShopee = pedido.marketplace === 'shopee';
+      const canalLabel = isShopee ? 'Shopee' : 'Mercado Livre';
       const bdLine = (label, valor, negative) => '<div class="bd-row'+(negative?' neg':'')+'">'
         + '<span class="bd-label">'+label+'</span>'
         + '<span class="bd-value">'+(valor===null ? '<span style="color:var(--text-faint); font-style:italic; font-family:\'Public Sans\',sans-serif; font-weight:500;">indisponível</span>' : (negative?'− ':'')+money(Math.abs(valor),moeda))+'</span>'
@@ -3433,27 +3716,29 @@
         .map(c=> escapeHtml(c.label)+': '+money(c.valor,moeda)).join(' · ');
 
       const html = '<div class="side-panel-overlay" id="sidePanelOverlay"></div><div class="side-panel">'
-        + '<div class="modal-head"><div class="modal-title">Pedido #'+pedido.mlOrderId+'</div><button class="row-ic-btn" id="sidePanelClose" type="button">'+svg('x')+'</button></div>'
-        + '<div class="modal-sub">'+fmtDateTime(pedido.dataCriacao)+' · <span class="badge-status '+(pedido.status==='paid'?'on':'off')+'" style="display:inline-flex;"><span class="dot"></span>'+escapeHtml(pedido.status||'—')+'</span></div>'
+        + '<div class="modal-head"><div class="modal-title">Pedido #'+escapeHtml(pedido.mlOrderId)+'</div><button class="row-ic-btn" id="sidePanelClose" type="button">'+svg('x')+'</button></div>'
+        + '<div class="modal-sub">'+escapeHtml(canalLabel)+' · '+fmtDateTime(pedido.dataCriacao)+' · <span class="badge-status '+(pedido.status==='paid'?'on':'off')+'" style="display:inline-flex;"><span class="dot"></span>'+escapeHtml(pedido.status||'—')+'</span></div>'
 
         + '<div class="detail-section-title">Pedido</div>'
         + '<div class="detail-grid">'
           + '<div class="dg-item"><div class="dg-label">Loja</div><div class="dg-value'+(pedido.loja?'':' muted')+'">'+(escapeHtml(pedido.loja)||'—')+'</div></div>'
           + '<div class="dg-item"><div class="dg-label">Comprador</div><div class="dg-value">'+escapeHtml(pedido.compradorNickname||'—')+'</div></div>'
-          + '<div class="dg-item"><div class="dg-label">ID do pagamento</div><div class="dg-value'+(pedido.mlPaymentId?'':' muted')+'">'+(pedido.mlPaymentId||'indisponível')+'</div></div>'
-          + '<div class="dg-item"><div class="dg-label">ID do envio (shipment)</div><div class="dg-value'+(pedido.mlShippingId?'':' muted')+'">'+(pedido.mlShippingId||'sem envio')+'</div></div>'
-          + '<div class="dg-item"><div class="dg-label">Modalidade de logística</div><div class="dg-value'+(pedido.envioLogisticType?'':' muted')+'">'+(escapeHtml(pedido.envioLogisticType||pedido.envioLogisticMode)||'indisponível')+'</div></div>'
+          + (isShopee
+              ? '<div class="dg-item"><div class="dg-label">Forma de pagamento</div><div class="dg-value'+(pedido.metodoPagamento?'':' muted')+'">'+(escapeHtml(pedido.metodoPagamento)||'indisponível')+'</div></div>'
+              : '<div class="dg-item"><div class="dg-label">ID do pagamento</div><div class="dg-value'+(pedido.mlPaymentId?'':' muted')+'">'+(pedido.mlPaymentId||'indisponível')+'</div></div>'
+                + '<div class="dg-item"><div class="dg-label">ID do envio (shipment)</div><div class="dg-value'+(pedido.mlShippingId?'':' muted')+'">'+(pedido.mlShippingId||'sem envio')+'</div></div>')
+          + '<div class="dg-item"><div class="dg-label">'+(isShopee?'Transportadora':'Modalidade de logística')+'</div><div class="dg-value'+(pedido.envioLogisticType?'':' muted')+'">'+(escapeHtml(pedido.envioLogisticType||pedido.envioLogisticMode)||'indisponível')+'</div></div>'
         + '</div>'
 
         + '<div class="detail-section-title">Itens</div>'
-        + itens.map(it => '<div class="item-row"><div><div class="ir-title">'+escapeHtml(it.titulo||it.mlItemId||'—')+'</div>'
+        + itens.map(it => '<div class="item-row"><div><div class="ir-title">'+escapeHtml(it.titulo||it.mlItemId||it.itemId||'—')+'</div>'
             + '<div class="ir-sku">'+(it.sku?('SKU '+escapeHtml(it.sku)):'sem SKU informado')+' · qtd '+it.quantidade+'</div></div>'
             + '<div class="mono">'+(money(it.valorTotalItem,moeda)||'indisponível')+'</div></div>').join('')
 
         + '<div class="detail-section-title">Margem de contribuição desta venda</div>'
         + bdLine('Valor da venda', rf.valorVenda, false)
         + (rf.desconto ? bdLine('(−) Desconto (cupom do pagamento)', rf.desconto, true) : '')
-        + bdLine('(−) Taxas/comissões Mercado Livre', rf.tarifasMl.total, true)
+        + bdLine('(−) Taxas/comissões '+escapeHtml(canalLabel), rf.tarifasMl.total, true)
         + (tarifasSideNote ? '<div class="bd-side-note">'+tarifasSideNote+'</div>' : '')
         + bdLine('(−) Frete do vendedor', rf.freteVendedor, true)
         + bdLine('(−) Imposto configurado ('+rf.imposto.aliquota+'%)', rf.imposto.valor, true)
@@ -3464,8 +3749,10 @@
         + (rf.pendencias.length ? '<div class="bd-note">'+svg('alertCircle')+'<span>'+rf.pendencias.map(escapeHtml).join('<br>')+'</span></div>' : '')
 
         + '<div class="detail-section-title">Frete pago pelo comprador (informativo)</div>'
-        + bdLine('Frete comprador (receiver.cost)', rf.freteComprador, false)
-        + '<div class="bd-side-note">Não entra no cálculo do resultado acima — é o valor pago pelo comprador, separado do custo de frete do vendedor.</div>'
+        + bdLine(isShopee ? 'Frete comprador' : 'Frete comprador (receiver.cost)', rf.freteComprador, false)
+        + '<div class="bd-side-note">'+(isShopee
+            ? 'A Shopee ainda não separa esse valor nos dados já sincronizados nesta etapa da integração.'
+            : 'Não entra no cálculo do resultado acima — é o valor pago pelo comprador, separado do custo de frete do vendedor.')+'</div>'
 
         + '</div>';
 
@@ -3868,6 +4155,17 @@
       if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
     }
+    // 14/09/2026, pedido explícito do usuário: "como podemos fazer para
+    // puxar o sku com o custo direto" — SKUs que já apareceram em pedidos
+    // reais (Mercado Livre + Shopee) desta empresa mas ainda não têm
+    // produto cadastrado (ver rota em routes/produtos.js). Usado só pra
+    // sugerir no cadastro/edição de produto — nunca preenche nada sozinho,
+    // o usuário sempre escolhe/confirma antes de salvar.
+    async function apiSugestoesSku(empresaId){
+      const res = await fetch('/api/produtos/sugestoes-sku?empresaId='+empresaId);
+      const body = await res.json().catch(()=>({}));
+      return (body && body.sugestoes) || [];
+    }
     async function apiConfig(path, opts){
       const res = await fetch('/api/config-financeiro'+path, { headers:{'Content-Type':'application/json'}, ...opts });
       let body = null; try{ body = await res.json(); }catch(e){}
@@ -4023,7 +4321,9 @@
           + '<form id="prdForm">'
             + '<div class="field"><label>Nome do produto</label><input type="text" id="fNome" placeholder="Ex: Caixa de papelão 50x24x15" value="'+(isEdit?escapeHtml(produto.nome):'')+'" maxlength="200">'
               + '<div class="field-error" id="eNome" style="display:none;"></div></div>'
-            + '<div class="field"><label>SKU</label><input type="text" id="fSku" placeholder="Ex: CX-50X24X15" value="'+(isEdit?escapeHtml(produto.sku):'')+'" maxlength="100">'
+            + '<div class="field"><label>SKU</label><input type="text" id="fSku" list="skuSugestoesList" placeholder="Ex: CX-50X24X15" value="'+(isEdit?escapeHtml(produto.sku):'')+'" maxlength="100">'
+              + '<datalist id="skuSugestoesList"></datalist>'
+              + '<div class="field-hint" id="skuSugestoesHint" style="margin-top:4px;"></div>'
               + '<div class="field-error" id="eSku" style="display:none;"></div></div>'
             + '<div class="field"><label>Custo (R$)</label><input type="text" inputmode="decimal" id="fCusto" placeholder="0,00" value="'+(isEdit?String(produto.custo).replace('.',','):'')+'">'
               + '<div class="field-error" id="eCusto" style="display:none;"></div></div>'
@@ -4043,6 +4343,38 @@
       document.getElementById('modalClose').addEventListener('click', close);
       document.getElementById('modalCancel').addEventListener('click', close);
       document.getElementById('fNome').focus();
+
+      // Sugestões de SKU puxadas direto dos pedidos (Mercado Livre + Shopee)
+      // — pedido explícito do usuário (14/09/2026): evita digitar o SKU na
+      // mão e errar (o que faz o custo nunca casar com a venda). Só
+      // sugere, nunca preenche nada sem o usuário escolher.
+      let sugestoesSku = [];
+      const fSkuInput = document.getElementById('fSku');
+      const skuHint = document.getElementById('skuSugestoesHint');
+      if(skuHint) skuHint.textContent = 'Carregando sugestões de SKU dos pedidos…';
+      apiSugestoesSku(state.empresaId).then(function(lista){
+        sugestoesSku = lista;
+        const datalist = document.getElementById('skuSugestoesList');
+        if(!datalist) return; // modal já foi fechado antes da resposta chegar
+        if(lista.length){
+          datalist.innerHTML = lista.map(function(s){
+            return '<option value="'+escapeHtml(s.sku)+'">'+escapeHtml(s.nomeSugerido||s.sku)+' — '+s.qtdPedidos+(s.qtdPedidos===1?' pedido':' pedidos')+' sem custo cadastrado</option>';
+          }).join('');
+          if(skuHint) skuHint.textContent = 'Comece a digitar pra ver SKUs que já apareceram em pedidos e ainda não têm custo cadastrado — escolher um da lista garante que bate certinho com a venda.';
+        } else if(skuHint) {
+          skuHint.textContent = isEdit ? '' : 'Nenhum SKU de pedido pendente de custo encontrado no momento — pode digitar o SKU manualmente.';
+        }
+      }).catch(function(){ if(skuHint) skuHint.textContent = ''; });
+
+      if(fSkuInput && !isEdit){
+        fSkuInput.addEventListener('input', function(){
+          const sugestao = sugestoesSku.find(function(s){ return s.sku === fSkuInput.value; });
+          const fNomeInput = document.getElementById('fNome');
+          if(sugestao && sugestao.nomeSugerido && fNomeInput && !fNomeInput.value.trim()){
+            fNomeInput.value = sugestao.nomeSugerido;
+          }
+        });
+      }
 
       const toggleBtn = document.getElementById('fAtivo');
       if(toggleBtn) toggleBtn.addEventListener('click', ()=>{
@@ -4331,6 +4663,478 @@
     window.Fornecedores = { load };
   })();
 
+  /* ================= MAPA DE PRODUTOS — produto base + vínculo de SKU
+     (19/09/2026, pedido explícito do usuário) =================
+     A Estoque Full (valor em R$/caixas) e o Relatório de Produtos "Por
+     Caixa" precisam saber, pra cada SKU de venda (kit, ex:
+     '100CX-19X12X12'), qual é o produto FÍSICO real por trás dele
+     (produto base, ex: 'CX-19X12X12') e quantas caixas físicas cada
+     unidade desse kit representa (multiplicador). A API já existia
+     inteira (routes/produtosBase.js) mas nunca teve tela — esta tela só
+     consome essa API, nenhuma regra nova é criada aqui.
+     Custo do produto base = custo por CAIXA física (nunca por kit) — é
+     isso que a Estoque Full usa pra calcular o valor do estoque. Como o
+     usuário normalmente só sabe o custo do KIT que comprou (ex: um kit de
+     25 caixas), o formulário abaixo tem uma calculadora opcional: custo do
+     kit ÷ caixas no kit = custo por caixa — preenche o campo de custo
+     sozinha, mas o campo continua editável (o cálculo é só uma ajuda,
+     nunca a única forma de preencher). */
+  (function(){
+    const state = {
+      empresas:[], empresaId:null, loadingEmpresas:false,
+      produtosBase:[], loading:false, error:null, status:'ativos', search:'',
+      vinculos:[], loadingVinculos:false, errorVinculos:null,
+      sugestoes:[], loadingSugestoes:false, errorSugestoes:null,
+    };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    // Entrada de valor decimal em pt-BR ("22,75" -> 22.75). Remove ponto de
+    // milhar antes de trocar a vírgula decimal, pra aceitar "1.234,56" também.
+    function parseDecimalBR(v){
+      const s = String(v===undefined||v===null?'':v).trim();
+      if(!s) return null;
+      const normalizado = s.replace(/\./g,'').replace(',', '.');
+      const n = Number(normalizado);
+      return Number.isFinite(n) ? n : NaN;
+    }
+    function fmtDecimalInput(v){ return v===null||v===undefined ? '' : String(v).replace('.',','); }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function api(path, opts){
+      const res = await fetch('/api/produtos-base'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&Object.values(body.errors)[0])))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+
+    async function loadProdutosBase(){
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: state.empresaId });
+        if(state.status !== 'todos') params.set('status', state.status);
+        if(state.search.trim()) params.set('search', state.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.produtosBase = data.produtosBase;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar os produtos base.'; }
+      finally{ state.loading = false; render(); }
+    }
+    async function loadVinculos(){
+      state.loadingVinculos = true; state.errorVinculos = null; render();
+      try{
+        const data = await api('/vinculos?empresaId='+state.empresaId, { method:'GET' });
+        state.vinculos = data.vinculos;
+      }catch(err){ state.errorVinculos = err.message || 'Não foi possível carregar os vínculos.'; }
+      finally{ state.loadingVinculos = false; render(); }
+    }
+    async function loadSugestoes(){
+      state.loadingSugestoes = true; state.errorSugestoes = null; render();
+      try{
+        const data = await api('/vinculos/sugestoes?empresaId='+state.empresaId, { method:'GET' });
+        state.sugestoes = data.sugestoes;
+      }catch(err){ state.errorSugestoes = err.message || 'Não foi possível carregar as sugestões.'; }
+      finally{ state.loadingSugestoes = false; render(); }
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId){ await Promise.all([loadProdutosBase(), loadVinculos(), loadSugestoes()]); }
+      else render();
+    }
+
+    function produtoBaseLabel(id){
+      const p = state.produtosBase.find(x=>x.id===id);
+      return p ? p.codigo : '—';
+    }
+
+    function tabelaProdutosBaseHTML(){
+      if(state.loading){
+        return '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando produtos base…</span></div></div>';
+      }
+      if(state.error){
+        return '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="mpRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      }
+      if(!state.produtosBase.length){
+        const filtrado = !!(state.search || state.status!=='ativos');
+        return '<div class="empty-panel"><div class="empty-icon">'+svg('link')+'</div>'
+          + '<h2>Nenhum produto base encontrado</h2>'
+          + '<p class="lead">'+(filtrado ? 'Nenhum produto base corresponde ao filtro atual.' : 'Cadastre o primeiro produto base (o modelo físico real, ex: uma caixa 19x12x12) desta empresa.')+'</p>'
+          + (filtrado ? '' : '<button class="primary-btn enabled" id="mpEmptyNew" type="button">'+svg('plus')+'<span>Novo produto base</span></button>')
+        + '</div>';
+      }
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Código</th><th>Nome</th><th>Custo por caixa</th><th>Status</th><th></th>'
+        + '</tr></thead><tbody>'
+        + state.produtosBase.map(p => '<tr class="'+(p.ativo?'':'inactive')+'">'
+          + '<td class="mono">'+escapeHtml(p.codigo)+'</td>'
+          + '<td>'+escapeHtml(p.nome||'—')+'</td>'
+          + '<td class="tab-nums">'+(p.custo!==null ? money(p.custo) : '<span style="color:var(--text-faint); font-style:italic;">Pendente</span>')+'</td>'
+          + '<td>'+(p.ativo ? '<span class="badge-status on"><span class="dot"></span>Ativo</span>' : '<span class="badge-status off"><span class="dot"></span>Inativo</span>')+'</td>'
+          + '<td><div class="row-actions">'
+            + '<button class="row-ic-btn" data-edit-base="'+p.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
+            + '<button class="row-ic-btn '+(p.ativo?'danger':'success')+'" data-toggle-base="'+p.id+'" data-next="'+(!p.ativo)+'" title="'+(p.ativo?'Desativar':'Ativar')+'" type="button">'+svg('power')+'</button>'
+          + '</div></td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    function tabelaVinculosHTML(){
+      let html = '<div class="section-label" style="margin:18px 0 8px;"><span>Vínculos: SKU de venda → produto base</span></div>';
+      if(state.loadingVinculos){
+        return html + '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando vínculos…</span></div></div>';
+      }
+      if(state.errorVinculos){
+        return html + '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.errorVinculos)+'</p></div>';
+      }
+      if(!state.vinculos.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
+          + '<h2>Nenhum vínculo cadastrado ainda</h2>'
+          + '<p class="lead">Vincule um SKU de venda a um produto base (veja as sugestões abaixo, se houver) para que ele entre nas contas de Estoque Full e do Relatório "Por Caixa".</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>SKU de venda</th><th>Produto base</th><th>Caixas por kit</th><th>Origem</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.vinculos.map(v => '<tr>'
+            + '<td class="mono">'+escapeHtml(v.sku)+'</td>'
+            + '<td class="mono">'+escapeHtml(v.produtoBaseCodigo||'—')+(v.produtoBaseNome?' <span style="color:var(--text-faint);">('+escapeHtml(v.produtoBaseNome)+')</span>':'')+'</td>'
+            + '<td class="tab-nums">'+v.multiplicador+'</td>'
+            + '<td>'+(v.origem==='automatico' ? '<span class="badge-status warn"><span class="dot"></span>Automático</span>' : '<span class="badge-status on"><span class="dot"></span>Manual</span>')+'</td>'
+            + '<td><div class="row-actions">'
+              + '<button class="row-ic-btn" data-edit-vinculo="'+v.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
+              + '<button class="row-ic-btn danger" data-remove-vinculo="'+v.id+'" title="Remover" type="button">'+svg('trash')+'</button>'
+            + '</div></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+      return html;
+    }
+
+    function painelSugestoesHTML(){
+      if(state.loadingSugestoes || state.errorSugestoes || !state.sugestoes.length) return '';
+      return '<div class="section-label" style="margin:18px 0 8px;"><span>SKUs vendidos ainda sem vínculo</span></div>'
+        + '<div class="empty-panel" style="padding:0; text-align:left;">'
+        + '<div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>SKU</th><th>Vezes vendido</th><th>Sugestão</th><th></th>'
+          + '</tr></thead><tbody>'
+          + state.sugestoes.slice(0,50).map(s => '<tr>'
+            + '<td class="mono">'+escapeHtml(s.sku)+'</td>'
+            + '<td class="tab-nums">'+s.ocorrencias+'</td>'
+            + '<td>'+(s.sugestao
+                ? ('<span class="mono">'+escapeHtml(s.sugestao.codigoBase)+'</span> × '+s.sugestao.multiplicador+' caixas'+(s.sugestao.produtoBaseExistenteId?'':' <span style="color:var(--text-faint);">(produto base novo)</span>'))
+                : '<span style="color:var(--text-faint); font-style:italic;">Sem sugestão — o SKU não segue o padrão "dígitos + código"</span>')
+              +'</td>'
+            + '<td><button class="row-ic-btn" data-vincular-sugestao="'+escapeHtml(s.sku)+'" title="Vincular" type="button">'+svg('link')+'</button></td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>'
+        + (state.sugestoes.length>50 ? '<div class="field-hint" style="margin-top:8px;">Mostrando 50 de '+state.sugestoes.length+' SKUs sem vínculo.</div>' : '');
+    }
+
+    function render(){
+      const root = document.getElementById('mapaProdutosRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de cadastrar o mapa de produtos.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="mpEmpresaSelect">'
+          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>'
+        + '<div class="seg" id="mpSeg">'
+          + [['ativos','Ativos'],['inativos','Inativos'],['todos','Todos']].map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '</div>'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="mpSearch" placeholder="Buscar por código ou nome" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+      + '</div>';
+
+      html += tabelaProdutosBaseHTML();
+      html += tabelaVinculosHTML();
+      html += '<div style="margin:14px 0;"><button class="ghost-btn" id="mpNovoVinculo" style="cursor:pointer; opacity:1;" type="button">'+svg('plus')+'<span>Novo vínculo</span></button></div>';
+      html += painelSugestoesHTML();
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('mpEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); load(); });
+      const seg = document.getElementById('mpSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadProdutosBase(); }));
+      const search = document.getElementById('mpSearch');
+      if(search) search.addEventListener('input', ()=>{
+        state.search = search.value;
+        clearTimeout(search._t);
+        search._t = setTimeout(loadProdutosBase, 300);
+      });
+      const retry = document.getElementById('mpRetry');
+      if(retry) retry.addEventListener('click', loadProdutosBase);
+      const emptyNew = document.getElementById('mpEmptyNew');
+      if(emptyNew) emptyNew.addEventListener('click', ()=> openModalBase());
+      root.querySelectorAll('[data-edit-base]').forEach(b=> b.addEventListener('click', ()=>{
+        const p = state.produtosBase.find(x=> String(x.id)===b.dataset.editBase);
+        openModalBase(p);
+      }));
+      root.querySelectorAll('[data-toggle-base]').forEach(b=> b.addEventListener('click', async ()=>{
+        const id = b.dataset.toggleBase, next = b.dataset.next === 'true';
+        b.disabled = true;
+        try{
+          await api('/'+id+'/status', { method:'PATCH', body: JSON.stringify({ ativo: next }) });
+          toast(next ? 'Produto base ativado.' : 'Produto base desativado.');
+          loadProdutosBase();
+        }catch(err){ toast(err.message, 'error'); b.disabled = false; }
+      }));
+      root.querySelectorAll('[data-edit-vinculo]').forEach(b=> b.addEventListener('click', ()=>{
+        const v = state.vinculos.find(x=> String(x.id)===b.dataset.editVinculo);
+        openModalVinculo(v);
+      }));
+      root.querySelectorAll('[data-remove-vinculo]').forEach(b=> b.addEventListener('click', async ()=>{
+        b.disabled = true;
+        try{
+          await api('/vinculos/'+b.dataset.removeVinculo, { method:'DELETE' });
+          toast('Vínculo removido.');
+          loadVinculos(); loadSugestoes();
+        }catch(err){ toast(err.message, 'error'); b.disabled = false; }
+      }));
+      const novoVinculo = document.getElementById('mpNovoVinculo');
+      if(novoVinculo) novoVinculo.addEventListener('click', ()=> openModalVinculo());
+      root.querySelectorAll('[data-vincular-sugestao]').forEach(b=> b.addEventListener('click', ()=>{
+        const s = state.sugestoes.find(x=> x.sku===b.dataset.vincularSugestao);
+        openModalVinculo(null, s);
+      }));
+    }
+
+    // ---- Modal: Produto base (com calculadora "custo do kit ÷ caixas no kit") ----
+    function openModalBase(produtoBase){
+      const isEdit = !!produtoBase;
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar produto base':'Novo produto base')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+(isEdit?'Atualize o código, nome e custo por caixa.':'Cadastre o modelo físico real (ex: uma caixa 19x12x12) que os SKUs de venda vão apontar.')+'</div>'
+          + '<form id="mpFormBase">'
+            + '<div class="field"><label>Código</label><input type="text" id="fCodigo" placeholder="Ex: CX-19X12X12" value="'+(isEdit?escapeHtml(produtoBase.codigo):'')+'" maxlength="100">'
+              + '<div class="field-error" id="eCodigo" style="display:none;"></div></div>'
+            + '<div class="field"><label>Nome <span class="opt">(opcional)</span></label><input type="text" id="fNome" placeholder="Ex: Caixa de papelão 19x12x12" value="'+(isEdit?escapeHtml(produtoBase.nome||''):'')+'" maxlength="200"></div>'
+            + '<div class="field-hint">Não sabe o custo por caixa de cabeça? Preencha o custo do kit que você comprou e quantas caixas ele tem — calculamos pra você (mas o campo abaixo continua editável direto, se preferir).</div>'
+            + '<div style="display:flex; gap:10px;">'
+              + '<div class="field" style="flex:1;"><label>Custo do kit (R$) <span class="opt">(opcional)</span></label><input type="text" inputmode="decimal" id="fCustoKit" placeholder="Ex: 22,75"></div>'
+              + '<div class="field" style="flex:1;"><label>Caixas no kit <span class="opt">(opcional)</span></label><input type="number" min="1" step="1" id="fCaixasKit" placeholder="Ex: 25"></div>'
+            + '</div>'
+            + '<div class="field"><label>Custo por caixa (R$) <span class="opt">(opcional)</span></label><input type="text" inputmode="decimal" id="fCusto" placeholder="Ex: 0,91" value="'+(isEdit?fmtDecimalInput(produtoBase.custo):'')+'">'
+              + '<div class="field-hint" id="hintCustoCalc"></div>'
+              + '<div class="field-error" id="eCusto" style="display:none;"></div></div>'
+            + (isEdit ? '<div class="toggle-row"><div><div class="toggle-row-label">Produto base ativo</div><div class="toggle-row-sub">Produtos base inativos ficam ocultos nas seleções do sistema.</div></div>'
+              + '<button type="button" class="toggle '+(produtoBase.ativo?'on':'')+'" id="fAtivoBase" data-on="'+(produtoBase.ativo?'true':'false')+'"></button></div>' : '')
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Cadastrar produto base')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+      document.getElementById('fCodigo').focus();
+
+      const toggleBtn = document.getElementById('fAtivoBase');
+      if(toggleBtn) toggleBtn.addEventListener('click', ()=>{
+        const on = toggleBtn.dataset.on !== 'true';
+        toggleBtn.dataset.on = String(on);
+        toggleBtn.classList.toggle('on', on);
+      });
+
+      // Calculadora: custo do kit ÷ caixas no kit = custo por caixa. Só
+      // preenche automaticamente enquanto o usuário não tiver editado o
+      // campo de custo na mão nesta mesma abertura do modal — nunca
+      // sobrescreve um valor que o usuário acabou de digitar direto.
+      const custoKitInput = document.getElementById('fCustoKit');
+      const caixasKitInput = document.getElementById('fCaixasKit');
+      const custoInput = document.getElementById('fCusto');
+      const hintCalc = document.getElementById('hintCustoCalc');
+      let custoEditadoManualmente = false;
+      custoInput.addEventListener('input', ()=>{ custoEditadoManualmente = true; hintCalc.textContent = ''; });
+      function recalcular(){
+        const custoKit = parseDecimalBR(custoKitInput.value);
+        const caixasKit = Number(caixasKitInput.value);
+        if(custoKit === null || !caixasKit){ hintCalc.textContent=''; return; }
+        if(!Number.isFinite(custoKit) || custoKit < 0 || !Number.isInteger(caixasKit) || caixasKit <= 0){
+          hintCalc.textContent = 'Informe um custo e uma quantidade de caixas válidos para calcular.';
+          return;
+        }
+        const porCaixa = custoKit / caixasKit;
+        hintCalc.textContent = money(custoKit)+' ÷ '+caixasKit+' caixas = '+money(porCaixa)+' por caixa.';
+        if(!custoEditadoManualmente){
+          custoInput.value = fmtDecimalInput(Math.round(porCaixa*100)/100);
+        }
+      }
+      custoKitInput.addEventListener('input', recalcular);
+      caixasKitInput.addEventListener('input', recalcular);
+
+      document.getElementById('mpFormBase').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eCodigo','eCusto'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+        ['fCodigo','fCusto'].forEach(id=> document.getElementById(id).classList.remove('invalid'));
+
+        const custoDigitado = custoInput.value.trim();
+        const custo = custoDigitado ? parseDecimalBR(custoDigitado) : null;
+        if(custo !== null && !Number.isFinite(custo)){
+          document.getElementById('eCusto').textContent = 'Custo por caixa inválido.';
+          document.getElementById('eCusto').style.display = 'block';
+          document.getElementById('fCusto').classList.add('invalid');
+          return;
+        }
+
+        const payload = {
+          empresaId: state.empresaId,
+          codigo: document.getElementById('fCodigo').value,
+          nome: document.getElementById('fNome').value,
+          custo,
+        };
+        if(isEdit && toggleBtn) payload.ativo = toggleBtn.dataset.on === 'true';
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/'+produtoBase.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Produto base atualizado.' : 'Produto base cadastrado.');
+          loadProdutosBase();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            const fieldMap = { codigo:'Codigo', custo:'Custo' };
+            Object.entries(err.errors).forEach(([k,msg])=>{
+              const suf = fieldMap[k]; if(!suf) return;
+              const el=document.getElementById('e'+suf); if(el){ el.textContent=msg; el.style.display='block'; }
+              const input=document.getElementById('f'+suf); if(input) input.classList.add('invalid');
+            });
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    // ---- Modal: Vínculo (SKU -> produto base + multiplicador) ----
+    // `sugestao` (opcional): { sku, sugestao:{multiplicador, codigoBase, produtoBaseExistenteId} } vinda do
+    // painel "SKUs vendidos ainda sem vínculo" — só pré-preenche o formulário, o usuário sempre confirma.
+    function openModalVinculo(vinculo, sugestao){
+      const isEdit = !!vinculo;
+      const baseSugeridaId = sugestao && sugestao.sugestao ? sugestao.sugestao.produtoBaseExistenteId : null;
+      const multiplicadorSugerido = sugestao && sugestao.sugestao ? sugestao.sugestao.multiplicador : null;
+      const modalRoot = document.getElementById('modalRoot');
+
+      // Só produtos base ativos entram na lista — exceto o produto base
+      // ATUAL do vínculo sendo editado, mesmo se foi desativado depois:
+      // senão o select "perderia" a seleção e um salvamento sem querer
+      // trocaria o vínculo pra outro produto base.
+      const basesParaListar = state.produtosBase.filter(p=> p.ativo || (isEdit && vinculo.produtoBaseId===p.id));
+      const opcoesBase = basesParaListar.map(p=>
+        '<option value="'+p.id+'" '+((isEdit && vinculo.produtoBaseId===p.id) || (!isEdit && baseSugeridaId===p.id) ?'selected':'')+'>'+escapeHtml(p.codigo)+(p.nome?' — '+escapeHtml(p.nome):'')+(!p.ativo?' (inativo)':'')+'</option>'
+      ).join('');
+
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card">'
+          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar vínculo':'Novo vínculo')+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">Diz ao ERP quantas caixas de qual produto base cada unidade deste SKU de venda representa.</div>'
+          + '<form id="mpFormVinculo">'
+            + '<div class="field"><label>SKU de venda</label><input type="text" id="fSku" placeholder="Ex: 100CX-19X12X12" value="'+(isEdit?escapeHtml(vinculo.sku):(sugestao?escapeHtml(sugestao.sku):''))+'" maxlength="100" '+(isEdit?'disabled':'')+'>'
+              + (isEdit ? '<div class="field-hint">O SKU de um vínculo já salvo não pode ser trocado — remova e crie um novo, se precisar.</div>' : '')
+              + '<div class="field-error" id="eSku" style="display:none;"></div></div>'
+            + '<div class="field"><label>Produto base</label>'
+              + (opcoesBase ? '<select id="fProdutoBase"><option value="">Selecione…</option>'+opcoesBase+'</select>'
+                            : '<div class="field-hint" style="margin-top:0;">Nenhum produto base ativo cadastrado ainda — cadastre um primeiro (botão "Novo produto base" no topo da tela).</div>')
+              + (!isEdit && sugestao && sugestao.sugestao && !baseSugeridaId ? '<div class="field-hint">Sugestão: <strong>'+escapeHtml(sugestao.sugestao.codigoBase)+'</strong> (ainda não cadastrado — cadastre-o primeiro, depois volte aqui).</div>' : '')
+              + '<div class="field-error" id="eProdutoBase" style="display:none;"></div></div>'
+            + '<div class="field"><label>Caixas por kit (multiplicador)</label><input type="number" min="1" step="1" id="fMultiplicador" placeholder="Ex: 100" value="'+(isEdit?vinculo.multiplicador:(multiplicadorSugerido||''))+'">'
+              + '<div class="field-hint">Quantas caixas físicas cada unidade deste SKU representa (ex: um anúncio "100CX-19X12X12" disponível = 100 caixas).</div>'
+              + '<div class="field-error" id="eMultiplicador" style="display:none;"></div></div>'
+            + '<div class="modal-actions">'
+              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+              + '<button type="submit" class="btn-primary" id="modalSave" '+(opcoesBase?'':'disabled')+'>'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Criar vínculo')+'</span></button>'
+            + '</div>'
+          + '</form>'
+        + '</div>'
+      + '</div>';
+
+      const overlay = document.getElementById('modalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('modalClose').addEventListener('click', close);
+      document.getElementById('modalCancel').addEventListener('click', close);
+      document.getElementById(isEdit?'fMultiplicador':'fSku').focus();
+
+      document.getElementById('mpFormVinculo').addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        ['eSku','eProdutoBase','eMultiplicador'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+        ['fSku','fMultiplicador'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('invalid'); });
+
+        const produtoBaseSelect = document.getElementById('fProdutoBase');
+        const payload = {
+          empresaId: state.empresaId,
+          multiplicador: Number(document.getElementById('fMultiplicador').value),
+        };
+        if(!isEdit) payload.sku = document.getElementById('fSku').value;
+        if(produtoBaseSelect) payload.produtoBaseId = produtoBaseSelect.value ? Number(produtoBaseSelect.value) : null;
+
+        const saveBtn = document.getElementById('modalSave');
+        saveBtn.disabled = true;
+        try{
+          if(isEdit) await api('/vinculos/'+vinculo.id, { method:'PUT', body: JSON.stringify(payload) });
+          else await api('/vinculos', { method:'POST', body: JSON.stringify(payload) });
+          close();
+          toast(isEdit ? 'Vínculo atualizado.' : 'Vínculo criado.');
+          loadVinculos(); loadSugestoes();
+        }catch(err){
+          saveBtn.disabled = false;
+          if(err.errors){
+            const fieldMap = { sku:'Sku', produtoBaseId:'ProdutoBase', produtoBase:'ProdutoBase', multiplicador:'Multiplicador' };
+            Object.entries(err.errors).forEach(([k,msg])=>{
+              const suf = fieldMap[k]; if(!suf) return;
+              const el=document.getElementById('e'+suf); if(el){ el.textContent=msg; el.style.display='block'; }
+              const input=document.getElementById('f'+suf); if(input) input.classList.add('invalid');
+            });
+          } else {
+            toast(err.message, 'error');
+          }
+        }
+      });
+    }
+
+    document.getElementById('btnNewProdutoBase').addEventListener('click', ()=> openModalBase());
+
+    window.MapaProdutos = { load };
+  })();
+
   /* ================= ANÚNCIOS — visualização ao vivo (Mercado Livre) =================
      Mostra os anúncios reais das contas do Mercado Livre conectadas: ID,
      título, SKU, loja, preço, estoque disponível, status e tipo. Nada é
@@ -4476,6 +5280,98 @@
     function pendenteSpan(){ return '<span style="color:var(--text-faint); font-style:italic; font-family:\'Public Sans\',sans-serif; font-weight:500;">Pendente</span>'; }
     function num(v){ return v === null || v === undefined ? pendenteSpan() : Number(v).toLocaleString('pt-BR'); }
     function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
+    // ---- Só usados na visão física (Estoque Full, opts.visaoFisica — ver
+    // corpoFisicoHTML abaixo). A aba Estoque (fora do Full) nunca passa por
+    // aqui, então nada muda pra ela.
+    function money(v){ return v===null||v===undefined ? pendenteSpan() : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtCaixas(v){ return v===null||v===undefined ? pendenteSpan() : Number(v).toLocaleString('pt-BR'); }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+    function secCardHTML(k){
+      return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
+        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div></div></div>';
+    }
+    // Avisos "nunca inventar": um SKU sem produto base vinculado ou um
+    // produto base sem custo cadastrado nunca viram um número chutado — a
+    // quantidade/valor fica de fora da conta e o motivo aparece aqui,
+    // explicitamente (mesmo padrão de lib/estoqueFisico.js).
+    function pendenciasFisicoHTML(f){
+      const avisos = [];
+      if(f.unidadesSemProdutoBaseIdentificado > 0){
+        avisos.push('<strong>'+fmtCaixas(f.unidadesSemProdutoBaseIdentificado)+'</strong> unidade(s) de anúncio ainda sem produto base identificado — o SKU precisa ser vinculado a um produto base para entrar na quantidade em caixas e no valor abaixo.');
+      }
+      if(f.unidadesFisicasSemCustoCadastrado > 0){
+        avisos.push('<strong>'+fmtCaixas(f.unidadesFisicasSemCustoCadastrado)+'</strong> caixa(s) de produto base sem custo cadastrado — entram na quantidade em caixas, mas não no valor em R$ (nunca um custo estimado).');
+      }
+      if(f.itensPendentesDeSincronizacao > 0){
+        avisos.push(f.itensPendentesDeSincronizacao+' item(ns) ainda aguardando sincronização com o Mercado Livre.');
+      }
+      if(!avisos.length) return '';
+      return '<div class="empty-panel" style="padding:12px 16px; margin-bottom:14px; text-align:left; display:flex; align-items:flex-start; gap:12px;">'
+        + '<div class="empty-icon" style="color:var(--warning); background:var(--warning-soft); width:34px; height:34px; margin:0; flex:none;">'+svg('clock')+'</div>'
+        + '<div style="color:var(--text-faint); font-size:13px; line-height:1.5;">' + avisos.map(a=>'<div>'+a+'</div>').join('') + '</div>'
+      + '</div>';
+    }
+    // Corpo da tela Estoque Full (19/09/2026, pedido explícito do usuário):
+    // não mostra mais os anúncios como lista única/principal — mostra valor
+    // em R$, quantidade em caixas, e a quebra por modelo (produto base) e por
+    // SKU/anúncio, cada uma na sua própria seção. `state.data.fisico` vem de
+    // lib/estoqueFisico.js#calcularEstoqueFisico (rota GET /api/estoque-full).
+    function corpoFisicoHTML(){
+      const f = state.data.fisico;
+      if(!f) return '';
+
+      let html = '<div class="kpi-sec-grid" style="margin-bottom:14px;">'
+        + secCardHTML({ label:'Valor em estoque (a custo)', icon:'wallet', tint: f.valorTotalACusto!==null ? 'success' : 'muted', valueHtml: f.valorTotalACusto!==null ? money(f.valorTotalACusto) : pendenteSpan() })
+        + secCardHTML({ label:'Quantidade em caixas', icon:'box', tint:'copper', valueHtml: fmtCaixas(f.unidadesFisicas) })
+      + '</div>';
+
+      html += pendenciasFisicoHTML(f);
+
+      const porModelo = f.produtosBase || [];
+      html += '<div class="section-label" style="margin:18px 0 8px;"><span>Por modelo (produto base)</span></div>';
+      if(!porModelo.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('box')+'</div>'
+          + '<h2>Nenhum modelo identificado ainda</h2>'
+          + '<p class="lead">Assim que os SKUs dos anúncios Full forem vinculados a um produto base (com custo cadastrado), o resumo por modelo aparece aqui.</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto base (modelo)</th><th>Quantidade em caixas</th><th>Custo unitário</th><th>Valor em estoque</th>'
+          + '</tr></thead><tbody>'
+          + porModelo.map(p => '<tr>'
+            + '<td class="mono">'+escapeHtml(p.produtoBase)+'</td>'
+            + '<td class="tab-nums">'+fmtCaixas(p.quantidadeFisica)+'</td>'
+            + '<td class="tab-nums">'+(p.custoUnitario!==null ? money(p.custoUnitario) : pendenteSpan())+'</td>'
+            + '<td class="tab-nums">'+(p.valorEmEstoque!==null ? money(p.valorEmEstoque) : pendenteSpan())+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      const porItem = f.itens || [];
+      html += '<div class="section-label" style="margin:18px 0 8px;"><span>Por SKU / anúncio</span></div>';
+      if(!porItem.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
+          + '<h2>'+opts.tituloVazio+'</h2>'
+          + '<p class="lead">'+opts.mensagemVazia+'</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto / Anúncio</th><th>SKU</th><th>Modelo (produto base)</th><th>Loja</th>'
+          + '<th>Qtd. no anúncio</th><th>Qtd. em caixas</th><th>Valor em estoque</th>'
+          + '</tr></thead><tbody>'
+          + porItem.map(it => '<tr>'
+            + '<td>'+escapeHtml(it.tituloAnuncio || '—')+'</td>'
+            + '<td class="mono">'+(it.sku ? escapeHtml(it.sku) : '<span style="color:var(--text-faint);">sem SKU</span>')+'</td>'
+            + '<td class="mono">'+(it.produtoBase ? escapeHtml(it.produtoBase) : '<span style="color:var(--text-faint);">não identificado</span>')+'</td>'
+            + '<td>'+escapeHtml(it.loja || '—')+'</td>'
+            + '<td class="tab-nums">'+fmtCaixas(it.quantidadeDisponivel)+'</td>'
+            + '<td class="tab-nums">'+(it.quantidadeFisica!==null ? fmtCaixas(it.quantidadeFisica) : pendenteSpan())+'</td>'
+            + '<td class="tab-nums">'+(it.valorEmEstoque!==null ? money(it.valorEmEstoque) : pendenteSpan())+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      return html;
+    }
     function statusBadge(status){
       if(status === 'active') return '<span class="badge-status on"><span class="dot"></span>Ativo</span>';
       if(status === 'paused') return '<span class="badge-status warn"><span class="dot"></span>Pausado</span>';
@@ -4578,28 +5474,37 @@
       } else if(state.data){
         html += bannerHTML() + ultimaSincronizacaoHTML();
 
-        const itens = state.data.itens || [];
-        if(!itens.length){
-          html += '<div class="empty-panel"><div class="empty-icon">'+svg('layers')+'</div>'
-            + '<h2>'+opts.tituloVazio+'</h2>'
-            + '<p class="lead">'+opts.mensagemVazia+'</p></div>';
+        // Estoque Full (opts.visaoFisica): 19/09/2026, pedido explícito do
+        // usuário — não mostra mais os anúncios crus como visão principal;
+        // mostra valor em R$, quantidade em caixas e a quebra por modelo e
+        // por SKU/anúncio (ver corpoFisicoHTML). A aba Estoque (fora do
+        // Full) nunca passa por aqui — continua exatamente como antes.
+        if(opts.visaoFisica){
+          html += corpoFisicoHTML();
         } else {
-          html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-            + '<th>Produto / Anúncio</th><th>SKU</th><th>Loja</th><th>ID do anúncio</th>'
-            + '<th>Estoque disponível</th><th>Status</th><th>Última sincronização</th>'
-            + '</tr></thead><tbody>'
-            + itens.map(it => {
-              return '<tr>'
-                + '<td>'+escapeHtml(it.produto || '—')+'</td>'
-                + '<td class="mono">'+(it.sku ? escapeHtml(it.sku) : '<span style="color:var(--text-faint);">sem SKU</span>')+'</td>'
-                + '<td>'+escapeHtml(it.loja || '—')+'</td>'
-                + '<td class="mono">'+escapeHtml(it.mlItemId || '—')+(it.mlVariationId ? ' <span style="color:var(--text-faint);">('+escapeHtml(String(it.mlVariationId))+')</span>' : '')+'</td>'
-                + '<td class="tab-nums">'+(it.pendente ? pendenteSpan() : num(it.estoqueDisponivel))+'</td>'
-                + '<td>'+statusBadge(it.status)+'</td>'
-                + '<td>'+(fmtDateTime(it.ultimaSincronizacao) ? escapeHtml(fmtDateTime(it.ultimaSincronizacao)) : '—')+'</td>'
-              + '</tr>';
-            }).join('')
-            + '</tbody></table></div></div>';
+          const itens = state.data.itens || [];
+          if(!itens.length){
+            html += '<div class="empty-panel"><div class="empty-icon">'+svg('layers')+'</div>'
+              + '<h2>'+opts.tituloVazio+'</h2>'
+              + '<p class="lead">'+opts.mensagemVazia+'</p></div>';
+          } else {
+            html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+              + '<th>Produto / Anúncio</th><th>SKU</th><th>Loja</th><th>ID do anúncio</th>'
+              + '<th>Estoque disponível</th><th>Status</th><th>Última sincronização</th>'
+              + '</tr></thead><tbody>'
+              + itens.map(it => {
+                return '<tr>'
+                  + '<td>'+escapeHtml(it.produto || '—')+'</td>'
+                  + '<td class="mono">'+(it.sku ? escapeHtml(it.sku) : '<span style="color:var(--text-faint);">sem SKU</span>')+'</td>'
+                  + '<td>'+escapeHtml(it.loja || '—')+'</td>'
+                  + '<td class="mono">'+escapeHtml(it.mlItemId || '—')+(it.mlVariationId ? ' <span style="color:var(--text-faint);">('+escapeHtml(String(it.mlVariationId))+')</span>' : '')+'</td>'
+                  + '<td class="tab-nums">'+(it.pendente ? pendenteSpan() : num(it.estoqueDisponivel))+'</td>'
+                  + '<td>'+statusBadge(it.status)+'</td>'
+                  + '<td>'+(fmtDateTime(it.ultimaSincronizacao) ? escapeHtml(fmtDateTime(it.ultimaSincronizacao)) : '—')+'</td>'
+                + '</tr>';
+              }).join('')
+              + '</tbody></table></div></div>';
+          }
         }
       }
 
@@ -4635,6 +5540,10 @@
     syncButtonId: 'btnSincronizarEstoqueFull',
     tituloVazio: 'Nenhum item Full sincronizado ainda',
     mensagemVazia: 'Assim que a sincronização automática rodar (ou ao clicar em "Sincronizar agora"), os anúncios com logística Full aparecem aqui.',
+    // 19/09/2026, pedido explícito do usuário: em vez da lista de anúncios
+    // como visão principal, mostrar valor em R$, quantidade em caixas e a
+    // quebra por modelo/SKU/anúncio (ver corpoFisicoHTML acima).
+    visaoFisica: true,
   });
 
   /* ================= COMPRAS — primeira versão simples =================
@@ -6324,6 +7233,48 @@
       }));
     }
 
+    // Primeiro dia do mês corrente (BRT) — 19/09/2026, CORREÇÃO: usuário
+    // reportou "quando eu lanço em despesas fixas não está entrando no
+    // contas a pagar". Causa raiz: o formulário sugeria "hoje" como Data de
+    // início, e lib/despesasFixas.js#ocorrenciasNoIntervalo (backend) nunca
+    // gera uma ocorrência ANTES da Data de início — então uma despesa
+    // cadastrada hoje (ex: dia 19) com vencimento num dia que já passou
+    // neste mês (ex: dia 10) simplesmente pulava o mês inteiro, sem nenhum
+    // aviso, e só a próxima ocorrência (mês que vem) seria gerada. Corrigido
+    // sugerindo o 1º dia do mês corrente como padrão (assim a conta deste
+    // mês, se o dia de vencimento já passou, ainda entra), MAIS o preview
+    // abaixo ("Primeira conta gerada") pra nunca mais isso ficar escondido
+    // — o usuário sempre vê exatamente quando a primeira conta vai aparecer
+    // e pode ajustar a Data de início se quiser outra coisa.
+    function primeiroDiaDoMesCorrenteBRT(){
+      const [y,m] = hojeBRT().split('-');
+      return y+'-'+m+'-01';
+    }
+
+    // Reimplementação em JS (só pra preview, sem chamar o backend) do mesmo
+    // cálculo de lib/despesasFixas.js#ocorrenciasNoIntervalo, procurando só
+    // a PRIMEIRA ocorrência (nunca antes de dataInicio, respeitando
+    // dataFim) — mesma regra, mesma clampagem de "dia 31" no fim do mês.
+    function primeiraOcorrenciaISO(frequencia, diaVencimento, dataInicio, dataFim){
+      if(!dataInicio || !diaVencimento) return null;
+      function pad2(n){ return String(n).padStart(2,'0'); }
+      function ultimoDiaDoMes(ano,mes){ return new Date(Date.UTC(ano,mes,0)).getUTCDate(); }
+      function normalizarDiaMes(ano,mes,dia){ return Math.min(dia, ultimoDiaDoMes(ano,mes)); }
+      if(frequencia === 'semanal') return dataInicio; // backend: cursor começa em dataInicio
+      const [y0,m0] = dataInicio.split('-').map(Number);
+      const mesAnual = frequencia === 'anual' ? Number(dataInicio.slice(5,7)) : null;
+      let ano=y0, mes=m0;
+      for(let i=0;i<24;i++){ // até 24 meses à frente é mais que suficiente pra um preview
+        if(mesAnual === null || mes === mesAnual){
+          const dia = normalizarDiaMes(ano, mes, Number(diaVencimento));
+          const dataStr = ano+'-'+pad2(mes)+'-'+pad2(dia);
+          if(dataStr >= dataInicio && (!dataFim || dataStr <= dataFim)) return dataStr;
+        }
+        mes++; if(mes>12){ mes=1; ano++; }
+      }
+      return null;
+    }
+
     function openModal(despesa){
       const isEdit = !!despesa;
       const modalRoot = document.getElementById('modalRoot');
@@ -6352,11 +7303,12 @@
                 + '<div class="field-error" id="eDiaVencimento" style="display:none;"></div></div>'
             + '</div>'
             + '<div class="inline-form" style="margin-top:0;">'
-              + '<div class="field narrow"><label>Data de início</label><input type="date" id="fDataInicio" value="'+(isEdit?despesa.dataInicio:hoje)+'">'
+              + '<div class="field narrow"><label>Data de início</label><input type="date" id="fDataInicio" value="'+(isEdit?despesa.dataInicio:primeiroDiaDoMesCorrenteBRT())+'">'
                 + '<div class="field-error" id="eDataInicio" style="display:none;"></div></div>'
               + '<div class="field narrow"><label>Data de término <span class="opt">(se houver)</span></label><input type="date" id="fDataFim" value="'+(isEdit&&despesa.dataFim?despesa.dataFim:'')+'">'
                 + '<div class="field-error" id="eDataFim" style="display:none;"></div></div>'
             + '</div>'
+            + '<div class="field-hint" id="hintPrimeiraConta" style="margin:-4px 0 10px;"></div>'
             + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" value="'+(isEdit?escapeHtml(despesa.observacao||''):'')+'"></div>'
             + '<div class="modal-actions">'
               + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
@@ -6389,9 +7341,35 @@
           label.textContent = f === 'anual' ? 'Dia do mês (mês = mês da data de início)' : 'Dia do mês';
         }
       }
-      document.getElementById('fFrequencia').addEventListener('change', atualizarCampoDiaVencimento);
-      document.getElementById('fDataInicio').addEventListener('change', atualizarCampoDiaVencimento);
+
+      // Preview "Primeira conta gerada" — CORREÇÃO 19/09/2026 (ver comentário
+      // em primeiroDiaDoMesCorrenteBRT acima): nunca mais deixar o usuário
+      // descobrir só depois que a conta deste mês não vai aparecer.
+      function atualizarPreviewPrimeiraConta(){
+        const f = document.getElementById('fFrequencia').value;
+        const dataInicio = document.getElementById('fDataInicio').value;
+        const dataFim = document.getElementById('fDataFim').value;
+        const diaVencimento = f === 'semanal' ? (dataInicio ? diaDaSemanaISO(dataInicio) : null) : Number(document.getElementById('fDiaVencimento').value);
+        const hintEl = document.getElementById('hintPrimeiraConta');
+        if(!hintEl) return;
+        if(!dataInicio || !diaVencimento){ hintEl.textContent = ''; return; }
+        const primeira = primeiraOcorrenciaISO(f, diaVencimento, dataInicio, dataFim || null);
+        if(!primeira){
+          hintEl.textContent = 'Com a data de término informada, nenhuma conta seria gerada — revise as datas.';
+          hintEl.style.color = 'var(--danger)';
+          return;
+        }
+        const mesmoMesDeHoje = primeira.slice(0,7) === hoje.slice(0,7);
+        hintEl.style.color = '';
+        hintEl.innerHTML = 'Primeira conta a pagar gerada: <strong>'+fmtDate(primeira)+'</strong>'
+          + (mesmoMesDeHoje ? '' : ' <span style="color:var(--text-faint);">(ainda não é este mês — pra incluir a conta deste mês, use uma data de início mais cedo)</span>');
+      }
+      document.getElementById('fFrequencia').addEventListener('change', ()=>{ atualizarCampoDiaVencimento(); atualizarPreviewPrimeiraConta(); });
+      document.getElementById('fDataInicio').addEventListener('change', ()=>{ atualizarCampoDiaVencimento(); atualizarPreviewPrimeiraConta(); });
+      document.getElementById('fDiaVencimento').addEventListener('input', atualizarPreviewPrimeiraConta);
+      document.getElementById('fDataFim').addEventListener('change', atualizarPreviewPrimeiraConta);
       atualizarCampoDiaVencimento();
+      atualizarPreviewPrimeiraConta();
 
       apiCategorias().then(categorias=>{
         const dl = document.getElementById('dlCategoriasDespesaFixa');
@@ -9331,9 +10309,11 @@
         + '<div class="panel-title" style="margin-bottom:14px;"><span class="panel-title-ic">'+svg('percent')+'</span>Configuração da IA de Promoções</div>'
         + '<div class="inline-form" style="margin-top:0;align-items:flex-end;">'
           + '<div class="field narrow"><label>Margem mínima permitida em promoção (%)</label><input type="number" id="promoMargemMinima" min="0" max="100" step="0.1" value="'+(c.margemMinimaPct!==undefined?c.margemMinimaPct:14)+'"></div>'
+          + '<div class="field narrow"><label>Margem de conforto p/ promoção com desconto (pontos %)</label><input type="number" id="promoMargemConforto" min="0" max="100" step="0.1" value="'+(c.margemConfortoPct!==undefined?c.margemConfortoPct:0)+'"></div>'
           + '<button class="ghost-btn" id="promoSalvarConfig" type="button" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Salvar</span></button>'
         + '</div>'
         + '<div class="field-hint" style="margin-top:6px;">Quando uma promoção deixar a margem estimada abaixo deste número, a IA vai marcar como <strong>🔴 NÃO RECOMENDADA</strong>.</div>'
+        + '<div class="field-hint" style="margin-top:4px;">Margem de conforto (15/09/2026): pontos percentuais exigidos ACIMA da margem mínima, mas só pra promoções que têm desconto de verdade (preço abaixo do normal). Uma promoção no preço normal (sem desconto, margem igual à sua margem normal) continua exigindo só a margem mínima. Deixe em 0 para desligar — a IA volta a exigir só a margem mínima em qualquer caso.</div>'
         + '<div style="margin-top:18px;">'
           + '<div class="field-hint" style="margin:0 0 8px;">Modo da IA</div>'
           + modos.map(m => {
@@ -9418,6 +10398,7 @@
           { label:'Margem real (R$)', html: l.margemReal===null?'—':money(l.margemReal) },
           { label:'Margem real (%)', html: l.margemRealPct===null?'—':pctFmt(l.margemRealPct) },
           { label:'Margem mínima configurada', html: pctFmt(l.margemMinimaPctUsada) },
+          { label:'Margem de conforto exigida (tem desconto? '+(l.temDesconto?'sim':'não')+')', html: (l.margemConfortoPctUsada && l.temDesconto) ? (pctFmt(l.margemConfortoPctUsada) + ' — mínimo exigido nesta promoção: ' + pctFmt(Number(l.margemMinimaPctUsada||0) + Number(l.margemConfortoPctUsada||0))) : '<span style="color:var(--text-faint);">não se aplica</span>' },
           { label:'Classificação da IA', html: badgeClassificacaoHTML(l) },
           { label:'Por que este dado pode estar incompleto', html: l.motivoIncompleto ? escapeHtml(l.motivoIncompleto) : '<span style="color:var(--text-faint);">Nenhum dado faltando.</span>' },
           { label:'Última atualização', value: fmtDataHora(l.atualizadoEm) },
@@ -9486,12 +10467,16 @@
       const btnSalvar = document.getElementById('promoSalvarConfig');
       if(btnSalvar) btnSalvar.addEventListener('click', async ()=>{
         const margemMinimaPct = Number(document.getElementById('promoMargemMinima').value);
+        const margemConfortoPct = Number(document.getElementById('promoMargemConforto').value);
         if(!Number.isFinite(margemMinimaPct) || margemMinimaPct < 0 || margemMinimaPct > 100){
-          toast('Informe um percentual entre 0 e 100.', 'error'); return;
+          toast('Informe uma margem mínima entre 0 e 100.', 'error'); return;
+        }
+        if(!Number.isFinite(margemConfortoPct) || margemConfortoPct < 0 || margemConfortoPct > 100){
+          toast('Informe uma margem de conforto entre 0 e 100.', 'error'); return;
         }
         btnSalvar.disabled = true;
         try{
-          state.config = await apiSalvarConfig({ empresaId: filtro.empresaId, margemMinimaPct });
+          state.config = await apiSalvarConfig({ empresaId: filtro.empresaId, margemMinimaPct, margemConfortoPct });
           toast('Configuração salva.');
           render();
         }catch(err){ toast(err.message, 'error'); }
@@ -9839,6 +10824,785 @@
           + '<div class="cell-stack-sub">'+fmtDataHora(d.resultadoAvaliadoEm)+'</div>';
       },
     });
+  })();
+
+  /* ================= AGENTES DE SAC — Mercado Livre / Shopee (14/09/2026) =================
+     Pedido explícito do usuário: "vem diretamente do mercado livre e
+     shopee... vamos fazer com todas as ia... por enquanto vai ser apenas
+     leitura e analise... deve ter um agente para shopee e outro para o
+     mercado livre". Dois agentes SEPARADOS (nunca uma tela "SAC" genérica),
+     cada um na sua própria página, mas montados pela mesma fábrica
+     criarModuloAgenteSac() pra nunca duplicar a lógica entre os dois —
+     mesma ideia de criarModuloAgenteDecisoes() logo acima.
+
+     MODO SUPERVISIONADO — FASE 1 (regra do usuário que esta tela nunca
+     pode quebrar): a IA só SUGERE uma resposta. Aprovar/editar aqui só
+     REGISTRA a decisão (ver PUT /api/sac/respostas/:id/decisao) — nenhuma
+     resposta é enviada ao Mercado Livre/Shopee nesta fase. Cada card deixa
+     isso explícito (ver .sac-resposta-disclaimer).
+
+     Regra 3 do pedido ("não crie dados falsos, botões sem função ou APIs
+     simuladas"): todo atendimento vem de GET /api/sac/atendimentos (dado
+     real gravado por lib/ia/sacMercadoLivre.js/lib/ia/sacShopee.js a partir
+     da API de verdade) — quando a IA não conseguiu gerar uma sugestão
+     segura, o card mostra o motivo (nunca um texto de resposta inventado). */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      try{ const d = new Date(v); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '—'; }
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+
+    const TIPO_ORIGEM_LABEL = { pergunta:'Pergunta', mensagem:'Mensagem pós-venda', reclamacao:'Reclamação', devolucao:'Devolução' };
+    const CLASSIFICACAO_INFO = {
+      duvida_simples:   { emoji:'🟢', label:'Dúvida simples' },
+      info_pedido:       { emoji:'🔵', label:'Informação do pedido' },
+      problema_entrega:  { emoji:'🟡', label:'Problema de entrega' },
+      reclamacao:        { emoji:'🟠', label:'Reclamação' },
+      insatisfeito:      { emoji:'🔴', label:'Cliente insatisfeito' },
+      devolucao:         { emoji:'🟣', label:'Devolução' },
+    };
+    const STATUS_LABEL = { novo:'Novo', aguardando_resposta:'Aguardando resposta', respondido:'Respondido', resolvido:'Resolvido' };
+    const STATUS_DECISAO_LABEL = { aprovada:'Aprovada', editada:'Editada e aprovada', recusada:'Recusada' };
+    const STATUS_DECISAO_COR = { aprovada:'var(--success)', editada:'var(--copper)', recusada:'var(--danger)' };
+
+    function criarModuloAgenteSac(cfg){
+      const state = {
+        agente:null, itens:[], stats:null, loading:false, error:null,
+        tabTipo:'todos', filtroStatus:'abertos', busca:'', gerando:false,
+        editando:{}, // { [atendimentoId]: textoEditado }
+        ultimoResultado:null, // resultado detalhado da última "Sincronizar agora" (ver ultimoResultadoHTML)
+        statusAuto:null, // estado do scheduler automático em background (ver lib/ia/sacScheduler.js e statusAutoHTML)
+      };
+
+      async function apiAgente(){
+        const res = await fetch('/api/ia-agentes');
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) return null;
+        return ((body && body.agentes) || []).find((a)=> a.codigo === cfg.codigoAgente) || null;
+      }
+      async function apiAtendimentos(empresaId){
+        const params = new URLSearchParams({ empresaId, marketplace: cfg.marketplace });
+        if(state.tabTipo === 'urgentes') params.set('urgente', 'true');
+        else if(state.tabTipo !== 'todos') params.set('tipoOrigem', state.tabTipo);
+        if(state.filtroStatus === 'abertos'){ /* filtra no cliente abaixo — mistura novo+aguardando_resposta */ }
+        else if(state.filtroStatus !== 'todos') params.set('status', state.filtroStatus);
+        if(state.busca.trim()) params.set('busca', state.busca.trim());
+        const res = await fetch('/api/sac/atendimentos?' + params.toString());
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os atendimentos.');
+        let itens = (body && body.atendimentos) || [];
+        if(state.filtroStatus === 'abertos') itens = itens.filter((a)=> a.status === 'novo' || a.status === 'aguardando_resposta');
+        return itens;
+      }
+      async function apiStats(empresaId){
+        const res = await fetch('/api/sac/stats?' + new URLSearchParams({ empresaId, marketplace: cfg.marketplace }).toString());
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) return null;
+        return body;
+      }
+      async function apiDecidir(respostaId, statusDecisao, respostaFinal, empresaId){
+        const res = await fetch('/api/sac/respostas/' + respostaId + '/decisao', {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ empresaId, statusDecisao, respostaFinal, decididoPor:'Pablo' }),
+        });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível registrar a decisão.');
+        return body;
+      }
+      async function apiResolver(atendimentoId, empresaId){
+        const res = await fetch('/api/sac/atendimentos/' + atendimentoId + '/resolver', {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }),
+        });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível marcar como resolvido.');
+        return body;
+      }
+      async function apiGerarAgora(empresaId){
+        const res = await fetch('/api/sac/gerar-agora', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ empresaId, marketplace: cfg.marketplace }),
+        });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Falha ao sincronizar agora.');
+        return body;
+      }
+      // 15/09/2026 — pedido explícito do usuário "nao quero ter que ficar
+      // sincronizando nada quero tudo automatico": só LÊ o estado já
+      // calculado pelo servidor (GET /api/sac/status-automatico), o
+      // navegador nunca dispara nada sozinho — mesmo padrão do indicador
+      // "Sincronizado há Xs" do header (ver GET .../mercadolivre/status-automatico).
+      async function apiStatusAuto(){
+        try{
+          const res = await fetch('/api/sac/status-automatico');
+          if(!res.ok) return null;
+          return await res.json();
+        }catch(e){ return null; }
+      }
+
+      async function carregar(){
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId){ state.itens = []; state.stats = null; state.loading = false; render(); return; }
+        state.loading = true; state.error = null; render();
+        try{
+          const [itens, stats] = await Promise.all([apiAtendimentos(filtro.empresaId), apiStats(filtro.empresaId)]);
+          state.itens = itens; state.stats = stats;
+        }catch(e){ state.error = e.message; state.itens = []; }
+        state.loading = false; render();
+      }
+
+      async function gerarAgora(){
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId) return;
+        state.gerando = true; render();
+        try{
+          const r = await apiGerarAgora(filtro.empresaId);
+          state.ultimoResultado = r;
+          const temErro = (r.erros && r.erros.length) || Object.values(r.detalhesPorFonte||{}).some((d)=> d && (d.erro || (d.erros&&d.erros.length)));
+          toast('Sincronizado: ' + (r.atendimentosNovos||0) + ' atendimento(s) novo(s), ' + (r.sugestoesGeradas||0) + ' sugestão(ões) gerada(s).' + (temErro?' Veja os detalhes abaixo — houve erro em alguma fonte.':''), temErro?'error':'success');
+          await carregar();
+        }catch(e){ state.ultimoResultado = null; toast(e.message || 'Falha ao sincronizar agora.', 'error'); }
+        finally{ state.gerando = false; render(); }
+      }
+
+      // Mostra o que aconteceu em CADA fonte na última sincronização (ver
+      // lib/ia/sacCiclo.js#detalhesPorFonte, 15/09/2026 — pedido implícito
+      // do usuário ao reportar "tem pós-venda pendente no Mercado Livre,
+      // mas no sistema não consta nada"): fica visível até a próxima
+      // sincronização, nunca só um toast que some em segundos — pra dar pra
+      // conferir com calma quantos pedidos/itens foram verificados e se
+      // alguma fonte devolveu erro.
+      function ultimoResultadoHTML(){
+        const r = state.ultimoResultado;
+        if(!r) return '';
+        const fontes = cfg.marketplace === 'shopee'
+          ? [['conversas','Conversas (chat)'],['devolucoes','Devoluções']]
+          : [['perguntas','Perguntas'],['mensagens','Mensagens pós-venda'],['reclamacoes','Reclamações']];
+        const linhas = fontes.map(([chave,label])=>{
+          const d = r.detalhesPorFonte ? r.detalhesPorFonte[chave] : null;
+          if(!d) return '<div><b>'+escapeHtml(label)+':</b> sem dados nesta sincronização.</div>';
+          let linha = '<div><b>'+escapeHtml(label)+':</b> ';
+          if(d.pedidosVerificados !== undefined) linha += d.pedidosVerificados+' pedido(s) verificado(s), ';
+          linha += (d.processadas||0)+' encontrada(s), '+(d.novos||0)+' nova(s)';
+          linha += '</div>';
+          if(d.erro) linha += '<div style="color:var(--danger);">⚠ '+escapeHtml(d.erro)+'</div>';
+          if(d.erros && d.erros.length) linha += d.erros.map((e)=> '<div style="color:var(--danger);">⚠ '+escapeHtml(e)+'</div>').join('');
+          return linha;
+        }).join('');
+        return '<div class="table-card" style="padding:14px 16px;margin-bottom:12px;font-size:12.5px;color:var(--text-muted);">'
+          + '<div style="font-weight:700;color:var(--text);margin-bottom:6px;">Última sincronização'+(r.contasProcessadas!==undefined?(' — '+r.contasProcessadas+' conta(s)'):'')+'</div>'
+          + linhas
+          + (r.erros && r.erros.length ? r.erros.map((e)=> '<div style="color:var(--danger);margin-top:4px;">⚠ Conta '+escapeHtml(String(e.contaId))+': '+escapeHtml(e.erro)+'</div>').join('') : '')
+        + '</div>';
+      }
+
+      async function decidir(atendimento, statusDecisao){
+        const filtro = window.CerneFiltro.state;
+        const respostaId = atendimento.respostaPendente && atendimento.respostaPendente.id;
+        if(!respostaId) return;
+        let respostaFinal = null;
+        if(statusDecisao !== 'recusada'){
+          const editado = state.editando[atendimento.id];
+          respostaFinal = editado !== undefined ? editado : (atendimento.respostaPendente.respostaSugeridaIa || '');
+          if(!respostaFinal.trim()){ toast('Escreva o texto da resposta antes de aprovar.', 'error'); return; }
+          if(editado !== undefined && editado !== atendimento.respostaPendente.respostaSugeridaIa) statusDecisao = 'editada';
+        }
+        try{
+          await apiDecidir(respostaId, statusDecisao, respostaFinal, filtro.empresaId);
+          toast(statusDecisao === 'recusada' ? 'Sugestão recusada.' : 'Decisão registrada — nada foi enviado automaticamente.');
+          delete state.editando[atendimento.id];
+          await carregar();
+        }catch(e){ toast(e.message || 'Falha ao registrar decisão.', 'error'); }
+      }
+
+      async function resolver(atendimento){
+        const filtro = window.CerneFiltro.state;
+        try{ await apiResolver(atendimento.id, filtro.empresaId); toast('Atendimento marcado como resolvido.'); await carregar(); }
+        catch(e){ toast(e.message || 'Falha ao marcar como resolvido.', 'error'); }
+      }
+
+      async function load(){
+        if(!state.agente) state.agente = await apiAgente();
+        state.statusAuto = await apiStatusAuto();
+        await carregar();
+      }
+
+      // Texto curto avisando que a verificação roda sozinha em background
+      // (ver lib/ia/sacScheduler.js) — "Sincronizar agora" continua
+      // disponível como atalho manual, mas deixou de ser a única forma de
+      // atualizar a tela.
+      function statusAutoHTML(){
+        const s = state.statusAuto;
+        if(!s) return '';
+        const dados = cfg.marketplace === 'shopee' ? s.shopee : s.mercadoLivre;
+        const min = Math.max(1, Math.round((s.intervaloSegundos||0) / 60));
+        let texto = 'Verificação automática ativa — a cada ' + min + ' min, direto no servidor.';
+        if(s.ultimaExecucaoEm) texto += ' Última verificação: ' + fmtDataHora(s.ultimaExecucaoEm) + '.';
+        const temErro = dados && dados.comErro && dados.comErro.length;
+        return '<div class="field-hint" style="margin-top:8px;display:flex;align-items:center;gap:6px;'+(temErro?'color:var(--danger);':'')+'">'
+          + svg(temErro?'alertCircle':'checkCircle') + '<span>' + escapeHtml(texto) + (temErro?' Houve erro na última verificação automática — veja "Sincronizar agora" para tentar na hora.':'') + '</span>'
+        + '</div>';
+      }
+
+      window.CerneFiltro.onChange(()=>{
+        const page = document.getElementById('page-'+cfg.pageId);
+        if(page && page.classList.contains('active')) carregar();
+        else render();
+      });
+
+      function kpiStripHTML(){
+        const s = state.stats;
+        const box = (valor, label, classe)=> '<div class="sac-kpi-box"><b class="'+(classe||'')+'">'+(s ? valor : '—')+'</b><span>'+escapeHtml(label)+'</span></div>';
+        return '<div class="sac-kpi-strip">'
+          + box(s?s.atendimentosNovos:null, 'Novos')
+          + box(s?s.aguardandoResposta:null, 'Aguardando resposta', 'warn')
+          + box(s?s.respondidosHoje:null, 'Respondidos hoje')
+          + box(s?s.reclamacoesAbertas:null, 'Reclamações abertas', s&&s.reclamacoesAbertas>0?'danger':'')
+          + box(s?s.devolucoesAbertas:null, 'Devoluções abertas', s&&s.devolucoesAbertas>0?'danger':'')
+          + box(s&&s.tempoMedioRespostaMin!==null? s.tempoMedioRespostaMin+' min':'—', 'Tempo médio de resposta (hoje)')
+          + box(s?s.atendimentosCriticos:null, 'Críticos', s&&s.atendimentosCriticos>0?'danger':'')
+        + '</div>';
+      }
+
+      function abasHTML(){
+        const abas = [['todos','Todos'],['pergunta','Perguntas'],['mensagem','Pós-venda'],['reclamacao','Reclamações'],['devolucao','Devoluções'],['urgentes','Urgentes']];
+        return '<div class="seg" id="'+cfg.rootElId+'Tabs" style="margin-bottom:10px;">'
+          + abas.map(([v,l])=> '<button type="button" data-tab="'+v+'" class="'+(state.tabTipo===v?'active':'')+'">'+escapeHtml(l)+'</button>').join('')
+        + '</div>';
+      }
+
+      function toolbarHTML(){
+        return '<div class="agent-toolbar">'
+          + '<div class="search-box">'+svg('search')+'<input type="text" id="'+cfg.rootElId+'Busca" placeholder="Buscar por cliente, produto, SKU ou mensagem…" value="'+escapeHtml(state.busca)+'"></div>'
+          + '<select class="toolbar-select" id="'+cfg.rootElId+'Status">'
+            + ['abertos','todos','novo','aguardando_resposta','respondido','resolvido'].map((v)=>
+                '<option value="'+v+'" '+(state.filtroStatus===v?'selected':'')+'>'+(v==='abertos'?'Abertos (novo + aguardando)':v==='todos'?'Todos os status':STATUS_LABEL[v])+'</option>').join('')
+          + '</select>'
+          + '<button class="ghost-btn" id="'+cfg.rootElId+'GerarAgora" type="button" title="A verificação já roda sozinha em background — use aqui só se quiser checar agora, sem esperar." style="cursor:pointer;opacity:1;" '+(state.gerando?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.gerando?'Sincronizando…':'Verificar agora')+'</span></button>'
+        + '</div>';
+      }
+
+      function respostaBoxHTML(a){
+        if(a.ultimaDecisao && !a.respostaPendente){
+          const cor = STATUS_DECISAO_COR[a.ultimaDecisao.statusDecisao] || 'var(--text-faint)';
+          return '<div class="sac-resposta-box"><div class="sac-decisao-final">'
+            + '<span class="status" style="color:'+cor+';">'+escapeHtml(STATUS_DECISAO_LABEL[a.ultimaDecisao.statusDecisao] || a.ultimaDecisao.statusDecisao)+'</span>'
+            + (a.ultimaDecisao.respostaFinal ? '<div style="margin-top:6px;white-space:pre-wrap;">'+escapeHtml(a.ultimaDecisao.respostaFinal)+'</div>' : '')
+            + '<div class="cell-stack-sub" style="margin-top:6px;">'+fmtDataHora(a.ultimaDecisao.decididoEm)+(a.ultimaDecisao.decididoPor?(' · '+escapeHtml(a.ultimaDecisao.decididoPor)):'')+'</div>'
+            + '</div><div class="sac-resposta-disclaimer">'+svg('alertCircle')+' Só registrado — nenhuma resposta foi enviada ao '+(cfg.marketplace==='shopee'?'Shopee':'Mercado Livre')+' automaticamente (Modo supervisionado, Fase 1).</div>'
+          + '</div>';
+        }
+        if(!a.respostaPendente){
+          return '<div class="sac-resposta-box"><div class="sac-sem-sugestao">Sugestão ainda não gerada — a verificação automática cuida disso sozinha em instantes, ou clique em "Verificar agora" para não esperar.</div></div>';
+        }
+        if(!a.respostaPendente.respostaSugeridaIa){
+          return '<div class="sac-resposta-box"><div class="sac-resposta-label">A IA não gerou uma resposta</div>'
+            + '<div class="sac-sem-sugestao">'+escapeHtml(a.respostaPendente.motivoSemSugestao || 'Situação exige análise humana.')+'</div></div>';
+        }
+        const textoAtual = state.editando[a.id] !== undefined ? state.editando[a.id] : a.respostaPendente.respostaSugeridaIa;
+        return '<div class="sac-resposta-box">'
+          + '<div class="sac-resposta-label">Sugestão da IA (você pode editar antes de aprovar)</div>'
+          + '<textarea data-atendimento="'+a.id+'">'+escapeHtml(textoAtual)+'</textarea>'
+          + '<div class="sac-resposta-acoes">'
+            + '<button class="primary-btn enabled" data-acao="aprovar" data-id="'+a.id+'" type="button">'+svg('checkCircle')+'<span>Aprovar</span></button>'
+            + '<button class="ghost-btn" data-acao="recusar" data-id="'+a.id+'" type="button" style="cursor:pointer;opacity:1;">'+svg('x')+'<span>Recusar</span></button>'
+          + '</div>'
+          + '<div class="sac-resposta-disclaimer">'+svg('alertCircle')+' Aprovar só REGISTRA a decisão — nenhuma resposta é enviada ao '+(cfg.marketplace==='shopee'?'Shopee':'Mercado Livre')+' automaticamente nesta fase (Modo supervisionado).</div>'
+        + '</div>';
+      }
+
+      function itemHTML(a){
+        const cls = CLASSIFICACAO_INFO[a.classificacao];
+        return '<div class="sac-item'+(a.urgente?' urgente':'')+'">'
+          + '<div class="sac-item-top">'
+            + '<div class="sac-item-meta">'
+              + '<span class="sac-badge">'+escapeHtml(TIPO_ORIGEM_LABEL[a.tipoOrigem]||a.tipoOrigem)+'</span>'
+              + (cls ? '<span class="sac-badge">'+cls.emoji+' '+escapeHtml(cls.label)+'</span>' : '')
+              + (a.urgente ? '<span class="sac-badge urgente">🔴 Urgente</span>' : '')
+              + '<span class="sac-badge">'+escapeHtml(STATUS_LABEL[a.status]||a.status)+'</span>'
+            + '</div>'
+            + '<div class="sac-item-time">'+fmtDataHora(a.dataRecebido)+'</div>'
+          + '</div>'
+          + '<div class="sac-item-contexto">'
+            + (a.clienteNome ? '<b>Cliente:</b> '+escapeHtml(a.clienteNome)+'  ' : '')
+            + (a.produtoTitulo ? '<b>Produto:</b> '+escapeHtml(a.produtoTitulo)+'  ' : '')
+            + (a.sku ? '<b>SKU:</b> '+escapeHtml(a.sku)+'  ' : '')
+            + (a.pedidoRef ? '<b>Pedido:</b> '+escapeHtml(a.pedidoRef) : '')
+          + '</div>'
+          + '<div class="sac-msg">'+escapeHtml(a.mensagemCliente)+'</div>'
+          + respostaBoxHTML(a)
+          + ((a.status==='respondido') ? '<div style="margin-top:8px;"><button class="ghost-btn" data-acao="resolver" data-id="'+a.id+'" type="button" style="cursor:pointer;opacity:1;">'+svg('checkCircle')+'<span>Marcar como resolvido</span></button></div>' : '')
+        + '</div>';
+      }
+
+      function render(){
+        const root = document.getElementById(cfg.rootElId);
+        if(!root) return;
+        const filtro = window.CerneFiltro.state;
+
+        if(!filtro.loadingEmpresas && !filtro.empresas.length){
+          root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+            + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para usar este agente.</p></div>';
+          return;
+        }
+
+        const a = state.agente;
+        let html = '<div class="table-card" style="padding:20px;margin-bottom:14px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">'
+          + '<div class="kpi-hero-icon" style="flex-shrink:0;">'+svg((a && a.icone) || cfg.iconeFallback)+'</div>'
+          + '<div style="min-width:0;flex:1;">'
+            + '<div class="panel-title" style="margin:0 0 4px;">'+escapeHtml((a && a.nome) || cfg.nomeFallback)+'</div>'
+            + '<div class="field-hint" style="max-width:760px;">'+escapeHtml((a && a.descricao) || cfg.descricaoFallback)+'</div>'
+            + '<div class="field-hint" style="margin-top:8px;color:var(--text-faint);">Modo supervisionado (Fase 1): a IA lê e analisa os atendimentos reais, e sugere uma resposta — ela nunca oferece reembolso, aprova devolução, cancela pedido, dá desconto, envia cupom ou promete prazo não confirmado. Você sempre aprova, edita ou recusa antes de qualquer coisa, e nada é enviado ao marketplace automaticamente nesta fase.</div>'
+            + statusAutoHTML()
+          + '</div>'
+        + '</div>';
+
+        html += kpiStripHTML() + abasHTML() + toolbarHTML() + ultimoResultadoHTML();
+
+        if(state.loading){
+          html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+        } else if(state.error){
+          html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+            + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+        } else if(!state.itens.length){
+          html += '<div class="empty-panel"><div class="empty-icon">'+svg('inbox')+'</div>'
+            + '<h2>Nenhum atendimento aqui</h2><p class="lead">Quando houver perguntas, mensagens, reclamações ou devoluções reais do '+(cfg.marketplace==='shopee'?'Shopee':'Mercado Livre')+', elas aparecem aqui sozinhas — a verificação automática roda em background. Clique em "Verificar agora" se quiser checar sem esperar.</p></div>';
+        } else {
+          html += state.itens.map(itemHTML).join('');
+        }
+
+        root.innerHTML = html;
+
+        const tabsEl = document.getElementById(cfg.rootElId+'Tabs');
+        if(tabsEl) tabsEl.querySelectorAll('button').forEach((b)=> b.addEventListener('click', ()=>{ state.tabTipo = b.dataset.tab; carregar(); }));
+
+        const statusEl = document.getElementById(cfg.rootElId+'Status');
+        if(statusEl) statusEl.addEventListener('change', ()=>{ state.filtroStatus = statusEl.value; carregar(); });
+
+        const buscaEl = document.getElementById(cfg.rootElId+'Busca');
+        if(buscaEl){
+          let timer = null;
+          buscaEl.addEventListener('input', ()=>{ state.busca = buscaEl.value; clearTimeout(timer); timer = setTimeout(carregar, 400); });
+        }
+
+        const btnGerar = document.getElementById(cfg.rootElId+'GerarAgora');
+        if(btnGerar) btnGerar.addEventListener('click', gerarAgora);
+
+        root.querySelectorAll('textarea[data-atendimento]').forEach((ta)=> ta.addEventListener('input', ()=>{ state.editando[Number(ta.dataset.atendimento)] = ta.value; }));
+
+        root.querySelectorAll('[data-acao]').forEach((btn)=> btn.addEventListener('click', ()=>{
+          const id = Number(btn.dataset.id);
+          const acao = btn.dataset.acao;
+          const a = state.itens.find((x)=> x.id === id);
+          if(!a) return;
+          if(acao === 'aprovar') decidir(a, 'aprovada');
+          else if(acao === 'recusar') decidir(a, 'recusada');
+          else if(acao === 'resolver') resolver(a);
+        }));
+      }
+
+      return { load };
+    }
+
+    window.SacMercadoLivre = criarModuloAgenteSac({
+      codigoAgente: 'sac_mercado_livre', marketplace: 'mercado_livre', pageId: 'sacMercadoLivre', rootElId: 'sacMercadoLivreRoot',
+      iconeFallback: 'inbox', nomeFallback: 'SAC Mercado Livre',
+      descricaoFallback: 'Centraliza perguntas, mensagens pós-venda e reclamações do Mercado Livre, e sugere uma resposta pronta.',
+    });
+    window.SacShopee = criarModuloAgenteSac({
+      codigoAgente: 'sac_shopee', marketplace: 'shopee', pageId: 'sacShopee', rootElId: 'sacShopeeRoot',
+      iconeFallback: 'inbox', nomeFallback: 'SAC Shopee',
+      descricaoFallback: 'Centraliza mensagens e devoluções da Shopee, e sugere uma resposta pronta.',
+    });
+  })();
+
+  /* ================= AGENTES DE IA — HUB (14/09/2026) =================
+     Redesign completo da área "Agentes de IA" pedido pelo usuário (prints
+     de referência + especificação numerada 1-13). ETAPA 2/3 do processo
+     em etapas que o próprio usuário pediu ("Comece somente pela ETAPA 1.
+     Não altere código ainda" -> ETAPA 1 = análise só, já entregue e
+     aprovada ("pode seguir") -> ETAPA 2 = estrutura/layout -> ETAPA 3 =
+     conectar cards/filtros/indicadores a dado real, feitas juntas aqui
+     porque quase todo dado já existe em rotas prontas (GET
+     /api/ia-agentes, e os novos GET /api/ia-agentes/stats e
+     GET /api/ia-agentes/historico, ver lib/ia/agentesResumo.js).
+     ETAPA 4 (interruptor real por empresa + scheduler, formulário "+ Novo
+     Agente") e ETAPA 5 (testes finais) ficam pra próxima entrega — esta
+     tela já avisa isso onde é o caso (nunca finge que algo já é real).
+
+     Reaproveita 100% do que já existe: window.CerneFiltro (empresa/
+     período do cabeçalho), GET /api/ia-agentes (mesmo endpoint que
+     criarModuloAgenteDecisoes já usa), as páginas/telas reais
+     agenteAds/agentePromocoes/iaGestora (o botão "Ver detalhes"/
+     "Conversar" só NAVEGA pra elas — nenhuma lógica duplicada) e as
+     classes CSS já existentes (.kpi-hero, .seg, .badge-status, .toggle,
+     .search-box, .table-card, .empty-panel, toast()).
+
+     Regra 3 do pedido ("NÃO USAR DADOS FALSOS"): todo número desta tela
+     vem de GET /api/ia-agentes/stats (nunca calculado aqui no front-end),
+     e quando não há dado o valor mostrado é "Sem dados ainda"/0 real —
+     nunca um número inventado. Os 5 cards "Em construção"
+     (SAC/Vendas-BuyBox/Estoque/Financeiro/Riscos Operacionais) são uma
+     exceção explícita, decidida com o usuário: eles NÃO existem como
+     agente real (mesma regra de db/schema.sql/especialistas.js: "nunca
+     como placeholder" pra automação de verdade) — por isso nunca têm
+     número, nunca vêm de GET /api/ia-agentes (ficam hardcoded aqui embaixo
+     só pra dar identidade ao card), e o botão de detalhes fica desabilitado
+     com o motivo explicado. */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtHora(v){
+      if(!v) return '--:--';
+      try{ return new Date(v).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '--:--'; }
+    }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      try{ const d = new Date(v); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '—'; }
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+    function tintVars(tint){ return '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+
+    // Ver comentário grande acima do IIFE — nunca cadastrados em
+    // ia_agentes, nunca com número/status real, sempre com o "Ver
+    // detalhes" desabilitado e explicado.
+    const EM_CONSTRUCAO = [
+      { codigo:'vendas_buybox', nome:'Vendas / Buy Box', icone:'store', area:'Vendas', tint:'copper',
+        desc:'Vai acompanhar concorrência de preço e Buy Box dos seus anúncios — ainda não existe como agente real.' },
+      { codigo:'estoque', nome:'Estoque', icone:'layers', area:'Estoque', tint:'petrol',
+        desc:'Vai sugerir reposição e alertar risco de ruptura de estoque — ainda não existe como agente real.' },
+      { codigo:'financeiro', nome:'Financeiro', icone:'wallet', area:'Financeiro', tint:'success',
+        desc:'Vai acompanhar caixa e contas a pagar/receber e sugerir ações — ainda não existe como agente real.' },
+      { codigo:'riscos', nome:'Riscos Operacionais', icone:'alertCircle', area:'Riscos', tint:'warning',
+        desc:'Vai consolidar riscos operacionais num agente dedicado — hoje esses alertas já existem em Alertas & IA, mas não como agente próprio.' },
+    ];
+
+    // Metadados de exibição dos agentes REAIS (a identidade/descrição
+    // continua vindo sempre de GET /api/ia-agentes — isto aqui é só a
+    // área/cor/página de destino de cada um, pra nunca duplicar texto).
+    const META_REAIS = {
+      ads_performance: { area:'Marketing / Ads', tint:'petrol', pagina:'agenteAds' },
+      promocoes: { area:'Vendas', tint:'copper', pagina:'agentePromocoes' },
+      sac_mercado_livre: { area:'Atendimento', tint:'teal', pagina:'sacMercadoLivre' },
+      sac_shopee: { area:'Atendimento', tint:'teal', pagina:'sacShopee' },
+    };
+
+    const state = {
+      aba: 'agentes',
+      search: '',
+      filtroStatus: 'todos',
+      filtroArea: 'todas',
+      somentePendencias: false,
+      somenteAlertas: false,
+      loading: false,
+      error: null,
+      resumo: null,
+      historicoCarregado: false,
+      loadingHistorico: false,
+      errorHistorico: null,
+      historico: [],
+    };
+
+    async function apiResumo(empresaId){
+      const res = await fetch('/api/ia-agentes/stats?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os agentes.');
+      return body;
+    }
+    async function apiHistorico(empresaId){
+      const res = await fetch('/api/ia-agentes/historico?empresaId='+empresaId+'&limit=60');
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o histórico.');
+      return (body && body.eventos) || [];
+    }
+
+    async function carregarResumo(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.resumo = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.resumo = await apiResumo(filtro.empresaId); }
+      catch(e){ state.error = e.message; state.resumo = null; }
+      state.loading = false; render();
+    }
+
+    async function carregarHistorico(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.historico = []; state.loadingHistorico = false; render(); return; }
+      state.loadingHistorico = true; state.errorHistorico = null; render();
+      try{ state.historico = await apiHistorico(filtro.empresaId); state.historicoCarregado = true; }
+      catch(e){ state.errorHistorico = e.message; state.historico = []; }
+      state.loadingHistorico = false; render();
+    }
+
+    async function load(){
+      state.historicoCarregado = false;
+      await carregarResumo();
+      if(state.aba === 'historico') await carregarHistorico();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-agentesIaHub');
+      if(page && page.classList.contains('active')) load();
+      else render();
+    });
+
+    function construirCards(){
+      const resumo = state.resumo;
+      const cards = [];
+      if(resumo){
+        resumo.agentes.forEach((a)=>{
+          const meta = META_REAIS[a.codigo] || { area:'Outros', tint:'copper', pagina:null };
+          cards.push({
+            codigo:a.codigo, nome:a.nome, icone:a.icone || 'sparkle', area:meta.area, tint:meta.tint,
+            desc:a.descricao, real:true, emConstrucao:false, status:'online',
+            pendentes:a.pendentes, decididasHoje:a.decididasHoje, alertas:0,
+            ultimaAtualizacao:a.ultimaAtualizacao, pagina:meta.pagina, acaoLabel:'Ver detalhes',
+          });
+        });
+        // IA Gestora não é uma linha de `ia_agentes` (essa tabela é só pros
+        // agentes de decisão automática), mas é um agente real e
+        // funcionando — identidade reaproveitada de PAGES.iaGestora.
+        const pIaGestora = PAGES['iaGestora'];
+        cards.push({
+          codigo:'ia_gestora', nome:pIaGestora.title, icone:pIaGestora.icon, area:'Gestão', tint:'purple',
+          desc:pIaGestora.desc, real:true, emConstrucao:false, status:'online',
+          pendentes:null, decididasHoje:null, alertas:0,
+          conversasHoje:resumo.iaGestora.conversasHoje, mensagensHoje:resumo.iaGestora.mensagensHoje,
+          ultimaAtualizacao:resumo.iaGestora.ultimaAtividade, pagina:'iaGestora', acaoLabel:'Conversar',
+        });
+      }
+      EM_CONSTRUCAO.forEach((a)=>{
+        cards.push({
+          codigo:a.codigo, nome:a.nome, icone:a.icone, area:a.area, tint:a.tint,
+          desc:a.desc, real:false, emConstrucao:true, status:'em_construcao',
+          pendentes:null, decididasHoje:null, alertas:null, ultimaAtualizacao:null,
+          pagina:null, acaoLabel:'Ver detalhes',
+        });
+      });
+      return cards;
+    }
+
+    function filtrarCards(cards){
+      const busca = state.search.trim().toLowerCase();
+      return cards.filter((c)=>{
+        if(busca && c.nome.toLowerCase().indexOf(busca) === -1) return false;
+        if(state.filtroStatus !== 'todos' && c.status !== state.filtroStatus) return false;
+        if(state.filtroArea !== 'todas' && c.area !== state.filtroArea) return false;
+        if(state.somentePendencias && !(c.pendentes > 0)) return false;
+        if(state.somenteAlertas && !(c.alertas > 0)) return false;
+        return true;
+      });
+    }
+
+    function statChip(valor, label){
+      return '<div class="agent-card-stat"><b>'+(valor===null||valor===undefined?'—':valor)+'</b><span>'+escapeHtml(label)+'</span></div>';
+    }
+
+    function badgeStatusHTML(card){
+      if(card.emConstrucao) return '<span class="badge-status off"><span class="dot"></span>Em construção</span>';
+      if(card.status === 'online') return '<span class="badge-status on"><span class="dot"></span>Online</span>';
+      return '<span class="badge-status off"><span class="dot"></span>Pausado</span>';
+    }
+
+    function agentCardHTML(card){
+      const stats = card.codigo === 'ia_gestora'
+        ? statChip(card.conversasHoje, 'Conversas hoje') + statChip(card.mensagensHoje, 'Mensagens hoje')
+        : (card.emConstrucao
+            ? '<div class="field-hint" style="margin:0;">Sem dados — este agente ainda não existe de verdade.</div>'
+            : statChip(card.pendentes, 'Pendentes') + statChip(card.decididasHoje, 'Decididas hoje'));
+
+      // IA Gestora é um chat sob demanda, não uma automação em segundo
+      // plano — não faz sentido ter um interruptor ligar/desligar nela
+      // (por isso fica de fora, junto dos cards "Em construção").
+      const toggleHtml = (card.emConstrucao || card.codigo === 'ia_gestora') ? ''
+        : '<button type="button" class="toggle '+(card.status==='online'?'on':'')+'" disabled style="cursor:not-allowed;opacity:.7;" title="Interruptor por empresa: chega na próxima etapa (ETAPA 4) — ainda não desliga a automação de verdade."></button>';
+
+      const acaoBtn = card.emConstrucao
+        ? '<button class="ghost-btn" type="button" disabled title="Este agente ainda não existe de verdade — sem tela de detalhes ainda.">'+svg('eye')+'<span>Ver detalhes</span></button>'
+        : '<button class="ghost-btn" type="button" style="cursor:pointer;opacity:1;" data-page="'+card.pagina+'">'+svg(card.acaoLabel==='Conversar'?'messageCircle':'eye')+'<span>'+card.acaoLabel+'</span></button>';
+
+      return '<div class="agent-card'+(card.emConstrucao?' em-construcao':'')+'" style="'+tintVars(card.tint)+'">'
+        + '<div class="agent-card-top">'
+          + '<div class="agent-card-id"><div class="kpi-hero-icon">'+svg(card.icone)+'</div>'
+            + '<div><div class="agent-card-name">'+escapeHtml(card.nome)+'</div><div class="agent-card-area">'+escapeHtml(card.area)+'</div></div>'
+          + '</div>'
+          + badgeStatusHTML(card)
+        + '</div>'
+        + '<div class="agent-card-desc">'+escapeHtml(card.desc||'')+'</div>'
+        + '<div class="agent-card-stats">'+stats+'</div>'
+        + '<div class="agent-card-foot">'+toggleHtml+acaoBtn+'</div>'
+        + (card.emConstrucao ? '' : '<div class="agent-card-ultima">Última atualização: '+fmtDataHora(card.ultimaAtualizacao)+'</div>')
+      + '</div>';
+    }
+
+    function kpiRowHTML(){
+      const k = state.resumo ? state.resumo.kpis : null;
+      const semDado = state.loading || state.error || !k;
+      const items = [
+        { label:'Agentes ativos', icon:'sparkle', tint:'purple', value:k?k.agentesAtivos:null, note:'Cadastro ativo — interruptor por empresa chega na próxima etapa' },
+        { label:'Tarefas executadas hoje', icon:'activity', tint:'petrol', value:k?k.tarefasHoje:null, note:'Sugestões novas + alertas novos gerados hoje pelos agentes' },
+        { label:'Alertas importantes', icon:'alertCircle', tint:'warning', value:k?k.alertasImportantes:null, note:'Críticos + atenção, abertos agora (Radar)' },
+      ];
+      return '<div class="kpi-hero-grid" style="margin-bottom:14px;">' + items.map((it)=>{
+        const valueHtml = semDado ? '<span class="dash">'+(state.error?'—':'…')+'</span>' : String(it.value);
+        return '<div class="kpi-hero" style="'+tintVars(it.tint)+'">'
+          + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(it.icon)+'</div></div>'
+          + '<div class="kpi-hero-label">'+it.label+'</div>'
+          + '<div class="kpi-hero-value">'+valueHtml+'</div>'
+          + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+it.note+'</span></div>'
+        + '</div>';
+      }).join('') + '</div>';
+    }
+
+    function heroIaGestoraHTML(){
+      const p = PAGES['iaGestora'];
+      const g = state.resumo ? state.resumo.iaGestora : null;
+      return '<div class="ia-hub-hero">'
+        + '<div class="ia-hub-hero-ic">'+svg(p.icon)+'</div>'
+        + '<div class="ia-hub-hero-body">'
+          + '<div class="ia-hub-hero-title">IA Gestora</div>'
+          + '<div class="ia-hub-hero-sub">'+escapeHtml(p.desc)+'</div>'
+          + '<div class="ia-hub-hero-stats">'
+            + '<div class="ia-hub-hero-stat"><b>'+(g?g.conversasHoje:'—')+'</b><span>Conversas hoje</span></div>'
+            + '<div class="ia-hub-hero-stat"><b>'+(g?g.mensagensHoje:'—')+'</b><span>Mensagens hoje</span></div>'
+          + '</div>'
+        + '</div>'
+        + '<button type="button" class="primary-btn" data-page="iaGestora" style="flex-shrink:0;cursor:pointer;opacity:1;">'+svg('messageCircle')+'<span>Conversar com a IA Gestora</span></button>'
+      + '</div>';
+    }
+
+    function toolbarHTML(areas){
+      const areaOptions = ['todas'].concat(areas).map((a)=> '<option value="'+escapeHtml(a)+'" '+(state.filtroArea===a?'selected':'')+'>'+(a==='todas'?'Todas as áreas':escapeHtml(a))+'</option>').join('');
+      return '<div class="agent-toolbar">'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="agHubSearch" placeholder="Buscar agente por nome…" value="'+escapeHtml(state.search)+'"></div>'
+        + '<select class="toolbar-select" id="agHubStatus">'
+          + '<option value="todos" '+(state.filtroStatus==='todos'?'selected':'')+'>Status: todos</option>'
+          + '<option value="online" '+(state.filtroStatus==='online'?'selected':'')+'>Online</option>'
+          + '<option value="pausado" '+(state.filtroStatus==='pausado'?'selected':'')+'>Pausado</option>'
+          + '<option value="em_construcao" '+(state.filtroStatus==='em_construcao'?'selected':'')+'>Em construção</option>'
+        + '</select>'
+        + '<select class="toolbar-select" id="agHubArea">'+areaOptions+'</select>'
+        + '<label class="check-chip'+(state.somentePendencias?' active':'')+'"><input type="checkbox" id="agHubPendencias" '+(state.somentePendencias?'checked':'')+'>Com pendências</label>'
+        + '<label class="check-chip'+(state.somenteAlertas?' active':'')+'"><input type="checkbox" id="agHubAlertas" '+(state.somenteAlertas?'checked':'')+'>Com alertas</label>'
+      + '</div>';
+    }
+
+    function abasHTML(){
+      return '<div class="seg" id="agHubTabs" style="margin-bottom:14px;">'
+        + '<button type="button" data-aba="agentes" class="'+(state.aba==='agentes'?'active':'')+'">Agentes</button>'
+        + '<button type="button" data-aba="historico" class="'+(state.aba==='historico'?'active':'')+'">Histórico</button>'
+      + '</div>';
+    }
+
+    const HIST_ICONE = { sugestao:'sparkle', aprovada:'checkCircle', alterada:'edit', editada:'edit', recusada:'x', expirada:'clock', alerta:'alertCircle', atendimento_novo:'inbox' };
+    const HIST_VERBO = { aprovada:'aprovou a resposta', alterada:'alterou a sugestão', editada:'editou e aprovou a resposta', recusada:'recusou a sugestão', expirada:'deixou a sugestão expirar' };
+    const HIST_NOME_AGENTE = { ads_performance:'Ads e Performance', promocoes:'Promoções', radar:'Radar (Central de Alertas)', sac_mercado_livre:'SAC Mercado Livre', sac_shopee:'SAC Shopee' };
+
+    function historicoEventoHTML(ev){
+      const agente = HIST_NOME_AGENTE[ev.agenteCodigo] || ev.agenteCodigo;
+      let corpo;
+      if(ev.tipo === 'sugestao'){
+        corpo = '<b>'+escapeHtml(agente)+'</b> sugeriu uma ação em <b>'+escapeHtml(ev.referencia)+'</b>';
+      } else if(ev.tipo === 'atendimento_novo'){
+        corpo = '<b>'+escapeHtml(agente)+'</b> recebeu um novo atendimento: <b>'+escapeHtml(ev.referencia)+'</b>';
+      } else if(ev.tipo === 'alerta'){
+        corpo = '<b>Radar</b> detectou: <b>'+escapeHtml(ev.referencia)+'</b>';
+      } else {
+        const verbo = HIST_VERBO[ev.tipo] || ev.tipo;
+        corpo = '<b>'+escapeHtml(ev.usuario || 'Alguém')+'</b> '+verbo+' de <b>'+escapeHtml(agente)+'</b> em '+escapeHtml(ev.referencia);
+      }
+      return '<div class="hist-row">'
+        + '<div class="hist-time">'+fmtHora(ev.ts)+'</div>'
+        + '<div class="hist-ic">'+svg(HIST_ICONE[ev.tipo]||'activity')+'</div>'
+        + '<div><div class="hist-body">'+corpo+'</div><div class="hist-sub">'+escapeHtml(ev.motivo||'')+'</div></div>'
+      + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('agentesIaHubRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver os agentes de IA.</p></div>';
+        return;
+      }
+
+      let html = kpiRowHTML() + heroIaGestoraHTML() + abasHTML();
+
+      if(state.aba === 'agentes'){
+        if(state.loading){
+          html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando agentes…</span></div></div>';
+        } else if(state.error){
+          html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+            + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+        } else {
+          const todos = construirCards();
+          const areas = Array.from(new Set(todos.map((c)=> c.area))).sort();
+          html += toolbarHTML(areas);
+          const filtrados = filtrarCards(todos);
+          if(!filtrados.length){
+            html += '<div class="empty-panel"><div class="empty-icon">'+svg('search')+'</div>'
+              + '<h2>Nenhum agente encontrado</h2><p class="lead">Ajuste a busca ou os filtros acima.</p></div>';
+          } else {
+            html += '<div class="agent-grid">' + filtrados.map(agentCardHTML).join('') + '</div>';
+          }
+        }
+      } else {
+        html += toolbarHTML(state.resumo ? Array.from(new Set(construirCards().map((c)=> c.area))).sort() : []);
+        if(state.loadingHistorico){
+          html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando histórico…</span></div></div>';
+        } else if(state.errorHistorico){
+          html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+            + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.errorHistorico)+'</p></div>';
+        } else if(!state.historico.length){
+          html += '<div class="empty-panel"><div class="empty-icon">'+svg('clock')+'</div>'
+            + '<h2>Nenhum evento ainda</h2><p class="lead">Assim que um agente sugerir algo, você decidir, ou o Radar detectar um alerta, o evento aparece aqui.</p></div>';
+        } else {
+          html += '<div class="table-card"><div class="hist-list">' + state.historico.map(historicoEventoHTML).join('') + '</div></div>';
+        }
+      }
+
+      root.innerHTML = html;
+
+      const search = document.getElementById('agHubSearch');
+      if(search) search.addEventListener('input', ()=>{ state.search = search.value; render(); const el=document.getElementById('agHubSearch'); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
+      const selStatus = document.getElementById('agHubStatus');
+      if(selStatus) selStatus.addEventListener('change', ()=>{ state.filtroStatus = selStatus.value; render(); });
+      const selArea = document.getElementById('agHubArea');
+      if(selArea) selArea.addEventListener('change', ()=>{ state.filtroArea = selArea.value; render(); });
+      const chkPend = document.getElementById('agHubPendencias');
+      if(chkPend) chkPend.addEventListener('change', ()=>{ state.somentePendencias = chkPend.checked; render(); });
+      const chkAlert = document.getElementById('agHubAlertas');
+      if(chkAlert) chkAlert.addEventListener('change', ()=>{ state.somenteAlertas = chkAlert.checked; render(); });
+      const tabsEl = document.getElementById('agHubTabs');
+      if(tabsEl) tabsEl.querySelectorAll('button').forEach((b)=> b.addEventListener('click', ()=>{
+        state.aba = b.dataset.aba;
+        if(state.aba === 'historico' && !state.historicoCarregado){ carregarHistorico(); }
+        else render();
+      }));
+      root.querySelectorAll('[data-page]').forEach((el)=> el.addEventListener('click', ()=> navigate(el.dataset.page)));
+    }
+
+    window.AgentesIaHub = { load };
   })();
 
   /* ================= RELATÓRIOS — categorias com dados 100% reaproveitados =================

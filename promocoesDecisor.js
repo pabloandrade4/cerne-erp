@@ -21,19 +21,30 @@ function sugerirAcaoPromocao(linha) {
   const jaAtiva = !!linha.statusItemMl && linha.statusItemMl !== 'candidate';
   const margemTxt = linha.margemRealPct !== null && linha.margemRealPct !== undefined ? Number(linha.margemRealPct).toFixed(1) + '%' : 'indisponível';
   const minimoTxt = linha.margemMinimaPctUsada !== null && linha.margemMinimaPctUsada !== undefined ? Number(linha.margemMinimaPctUsada).toFixed(1) + '%' : 'indisponível';
+  // Margem de conforto (15/09/2026, pedido explícito do usuário — ver
+  // lib/promocoesMotor.js#classificar): só entra na explicação quando de
+  // fato foi exigida (tem desconto real E o usuário configurou um valor
+  // > 0) — pra nunca confundir quem não usa essa opção com um mínimo
+  // "diferente" do que configurou.
+  const temConforto = !!linha.temDesconto && Number(linha.margemConfortoPctUsada) > 0;
+  const minimoExigidoTxt = temConforto
+    ? (Number(linha.margemMinimaPctUsada) + Number(linha.margemConfortoPctUsada)).toFixed(1) + '%'
+    : minimoTxt;
 
   if (!jaAtiva) {
     if (codigo === 'entrar' || codigo === 'oportunidade') {
       return {
         tipoAcao: 'entrar_promocao',
-        motivo: `Margem real estimada de ${margemTxt} no preço promocional — ${codigo === 'oportunidade' ? 'bem acima do' : 'dentro do'} mínimo configurado (${minimoTxt}).`,
+        motivo: `Margem real estimada de ${margemTxt} no preço promocional — ${codigo === 'oportunidade' ? 'bem acima do' : 'dentro do'} mínimo exigido (${minimoExigidoTxt}${temConforto ? `, sendo ${minimoTxt} o mínimo configurado + ${Number(linha.margemConfortoPctUsada).toFixed(1)}% de margem de conforto por ter desconto` : ' configurado'}).`,
         valorSugeridoIa: { acao: 'entrar', precoPromoAtual: linha.precoPromo },
       };
     }
     if (codigo === 'nao_recomendado') {
       return {
         tipoAcao: 'nao_entrar_promocao',
-        motivo: `Margem real estimada de ${margemTxt} ficaria abaixo do mínimo configurado (${minimoTxt}) no preço promocional sugerido pelo Mercado Livre.`,
+        motivo: temConforto
+          ? `Margem real estimada de ${margemTxt} fica acima do mínimo puro (${minimoTxt}), mas abaixo do mínimo exigido pra promoções com desconto (${minimoTxt} + ${Number(linha.margemConfortoPctUsada).toFixed(1)}% de margem de conforto = ${minimoExigidoTxt}).`
+          : `Margem real estimada de ${margemTxt} ficaria abaixo do mínimo configurado (${minimoTxt}) no preço promocional sugerido pelo Mercado Livre.`,
         valorSugeridoIa: { acao: 'nao_entrar', precoPromoAtual: linha.precoPromo },
       };
     }

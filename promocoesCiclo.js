@@ -28,8 +28,12 @@ const { calcularHistoricoPorSku, analisarItemPromocao, DIAS_HISTORICO_PADRAO } =
 const { sincronizarDecisaoPromocao, expirarDecisoesPromocaoNaoTocadas, avaliarResultadosPromocoes } = require('./promocoesDecisoesStore');
 
 async function buscarConfigPromocoes(empresaId) {
-  const { rows } = await pool.query('SELECT margem_minima_pct FROM config_promocoes WHERE empresa_id = $1', [empresaId]);
-  return rows.length ? Number(rows[0].margem_minima_pct) : 14;
+  const { rows } = await pool.query('SELECT margem_minima_pct, margem_conforto_pct FROM config_promocoes WHERE empresa_id = $1', [empresaId]);
+  if (!rows.length) return { margemMinimaPct: 14, margemConfortoPct: 0 };
+  return {
+    margemMinimaPct: Number(rows[0].margem_minima_pct),
+    margemConfortoPct: Number(rows[0].margem_conforto_pct) || 0,
+  };
 }
 
 async function buscarAliquotaImposto(empresaId) {
@@ -53,11 +57,12 @@ async function upsertAnalise(linha) {
        desconto_pct, desconto_bancado_meli_pct, desconto_bancado_vendedor_pct,
        custo_produto, tarifas_estimadas, frete_vendedor_estimado, imposto_estimado,
        margem_real, margem_real_pct, margem_minima_pct_usada,
+       margem_conforto_pct_usada, tem_desconto,
        margem_incompleta, motivo_incompleto,
        classificacao_codigo, classificacao_label, atualizado_em
      ) VALUES (
        $1,$2,$3,$4,$5, $6,$7,$8,$9,$10, $11,$12,$13, $14,$15,$16,
-       $17,$18,$19,$20, $21,$22,$23, $24,$25, $26,$27, now()
+       $17,$18,$19,$20, $21,$22,$23, $24,$25, $26,$27, $28,$29, now()
      )
      ON CONFLICT (conta_id, promotion_id, ml_item_id) DO UPDATE SET
        empresa_id = EXCLUDED.empresa_id,
@@ -80,6 +85,8 @@ async function upsertAnalise(linha) {
        margem_real = EXCLUDED.margem_real,
        margem_real_pct = EXCLUDED.margem_real_pct,
        margem_minima_pct_usada = EXCLUDED.margem_minima_pct_usada,
+       margem_conforto_pct_usada = EXCLUDED.margem_conforto_pct_usada,
+       tem_desconto = EXCLUDED.tem_desconto,
        margem_incompleta = EXCLUDED.margem_incompleta,
        motivo_incompleto = EXCLUDED.motivo_incompleto,
        classificacao_codigo = EXCLUDED.classificacao_codigo,
@@ -92,6 +99,7 @@ async function upsertAnalise(linha) {
       linha.descontoPct, linha.descontoBancadoMeliPct, linha.descontoBancadoVendedorPct,
       linha.custoProduto, linha.tarifasEstimadas, linha.freteVendedorEstimado, linha.impostoEstimado,
       linha.margemReal, linha.margemRealPct, linha.margemMinimaPctUsada,
+      linha.margemConfortoPctUsada, !!linha.temDesconto,
       linha.margemIncompleta, linha.motivoIncompleto,
       linha.classificacaoCodigo, linha.classificacaoLabel,
     ]
@@ -115,7 +123,7 @@ async function removerAnalisesForaDaLista(contaId, chavesAtuais) {
   );
 }
 
-async function executarCicloPromocoesConta({ conta, custoPorSku, historicoPorSku, aliquotaImposto, margemMinimaPct }) {
+async function executarCicloPromocoesConta({ conta, custoPorSku, historicoPorSku, aliquotaImposto, margemMinimaPct, margemConfortoPct }) {
   const contaComToken = await getContaComTokenValido(conta.id);
   const accessToken = decrypt(contaComToken.access_token_enc);
 
@@ -187,6 +195,7 @@ async function executarCicloPromocoesConta({ conta, custoPorSku, historicoPorSku
         custoPorSku,
         aliquotaImposto,
         margemMinimaPct,
+        margemConfortoPct,
         contexto: {
           empresaId: conta.empresa_id,
           contaId: conta.id,
@@ -236,11 +245,12 @@ async function executarCicloPromocoesEmpresa(empresaId) {
   );
   if (!contas.length) return { empresaId, contasProcessadas: 0, itensAnalisados: 0, comErro: [] };
 
-  const [margemMinimaPct, aliquotaImposto, custoPorSku] = await Promise.all([
+  const [configPromocoes, aliquotaImposto, custoPorSku] = await Promise.all([
     buscarConfigPromocoes(empresaId),
     buscarAliquotaImposto(empresaId),
     buscarCustoPorSku(empresaId),
   ]);
+  const { margemMinimaPct, margemConfortoPct } = configPromocoes;
 
   const agora = new Date();
   const desde = new Date(agora.getTime() - DIAS_HISTORICO_PADRAO * 24 * 60 * 60 * 1000);
@@ -251,7 +261,7 @@ async function executarCicloPromocoesEmpresa(empresaId) {
   const comErro = [];
   for (const conta of contas) {
     try {
-      const resultadoConta = await executarCicloPromocoesConta({ conta, custoPorSku, historicoPorSku, aliquotaImposto, margemMinimaPct });
+      const resultadoConta = await executarCicloPromocoesConta({ conta, custoPorSku, historicoPorSku, aliquotaImposto, margemMinimaPct, margemConfortoPct });
       itensAnalisados += resultadoConta.itensAnalisados;
     } catch (err) {
       comErro.push({ contaId: conta.id, erro: err.message });

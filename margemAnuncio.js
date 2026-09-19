@@ -1,29 +1,211 @@
-// Aba "Margem por Anúncio" (Análise) — router fino, ver
-// lib/margemAnuncio.js para a regra de negócio.
-const express = require('express');
-const { calcularPeriodo } = require('../lib/periodo');
-const { gerarMargemPorAnuncio } = require('../lib/margemAnuncio');
+// Aba "Margem por Anúncio" (Análise) — criada em 26/08/2026, pedido
+// explícito do usuário: "Use a mesma regra financeira de Pedidos,
+// Financeiro e Relatórios. Não crie uma nova fórmula específica para essa
+// página." Por isso este arquivo NÃO recalcula nada: agrupa por anúncio os
+// mesmos ITENS de pedido já calculados por lib/relatorioVendas.js (via
+// lib/anunciosBase.js#agruparVendasDetalhado, que usa
+// lib/resultadoVenda.js) e o investimento em Ads já sincronizado (mesma
+// fonte da tela Ads — lib/ads.js#buscarMetricasPorAnuncio).
+//
+// FÓRMULA (idêntica à usada em Pedidos/Financeiro/Relatórios/Ads):
+//   FATURAMENTO − tarifas/comissões − frete do vendedor − imposto − custo
+//   dos produtos = MARGEM DE CONTRIBUIÇÃO (antes do Ads)
+//   MARGEM DE CONTRIBUIÇÃO − ADS = RESULTADO APÓS ADS
+//
+// Sobre "imposto ausente" (pedido do usuário: "Se algum SKU estiver sem
+// custo ou imposto, sinalize claramente que a margem está incompleta"):
+// neste ERP o imposto é uma ALÍQUOTA ÚNICA POR EMPRESA (config_financeiro,
+// não por SKU — ver lib/resultadoVenda.js), sempre aplicada quando o valor
+// da venda existe. Por isso, no modelo de dados atual, "imposto ausente por
+// SKU" não é uma situação que pode ocorrer de verdade — documentado aqui
+// para não inventar uma sinalização que o próprio sistema nunca produz. A
+// causa real de margem incompleta hoje é sempre CUSTO do produto não
+// cadastrado em Produtos (mesmo sinal — `pendentes`/`margemIncompleta` — já
+// usado em Pedidos, Relatórios e Ads). Se um dia o imposto passar a ser
+// calculado por SKU, esta tela precisa ser revisada.
+//
+// ============================================================================
+// DESTAQUES OBJETIVOS (pedido do usuário: "Destacar anúncios que...") — os
+// mesmos limiares abaixo estão documentados em docs/01-regras-de-negocio.md.
+// Faturamento e quantidade vendida são comparados aos anúncios do MESMO
+// resultado (empresa/loja/período filtrados) por TERÇOS (top 1/3 = "alto",
+// 1/3 inferior = "baixo") — uma régua relativa, já que "fatura muito" ou
+// "vende pouco" só faz sentido comparado aos outros anúncios do mesmo
+// conjunto, nunca um valor fixo em reais que funcionaria para uma empresa
+// pequena e não para uma grande.
+//   - "Fatura muito, mas deixa pouca margem": faturamento no terço de cima
+//     do conjunto E margemContribuicaoPct <= MARGEM_BAIXA_PCT (10%).
+//   - "Margem negativa": margemContribuicao < 0.
+//   - "Prejuízo após Ads": resultadoAposAds < 0 (mesmo com margem >= 0).
+//   - "Ads consumindo grande parte do resultado": investimento em Ads >=
+//     ADS_CONSOME_PCT (50%) da margem de contribuição (só quando a margem é
+//     positiva — se já é negativa, o destaque é "Margem negativa").
+//   - "Vende pouco, mas ótima margem": quantidade vendida no terço de baixo
+//     do conjunto E margemContribuicaoPct >= MARGEM_OTIMA_PCT (30%).
+//   - "Vende muito com margem saudável": quantidade vendida no terço de
+//     cima do conjunto E margemContribuicaoPct >= MARGEM_SAUDAVEL_PCT (15%).
+// ============================================================================
+const { round2 } = require('./resultadoVenda');
+const { buscarItensDoPeriodo } = require('./relatorioVendas');
+const { periodoParaDatasBRT } = require('./periodo');
+const { buscarMetricasPorAnuncio } = require('./ads');
+const {
+  agruparVendasDetalhado, buscarNomesProdutoPorSku, buscarContasFiltradas,
+  buscarAnunciosVivosPorConta, resolverIdentidade,
+} = require('./anunciosBase');
 
-const router = express.Router();
+const MARGEM_BAIXA_PCT = 10;
+const ADS_CONSOME_PCT = 50;
+const MARGEM_OTIMA_PCT = 30;
+const MARGEM_SAUDAVEL_PCT = 15;
 
-// GET /api/margem-anuncio?empresaId=ID&periodo=30d&contaId=&sku=
-router.get('/', async (req, res, next) => {
-  try {
-    const { empresaId, periodo, contaId, sku, desde: desdeQuery, ate: ateQuery } = req.query;
-    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+const CRITERIOS = {
+  margemBaixaPct: MARGEM_BAIXA_PCT,
+  adsConsomePct: ADS_CONSOME_PCT,
+  margemOtimaPct: MARGEM_OTIMA_PCT,
+  margemSaudavelPct: MARGEM_SAUDAVEL_PCT,
+  descricao: 'Faturamento e quantidade vendida são comparados por terços dentro do próprio conjunto filtrado (empresa/loja/período) — documentado em docs/01-regras-de-negocio.md.',
+};
 
-    const periodoCalc = calcularPeriodo(periodo, { desde: desdeQuery, ate: ateQuery });
+// Devolve o valor de corte do terço de cima e do terço de baixo de uma lista
+// de números (>=0 apenas, ignorando null) — usado para "fatura muito"/"vende
+// pouco" relativos ao próprio conjunto filtrado.
+function limiaresPorTercos(valores) {
+  const validos = valores.filter((v) => v !== null && v !== undefined).slice().sort((a, b) => a - b);
+  if (validos.length < 3) return { corteBaixo: null, corteAlto: null };
+  const corteBaixo = validos[Math.floor(validos.length / 3) - 1] ?? validos[0];
+  const corteAlto = validos[Math.ceil((validos.length * 2) / 3)] ?? validos[validos.length - 1];
+  return { corteBaixo, corteAlto };
+}
 
-    // `periodoChaveAds` é a mesma chave usada para ler ads_metricas_anuncio
-    // (lib/ads.js — sincronizada em background pelas 5 janelas de
-    // lib/periodo.js), igual à tela Ads.
-    const resultado = await gerarMargemPorAnuncio({
-      empresaId, contaId: contaId || null, sku: sku || null,
-      periodoCalc, periodoChaveAds: periodoCalc.chave,
-    });
+async function gerarMargemPorAnuncio({ empresaId, contaId, sku, periodoCalc, periodoChaveAds }) {
+  const { contasTodas, contasFiltradas } = await buscarContasFiltradas({ empresaId, contaId });
+  if (!contasTodas.length) {
+    return { semConta: true, lojas: [], linhas: [], periodo: null, criterios: CRITERIOS };
+  }
 
-    res.json(resultado);
-  } catch (err) { next(err); }
-});
+  const { desde, ate } = periodoCalc;
+  const contasAtivasObjetos = contasFiltradas.filter((c) => c.status === 'ativa');
+  const contaIdsAtivas = contasAtivasObjetos.map((c) => c.id);
+  // Só usado quando periodoChaveAds === 'personalizado' (ver
+  // lib/ads.js#buscarMetricasPorAnuncio) — a API de Advertising espera
+  // datas de calendário (YYYY-MM-DD), não os instantes de periodoCalc.
+  const { desde: desdeStrAds, ate: ateStrAds } = periodoParaDatasBRT(periodoCalc);
 
-module.exports = router;
+  const [{ itens }, investimentoPorAnuncio, { porItemId: anunciosVivos }] = await Promise.all([
+    buscarItensDoPeriodo({ empresaId, desde, ate }),
+    buscarMetricasPorAnuncio(contaIdsAtivas, periodoChaveAds || '30d', {
+      desde: desdeStrAds, ate: ateStrAds, contasAtivas: contasAtivasObjetos,
+    }),
+    buscarAnunciosVivosPorConta(contasFiltradas),
+  ]);
+
+  const itensFiltrados = contaId ? itens.filter((it) => String(it.contaMlId) === String(contaId)) : itens;
+  const vendas = agruparVendasDetalhado(itensFiltrados);
+
+  const skus = [...vendas.values()].map((v) => v.sku);
+  const nomesProduto = await buscarNomesProdutoPorSku(empresaId, skus);
+
+  let linhas = [...vendas.entries()].map(([chave, v]) => {
+    const vivo = v.mlItemId ? (anunciosVivos.get(v.mlItemId) || null) : null;
+    const identidade = resolverIdentidade({ mlItemId: v.mlItemId, venda: v, vivo });
+    const ads = v.mlItemId ? investimentoPorAnuncio.get(v.mlItemId) : null;
+    const investimentoAds = ads ? ads.investimento : null;
+
+    const margemContribuicaoPct = (v.margemContribuicao !== null && v.faturamento) ? round2((v.margemContribuicao / v.faturamento) * 100) : null;
+    // RESULTADO REAL do anúncio após Ads — sempre a partir de VENDAS REAIS
+    // (margemContribuicao, calculada acima com a mesma fórmula de
+    // Pedidos/Financeiro/Relatórios) menos o investimento realmente
+    // sincronizado. Pedido explícito do usuário: "deixe separado:
+    // Performance atribuída pelo Mercado Ads de Resultado real do anúncio
+    // após Ads" — por isso NUNCA usamos `faturamentoAtribuido`/
+    // `qtdVendasAtribuidas` (que vêm do próprio Mercado Ads, podem incluir
+    // atribuição imprecisa/janela de atribuição diferente) para calcular
+    // este resultado; esses dois campos só aparecem no bloco `adsAtribuido`
+    // abaixo, como informação separada.
+    const resultadoAposAds = (v.margemContribuicao !== null && investimentoAds !== null) ? round2(v.margemContribuicao - investimentoAds) : null;
+    const margemAposAdsPct = (resultadoAposAds !== null && v.faturamento) ? round2((resultadoAposAds / v.faturamento) * 100) : null;
+
+    // Performance ATRIBUÍDA pelo Mercado Ads — dado bruto da API de
+    // Publicidade (cliques, impressões, CTR/CVR/ROAS calculados pelo
+    // próprio Mercado Ads, faturamento/vendas que o Ads ATRIBUI a este
+    // anúncio). Informativo, nunca usado para recalcular a margem real
+    // acima. "Ads pendente" (ads === null) quando este anúncio ainda não
+    // tem sincronização de Ads para o período — nesse caso a margem ANTES
+    // do Ads continua normal (calculada só com dados de venda reais).
+    const adsAtribuido = ads ? {
+      disponivel: true,
+      campanha: ads.campanha,
+      cliques: ads.clicks,
+      impressoes: ads.prints,
+      cpc: ads.cpc,
+      ctrApi: ads.ctrApi,
+      cvrApi: ads.cvrApi,
+      roasApi: ads.roasApi,
+      acosApi: ads.acosApi,
+      investimento: ads.investimento,
+      faturamentoAtribuido: ads.faturamentoAtribuido,
+      qtdVendasAtribuidas: ads.qtdVendasAtribuidas,
+    } : { disponivel: false };
+
+    return {
+      mlItemId: v.mlItemId,
+      imagemUrl: identidade.imagemUrl,
+      anuncio: identidade.anuncio,
+      sku: v.sku,
+      produto: v.sku ? (nomesProduto.get(v.sku) || null) : null,
+      loja: v.loja,
+      contaMlId: v.contaMlId,
+      quantidadePedidos: v.quantidadePedidos,
+      quantidadeVendida: v.quantidade,
+      faturamento: v.faturamento,
+      custoProdutos: v.custoProduto,
+      imposto: v.imposto,
+      tarifas: v.tarifas,
+      freteVendedor: v.freteVendedor,
+      margemContribuicao: v.margemContribuicao,
+      margemContribuicaoPct,
+      investimentoAds,
+      resultadoAposAds,
+      margemAposAdsPct,
+      adsAtribuido,
+      margemIncompleta: v.margemIncompleta,
+      semDadosAds: !ads,
+      rateado: v.rateado,
+    };
+  });
+
+  if (sku) {
+    const alvo = sku.trim().toLowerCase();
+    linhas = linhas.filter((l) => (l.sku || '').toLowerCase().includes(alvo));
+  }
+
+  const { corteBaixo: corteBaixoFaturamento, corteAlto: corteAltoFaturamento } = limiaresPorTercos(linhas.map((l) => l.faturamento));
+  const { corteBaixo: corteBaixoQtd, corteAlto: corteAltoQtd } = limiaresPorTercos(linhas.map((l) => l.quantidadeVendida));
+
+  linhas = linhas.map((l) => {
+    const faturaMuitoNoTopo = corteAltoFaturamento !== null && l.faturamento >= corteAltoFaturamento;
+    const vendeQuantidadeNoTopo = corteAltoQtd !== null && l.quantidadeVendida >= corteAltoQtd;
+    const vendePoucoNoFundo = corteBaixoQtd !== null && l.quantidadeVendida <= corteBaixoQtd;
+
+    const destaques = {
+      faturaMuitoPoucaMargem: faturaMuitoNoTopo && l.margemContribuicaoPct !== null && l.margemContribuicaoPct <= MARGEM_BAIXA_PCT,
+      margemNegativa: l.margemContribuicao !== null && l.margemContribuicao < 0,
+      prejuizoAposAds: l.resultadoAposAds !== null && l.resultadoAposAds < 0 && !(l.margemContribuicao !== null && l.margemContribuicao < 0),
+      adsConsumindoResultado: l.investimentoAds !== null && l.margemContribuicao !== null && l.margemContribuicao > 0 && l.investimentoAds >= l.margemContribuicao * (ADS_CONSOME_PCT / 100),
+      vendePoucoOtimaMargem: vendePoucoNoFundo && l.margemContribuicaoPct !== null && l.margemContribuicaoPct >= MARGEM_OTIMA_PCT,
+      vendeMuitoMargemSaudavel: vendeQuantidadeNoTopo && l.margemContribuicaoPct !== null && l.margemContribuicaoPct >= MARGEM_SAUDAVEL_PCT,
+    };
+    return { ...l, destaques };
+  });
+
+  return {
+    semConta: false,
+    lojas: contasTodas.map((c) => ({ id: c.id, nickname: c.nickname })),
+    periodo: { chave: periodoCalc.chave, label: periodoCalc.label, desde, ate },
+    linhas,
+    criterios: CRITERIOS,
+  };
+}
+
+module.exports = { gerarMargemPorAnuncio, CRITERIOS };
