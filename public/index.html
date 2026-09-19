@@ -486,7 +486,7 @@
   .ov2-ia-item-title{ font-size:12.5px; font-weight:700; color:var(--text); }
   .ov2-ia-item-body{ font-size:12px; color:var(--text-muted); margin-top:3px; line-height:1.5; }
   .ov2-ia-cta-wrap{ padding:14px 18px 18px; margin-top:auto; }
-  .ov2-ia-cta{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:11px 16px; border-radius:12px; background:var(--purple); color:#fff; font-weight:700; font-size:13px; text-decoration:none; transition:opacity .15s; }
+  .ov2-ia-cta{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:11px 16px; border-radius:12px; background:var(--copper); color:#fff; font-weight:700; font-size:13px; text-decoration:none; transition:opacity .15s; }
   .ov2-ia-cta:hover{ opacity:.88; }
 
   /* ---- Gráfico simples (SVG, sem lib externa) ---- */
@@ -5546,6 +5546,23 @@
     const btnSync = document.getElementById(opts.syncButtonId);
     if(btnSync) btnSync.addEventListener('click', sincronizarAgora);
 
+    // Atualização automática da TELA a cada 1 minuto (19/09/2026, pedido
+    // explícito do usuário: "quero que atualize de 1 em 1 minuto o estoque
+    // full"). O backend já sincroniza a quantidade a cada 1 minuto sozinho
+    // (lib/syncScheduler.js) desde antes — o que faltava era a tela reler
+    // esse dado sozinha, sem precisar trocar de aba/recarregar a página ou
+    // clicar em "Sincronizar agora". Isto só rechama loadDados() (o MESMO
+    // GET de sempre) — nunca dispara uma sincronização nova sozinho, e só
+    // quando esta aba está aberta, ativa e visível (evita chamada à toa com
+    // o usuário em outra tela do ERP ou com o navegador em segundo plano).
+    setInterval(()=>{
+      const page = document.getElementById('page-'+opts.pageId);
+      if(!page || !page.classList.contains('active')) return;
+      if(document.hidden) return;
+      if(state.loading || state.sincronizando || !state.empresaId) return;
+      loadDados();
+    }, 60000);
+
     return { load };
   }
 
@@ -5555,6 +5572,7 @@
     selectId: 'stkEmpresaSelect',
     retryId: 'stkRetry',
     syncButtonId: 'btnSincronizarEstoque',
+    pageId: 'stock',
     tituloVazio: 'Nenhum item sincronizado ainda',
     mensagemVazia: 'Assim que a sincronização automática rodar (ou ao clicar em "Sincronizar agora"), os anúncios com estoque fora do Full aparecem aqui.',
   });
@@ -5565,6 +5583,7 @@
     selectId: 'stkFullEmpresaSelect',
     retryId: 'stkFullRetry',
     syncButtonId: 'btnSincronizarEstoqueFull',
+    pageId: 'stockFull',
     tituloVazio: 'Nenhum item Full sincronizado ainda',
     mensagemVazia: 'Assim que a sincronização automática rodar (ou ao clicar em "Sincronizar agora"), os anúncios com logística Full aparecem aqui.',
     // 19/09/2026, pedido explícito do usuário: em vez da lista de anúncios
