@@ -4797,6 +4797,98 @@
     function pendenteSpan(){ return '<span style="color:var(--text-faint); font-style:italic; font-family:\'Public Sans\',sans-serif; font-weight:500;">Pendente</span>'; }
     function num(v){ return v === null || v === undefined ? pendenteSpan() : Number(v).toLocaleString('pt-BR'); }
     function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
+    // ---- Só usados na visão física (Estoque Full, opts.visaoFisica — ver
+    // corpoFisicoHTML abaixo). A aba Estoque (fora do Full) nunca passa por
+    // aqui, então nada muda pra ela.
+    function money(v){ return v===null||v===undefined ? pendenteSpan() : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtCaixas(v){ return v===null||v===undefined ? pendenteSpan() : Number(v).toLocaleString('pt-BR'); }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+    function secCardHTML(k){
+      return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
+        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div></div></div>';
+    }
+    // Avisos "nunca inventar": um SKU sem produto base vinculado ou um
+    // produto base sem custo cadastrado nunca viram um número chutado — a
+    // quantidade/valor fica de fora da conta e o motivo aparece aqui,
+    // explicitamente (mesmo padrão de lib/estoqueFisico.js).
+    function pendenciasFisicoHTML(f){
+      const avisos = [];
+      if(f.unidadesSemProdutoBaseIdentificado > 0){
+        avisos.push('<strong>'+fmtCaixas(f.unidadesSemProdutoBaseIdentificado)+'</strong> unidade(s) de anúncio ainda sem produto base identificado — o SKU precisa ser vinculado a um produto base para entrar na quantidade em caixas e no valor abaixo.');
+      }
+      if(f.unidadesFisicasSemCustoCadastrado > 0){
+        avisos.push('<strong>'+fmtCaixas(f.unidadesFisicasSemCustoCadastrado)+'</strong> caixa(s) de produto base sem custo cadastrado — entram na quantidade em caixas, mas não no valor em R$ (nunca um custo estimado).');
+      }
+      if(f.itensPendentesDeSincronizacao > 0){
+        avisos.push(f.itensPendentesDeSincronizacao+' item(ns) ainda aguardando sincronização com o Mercado Livre.');
+      }
+      if(!avisos.length) return '';
+      return '<div class="empty-panel" style="padding:12px 16px; margin-bottom:14px; text-align:left; display:flex; align-items:flex-start; gap:12px;">'
+        + '<div class="empty-icon" style="color:var(--warning); background:var(--warning-soft); width:34px; height:34px; margin:0; flex:none;">'+svg('clock')+'</div>'
+        + '<div style="color:var(--text-faint); font-size:13px; line-height:1.5;">' + avisos.map(a=>'<div>'+a+'</div>').join('') + '</div>'
+      + '</div>';
+    }
+    // Corpo da tela Estoque Full (19/09/2026, pedido explícito do usuário):
+    // não mostra mais os anúncios como lista única/principal — mostra valor
+    // em R$, quantidade em caixas, e a quebra por modelo (produto base) e por
+    // SKU/anúncio, cada uma na sua própria seção. `state.data.fisico` vem de
+    // lib/estoqueFisico.js#calcularEstoqueFisico (rota GET /api/estoque-full).
+    function corpoFisicoHTML(){
+      const f = state.data.fisico;
+      if(!f) return '';
+
+      let html = '<div class="kpi-sec-grid" style="margin-bottom:14px;">'
+        + secCardHTML({ label:'Valor em estoque (a custo)', icon:'wallet', tint: f.valorTotalACusto!==null ? 'success' : 'muted', valueHtml: f.valorTotalACusto!==null ? money(f.valorTotalACusto) : pendenteSpan() })
+        + secCardHTML({ label:'Quantidade em caixas', icon:'box', tint:'copper', valueHtml: fmtCaixas(f.unidadesFisicas) })
+      + '</div>';
+
+      html += pendenciasFisicoHTML(f);
+
+      const porModelo = f.produtosBase || [];
+      html += '<div class="section-label" style="margin:18px 0 8px;"><span>Por modelo (produto base)</span></div>';
+      if(!porModelo.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('box')+'</div>'
+          + '<h2>Nenhum modelo identificado ainda</h2>'
+          + '<p class="lead">Assim que os SKUs dos anúncios Full forem vinculados a um produto base (com custo cadastrado), o resumo por modelo aparece aqui.</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto base (modelo)</th><th>Quantidade em caixas</th><th>Custo unitário</th><th>Valor em estoque</th>'
+          + '</tr></thead><tbody>'
+          + porModelo.map(p => '<tr>'
+            + '<td class="mono">'+escapeHtml(p.produtoBase)+'</td>'
+            + '<td class="tab-nums">'+fmtCaixas(p.quantidadeFisica)+'</td>'
+            + '<td class="tab-nums">'+(p.custoUnitario!==null ? money(p.custoUnitario) : pendenteSpan())+'</td>'
+            + '<td class="tab-nums">'+(p.valorEmEstoque!==null ? money(p.valorEmEstoque) : pendenteSpan())+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      const porItem = f.itens || [];
+      html += '<div class="section-label" style="margin:18px 0 8px;"><span>Por SKU / anúncio</span></div>';
+      if(!porItem.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
+          + '<h2>'+opts.tituloVazio+'</h2>'
+          + '<p class="lead">'+opts.mensagemVazia+'</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto / Anúncio</th><th>SKU</th><th>Modelo (produto base)</th><th>Loja</th>'
+          + '<th>Qtd. no anúncio</th><th>Qtd. em caixas</th><th>Valor em estoque</th>'
+          + '</tr></thead><tbody>'
+          + porItem.map(it => '<tr>'
+            + '<td>'+escapeHtml(it.tituloAnuncio || '—')+'</td>'
+            + '<td class="mono">'+(it.sku ? escapeHtml(it.sku) : '<span style="color:var(--text-faint);">sem SKU</span>')+'</td>'
+            + '<td class="mono">'+(it.produtoBase ? escapeHtml(it.produtoBase) : '<span style="color:var(--text-faint);">não identificado</span>')+'</td>'
+            + '<td>'+escapeHtml(it.loja || '—')+'</td>'
+            + '<td class="tab-nums">'+fmtCaixas(it.quantidadeDisponivel)+'</td>'
+            + '<td class="tab-nums">'+(it.quantidadeFisica!==null ? fmtCaixas(it.quantidadeFisica) : pendenteSpan())+'</td>'
+            + '<td class="tab-nums">'+(it.valorEmEstoque!==null ? money(it.valorEmEstoque) : pendenteSpan())+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      return html;
+    }
     function statusBadge(status){
       if(status === 'active') return '<span class="badge-status on"><span class="dot"></span>Ativo</span>';
       if(status === 'paused') return '<span class="badge-status warn"><span class="dot"></span>Pausado</span>';
@@ -4899,28 +4991,37 @@
       } else if(state.data){
         html += bannerHTML() + ultimaSincronizacaoHTML();
 
-        const itens = state.data.itens || [];
-        if(!itens.length){
-          html += '<div class="empty-panel"><div class="empty-icon">'+svg('layers')+'</div>'
-            + '<h2>'+opts.tituloVazio+'</h2>'
-            + '<p class="lead">'+opts.mensagemVazia+'</p></div>';
+        // Estoque Full (opts.visaoFisica): 19/09/2026, pedido explícito do
+        // usuário — não mostra mais os anúncios crus como visão principal;
+        // mostra valor em R$, quantidade em caixas e a quebra por modelo e
+        // por SKU/anúncio (ver corpoFisicoHTML). A aba Estoque (fora do
+        // Full) nunca passa por aqui — continua exatamente como antes.
+        if(opts.visaoFisica){
+          html += corpoFisicoHTML();
         } else {
-          html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-            + '<th>Produto / Anúncio</th><th>SKU</th><th>Loja</th><th>ID do anúncio</th>'
-            + '<th>Estoque disponível</th><th>Status</th><th>Última sincronização</th>'
-            + '</tr></thead><tbody>'
-            + itens.map(it => {
-              return '<tr>'
-                + '<td>'+escapeHtml(it.produto || '—')+'</td>'
-                + '<td class="mono">'+(it.sku ? escapeHtml(it.sku) : '<span style="color:var(--text-faint);">sem SKU</span>')+'</td>'
-                + '<td>'+escapeHtml(it.loja || '—')+'</td>'
-                + '<td class="mono">'+escapeHtml(it.mlItemId || '—')+(it.mlVariationId ? ' <span style="color:var(--text-faint);">('+escapeHtml(String(it.mlVariationId))+')</span>' : '')+'</td>'
-                + '<td class="tab-nums">'+(it.pendente ? pendenteSpan() : num(it.estoqueDisponivel))+'</td>'
-                + '<td>'+statusBadge(it.status)+'</td>'
-                + '<td>'+(fmtDateTime(it.ultimaSincronizacao) ? escapeHtml(fmtDateTime(it.ultimaSincronizacao)) : '—')+'</td>'
-              + '</tr>';
-            }).join('')
-            + '</tbody></table></div></div>';
+          const itens = state.data.itens || [];
+          if(!itens.length){
+            html += '<div class="empty-panel"><div class="empty-icon">'+svg('layers')+'</div>'
+              + '<h2>'+opts.tituloVazio+'</h2>'
+              + '<p class="lead">'+opts.mensagemVazia+'</p></div>';
+          } else {
+            html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+              + '<th>Produto / Anúncio</th><th>SKU</th><th>Loja</th><th>ID do anúncio</th>'
+              + '<th>Estoque disponível</th><th>Status</th><th>Última sincronização</th>'
+              + '</tr></thead><tbody>'
+              + itens.map(it => {
+                return '<tr>'
+                  + '<td>'+escapeHtml(it.produto || '—')+'</td>'
+                  + '<td class="mono">'+(it.sku ? escapeHtml(it.sku) : '<span style="color:var(--text-faint);">sem SKU</span>')+'</td>'
+                  + '<td>'+escapeHtml(it.loja || '—')+'</td>'
+                  + '<td class="mono">'+escapeHtml(it.mlItemId || '—')+(it.mlVariationId ? ' <span style="color:var(--text-faint);">('+escapeHtml(String(it.mlVariationId))+')</span>' : '')+'</td>'
+                  + '<td class="tab-nums">'+(it.pendente ? pendenteSpan() : num(it.estoqueDisponivel))+'</td>'
+                  + '<td>'+statusBadge(it.status)+'</td>'
+                  + '<td>'+(fmtDateTime(it.ultimaSincronizacao) ? escapeHtml(fmtDateTime(it.ultimaSincronizacao)) : '—')+'</td>'
+                + '</tr>';
+              }).join('')
+              + '</tbody></table></div></div>';
+          }
         }
       }
 
@@ -4956,6 +5057,10 @@
     syncButtonId: 'btnSincronizarEstoqueFull',
     tituloVazio: 'Nenhum item Full sincronizado ainda',
     mensagemVazia: 'Assim que a sincronização automática rodar (ou ao clicar em "Sincronizar agora"), os anúncios com logística Full aparecem aqui.',
+    // 19/09/2026, pedido explícito do usuário: em vez da lista de anúncios
+    // como visão principal, mostrar valor em R$, quantidade em caixas e a
+    // quebra por modelo/SKU/anúncio (ver corpoFisicoHTML acima).
+    visaoFisica: true,
   });
 
   /* ================= COMPRAS — primeira versão simples =================
