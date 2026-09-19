@@ -7,8 +7,20 @@
 // (tipo='full'), sincronizado automaticamente a cada 1 minuto pelo mesmo
 // ciclo de server/lib/syncScheduler.js — não busca mais ao vivo na API a
 // cada carregamento (diferente da versão anterior desta tela).
+//
+// `fisico` (19/09/2026) — pedido explícito do usuário: a tela não deve mais
+// mostrar os anúncios "crus" como visão principal; em vez disso, mostrar o
+// valor em R$, a quantidade em caixas e a quebra por modelo (produto base) e
+// por SKU/anúncio, tudo separado. Em vez de inventar uma conta nova, reusa
+// lib/estoqueFisico.js#calcularEstoqueFisico — módulo já existente (criado
+// para a IA Gestora, ver seu cabeçalho) que já faz exatamente essa conversão
+// kit→físico e a soma a custo, só que ainda não estava ligado a nenhuma rota
+// HTTP nem tela. `itens` (cru, por anúncio) continua sendo devolvido sem
+// mudança nenhuma, para não quebrar nada que já lê esta rota — `fisico` é um
+// campo NOVO e aditivo.
 const express = require('express');
 const pool = require('../db/pool');
+const { calcularEstoqueFisico } = require('../lib/estoqueFisico');
 
 const router = express.Router();
 
@@ -68,6 +80,8 @@ router.get('/', async (req, res, next) => {
       mensagem = 'Ainda não há dados sincronizados (ou esta conta não tem nenhum anúncio no Full). A sincronização automática roda a cada 1 minuto — ou clique em "Sincronizar agora".';
     }
 
+    const estoqueFisico = await calcularEstoqueFisico(empresaId);
+
     res.json({
       pendente,
       motivo,
@@ -75,6 +89,7 @@ router.get('/', async (req, res, next) => {
       contas: contas.map((c) => ({ id: c.id, nickname: c.nickname, status: c.status })),
       itens: itens.map(serializeItem),
       ultimaSincronizacaoGeral,
+      fisico: estoqueFisico.full,
     });
   } catch (err) { next(err); }
 });
