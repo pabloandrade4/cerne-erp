@@ -1575,6 +1575,15 @@ CREATE TABLE IF NOT EXISTS ia_reunioes_diarias (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_reunioes_diarias_empresa_dia
   ON ia_reunioes_diarias (empresa_id, data_referencia);
 
+-- Coluna aditiva (19/09/2026, pedido explícito do usuário: "quero que
+-- atualize... me enviar relatórios... pelo WhatsApp") — Etapa 4 da Daily dos
+-- Agentes: agendamento automático + aviso por WhatsApp (ver
+-- lib/ia/dailyScheduler.js). NULL enquanto o resumo do dia ainda não foi
+-- enviado; marcado com now() assim que o agendador TENTA o envio (sucesso ou
+-- falha do WhatsApp) — nunca tenta mandar 2 vezes no mesmo dia pra mesma
+-- empresa, mesmo que o servidor reinicie no meio do dia.
+ALTER TABLE ia_reunioes_diarias ADD COLUMN IF NOT EXISTS whatsapp_enviado_em TIMESTAMPTZ;
+
 -- Um achado por linha — o que cada especialista relatou na reunião
 -- (problema/oportunidade/risco/alteração desde a última reunião). `dados` é
 -- o JSONB com os números reais que sustentam o achado (nunca uma frase sem

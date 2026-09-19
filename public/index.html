@@ -489,6 +489,34 @@
   .ov2-ia-cta{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:11px 16px; border-radius:12px; background:var(--copper); color:#fff; font-weight:700; font-size:13px; text-decoration:none; transition:opacity .15s; }
   .ov2-ia-cta:hover{ opacity:.88; }
 
+  /* ---- Sala dos Agentes — cena 3D (19/09/2026, pedido explícito do
+     usuário: "sala 3d onde vai mostrar todos agentes trabalhando").
+     Three.js só é carregado quando esta tela é aberta pela 1ª vez (ver
+     window.SalaAgentes em public/index.html) — nenhum outro lugar do ERP
+     paga o custo dessa biblioteca. ---- */
+  .sa-wrap{ display:grid; grid-template-columns:1fr 328px; gap:16px; align-items:start; }
+  @media (max-width:1050px){ .sa-wrap{ grid-template-columns:1fr; } }
+  .sa-canvas-card{ position:relative; min-height:560px; border-radius:18px; overflow:hidden; border:1px solid var(--border); background:var(--surface); box-shadow:var(--shadow-sm); }
+  .sa-canvas-card canvas{ display:block; width:100%; height:560px; }
+  .sa-hint{ position:absolute; top:12px; left:12px; display:flex; align-items:center; gap:6px; background:rgba(15,19,32,.72); color:#fff; font-size:11px; font-weight:600; padding:6px 11px; border-radius:20px; pointer-events:none; }
+  .sa-legend{ position:absolute; top:12px; right:12px; display:flex; flex-direction:column; gap:5px; background:rgba(15,19,32,.72); color:#fff; font-size:10.5px; font-weight:600; padding:8px 12px; border-radius:12px; pointer-events:none; }
+  .sa-legend-row{ display:flex; align-items:center; gap:6px; }
+  .sa-legend-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .sa-status-overlay{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; background:var(--surface); color:var(--text-muted); font-size:13px; text-align:center; padding:20px; }
+  .sa-status-overlay .spin{ width:22px; height:22px; }
+  .sa-label{ position:absolute; transform:translate(-50%,-100%); pointer-events:none; display:flex; flex-direction:column; align-items:center; white-space:nowrap; transition:opacity .15s; }
+  .sa-label-chip{ display:flex; align-items:center; gap:5px; background:var(--surface-raised); border:1px solid var(--border); border-radius:20px; padding:4px 10px 4px 7px; box-shadow:var(--shadow-sm); font-size:10.5px; font-weight:700; color:var(--text); }
+  .sa-label-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .sa-label.is-selected .sa-label-chip{ border-color:var(--copper); box-shadow:0 0 0 2px var(--copper-soft); }
+  .sa-side-panel{ display:flex; flex-direction:column; gap:12px; }
+  .sa-agent-row{ cursor:pointer; }
+  .sa-agent-row.is-selected{ background:var(--surface-hover); border-radius:10px; }
+  .sa-detail-empty{ padding:6px 4px; font-size:12.5px; color:var(--text-faint); }
+  .sa-detail-name{ font-family:"Archivo",sans-serif; font-weight:800; font-size:14px; color:var(--text); }
+  .sa-detail-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-top:1px solid var(--border); font-size:12px; }
+  .sa-detail-row span:first-child{ color:var(--text-faint); }
+  .sa-detail-row span:last-child{ color:var(--text); font-weight:700; text-align:right; }
+
   /* ---- Gráfico simples (SVG, sem lib externa) ---- */
   .simple-chart-svg{ width:100%; display:block; overflow:visible; }
   .simple-chart-xlabels{ display:grid; margin-top:6px; }
@@ -1251,6 +1279,14 @@
       { id:'iaGestora', title:'IA Gestora', icon:'messageCircle', desc:'Converse com a IA Gestora sobre os dados reais da empresa e período selecionados — vendas, margem, custos, contas a pagar/receber, estoque e alertas.' },
       { id:'alerts', title:'Alertas & IA', icon:'sparkle', action:'Ver tudo', desc:'Central de alertas inteligentes e sugestões geradas por IA sobre a operação.',
         bullets:['Alertas de risco de ruptura de estoque','Alertas de caixa e prazos financeiros','Sugestões de reposição e compra','Anomalias de custo, taxa ou margem'] },
+      // 19/09/2026, pedido explícito do usuário: "tem como nos fazer
+      // agentes de ia para rodar 24h por dia e fazer uma sala 3d onde vai
+      // mostrar todos agentes trabalhando?" — os processos automáticos já
+      // rodavam 24h no servidor antes disso (schedulers de sincronização,
+      // Radar da IA, Promoções IA, SAC); esta tela só dá uma cara visual
+      // pra esse status real (GET /api/agentes-3d/status), nunca inventa
+      // um agente/dado que não exista de verdade.
+      { id:'salaAgentes', title:'Sala dos Agentes', icon:'box', desc:'Sala 3D mostrando, em tempo real, os processos automáticos que já rodam 24h por dia no servidor — sincronizações, Radar da IA, Promoções IA, SAC e a Daily (resumo diário por WhatsApp).' },
     ]},
     { id:'cadastros', label:'Cadastros', open:true, items:[
       { id:'companies', title:'Empresas', icon:'building', action:'Nova empresa', desc:'Cadastro das empresas e CNPJs que operam dentro do ERP.',
@@ -1405,7 +1441,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','agenteAds','agentePromocoes','sacMercadoLivre','sacShopee'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','agenteAds','agentePromocoes','sacMercadoLivre','sacShopee','salaAgentes'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1477,6 +1513,7 @@
     else if(id === 'agentePromocoes'){ inner += '<div id="agentePromocoesRoot"></div>'; }
     else if(id === 'sacMercadoLivre'){ inner += '<div id="sacMercadoLivreRoot"></div>'; }
     else if(id === 'sacShopee'){ inner += '<div id="sacShopeeRoot"></div>'; }
+    else if(id === 'salaAgentes'){ inner += '<div id="salaAgentesRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1531,6 +1568,13 @@
     if(id === 'agentePromocoes' && window.AgentePromocoes) window.AgentePromocoes.load();
     if(id === 'sacMercadoLivre' && window.SacMercadoLivre) window.SacMercadoLivre.load();
     if(id === 'sacShopee' && window.SacShopee) window.SacShopee.load();
+    // Sala dos Agentes (cena 3D) é a única tela que precisa de um "unload"
+    // explícito: ela abre um contexto WebGL + um loop de animação +
+    // polling próprios, e isso NUNCA pode continuar rodando depois que o
+    // usuário navega pra outra tela do ERP (gastaria GPU/CPU/rede à toa em
+    // segundo plano, pesando no resto do sistema).
+    if(id === 'salaAgentes' && window.SalaAgentes) window.SalaAgentes.load();
+    else if(window.SalaAgentes) window.SalaAgentes.unload();
     if(location.hash !== '#'+id) history.replaceState(null,'','#'+id);
   }
   window.addEventListener('hashchange', ()=> navigate(location.hash.slice(1)));
@@ -11918,6 +11962,371 @@
     }
 
     window.Relatorios = { load };
+  })();
+
+  /* ================= SALA DOS AGENTES — cena 3D (19/09/2026) =================
+     Pedido explícito do usuário: "tem como nos fazer agentes de ia para rodar
+     24h por dia e fazer uma sala 3d onde vai mostar todos agentes
+     trabalhando?". A resposta pra "rodar 24h" já existia antes desta tela —
+     server.js#start já liga 8 schedulers reais que rodam sozinhos no
+     servidor (nunca dependem de ninguém com o navegador aberto). Esta tela
+     só dá uma cara visual (3D) pro status desses 8 processos reais, lido de
+     GET /api/agentes-3d/status (routes/agentes3d.js) — NENHUM agente/dado
+     novo é inventado aqui, e nenhuma lógica de negócio existente é tocada.
+
+     Decisões importantes:
+     - Three.js só é carregado (via CDN) na 1ª vez que esta tela abre — nunca
+       no carregamento normal do ERP — pra não pesar nas outras telas.
+     - "Descarregar" ao sair da tela (ver navigate()) só PAUSA o loop de
+       animação e o polling — a cena em si fica guardada na memória. Isso já
+       elimina praticamente todo o custo de CPU/GPU/rede em segundo plano, e
+       evita destruir/reconstruir o contexto WebGL toda vez que o usuário
+       volta pra esta tela (navegadores têm um limite baixo de contextos
+       WebGL simultâneos que um destroy/rebuild repetido poderia estourar).
+     - Layout fixo (LAYOUT_ORDEM) agrupado por categoria (sincronização,
+       financeiro, IA) — mesma ordem sempre, pra o usuário aprender onde
+       cada agente fica. */
+  (function(){
+    const THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js';
+    const ORBIT_CDN = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+
+    const LAYOUT_ORDEM = ['ml-pedidos','ml-estoque','shopee-pedidos','shopee-token','ads','despesas-fixas','radar-ia','promocoes-ia','sac-ia','daily'];
+    const CATEGORIA_TOKEN = { sincronizacao:'--copper', financeiro:'--teal', ia:'--purple' };
+    const CATEGORIA_LABEL = { sincronizacao:'Sincronização', financeiro:'Financeiro', ia:'Inteligência Artificial' };
+
+    const state = {
+      shellPronta:false, cenaPronta:false, carregandoScripts:null,
+      ativo:false, destruidoEnquantoCarregava:false,
+      pollTimer:null, rafId:null,
+      agentesPorId:{}, selecionadoId:null,
+      three:null, // { renderer, scene, camera, controls, personagens:Map, clock }
+    };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function corToken(nomeVar, alt){ const v = getComputedStyle(document.documentElement).getPropertyValue(nomeVar).trim(); return v || alt || '#888888'; }
+    function fmtRelativo(iso){
+      if(!iso) return 'ainda não rodou';
+      const ms = Date.now() - new Date(iso).getTime();
+      if(ms < 0) return 'agora há pouco';
+      const min = Math.floor(ms/60000);
+      if(min < 1) return 'há poucos segundos';
+      if(min < 60) return 'há ' + min + ' min';
+      const h = Math.floor(min/60);
+      if(h < 24) return 'há ' + h + 'h';
+      return 'há ' + Math.floor(h/24) + 'd';
+    }
+    function fmtIntervalo(ms){ if(!ms) return '—'; const min = Math.round(ms/60000); return min < 1 ? Math.round(ms/1000)+'s' : (min+' min'); }
+
+    function carregarScript(src){
+      return new Promise((resolve, reject) => {
+        const el = document.createElement('script');
+        el.src = src; el.async = true;
+        el.onload = () => resolve();
+        el.onerror = () => reject(new Error('Falha ao carregar ' + src));
+        document.head.appendChild(el);
+      });
+    }
+    function garantirThree(){
+      if(window.THREE && window.THREE.OrbitControls) return Promise.resolve();
+      if(state.carregandoScripts) return state.carregandoScripts;
+      state.carregandoScripts = carregarScript(THREE_CDN).then(() => carregarScript(ORBIT_CDN));
+      return state.carregandoScripts;
+    }
+
+    async function apiStatus(){
+      const res = await fetch('/api/agentes-3d/status');
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar o status dos agentes.');
+      return body.agentes || [];
+    }
+
+    // ---- Shell HTML (montada 1 única vez) ----
+    function montarShellHTML(){
+      const root = document.getElementById('salaAgentesRoot');
+      if(!root) return;
+      root.innerHTML = '<div class="sa-wrap">'
+        + '<div class="sa-canvas-card" id="saCanvasCard">'
+          + '<div class="sa-hint">'+svg('eye')+'<span>Arraste para girar · scroll para dar zoom</span></div>'
+          + '<div class="sa-legend" id="saLegend"></div>'
+          + '<div class="sa-status-overlay" id="saStatusOverlay"><span class="spin"></span><span>Carregando a sala 3D…</span></div>'
+        + '</div>'
+        + '<div class="sa-side-panel">'
+          + '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('box')+'</span>Agentes</div></div>'
+            + '<div id="saListaAgentes"></div>'
+          + '</div>'
+          + '<div class="panel" id="saPainelDetalhe"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Detalhe</div></div>'
+            + '<div class="sa-detail-empty" id="saDetalheCorpo">Clique num personagem na sala 3D (ou na lista ao lado) para ver os detalhes.</div>'
+          + '</div>'
+        + '</div>'
+      + '</div>';
+
+      const legend = document.getElementById('saLegend');
+      legend.innerHTML = Object.keys(CATEGORIA_LABEL).map(cat =>
+        '<div class="sa-legend-row"><span class="sa-legend-dot" style="background:'+corToken(CATEGORIA_TOKEN[cat])+';"></span>'+CATEGORIA_LABEL[cat]+'</div>'
+      ).join('');
+
+      state.shellPronta = true;
+    }
+
+    function renderListaAgentes(){
+      const wrap = document.getElementById('saListaAgentes');
+      if(!wrap) return;
+      wrap.innerHTML = LAYOUT_ORDEM.map(id => {
+        const a = state.agentesPorId[id];
+        if(!a) return '';
+        const cor = corToken(CATEGORIA_TOKEN[a.categoria]);
+        const corStatus = a.emExecucao ? cor : (a.ultimoCicloOk === false ? corToken('--danger') : corToken('--text-faint'));
+        return '<div class="conn-row sa-agent-row'+(state.selecionadoId===id?' is-selected':'')+'" data-agente-id="'+id+'">'
+          + '<div class="conn-row-left"><span class="conn-ic" style="color:'+corStatus+';">'+svg(a.emExecucao?'activity':'checkCircle')+'</span><div>'
+            + '<div class="conn-name">'+escapeHtml(a.nome)+'</div><div class="conn-sub">'+(a.emExecucao?'Trabalhando agora':'Última execução '+fmtRelativo(a.ultimaExecucaoEm))+'</div>'
+          + '</div></div>'
+        + '</div>';
+      }).join('');
+      wrap.querySelectorAll('.sa-agent-row').forEach(el => {
+        el.addEventListener('click', () => selecionarAgente(el.dataset.agenteId));
+      });
+    }
+
+    function renderDetalhe(){
+      const corpo = document.getElementById('saDetalheCorpo');
+      if(!corpo) return;
+      const a = state.selecionadoId ? state.agentesPorId[state.selecionadoId] : null;
+      if(!a){ corpo.className = 'sa-detail-empty'; corpo.textContent = 'Clique num personagem na sala 3D (ou na lista ao lado) para ver os detalhes.'; return; }
+      corpo.className = '';
+      corpo.innerHTML = '<div class="sa-detail-name">'+escapeHtml(a.nome)+'</div>'
+        + '<div class="sa-detail-row"><span>Status</span><span>'+(a.emExecucao ? 'Trabalhando agora' : (a.ativo ? 'Ocioso (aguardando o próximo ciclo)' : 'Parado'))+'</span></div>'
+        + '<div class="sa-detail-row"><span>Última execução</span><span>'+fmtRelativo(a.ultimaExecucaoEm)+'</span></div>'
+        + '<div class="sa-detail-row"><span>Último ciclo</span><span>'+(a.ultimoCicloOk===null ? '—' : (a.ultimoCicloOk ? 'Concluído sem erro' : 'Terminou com erro'))+'</span></div>'
+        + '<div class="sa-detail-row"><span>Roda a cada</span><span>'+fmtIntervalo(a.intervaloMs)+'</span></div>'
+        + '<div class="sa-detail-row"><span>Resumo</span><span>'+escapeHtml(a.resumo)+'</span></div>';
+    }
+
+    function selecionarAgente(id){
+      state.selecionadoId = id;
+      renderListaAgentes();
+      renderDetalhe();
+      document.querySelectorAll('.sa-label').forEach(el => el.classList.toggle('is-selected', el.dataset.agenteId === id));
+    }
+
+    // ---- Cena 3D ----
+    function construirCena(){
+      const THREE = window.THREE;
+      const card = document.getElementById('saCanvasCard');
+      if(!card) return;
+      const largura = card.clientWidth, altura = 560;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(corToken('--page','#0A0C11'));
+      scene.fog = new THREE.Fog(scene.background.getHex(), 22, 42);
+
+      const camera = new THREE.PerspectiveCamera(42, largura/altura, 0.1, 100);
+      camera.position.set(9, 10, 12);
+
+      const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+      renderer.setSize(largura, altura);
+      card.insertBefore(renderer.domElement, card.firstChild);
+
+      const controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 0.5, 0);
+      controls.enableDamping = true; controls.dampingFactor = 0.08;
+      controls.minDistance = 6; controls.maxDistance = 26;
+      controls.maxPolarAngle = Math.PI * 0.49;
+      controls.update();
+
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x30323d, 0.95));
+      const sol = new THREE.DirectionalLight(0xffffff, 0.65);
+      sol.position.set(8, 14, 6);
+      scene.add(sol);
+
+      const chao = new THREE.Mesh(
+        new THREE.PlaneGeometry(26, 20),
+        new THREE.MeshStandardMaterial({ color: corToken('--surface-2','#191d26'), roughness:0.95 })
+      );
+      chao.rotation.x = -Math.PI/2;
+      scene.add(chao);
+
+      const grade = new THREE.GridHelper(26, 26, corToken('--border','#262b37'), corToken('--border','#262b37'));
+      grade.position.y = 0.01;
+      scene.add(grade);
+
+      const paredeMat = new THREE.MeshStandardMaterial({ color: corToken('--surface','#13161d'), roughness:1 });
+      const paredeFundo = new THREE.Mesh(new THREE.PlaneGeometry(26, 8), paredeMat);
+      paredeFundo.position.set(0, 4, -10);
+      scene.add(paredeFundo);
+      const paredeLado = new THREE.Mesh(new THREE.PlaneGeometry(20, 8), paredeMat);
+      paredeLado.position.set(-13, 4, 0); paredeLado.rotation.y = Math.PI/2;
+      scene.add(paredeLado);
+
+      // Grid 3x3 — mesma ordem/agrupamento de LAYOUT_ORDEM.
+      const personagens = new Map();
+      const colunas = 3, espaco = 5.2;
+      LAYOUT_ORDEM.forEach((id, i) => {
+        const col = i % colunas, lin = Math.floor(i / colunas);
+        const x = (col - (colunas-1)/2) * espaco;
+        const z = (lin - 1) * espaco - 1;
+        const grupo = new THREE.Group();
+        grupo.position.set(x, 0, z);
+
+        // Mesa
+        const mesa = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.9), new THREE.MeshStandardMaterial({ color:'#8a6a45', roughness:0.8 }));
+        mesa.position.y = 0.75;
+        grupo.add(mesa);
+        [[-0.75,-0.35],[0.75,-0.35],[-0.75,0.35],[0.75,0.35]].forEach(([lx,lz]) => {
+          const perna = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.75, 0.08), new THREE.MeshStandardMaterial({ color:'#5c4630' }));
+          perna.position.set(lx, 0.375, lz);
+          grupo.add(perna);
+        });
+
+        // Monitor (acende com a cor do agente quando está trabalhando)
+        const monitor = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.36, 0.05), new THREE.MeshStandardMaterial({ color:'#111318', emissive:new THREE.Color(0x000000) }));
+        monitor.position.set(0, 1.12, -0.3);
+        grupo.add(monitor);
+
+        // Personagem: corpo + cabeça, cor por categoria
+        const corpoMat = new THREE.MeshStandardMaterial({ color:0x888888 });
+        const corpo = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.32, 0.85, 12), corpoMat);
+        corpo.position.set(0, 1.18, 0.55);
+        grupo.add(corpo);
+        const cabecaMat = new THREE.MeshStandardMaterial({ color:0xe7c9a3 });
+        const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 16), cabecaMat);
+        cabeca.position.set(0, 1.78, 0.55);
+        grupo.add(cabeca);
+
+        scene.add(grupo);
+        personagens.set(id, { grupo, corpoMat, monitorMat: monitor.material, baseY: grupo.position.y, faseAnim: Math.random()*Math.PI*2 });
+
+        // Rótulo HTML flutuante (posicionado via projeção de câmera a cada frame)
+        const label = document.createElement('div');
+        label.className = 'sa-label'; label.dataset.agenteId = id;
+        label.innerHTML = '<div class="sa-label-chip"><span class="sa-label-dot" style="background:#888;"></span><span class="sa-label-texto">'+escapeHtml(id)+'</span></div>';
+        label.addEventListener('click', () => selecionarAgente(id));
+        label.style.pointerEvents = 'auto';
+        label.style.cursor = 'pointer';
+        card.appendChild(label);
+        personagens.get(id).labelEl = label;
+      });
+
+      state.three = { renderer, scene, camera, controls, personagens, clock: new THREE.Clock(), card };
+      state.cenaPronta = true;
+
+      window.addEventListener('resize', onResizeCena);
+    }
+
+    function onResizeCena(){
+      if(!state.three) return;
+      const { renderer, camera, card } = state.three;
+      const largura = card.clientWidth;
+      camera.aspect = largura/560;
+      camera.updateProjectionMatrix();
+      renderer.setSize(largura, 560);
+    }
+
+    function atualizarPersonagens(){
+      const THREE = window.THREE;
+      state.three.personagens.forEach((p, id) => {
+        const a = state.agentesPorId[id];
+        if(!a) return;
+        const hex = corToken(CATEGORIA_TOKEN[a.categoria], '#888888');
+        const cor = new THREE.Color(hex);
+        p.corpoMat.color = cor;
+        if(a.emExecucao){
+          p.monitorMat.emissive = cor; p.monitorMat.emissiveIntensity = 0.9;
+        } else if(a.ultimoCicloOk === false){
+          p.monitorMat.emissive = new THREE.Color(corToken('--danger','#DC2626')); p.monitorMat.emissiveIntensity = 0.5;
+        } else {
+          p.monitorMat.emissive = new THREE.Color(0x000000); p.monitorMat.emissiveIntensity = 0;
+        }
+        const dot = p.labelEl.querySelector('.sa-label-dot');
+        const corStatus = a.emExecucao ? hex : (a.ultimoCicloOk === false ? corToken('--danger') : corToken('--text-faint'));
+        dot.style.background = corStatus;
+        p.labelEl.querySelector('.sa-label-texto').textContent = a.nome.length > 26 ? a.nome.slice(0,24)+'…' : a.nome;
+      });
+    }
+
+    function loopAnimacao(){
+      if(!state.ativo || !state.three) return;
+      const { renderer, scene, camera, controls, personagens, clock, card } = state.three;
+      const t = clock.getElapsedTime();
+      personagens.forEach((p, id) => {
+        const a = state.agentesPorId[id];
+        const trabalhando = a && a.emExecucao;
+        const amp = trabalhando ? 0.05 : 0.02;
+        const vel = trabalhando ? 5 : 1.6;
+        p.grupo.position.y = p.baseY + Math.sin(t*vel + p.faseAnim) * amp;
+        if(trabalhando) p.grupo.rotation.y = Math.sin(t*1.4 + p.faseAnim) * 0.12;
+      });
+      controls.update();
+      renderer.render(scene, camera);
+
+      // Projeta cada rótulo pra posição de tela
+      const rect = card.getBoundingClientRect();
+      personagens.forEach((p) => {
+        const pos = new THREE.Vector3(0, 2.15, 0.55).add(p.grupo.position);
+        pos.project(camera);
+        const visivel = pos.z < 1;
+        p.labelEl.style.display = visivel ? '' : 'none';
+        if(visivel){
+          p.labelEl.style.left = ((pos.x*0.5+0.5) * rect.width) + 'px';
+          p.labelEl.style.top = ((1 - (pos.y*0.5+0.5)) * rect.height) + 'px';
+        }
+      });
+
+      state.rafId = requestAnimationFrame(loopAnimacao);
+    }
+
+    // ---- Ciclo de dados (polling) ----
+    async function atualizarStatus(){
+      try{
+        const lista = await apiStatus();
+        state.agentesPorId = Object.fromEntries(lista.map(a => [a.id, a]));
+        // Só remove o overlay quando a cena 3D existe de fato — se ela falhou
+        // ao carregar (ex.: CDN bloqueado), load() já escreveu ali a mensagem
+        // de erro explicando isso, e essa mensagem não pode ser apagada só
+        // porque o status (que é independente da cena) veio com sucesso.
+        if(state.cenaPronta){
+          const overlay = document.getElementById('saStatusOverlay');
+          if(overlay) overlay.remove();
+        }
+        renderListaAgentes();
+        renderDetalhe();
+        if(state.cenaPronta) atualizarPersonagens();
+      }catch(err){
+        const overlay = document.getElementById('saStatusOverlay');
+        if(overlay){ overlay.innerHTML = '<span style="color:var(--danger);">'+escapeHtml(err.message||'Não foi possível carregar o status dos agentes.')+'</span>'; }
+      }
+    }
+
+    async function load(){
+      if(!state.shellPronta) montarShellHTML();
+      state.ativo = true;
+
+      if(!state.cenaPronta){
+        try{
+          await garantirThree();
+          if(!state.ativo) return; // usuário já saiu da tela enquanto carregava
+          construirCena();
+        }catch(err){
+          const overlay = document.getElementById('saStatusOverlay');
+          if(overlay) overlay.innerHTML = '<span style="color:var(--danger);">Não foi possível carregar a sala 3D (biblioteca externa bloqueada?). O status continua disponível na lista ao lado.</span>';
+        }
+      }
+
+      await atualizarStatus();
+      if(!state.ativo) return;
+
+      if(state.cenaPronta && state.rafId === null) loopAnimacao();
+      if(state.pollTimer) clearInterval(state.pollTimer);
+      state.pollTimer = setInterval(atualizarStatus, 20000);
+    }
+
+    function unload(){
+      state.ativo = false;
+      if(state.pollTimer){ clearInterval(state.pollTimer); state.pollTimer = null; }
+      if(state.rafId !== null){ cancelAnimationFrame(state.rafId); state.rafId = null; }
+    }
+
+    window.SalaAgentes = { load, unload };
   })();
 
   // Só navega para a rota inicial depois que TODOS os módulos acima (Empresas,

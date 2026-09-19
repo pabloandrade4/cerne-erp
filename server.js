@@ -10,6 +10,7 @@ const { iniciarSincronizacaoAutomaticaAds } = require('./lib/adsScheduler');
 const { iniciarGeracaoAutomaticaDeDespesasFixas } = require('./lib/despesasFixasScheduler');
 const { iniciarPromocoesIA } = require('./lib/ia/promocoesScheduler');
 const { iniciarSacScheduler } = require('./lib/ia/sacScheduler');
+const { iniciarDailyAutomatico } = require('./lib/ia/dailyScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
@@ -46,6 +47,7 @@ const promocoesRouter = require('./routes/promocoes');
 const iaAgentesRouter = require('./routes/iaAgentes');
 const dailyRouter = require('./routes/daily');
 const sacRouter = require('./routes/sac');
+const agentes3dRouter = require('./routes/agentes3d');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -91,6 +93,7 @@ app.use('/api/promocoes', promocoesRouter);
 app.use('/api/ia-agentes', iaAgentesRouter);
 app.use('/api/ia/daily', dailyRouter);
 app.use('/api/sac', sacRouter);
+app.use('/api/agentes-3d', agentes3dRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -149,6 +152,11 @@ async function start() {
     // supervisionado — nada aqui envia mensagem nenhuma sozinho, só gera
     // sugestão pendente de aprovação humana (ver lib/ia/sacScheduler.js).
     iniciarSacScheduler();
+    // Daily dos Agentes — Etapa 4 (19/09/2026, pedido explícito do usuário:
+    // "resumo diário... pelo WhatsApp"): agendamento automático + envio por
+    // WhatsApp do resumo diário real (Ads e Promoções), sempre no servidor,
+    // nunca dependendo do ERP aberto no navegador (ver lib/ia/dailyScheduler.js).
+    iniciarDailyAutomatico();
   });
 }
 
