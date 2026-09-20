@@ -10415,6 +10415,23 @@
         + emoji+' '+escapeHtml(l.classificacaoLabel||'—')
       + '</span>';
     }
+    // "Estoque alto" (20/09/2026, pedido explícito do usuário: "sobre, meu
+    // estoque daquele produto estiver alto, quero que me avise") — sinal
+    // INDEPENDENTE da classificação de margem (ver badgeClassificacaoHTML
+    // acima), por isso é um badge separado, nunca substitui o outro. O
+    // texto explicativo é remontado aqui a partir dos números que já vêm
+    // prontos da API (routes/promocoes.js) — o motivo em texto completo só
+    // existe no momento do cálculo (lib/promocoesMotor.js), não é
+    // persistido em promocoes_analises.
+    function badgeEstoqueAltoHTML(l){
+      if(!l.estoqueAlto) return '';
+      const titulo = l.coberturaDiasEstoque !== null && l.coberturaDiasEstoque !== undefined
+        ? ('No ritmo de vendas dos últimos 90 dias, esse estoque dura ' + Math.round(l.coberturaDiasEstoque) + ' dias.' + (l.estoqueAtual!==null&&l.estoqueAtual!==undefined ? (' Estoque atual: '+l.estoqueAtual+' unidade(s).') : ''))
+        : ('Nenhuma venda registrada nos últimos 90 dias, mas ainda há estoque.' + (l.estoqueAtual!==null&&l.estoqueAtual!==undefined ? (' Estoque atual: '+l.estoqueAtual+' unidade(s).') : ''));
+      return '<span style="display:inline-flex;align-items:center;gap:4px;font-weight:600;font-size:11.5px;color:var(--copper);margin-top:3px;" title="'+escapeHtml(titulo)+'">📦 Estoque alto'
+        + (l.coberturaDiasEstoque!==null&&l.coberturaDiasEstoque!==undefined ? (' ('+Math.round(l.coberturaDiasEstoque)+' dias)') : '')
+      + '</span>';
+    }
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
       const el = document.createElement('div');
@@ -10556,7 +10573,7 @@
           + '<td class="mono">'+money(l.precoPromo)+'</td>'
           + '<td class="mono">'+pctFmt(l.descontoPct)+'</td>'
           + '<td class="mono" style="'+(l.margemRealPct!==null?(l.margemRealPct>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.margemIncompleta?'<span style="color:var(--text-faint);font-style:italic;" title="'+escapeHtml(l.motivoIncompleto||'')+'">dados insuficientes</span>':pctFmt(l.margemRealPct))+'</td>'
-          + '<td>'+badgeClassificacaoHTML(l)+'</td>'
+          + '<td><div style="display:flex;flex-direction:column;">'+badgeClassificacaoHTML(l)+badgeEstoqueAltoHTML(l)+'</div></td>'
           + '<td style="white-space:nowrap;">'
             + '<button class="row-ic-btn promo-ver-detalhes" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" type="button" title="Ver detalhes">'+svg('activity')+'</button>'
             + ' <button class="row-ic-btn" type="button" disabled title="AÇÃO NÃO DISPONÍVEL: esta ação exige permissão de escrita na API do Mercado Livre. Atualmente sua aplicação possui apenas permissão de leitura." style="opacity:.4;cursor:not-allowed;">'+svg('checkCircle')+'</button>'
@@ -10588,6 +10605,11 @@
           { label:'Margem de conforto exigida (tem desconto? '+(l.temDesconto?'sim':'não')+')', html: (l.margemConfortoPctUsada && l.temDesconto) ? (pctFmt(l.margemConfortoPctUsada) + ' — mínimo exigido nesta promoção: ' + pctFmt(Number(l.margemMinimaPctUsada||0) + Number(l.margemConfortoPctUsada||0))) : '<span style="color:var(--text-faint);">não se aplica</span>' },
           { label:'Classificação da IA', html: badgeClassificacaoHTML(l) },
           { label:'Por que este dado pode estar incompleto', html: l.motivoIncompleto ? escapeHtml(l.motivoIncompleto) : '<span style="color:var(--text-faint);">Nenhum dado faltando.</span>' },
+          { label:'— Estoque —', html: '<hr style="border:none;border-top:1px solid var(--border-strong);margin:2px 0;">' },
+          { label:'Estoque atual', html: l.estoqueAtual===null||l.estoqueAtual===undefined ? '<span style="color:var(--text-faint);font-style:italic;">estoque ainda não sincronizado</span>' : (l.estoqueAtual+' unidade(s)') },
+          { label:'Vendas nos últimos 90 dias', html: (l.unidadesVendidas90d===null||l.unidadesVendidas90d===undefined) ? '—' : (l.unidadesVendidas90d+' unidade(s)') },
+          { label:'Cobertura de estoque', html: l.coberturaDiasEstoque===null||l.coberturaDiasEstoque===undefined ? '<span style="color:var(--text-faint);">não calculável</span>' : (Math.round(l.coberturaDiasEstoque)+' dias no ritmo atual de vendas') },
+          { label:'Estoque alto?', html: l.estoqueAlto ? '<span style="color:var(--copper);font-weight:700;">📦 Sim — considere uma promoção mais forte pra girar esse estoque</span>' : '<span style="color:var(--text-faint);">Não</span>' },
           { label:'Última atualização', value: fmtDataHora(l.atualizadoEm) },
         ],
       });
@@ -10729,6 +10751,7 @@
       nao_entrar_promocao: 'Não entrar na promoção',
       sair_promocao: 'Sair da promoção',
       revisar_preco: 'Revisar preço promocional',
+      estoque_alto: 'Estoque alto — considerar promoção',
     };
 
     function sugestaoResumoHTML(d){
