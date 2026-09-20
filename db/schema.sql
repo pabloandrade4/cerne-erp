@@ -1889,3 +1889,37 @@ ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS snapshot_margem_norma
 -- passa a só considerar alertas DA MESMA origem — corrige os dois problemas
 -- de uma vez, sem precisar listar categorias manualmente em lugar nenhum.
 ALTER TABLE radar_alertas ADD COLUMN IF NOT EXISTS origem_ciclo VARCHAR(40) NOT NULL DEFAULT 'radar_principal';
+
+-- ============================================================
+-- Promoções — "estoque alto" avisa o usuário (20/09/2026)
+-- ============================================================
+-- Pedido explícito do usuário: "sobre, meu estoque daquele produto estiver
+-- alto, quero que me avise". Perguntado de volta como definir "alto" —
+-- escolheu PELOS DIAS QUE O ESTOQUE DURA no ritmo real de vendas (nunca
+-- uma quantidade fixa em unidades, que seria enganosa entre produtos com
+-- ritmos de venda bem diferentes). `dias_cobertura_alta` é o limite (em
+-- dias) configurável por empresa, mesmo padrão de `margem_minima_pct` —
+-- 60 dias por padrão, o usuário pode pedir pra ajustar quando quiser. Ver
+-- lib/promocoesMotor.js#calcularCoberturaEstoque.
+ALTER TABLE config_promocoes ADD COLUMN IF NOT EXISTS dias_cobertura_alta INTEGER NOT NULL DEFAULT 60;
+
+-- `estoque_atual` vem de `ml_estoque_itens` (MESMA fonte real da tela
+-- Estoque — nunca uma segunda sincronização), somado por SKU no momento da
+-- análise. `vendas_unidades_90d` é a soma real de unidades vendidas desse
+-- SKU nos últimos 90 dias (lib/relatorioVendas.js, mesma fonte de sempre).
+-- `cobertura_dias_estoque` = estoque_atual ÷ (vendas_unidades_90d ÷ 90) —
+-- nunca calculado quando não há venda no período (fica NULL; "estoque
+-- alto sem nenhuma venda" ainda é sinalizado por `estoque_alto`, só sem um
+-- número de dias exato). `estoque_alto` é o sinal booleano pronto pra
+-- tela/alerta usar direto, sem recalcular nada no front-end.
+ALTER TABLE promocoes_analises ADD COLUMN IF NOT EXISTS estoque_atual INTEGER;
+ALTER TABLE promocoes_analises ADD COLUMN IF NOT EXISTS vendas_unidades_90d INTEGER;
+ALTER TABLE promocoes_analises ADD COLUMN IF NOT EXISTS cobertura_dias_estoque NUMERIC(8,1);
+ALTER TABLE promocoes_analises ADD COLUMN IF NOT EXISTS estoque_alto BOOLEAN NOT NULL DEFAULT false;
+
+-- Mesmos 3 campos, como snapshot no momento da sugestão (mesmo padrão de
+-- snapshot_margem_normal_pct acima) — pra auditoria: o que o estoque
+-- estava quando a IA sugeriu, mesmo que tenha mudado depois.
+ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS snapshot_estoque_atual INTEGER;
+ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS snapshot_cobertura_dias_estoque NUMERIC(8,1);
+ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS snapshot_estoque_alto BOOLEAN NOT NULL DEFAULT false;

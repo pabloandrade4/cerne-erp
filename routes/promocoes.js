@@ -288,6 +288,15 @@ function linhaAnaliseParaApi(row) {
     temDesconto: !!row.tem_desconto,
     margemIncompleta: row.margem_incompleta,
     motivoIncompleto: row.motivo_incompleto,
+    // "Estoque alto" (20/09/2026, pedido explícito do usuário — ver
+    // lib/promocoesMotor.js#calcularCoberturaEstoque). O motivo em texto
+    // (motivoEstoqueAlto) não é persistido em promocoes_analises — é
+    // recalculado a partir destes números direto no front, já que os
+    // números por si só (cobertura em dias, limite) já contam a história.
+    estoqueAtual: row.estoque_atual === null ? null : Number(row.estoque_atual),
+    unidadesVendidas90d: row.vendas_unidades_90d === null ? null : Number(row.vendas_unidades_90d),
+    coberturaDiasEstoque: row.cobertura_dias_estoque === null ? null : Number(row.cobertura_dias_estoque),
+    estoqueAlto: !!row.estoque_alto,
     classificacaoCodigo: row.classificacao_codigo,
     classificacaoLabel: row.classificacao_label,
     atualizadoEm: row.atualizado_em,
@@ -377,6 +386,11 @@ function linhaDecisaoPromocaoParaApi(row) {
       impostoEstimado: row.snapshot_imposto_estimado === null ? null : Number(row.snapshot_imposto_estimado),
       margemReal: row.snapshot_margem_real === null ? null : Number(row.snapshot_margem_real),
       margemRealPct: row.snapshot_margem_real_pct === null ? null : Number(row.snapshot_margem_real_pct),
+      // "Estoque alto" (20/09/2026) — foto do estoque no momento em que a
+      // IA gerou esta sugestão (ver lib/ia/promocoesDecisoesStore.js).
+      estoqueAtual: row.snapshot_estoque_atual === null ? null : Number(row.snapshot_estoque_atual),
+      coberturaDiasEstoque: row.snapshot_cobertura_dias_estoque === null ? null : Number(row.snapshot_cobertura_dias_estoque),
+      estoqueAlto: !!row.snapshot_estoque_alto,
     },
     valorSugeridoIa: row.valor_sugerido_ia,
     valorDecididoUsuario: row.valor_decidido_usuario,

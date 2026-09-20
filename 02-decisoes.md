@@ -3,6 +3,45 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-20 (47) — "Estoque alto": definição escolhida pelo usuário (dias de cobertura, não quantidade fixa) e limite padrão de 60 dias
+- **Pedido do usuário era ambíguo o bastante pra justificar perguntar
+  antes de construir:** "sobre, meu estoque daquele produto estiver
+  alto, quero que me avise" não diz o que conta como "alto" — inventar
+  um número aqui seria exatamente o tipo de dado fabricado que este
+  projeto evita. Perguntado de volta (`AskUserQuestion`) com 3 opções:
+  (1) dias de cobertura baseado na velocidade real de vendas
+  [recomendado], (2) quantidade fixa em unidades, (3) limite configurável
+  por produto. **Usuário escolheu a opção 1.**
+- **Por que dias de cobertura e não quantidade fixa:** produtos diferentes
+  vendem em ritmos bem diferentes — 200 unidades pode ser pouco pra um
+  produto que vende 10/dia e muito pra um que vende 1/mês. Medir em DIAS
+  que o estoque dura no ritmo real de vendas (últimos 90 dias, mesma
+  janela já usada em todo o motor de Promoções) é a única métrica que
+  faz sentido igual pra qualquer produto, sem exigir configuração por
+  item.
+- **Limite padrão escolhido: 60 dias.** Não foi perguntado ao usuário
+  (só o MÉTODO foi confirmado via `AskUserQuestion`, não o número) — é um
+  padrão razoável (2 meses de cobertura) consistente com o já usado em
+  outras partes do projeto, mas está configurável por empresa
+  (`config_promocoes.dias_cobertura_alta`) exatamente pra não travar o
+  usuário nesse número se não fizer sentido pro negócio dele. Comunicado
+  explicitamente ao usuário na resposta desta entrega (ver
+  `04-alteracoes.md` (54)) — nunca assumir que "confirmar o método" é o
+  mesmo que "confirmar o número".
+- **Decisão de design: sinal de estoque é INDEPENDENTE da classificação
+  de margem.** Nunca muda se a IA recomenda entrar/sair/manter uma
+  promoção — mesmo um item com margem incompleta (sem custo cadastrado)
+  pode e deve mostrar o alerta de estoque parado, porque são dados
+  diferentes. A única exceção é a classificação "manter": antes dessa
+  mudança "manter" nunca gerava nenhuma sugestão (nada a fazer); agora,
+  com estoque alto, gera a sugestão informativa "estoque_alto" — nunca
+  uma ação automática, sempre "considere revisar".
+- **Fonte do estoque: reaproveitada a mesma tabela `ml_estoque_itens` já
+  sincronizada pela tela Estoque, nunca uma segunda sincronização
+  própria da IA de Promoções.** Consistente com o princípio de sempre
+  reaproveitar a fonte de dado real já existente, em vez de duplicar
+  lógica de sincronização.
+
 ## 2026-09-20 (46) — Margem normal como filtro aditivo (nunca substitui o mínimo/conforto); Concorrente: o que fazer com o bloqueio do Mercado Livre; hub "Agentes de IA" permanece fora do menu
 - **Promoções — a nova regra é ADITIVA, nunca uma substituição.** O
   usuário pediu explicitamente "só me avisar de promoções quando for

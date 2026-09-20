@@ -2,6 +2,79 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-20 (54) — Promoções: "estoque alto" agora avisa o usuário
+- **Pedido explícito do usuário:** "sobre, meu estoque daquele produto
+  estiver alto, quero que me avise". Perguntado de volta como definir
+  "estoque alto" (por dias de cobertura, por quantidade fixa, ou
+  configurável), o usuário confirmou a opção recomendada: **pelos dias
+  que o estoque dura**, no ritmo real de vendas — nunca uma quantidade
+  fixa em unidades, já que produtos diferentes vendem em ritmos bem
+  diferentes.
+- **Como funciona:** pra cada item analisado pela IA de Promoções, calcula
+  quantos dias o estoque atual ainda dura, no ritmo real de vendas dos
+  últimos 90 dias (mesmo estoque já sincronizado da tela Estoque —
+  `ml_estoque_itens`, nunca uma segunda sincronização própria). Acima de
+  **60 dias** (padrão), o item é marcado como "estoque alto" — esse limite
+  é configurável por empresa em `config_promocoes.dias_cobertura_alta`
+  (mesmo padrão já usado pra margem mínima), caso 60 dias não faça sentido
+  pro seu negócio, é só pedir pra eu mudar. Produto com estoque > 0 e
+  **nenhuma venda** nos últimos 90 dias também conta como alto (produto
+  parado), mesmo sem dar pra calcular um número exato de dias. Sem o
+  estoque desse SKU ainda sincronizado, o sistema nunca assume zero — só
+  não mostra o aviso.
+- **Onde aparece:** sinal totalmente independente da margem — nunca muda
+  se a IA recomenda entrar/sair/manter uma promoção, só soma um aviso a
+  mais. Na tela Promoções: badge "📦 Estoque alto (N dias)" ao lado da
+  classificação de cada item, e um bloco de estoque (atual, vendas 90d,
+  cobertura, alto?) no detalhe de cada anúncio. Quando a margem já está de
+  boa (classificação "manter") mas o estoque está alto, a IA agora gera
+  uma sugestão nova (antes não gerava nenhuma pra "manter"): "Estoque alto
+  — considerar promoção", visível na aba de decisões, sugerindo considerar
+  uma promoção mais forte pra girar esse estoque — sempre respeitando a
+  margem mínima configurada.
+- **Testado:** `test/promocoesMotor.test.js` (função `calcularCoberturaEstoque`
+  — cobertura acima/abaixo/no limite, zero vendas com estoque, sem dado de
+  estoque, limite customizado por empresa, e ponta a ponta via
+  `analisarItemPromocao`), `test/promocoesDecisor.test.js` (nova sugestão
+  "estoque_alto" pra "manter", nunca muda o `tipoAcao` decidido pela
+  margem, aparece no motivo de todas as outras classificações),
+  `test/promocoesCiclo.test.js` (integração real com Postgres: soma correta
+  por SKU a partir de `ml_estoque_itens` ignorando linha pendente/SKU nulo,
+  gravação e atualização dos novos campos em `promocoes_analises`). Suite
+  completa sem nenhuma regressão nova.
+
+## 2026-09-20 (53) — Promoções: a mesma tolerância de 3% também vale pra promoção JÁ ATIVA
+- **Contexto:** o usuário reforçou o pedido de 20/09/2026 registrado em
+  (ver `02-decisoes.md`) com um exemplo concreto — vendendo a R$78,99 com
+  14% de margem, só quer sugestão de promoção em preços iguais ou
+  menores, nunca maiores — e confirmou ("ISSO MESMO") que a mesma regra
+  dos 3 pontos percentuais (que já valia só pra decidir ENTRAR numa
+  promoção nova) também deve valer pra decidir se ainda faz sentido
+  **manter** uma promoção que já está rodando.
+- **Confirmado que a regra de "nunca sugerir preço maior" já estava
+  correta** antes desta mudança: como o Mercado Livre só oferece preços
+  candidatos abaixo ou igual ao preço normal dentro da Central de
+  Promoções, a estrutura do próprio dado já garante isso — não havia bug
+  aí. O que faltava era só a extensão pedida abaixo.
+- **`lib/promocoesMotor.js#classificar`:** pra item já ativo numa
+  promoção, se a margem real caiu mais de 3 pontos percentuais abaixo da
+  margem NORMAL deste mesmo produto (preço cheio) — mesmo estando bem
+  acima do mínimo absoluto configurado — a classificação agora vira
+  **"RISCO DE MARGEM"** em vez de "MANTER". Nunca vira "SAIR" sozinho por
+  causa disso (SAIR continua reservado só pra abaixo do mínimo absoluto)
+  — é um aviso pra revisar, nunca uma saída automática.
+- **`lib/ia/promocoesDecisor.js`:** o motivo da sugestão agora distingue
+  os dois jeitos de cair em "risco de margem": perto do mínimo absoluto
+  (texto de sempre) ou já caiu demais da margem normal (novo texto,
+  explicando os pontos percentuais e a margem normal do produto).
+- **Testado:** `test/promocoesMotor.test.js` (6 cenários novos pra
+  `classificar` com item já ativo: acima/no limite/abaixo da tolerância,
+  SAIR nunca vira risco_margem, sem margem normal calculável a regra não
+  se aplica), `test/promocoesDecisor.test.js` (2 cenários novos
+  confirmando qual dos dois textos aparece). 1 teste antigo que esperava
+  o comportamento ANTERIOR (`"manter"` nesse cenário) foi atualizado pra
+  refletir a regra nova, confirmada pelo usuário.
+
 ## 2026-09-20 (52) — Corrigido bug real: tela de Concorrente quebrava com "Erro interno do servidor"
 - **Contexto:** o usuário mandou print mostrando "NÃO FOI POSSÍVEL BUSCAR —
   Erro interno do servidor" ao clicar em "Buscar concorrentes" pra um
