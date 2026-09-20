@@ -2539,11 +2539,31 @@
 
     // ---- Linha 1 — KPIs principais em destaque (Faturamento, Margem R$,
     // Margem %), com mini gráfico de tendência quando há série diária.
-    // "vs. período anterior" da referência foi OMITIDO de propósito:
-    // /api/relatorios/resumo-vendas não calcula comparação com o período
-    // anterior — mostrar isso exigiria inventar um número (ver
-    // docs/02-decisoes.md (37)).
-    function heroKpisHTML(resumo, moeda, hasOrders, serieDiaria){
+    //
+    // "vs. período anterior" no Faturamento (20/09/2026, pedido explícito
+    // do usuário: "em visão geral quero colocar tudo que for
+    // possível... principalmente se o faturamento está caindo ou
+    // aumentando, comparado ao mês passado") — até aqui isso ficava de fora
+    // de propósito porque /api/relatorios/resumo-vendas não calculava
+    // comparação nenhuma (ver docs/02-decisoes.md (37): "mostrar isso
+    // exigiria inventar um número"). Agora existe um cálculo real
+    // (lib/visaoGeralPainel.js#evolucaoFaturamento, mesmo período anterior
+    // de sempre — ver lib/periodoComparacao.js), então a nota antiga deixou
+    // de ser verdade. `faturamentoEvolucao` vem de `painel` (empresa
+    // inteira) — por isso só é mostrado quando NENHUMA loja específica está
+    // selecionada (o Faturamento em si, vindo de `resumo`, muda por loja;
+    // comparar o valor de 1 loja com a evolução da empresa toda seria
+    // enganoso), mesma regra já usada por "Por marketplace"/"Alertas & IA".
+    function faturamentoTendenciaHTML(evolucao){
+      if(!evolucao || evolucao.tendencia === 'sem_dado') return '';
+      const seta = evolucao.tendencia === 'subindo' ? '▲' : (evolucao.tendencia === 'caindo' ? '▼' : '●');
+      const cor = evolucao.tendencia === 'subindo' ? 'pos' : (evolucao.tendencia === 'caindo' ? 'neg' : 'dash');
+      const pctTxt = evolucao.variacaoPct !== null ? pctFmt(Math.abs(evolucao.variacaoPct)) : 'sem base pra comparar %';
+      const periodoTxt = (evolucao.periodoAnterior && evolucao.periodoAnterior.desde) ? ' ('+evolucao.periodoAnterior.desde+'–'+evolucao.periodoAnterior.ate+')' : '';
+      return '<div class="ov2-hero-note" style="margin-top:2px;"><span class="'+cor+'" style="font-weight:700;">'+seta+' '+escapeHtml(pctTxt)+'</span> vs. período anterior'+escapeHtml(periodoTxt)+'</div>';
+    }
+
+    function heroKpisHTML(resumo, moeda, hasOrders, serieDiaria, faturamentoEvolucao){
       const serie = serieDiaria || [];
       const spFaturamento = sparklineAreaSVG(serie.map(d => d.faturamento));
       const spMargem = sparklineAreaSVG(serie.map(d => d.margemContribuicao));
@@ -2554,6 +2574,7 @@
       const heroes = [
         { label:'Faturamento', icon:'barChart', tint:'copper', spark: spFaturamento,
           note: resumo.faturamento.valor!==null ? 'Bruto no período (vendas não canceladas)' : (pendNota('essa informação', resumo.faturamento.pendentes) || 'Bruto no período (vendas não canceladas)'),
+          extraHtml: resumo.faturamento.valor!==null ? faturamentoTendenciaHTML(faturamentoEvolucao) : '',
           valueHtml: resumo.faturamento.valor!==null ? escapeHtml(money(resumo.faturamento.valor, moeda)) : pendCurta(resumo.faturamento.pendentes) },
         { label:'Margem de contribuição (R$)', icon:'wallet', tint: resumo.margemContribuicao.valor===null ? 'muted' : (resumo.margemContribuicao.valor>=0?'success':'danger'), spark: spMargem,
           note: resumo.margemContribuicao.valor!==null
@@ -2574,6 +2595,7 @@
           + '<div class="ov2-hero-label">'+k.label+'</div>'
           + '<div class="ov2-hero-value">'+k.valueHtml+'</div>'
           + '<div class="ov2-hero-note">'+k.note+'</div>'
+          + (k.extraHtml || '')
           + (k.spark || '')
         + '</div>'
       ).join('') + '</div>';
@@ -2816,6 +2838,62 @@
       + '</div>';
     }
 
+    // ---- "Agentes de IA" (20/09/2026 — pedido do usuário: "em visão geral
+    // quero colocar tudo que for possível, os agentes ia, resumos") ----
+    // Dado real vindo de obterResumoHub (lib/ia/agentesResumo.js), o MESMO
+    // usado pela tela "Sala dos Agentes"/hub — nunca um cálculo novo aqui.
+    // Só linka pra uma página quando ela realmente existe na navegação
+    // atual (ver comentário de 19/09/2026 acima de GROUPS — "Agentes de
+    // IA", SAC Mercado Livre e SAC Shopee foram tirados do menu a pedido
+    // do usuário); pra esses e pro Radar de Anúncios (ainda sem tela
+    // própria), o item aparece só como texto, sem link fingindo existir.
+    const AGENTES_IA_PAGINA = { ads_performance:'agenteAds', promocoes:'agentePromocoes', concorrente:'concorrente' };
+
+    function agentesIaSummaryHTML(painel, painelError){
+      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('users')+'</span>Agentes de IA</div></div>';
+      if(painelError){
+        return '<div class="panel">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;padding:0 18px 16px;">Não foi possível carregar.</p></div>';
+      }
+      if(!painel){
+        return '<div class="panel"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      const agentesIa = painel.agentesIa;
+      if(!agentesIa){
+        return '<div class="panel">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;padding:0 18px 16px;">'+escapeHtml(painel.agentesIaError || 'Não foi possível carregar o resumo dos Agentes de IA agora.')+'</p></div>';
+      }
+
+      const kpis = agentesIa.kpis || {};
+      const chips = [
+        { label:'Agentes ativos', valueHtml:String(kpis.agentesAtivos||0), icon:'sparkle', tint:'teal' },
+        { label:'Tarefas hoje', valueHtml:String(kpis.tarefasHoje||0), icon:'activity', tint:'petrol' },
+        { label:'Alertas importantes', valueHtml:String(kpis.alertasImportantes||0), icon:'alertCircle', tint:(kpis.alertasImportantes>0?'danger':'success') },
+      ];
+      const chipsHtml = '<div class="ov2-health-row">' + chips.map(c=>
+        '<div class="ov2-health-chip" style="'+tintVars(c.tint)+'">'
+          + '<div class="ov2-health-ring">'+svg(c.icon)+'</div>'
+          + '<div class="ov2-health-value">'+c.valueHtml+'</div>'
+          + '<div class="ov2-health-label">'+c.label+'</div>'
+        + '</div>'
+      ).join('') + '</div>';
+
+      const agentes = agentesIa.agentes || [];
+      const itensHtml = agentes.map(a=>{
+        const pagina = AGENTES_IA_PAGINA[a.codigo] || null;
+        const partes = [];
+        if(a.sugestoesNovasHoje) partes.push(a.sugestoesNovasHoje+' sugestão'+(a.sugestoesNovasHoje===1?'':'s')+' nova'+(a.sugestoesNovasHoje===1?'':'s')+' hoje');
+        if(a.pendentes) partes.push(a.pendentes+' pendente'+(a.pendentes===1?'':'s'));
+        if(a.decididasHoje) partes.push(a.decididasHoje+' decidida'+(a.decididasHoje===1?'':'s')+' hoje');
+        const corpo = partes.length ? partes.join(' · ') : 'Sem novidade hoje.';
+        const tagAbre = pagina ? '<a href="#" class="alert-row" data-page="'+pagina+'" style="display:block;color:inherit;text-decoration:none;">' : '<div>';
+        const tagFecha = pagina ? '</a>' : '</div>';
+        return tagAbre + '<div class="ov2-ia-item" style="margin:0 18px;">'
+          + '<div class="ov2-ia-item-title">'+escapeHtml(a.nome)+'</div>'
+          + '<div class="ov2-ia-item-body">'+escapeHtml(corpo)+'</div></div>' + tagFecha;
+      }).join('');
+
+      return '<div class="panel">'+head+chipsHtml+itensHtml+'</div>';
+    }
+
     function render(){
       const root = document.getElementById('overviewRoot');
       if(!root) return;
@@ -2852,7 +2930,7 @@
         const resumo = state.data.resumo;
         const hasOrders = resumo.qtdPedidos > 0;
         html += sectionLabel('Indicadores principais — '+state.data.periodo.label)
-          + heroKpisHTML(resumo, 'BRL', hasOrders, state.data.serieDiaria)
+          + heroKpisHTML(resumo, 'BRL', hasOrders, state.data.serieDiaria, (!state.contaId && state.painel) ? state.painel.faturamentoEvolucao : null)
           + secondaryKpisHTML(resumo, 'BRL', hasOrders, state.painel, state.painelError)
           + (state.contaId ? '<div class="field-hint" style="margin:-8px 0 14px;">"Por marketplace", Fluxo de Caixa e Alertas &amp; IA abaixo continuam considerando todas as lojas da empresa — só os indicadores acima e o gráfico de desempenho respeitam a loja selecionada.</div>' : '')
           + sectionLabel('Desempenho')
@@ -2861,7 +2939,9 @@
             + '<div class="ov2-attention-panel">'+alertsPanelHTML(state.painel, state.painelError)+'</div>'
           + '</div>'
           + sectionLabel('Status da operação')
-          + '<div class="ov2-row-bottom">' + healthPanelHTML(resumo, state.painel, state.painelError) + iaSummaryPanelHTML(state.painel, state.painelError) + '</div>';
+          + '<div class="ov2-row-bottom">' + healthPanelHTML(resumo, state.painel, state.painelError) + iaSummaryPanelHTML(state.painel, state.painelError) + '</div>'
+          + sectionLabel('Agentes de IA')
+          + agentesIaSummaryHTML(state.painel, state.painelError);
       }
 
       root.innerHTML = html;
