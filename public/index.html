@@ -11685,6 +11685,12 @@
       promocoes: { area:'Vendas', tint:'copper', pagina:'agentePromocoes' },
       sac_mercado_livre: { area:'Atendimento', tint:'teal', pagina:'sacMercadoLivre' },
       sac_shopee: { area:'Atendimento', tint:'teal', pagina:'sacShopee' },
+      // 20/09/2026: faltavam aqui (caíam em "Outros", sem cor/área própria)
+      // — Anúncios (Radar) ainda não tem tela própria (fica null, nunca um
+      // link fingindo existir); Análise de Concorrente reaproveita a tela
+      // de busca manual já existente.
+      anuncios_radar: { area:'Marketing / Ads', tint:'petrol', pagina:null },
+      concorrente: { area:'Vendas', tint:'copper', pagina:'concorrente' },
     };
 
     const state = {
@@ -11804,6 +11810,13 @@
       return '<span class="badge-status off"><span class="dot"></span>Pausado</span>';
     }
 
+    // 20/09/2026, pedido explícito do usuário: "quando clicar em cima do
+    // agente de ia, quero ver oque ele esta fazendo, oque tenho pra
+    // aprovar..., oque ele fez e a melhora que ele teve" — todo agente REAL
+    // com uma linha em ia_agentes (nunca a IA Gestora, que é um chat sob
+    // demanda, nem os "Em construção", que nem existem de verdade) abre o
+    // modal de Detalhe do Agente (ver abrirDetalheAgente abaixo) tanto pelo
+    // clique no card inteiro quanto pelo botão "Ver detalhes".
     function agentCardHTML(card){
       const stats = card.codigo === 'ia_gestora'
         ? statChip(card.conversasHoje, 'Conversas hoje') + statChip(card.mensagensHoje, 'Mensagens hoje')
@@ -11817,11 +11830,17 @@
       const toggleHtml = (card.emConstrucao || card.codigo === 'ia_gestora') ? ''
         : '<button type="button" class="toggle '+(card.status==='online'?'on':'')+'" disabled style="cursor:not-allowed;opacity:.7;" title="Interruptor por empresa: chega na próxima etapa (ETAPA 4) — ainda não desliga a automação de verdade."></button>';
 
+      const abreDetalhe = card.real && card.codigo !== 'ia_gestora';
       const acaoBtn = card.emConstrucao
         ? '<button class="ghost-btn" type="button" disabled title="Este agente ainda não existe de verdade — sem tela de detalhes ainda.">'+svg('eye')+'<span>Ver detalhes</span></button>'
-        : '<button class="ghost-btn" type="button" style="cursor:pointer;opacity:1;" data-page="'+card.pagina+'">'+svg(card.acaoLabel==='Conversar'?'messageCircle':'eye')+'<span>'+card.acaoLabel+'</span></button>';
+        : (abreDetalhe
+          // Sem data-detalhe próprio — o clique borbulha pro card (que já
+          // tem o atributo), evitando abrir o modal 2x num clique só.
+          ? '<button class="ghost-btn" type="button" style="cursor:pointer;opacity:1;">'+svg('eye')+'<span>Ver detalhes</span></button>'
+          : '<button class="ghost-btn" type="button" style="cursor:pointer;opacity:1;" data-page="'+card.pagina+'">'+svg('messageCircle')+'<span>'+card.acaoLabel+'</span></button>');
 
-      return '<div class="agent-card'+(card.emConstrucao?' em-construcao':'')+'" style="'+tintVars(card.tint)+'">'
+      return '<div class="agent-card'+(card.emConstrucao?' em-construcao':'')+'" style="'+tintVars(card.tint)+(abreDetalhe?';cursor:pointer;':'')+'"'
+          + (abreDetalhe ? ' data-detalhe="'+card.codigo+'"' : '') + '>'
         + '<div class="agent-card-top">'
           + '<div class="agent-card-id"><div class="kpi-hero-icon">'+svg(card.icone)+'</div>'
             + '<div><div class="agent-card-name">'+escapeHtml(card.nome)+'</div><div class="agent-card-area">'+escapeHtml(card.area)+'</div></div>'
@@ -11983,6 +12002,114 @@
         else render();
       }));
       root.querySelectorAll('[data-page]').forEach((el)=> el.addEventListener('click', ()=> navigate(el.dataset.page)));
+      root.querySelectorAll('[data-detalhe]').forEach((el)=> el.addEventListener('click', ()=> abrirDetalheAgente(el.dataset.detalhe)));
+    }
+
+    /* ---------------- "Detalhe do Agente" (modal) ----------------
+       20/09/2026, pedido explícito do usuário: "quando clicar em cima do
+       agente de ia, quero ver oque ele esta fazendo, oque tenho pra
+       aprovar pra ele fazer, oque ele fez e a melhora que ele teve naquilo
+       que é pra ser feito" — sempre nessas 4 seções, nessa ordem. Todo dado
+       vem de GET /api/ia-agentes/:codigo/detalhe (ver lib/ia/agenteDetalhe.js
+       no backend — nunca um número calculado aqui no front). */
+    const SUBSTANTIVO_MELHORA = { anuncios_radar: 'alerta', concorrente: 'alerta', sac_mercado_livre: 'atendimento', sac_shopee: 'atendimento' };
+
+    function fmtIntervalo(ms){
+      if(!ms) return 'intervalo não configurado';
+      const min = Math.round(ms/60000);
+      if(min < 60) return min+' minuto'+(min===1?'':'s');
+      const h = Math.round(min/60);
+      return h+' hora'+(h===1?'':'s');
+    }
+    function haQuanto(iso){
+      if(!iso) return 'ainda não rodou';
+      const diffMs = Date.now() - new Date(iso).getTime();
+      const min = Math.round(diffMs/60000);
+      if(min < 1) return 'agora mesmo';
+      if(min < 60) return 'há '+min+' minuto'+(min===1?'':'s');
+      const h = Math.round(min/60);
+      if(h < 24) return 'há '+h+' hora'+(h===1?'':'s');
+      return fmtDataHora(iso);
+    }
+
+    function statusAtualHTML(status){
+      if(!status) return '<p class="lead">Sem informação de status pra este agente.</p>';
+      const dot = '<span class="badge-status '+(status.ativo?'on':'off')+'" style="margin-bottom:8px;"><span class="dot"></span>'+(status.ativo?'Ativo':'Pausado')+'</span>';
+      const linhas = [
+        'Verifica sua empresa a cada '+fmtIntervalo(status.intervaloMs)+'.',
+        'Última verificação (de todas as empresas): '+haQuanto(status.ultimaExecucaoEm)+'.',
+      ];
+      if(status.ultimoCicloOk === false) linhas.push('<span style="color:var(--warning);">A última verificação teve algum erro — os dados podem estar um pouco desatualizados.</span>');
+      return dot + linhas.map((l)=> '<p class="lead" style="margin:4px 0;">'+l+'</p>').join('');
+    }
+
+    function pendentesHTML(pendentes, codigo){
+      if(!pendentes || !pendentes.temFluxoDeAprovacao){
+        return '<p class="lead">Este agente só observa e recomenda — não existe uma decisão sua pra aprovar aqui.</p>';
+      }
+      const pagina = (META_REAIS[codigo] || {}).pagina;
+      const btn = pagina ? '<button class="btn-secondary" type="button" data-page="'+pagina+'" data-fecha-modal="1" style="margin-top:8px;">Ver e decidir</button>' : '';
+      return '<p class="lead" style="margin:0 0 4px;"><b>'+pendentes.total+'</b> '+(pendentes.total===1?'sugestão espera':'sugestões esperam')+' sua aprovação agora.</p>' + btn;
+    }
+
+    function melhoraHTML(melhora, codigo){
+      if(!melhora) return '<p class="lead">Sem dado de melhora pra este agente ainda.</p>';
+      if(melhora.tipo === 'financeira'){
+        if(!melhora.avaliadas) return '<p class="lead">Ainda não há decisões avaliadas o suficiente pra medir a melhora — a IA reavalia automaticamente cada decisão aprovada alguns dias depois.</p>';
+        const cor = melhora.deltaMedioPct >= 0 ? 'var(--success)' : 'var(--danger)';
+        const sinal = melhora.deltaMedioPct >= 0 ? '+' : '';
+        return '<p class="lead" style="margin:0;">Margem média <b style="color:'+cor+';">'+sinal+melhora.deltaMedioPct.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' p.p.</b> depois da decisão, com base em '+melhora.avaliadas+' decisão'+(melhora.avaliadas===1?'':'ões')+' já reavaliada'+(melhora.avaliadas===1?'':'s')+'.</p>';
+      }
+      const subst = SUBSTANTIVO_MELHORA[codigo] || 'item';
+      return '<p class="lead" style="margin:0;">Nos últimos 30 dias, <b>'+melhora.resolvidosUltimos30d+'</b> '+subst+(melhora.resolvidosUltimos30d===1?'':'s')+' '+(melhora.resolvidosUltimos30d===1?'foi resolvido':'foram resolvidos')+'. <b>'+melhora.abertosAgora+'</b> ainda em aberto agora.</p>';
+    }
+
+    function detalheModalHTML(dados){
+      const historicoHtml = dados.historico.length
+        ? '<div class="hist-list">'+dados.historico.map(historicoEventoHTML).join('')+'</div>'
+        : '<p class="lead">Nenhum evento ainda pra este agente.</p>';
+      return '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card" style="max-width:560px;max-height:85vh;overflow:auto;">'
+          + '<div class="modal-head"><div class="modal-title">'+escapeHtml(dados.nome)+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+escapeHtml(dados.descricao||'')+'</div>'
+          + '<h3 style="margin:16px 0 4px;font-size:14px;">O que está fazendo agora</h3>' + statusAtualHTML(dados.statusAtual)
+          + '<h3 style="margin:16px 0 4px;font-size:14px;">O que você tem pra aprovar</h3>' + pendentesHTML(dados.pendentes, dados.agenteCodigo)
+          + '<h3 style="margin:16px 0 4px;font-size:14px;">O que ele já fez</h3>' + historicoHtml
+          + '<h3 style="margin:16px 0 4px;font-size:14px;">A melhora que ele teve</h3>' + melhoraHTML(dados.melhora, dados.agenteCodigo)
+        + '</div>'
+      + '</div>';
+    }
+
+    async function abrirDetalheAgente(codigo){
+      const modalRoot = document.getElementById('modalRoot');
+      if(!modalRoot) return;
+      const empresaId = window.CerneFiltro.state.empresaId;
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card" style="max-width:560px;"><div class="table-skel"><span class="spin"></span><span>Carregando agente…</span></div></div></div>';
+      const overlayLoading = document.getElementById('modalOverlay');
+      const closeLoading = ()=> modalRoot.innerHTML = '';
+      overlayLoading.addEventListener('click', (e)=>{ if(e.target === overlayLoading) closeLoading(); });
+
+      try{
+        const res = await fetch('/api/ia-agentes/'+encodeURIComponent(codigo)+'/detalhe?empresaId='+empresaId);
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar este agente.');
+
+        modalRoot.innerHTML = detalheModalHTML(body);
+        const overlay = document.getElementById('modalOverlay');
+        const close = ()=> modalRoot.innerHTML = '';
+        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+        document.getElementById('modalClose').addEventListener('click', close);
+        modalRoot.querySelectorAll('[data-page]').forEach((el)=> el.addEventListener('click', ()=>{ close(); navigate(el.dataset.page); }));
+      }catch(err){
+        modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card" style="max-width:560px;">'
+          + '<div class="modal-head"><div class="modal-title">Não foi possível carregar</div><button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<p class="lead">'+escapeHtml(err.message)+'</p></div></div>';
+        const overlay = document.getElementById('modalOverlay');
+        const close = ()=> modalRoot.innerHTML = '';
+        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+        document.getElementById('modalClose').addEventListener('click', close);
+      }
     }
 
     window.AgentesIaHub = { load };
@@ -12306,7 +12433,25 @@
       ativo:false, destruidoEnquantoCarregava:false,
       pollTimer:null, rafId:null,
       agentesPorId:{}, selecionadoId:null,
+      // 20/09/2026, pedido explícito do usuário: "quando clicar em cima do
+      // agente de ia, quero ver oque ele esta fazendo, oque tenho pra
+      // aprovar..., oque ele fez e a melhora que ele teve" — `extraPorId`
+      // guarda o resultado de GET /api/ia-agentes/:codigo/detalhe (as outras
+      // 3 seções; "o que está fazendo" já existia aqui, vem do status do
+      // scheduler em `agentesPorId`). Buscado só quando o personagem é
+      // selecionado (nunca a cada poll de 20s — evita bater no banco toda
+      // hora com o painel só aberto e parado).
+      extraPorId:{},
       three:null, // { renderer, scene, camera, controls, personagens:Map, clock }
+    };
+
+    // Um personagem da sala pode representar mais de 1 agente real
+    // cadastrado (SAC é um personagem só na sala, mas são 2 agentes
+    // separados no catálogo — Mercado Livre e Shopee, ver db/schema.sql).
+    const SALA_ID_PARA_AGENTE = {
+      'promocoes-ia': ['promocoes'], 'ads': ['ads_performance'],
+      'anuncios-ia': ['anuncios_radar'], 'concorrente-ia': ['concorrente'],
+      'sac-ia': ['sac_mercado_livre', 'sac_shopee'],
     };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -12394,6 +12539,83 @@
       });
     }
 
+    // ---- "O que tenho pra aprovar" / "O que ele já fez" / "A melhora que
+    // ele teve" — 20/09/2026, pedido explícito do usuário. "O que está
+    // fazendo" (Status/Última execução/Roda a cada) já existia acima, vem
+    // do status global do scheduler; estas 3 seções vêm de
+    // GET /api/ia-agentes/:codigo/detalhe (por empresa selecionada no
+    // filtro do topo) — nunca um número novo calculado aqui no front.
+    const SUBSTANTIVO_MELHORA_SALA = { anuncios_radar:'alerta', concorrente:'alerta', sac_mercado_livre:'atendimento', sac_shopee:'atendimento' };
+
+    function combinarDetalhes(detalhes){
+      // SAC vira 1 personagem só na sala, mesmo sendo 2 agentes reais — soma
+      // pendentes/melhora e junta o histórico dos dois, mais recente primeiro.
+      const pendentesTotal = detalhes.reduce((s,d)=> s + (d.pendentes ? d.pendentes.total : 0), 0);
+      const temFluxo = detalhes.some((d)=> d.pendentes && d.pendentes.temFluxoDeAprovacao);
+      const historico = detalhes.flatMap((d)=> d.historico || []).sort((x,y)=> new Date(y.ts) - new Date(x.ts)).slice(0, 20);
+      const melhoras = detalhes.map((d)=> d.melhora).filter(Boolean);
+      let melhora = null;
+      if(melhoras.length === 1) melhora = melhoras[0];
+      else if(melhoras.length > 1 && melhoras[0].tipo === 'resolucao'){
+        melhora = {
+          tipo: 'resolucao',
+          resolvidosUltimos30d: melhoras.reduce((s,m)=> s + m.resolvidosUltimos30d, 0),
+          abertosAgora: melhoras.reduce((s,m)=> s + m.abertosAgora, 0),
+        };
+      }
+      return { pendentes: { temFluxoDeAprovacao: temFluxo, total: pendentesTotal }, historico, melhora };
+    }
+
+    async function carregarExtra(id){
+      const empresaId = window.CerneFiltro && window.CerneFiltro.state ? window.CerneFiltro.state.empresaId : null;
+      if(!empresaId){ state.extraPorId[id] = { erro: 'Selecione uma empresa no topo pra ver pendências, histórico e melhora.' }; renderDetalhe(); return; }
+      state.extraPorId[id] = { carregando: true };
+      renderDetalhe();
+      try{
+        const codigos = SALA_ID_PARA_AGENTE[id] || [];
+        const respostas = await Promise.all(codigos.map((cod)=> fetch('/api/ia-agentes/'+cod+'/detalhe?empresaId='+empresaId).then((r)=> r.json())));
+        state.extraPorId[id] = combinarDetalhes(respostas);
+      }catch(err){
+        state.extraPorId[id] = { erro: 'Não foi possível carregar pendências/histórico/melhora agora.' };
+      }
+      if(state.selecionadoId === id) renderDetalhe();
+    }
+
+    function pendentesSalaHTML(extra, id){
+      if(!extra.pendentes.temFluxoDeAprovacao) return '<p class="lead" style="margin:0;">Este agente só observa e recomenda — não existe uma decisão sua pra aprovar aqui.</p>';
+      const codigos = SALA_ID_PARA_AGENTE[id] || [];
+      const pagina = { promocoes:'agentePromocoes', ads_performance:'agenteAds', concorrente:'concorrente', sac_mercado_livre:'sacMercadoLivre', sac_shopee:'sacShopee' }[codigos[0]];
+      const btn = pagina ? '<button class="btn-secondary" type="button" data-ir-pagina="'+pagina+'" style="margin-top:6px;">Ver e decidir</button>' : '';
+      return '<p class="lead" style="margin:0 0 4px;"><b>'+extra.pendentes.total+'</b> '+(extra.pendentes.total===1?'sugestão espera':'sugestões esperam')+' sua aprovação.</p>' + btn;
+    }
+    function historicoSalaHTML(historico){
+      if(!historico.length) return '<p class="lead" style="margin:0;">Nenhum evento ainda pra este agente.</p>';
+      return '<div class="sa-hist-list">' + historico.slice(0, 8).map((ev)=>
+        '<div class="sa-hist-row"><span class="sa-hist-time">'+fmtRelativo(ev.ts)+'</span><span>'+escapeHtml(ev.referencia)+'</span></div>'
+      ).join('') + '</div>';
+    }
+    function melhoraSalaHTML(melhora, id){
+      if(!melhora) return '<p class="lead" style="margin:0;">Sem dado de melhora ainda.</p>';
+      if(melhora.tipo === 'financeira'){
+        if(!melhora.avaliadas) return '<p class="lead" style="margin:0;">Ainda sem decisões avaliadas o suficiente pra medir — a IA reavalia automaticamente alguns dias depois de cada aprovação.</p>';
+        const cor = melhora.deltaMedioPct >= 0 ? 'var(--success)' : 'var(--danger)';
+        const sinal = melhora.deltaMedioPct >= 0 ? '+' : '';
+        return '<p class="lead" style="margin:0;">Margem média <b style="color:'+cor+';">'+sinal+melhora.deltaMedioPct.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' p.p.</b> depois da decisão ('+melhora.avaliadas+' avaliada'+(melhora.avaliadas===1?'':'s')+').</p>';
+      }
+      const subst = SUBSTANTIVO_MELHORA_SALA[(SALA_ID_PARA_AGENTE[id]||[])[0]] || 'item';
+      return '<p class="lead" style="margin:0;">Nos últimos 30 dias: <b>'+melhora.resolvidosUltimos30d+'</b> '+subst+(melhora.resolvidosUltimos30d===1?'':'s')+' resolvido'+(melhora.resolvidosUltimos30d===1?'':'s')+', <b>'+melhora.abertosAgora+'</b> ainda aberto'+(melhora.abertosAgora===1?'':'s')+'.</p>';
+    }
+
+    function extraHTML(id){
+      const extra = state.extraPorId[id];
+      if(!extra) return '';
+      if(extra.erro) return '<div class="sa-detail-row" style="flex-direction:column;align-items:flex-start;gap:4px;"><p class="lead" style="margin:0;color:var(--warning);">'+escapeHtml(extra.erro)+'</p></div>';
+      if(extra.carregando) return '<div class="sa-detail-row"><span class="spin"></span><span>Carregando pendências, histórico e melhora…</span></div>';
+      return '<div class="sa-detail-section"><h4>O que você tem pra aprovar</h4>' + pendentesSalaHTML(extra, id) + '</div>'
+        + '<div class="sa-detail-section"><h4>O que ele já fez</h4>' + historicoSalaHTML(extra.historico) + '</div>'
+        + '<div class="sa-detail-section"><h4>A melhora que ele teve</h4>' + melhoraSalaHTML(extra.melhora, id) + '</div>';
+    }
+
     function renderDetalhe(){
       const corpo = document.getElementById('saDetalheCorpo');
       if(!corpo) return;
@@ -12401,11 +12623,13 @@
       if(!a){ corpo.className = 'sa-detail-empty'; corpo.textContent = 'Clique num personagem na sala 3D (ou na lista ao lado) para ver os detalhes.'; return; }
       corpo.className = '';
       corpo.innerHTML = '<div class="sa-detail-name">'+escapeHtml(a.nome)+'</div>'
+        + '<h4>O que está fazendo agora</h4>'
         + '<div class="sa-detail-row"><span>Status</span><span>'+(a.emExecucao ? 'Trabalhando agora' : (a.ativo ? 'Ocioso (aguardando o próximo ciclo)' : 'Parado'))+'</span></div>'
         + '<div class="sa-detail-row"><span>Última execução</span><span>'+fmtRelativo(a.ultimaExecucaoEm)+'</span></div>'
         + '<div class="sa-detail-row"><span>Último ciclo</span><span>'+(a.ultimoCicloOk===null ? '—' : (a.ultimoCicloOk ? 'Concluído sem erro' : 'Terminou com erro'))+'</span></div>'
         + '<div class="sa-detail-row"><span>Roda a cada</span><span>'+fmtIntervalo(a.intervaloMs)+'</span></div>'
-        + '<div class="sa-detail-row"><span>Resumo</span><span>'+escapeHtml(a.resumo)+'</span></div>';
+        + extraHTML(state.selecionadoId);
+      corpo.querySelectorAll('[data-ir-pagina]').forEach((el)=> el.addEventListener('click', ()=> navigate(el.dataset.irPagina)));
     }
 
     function selecionarAgente(id){
@@ -12413,6 +12637,7 @@
       renderListaAgentes();
       renderDetalhe();
       document.querySelectorAll('.sa-label').forEach(el => el.classList.toggle('is-selected', el.dataset.agenteId === id));
+      if(!state.extraPorId[id]) carregarExtra(id);
     }
 
     // ---- Cena 3D ----

@@ -6,8 +6,15 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { obterResumoHub, listarHistorico } = require('../lib/ia/agentesResumo');
+const { obterDetalheAgente } = require('../lib/ia/agenteDetalhe');
 
 const router = express.Router();
+
+// Só os 6 agentes reais e cadastrados (ver ia_agentes em db/schema.sql)
+// têm um "Detalhe" — nunca aceita um código arbitrário vindo da URL pra
+// dentro de uma query (ver lib/ia/agenteDetalhe.js, que só sabe lidar com
+// estes mesmos 6).
+const AGENTES_COM_DETALHE = ['ads_performance', 'promocoes', 'anuncios_radar', 'concorrente', 'sac_mercado_livre', 'sac_shopee'];
 
 // GET /api/ia-agentes — lista os agentes ativos, na ordem cadastrada.
 router.get('/', async (req, res, next) => {
@@ -41,6 +48,26 @@ router.get('/historico', async (req, res, next) => {
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
     const eventos = await listarHistorico(empresaId, req.query.limit);
     res.json({ eventos });
+  } catch (err) { next(err); }
+});
+
+// GET /api/ia-agentes/:codigo/detalhe?empresaId=ID — 20/09/2026, pedido
+// explícito do usuário: "quando clicar em cima do agente de ia, quero ver
+// oque ele esta fazendo, oque tenho pra aprovar..., oque ele fez e a
+// melhora que ele teve". Ver lib/ia/agenteDetalhe.js pra cada uma das 4
+// seções.
+router.get('/:codigo/detalhe', async (req, res, next) => {
+  try {
+    const { codigo } = req.params;
+    if (!AGENTES_COM_DETALHE.includes(codigo)) {
+      return res.status(404).json({ error: 'Agente não encontrado ou sem tela de detalhe.' });
+    }
+    const empresaId = Number(req.query.empresaId);
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const { rows } = await pool.query('SELECT nome, descricao FROM ia_agentes WHERE codigo = $1 AND ativo = true', [codigo]);
+    if (!rows.length) return res.status(404).json({ error: 'Agente não encontrado.' });
+    const detalhe = await obterDetalheAgente(codigo, empresaId);
+    res.json({ ...detalhe, nome: rows[0].nome, descricao: rows[0].descricao });
   } catch (err) { next(err); }
 });
 
