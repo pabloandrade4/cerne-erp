@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 
 const {
   calcularHistoricoPorSku,
+  calcularCoberturaEstoque,
   precoPromocionalDoItem,
   divisaoDesconto,
   classificar,
@@ -181,9 +182,94 @@ describe('classificar — margem normal do produto (pedido do usuário: nunca ca
     assert.equal(r.codigo, 'entrar');
   });
 
-  test('já ATIVA na promoção: regra da margem normal não se aplica (é só pra decidir ENTRAR)', () => {
+  test('já ATIVA, margem caiu mais de 3 pontos abaixo da normal: RISCO DE MARGEM (confirmado pelo usuário em 20/09/2026 — "isso mesmo", a mesma tolerância vale pra MANTER uma promoção ativa)', () => {
+    // 20% está acima do mínimo puro (14) e fora da faixa de risco absoluta
+    // (limiteRisco ~16.1), mas caiu 30 pontos abaixo da margem normal (50%)
+    // — bem mais que a tolerância de 3 pontos — por isso não é mais
+    // "manter" sozinho: vira "risco_margem" pro usuário revisar.
     const r = classificar({ ...base, statusItem: 'started', margemPromoPct: 20, margemNormalPct: 50 });
-    assert.equal(r.codigo, 'manter'); // 20 está acima do mínimo puro (14) e fora da faixa de risco
+    assert.equal(r.codigo, 'risco_margem');
+  });
+
+  test('já ATIVA, margem dentro da tolerância da normal (queda de só 2 pontos): MANTER', () => {
+    const r = classificar({ ...base, statusItem: 'started', margemPromoPct: 20, margemNormalPct: 22 });
+    assert.equal(r.codigo, 'manter');
+  });
+
+  test('já ATIVA, margem cai exatamente 3 pontos (limite aceito): ainda MANTER', () => {
+    const r = classificar({ ...base, statusItem: 'started', margemPromoPct: 20, margemNormalPct: 23 });
+    assert.equal(r.codigo, 'manter');
+  });
+
+  test('já ATIVA, margem abaixo do mínimo absoluto continua SAIR mesmo com margem normal alta (SAIR nunca vira risco_margem)', () => {
+    const r = classificar({ ...base, statusItem: 'started', margemPromoPct: 10, margemNormalPct: 50 });
+    assert.equal(r.codigo, 'sair');
+  });
+
+  test('já ATIVA, sem margem normal calculável: regra da queda não se aplica, só o mínimo/risco absoluto de sempre', () => {
+    const r = classificar({ ...base, statusItem: 'started', margemPromoPct: 20, margemNormalPct: null });
+    assert.equal(r.codigo, 'manter');
+  });
+});
+
+// 20/09/2026 — pedido explícito do usuário: "sobre, meu estoque daquele
+// produto estiver alto, quero que me avise". Ele confirmou (via pergunta
+// feita de volta) o método: dias que o estoque dura, no ritmo real de
+// vendas — nunca uma quantidade fixa em unidades.
+describe('calcularCoberturaEstoque — "estoque alto" pelos dias que o estoque dura (pedido do usuário, 20/09/2026)', () => {
+  test('cobertura abaixo do limite: não é estoque alto', () => {
+    // ritmo = 180/90 = 2 unidades/dia ; cobertura = 100/2 = 50 dias (< 60)
+    const r = calcularCoberturaEstoque({ estoqueAtual: 100, unidadesVendidas90d: 180, diasCoberturaAltaLimite: 60 });
+    assert.equal(r.coberturaDiasEstoque, 50);
+    assert.equal(r.estoqueAlto, false);
+    assert.equal(r.motivoEstoqueAlto, null);
+  });
+
+  test('cobertura acima do limite: estoque alto, com motivo explicando os dias', () => {
+    // ritmo = 180/90 = 2 unidades/dia ; cobertura = 200/2 = 100 dias (> 60)
+    const r = calcularCoberturaEstoque({ estoqueAtual: 200, unidadesVendidas90d: 180, diasCoberturaAltaLimite: 60 });
+    assert.equal(r.coberturaDiasEstoque, 100);
+    assert.equal(r.estoqueAlto, true);
+    assert.match(r.motivoEstoqueAlto, /100 dias/);
+  });
+
+  test('cobertura exatamente no limite: ainda não conta como alto (só acima)', () => {
+    // ritmo = 180/90 = 2 unidades/dia ; cobertura = 120/2 = 60 dias (= limite)
+    const r = calcularCoberturaEstoque({ estoqueAtual: 120, unidadesVendidas90d: 180, diasCoberturaAltaLimite: 60 });
+    assert.equal(r.coberturaDiasEstoque, 60);
+    assert.equal(r.estoqueAlto, false);
+  });
+
+  test('zero vendas no período mas com estoque > 0: conta como alto (produto parado), mesmo sem dia exato', () => {
+    const r = calcularCoberturaEstoque({ estoqueAtual: 50, unidadesVendidas90d: 0, diasCoberturaAltaLimite: 60 });
+    assert.equal(r.coberturaDiasEstoque, null);
+    assert.equal(r.estoqueAlto, true);
+    assert.match(r.motivoEstoqueAlto, /Nenhuma venda/);
+  });
+
+  test('zero vendas e zero estoque: não é alto (não há nada parado)', () => {
+    const r = calcularCoberturaEstoque({ estoqueAtual: 0, unidadesVendidas90d: 0, diasCoberturaAltaLimite: 60 });
+    assert.equal(r.estoqueAlto, false);
+    assert.equal(r.motivoEstoqueAlto, null);
+  });
+
+  test('sem dado de estoque (SKU nunca sincronizado): nunca assume zero, devolve tudo neutro', () => {
+    const r = calcularCoberturaEstoque({ estoqueAtual: null, unidadesVendidas90d: 180, diasCoberturaAltaLimite: 60 });
+    assert.equal(r.coberturaDiasEstoque, null);
+    assert.equal(r.estoqueAlto, false);
+    assert.equal(r.motivoEstoqueAlto, null);
+  });
+
+  test('limite customizado por empresa (config_promocoes.dias_cobertura_alta): usa o valor passado, não o padrão de 60', () => {
+    // ritmo = 180/90 = 2/dia ; cobertura = 100/2 = 50 dias — acima do limite customizado de 10
+    const r = calcularCoberturaEstoque({ estoqueAtual: 100, unidadesVendidas90d: 180, diasCoberturaAltaLimite: 10 });
+    assert.equal(r.estoqueAlto, true);
+  });
+
+  test('sem limite configurado (null/0): cai pro padrão de 60 dias', () => {
+    // cobertura = 100 dias > 60 (padrão) -> alto
+    const r = calcularCoberturaEstoque({ estoqueAtual: 200, unidadesVendidas90d: 180, diasCoberturaAltaLimite: null });
+    assert.equal(r.estoqueAlto, true);
   });
 });
 
@@ -328,5 +414,44 @@ describe('analisarItemPromocao — integra tudo e nunca fabrica margem sem dado 
     });
     assert.equal(linha.margemIncompleta, true);
     assert.match(linha.motivoIncompleto, /identificar o SKU/);
+  });
+
+  // 20/09/2026 — "estoque alto" passa de ponta a ponta por analisarItemPromocao,
+  // usando o SKU do catálogo pra buscar no mapa de estoque real (mesmo mapa
+  // vindo de ml_estoque_itens via lib/ia/promocoesCiclo.js).
+  test('estoque alto passa de ponta a ponta e nunca muda a classificação de margem (sinal independente)', () => {
+    const estoqueAtualPorSku = new Map([['SKU1', 200]]); // cobertura = 200/(1/90) bem acima do limite de 5 dias
+    const linha = analisarItemPromocao({
+      item: { id: 'MLB6', status: 'candidate', original_price: 100, suggested_discounted_price: 96 },
+      catalogEntry: { sku: 'SKU1', titulo: 'Produto Teste', imagemUrl: null, preco: 100 },
+      historicoPorSku,
+      custoPorSku,
+      aliquotaImposto: 0,
+      margemMinimaPct: 14,
+      estoqueAtualPorSku,
+      diasCoberturaAltaLimite: 5,
+      contexto: { empresaId: 2, contaId: 1, promotionId: 'P-5', promotionType: 'DEAL', promotionLabel: 'Teste' },
+    });
+    assert.equal(linha.estoqueAtual, 200);
+    assert.equal(linha.unidadesVendidas90d, 1);
+    assert.equal(linha.estoqueAlto, true);
+    assert.match(linha.motivoEstoqueAlto, /dias/);
+    // classificação continua vindo só da margem (mesmo resultado do teste
+    // "desconto pequeno" acima) — estoque alto nunca entra nessa decisão.
+    assert.equal(linha.classificacaoCodigo, 'oportunidade');
+  });
+
+  test('sem mapa de estoque (conta ainda sem sincronização): estoqueAtual fica null, nunca assume zero', () => {
+    const linha = analisarItemPromocao({
+      item: { id: 'MLB7', status: 'candidate', original_price: 100, suggested_discounted_price: 80 },
+      catalogEntry: { sku: 'SKU1', titulo: 'Produto Teste', imagemUrl: null, preco: 100 },
+      historicoPorSku,
+      custoPorSku,
+      aliquotaImposto: 0,
+      margemMinimaPct: 14,
+      contexto: { empresaId: 2, contaId: 1, promotionId: 'P-6', promotionType: 'DEAL', promotionLabel: 'Teste' },
+    });
+    assert.equal(linha.estoqueAtual, null);
+    assert.equal(linha.estoqueAlto, false);
   });
 });
