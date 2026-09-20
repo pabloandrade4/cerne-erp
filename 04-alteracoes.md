@@ -2,6 +2,43 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-20 (51) — Concorrente: rota de TESTE pra listar os anúncios de um vendedor só pelo link da loja (ainda não é a funcionalidade final)
+- **Contexto:** o usuário esclareceu o pedido de monitorar concorrente:
+  "eu posso te passar o link da loja dos concorrentes mas você não tem que
+  ir sempre olhando pra me avisar, não tem como eu te mandar o link" — ou
+  seja, dar o link da loja UMA VEZ, não ficar mandando link de anúncio toda
+  vez, e o sistema acompanhar sozinho depois. Ele mandou um exemplo real:
+  `mercadolivre.com.br/loja/nzb-embalagens?item_id=MLB4712675795&...`.
+- Antes de construir o monitoramento automático inteiro em cima disso, foi
+  criada uma rota só de **teste/diagnóstico**, pra confirmar com uma
+  chamada real (nunca simulada) se o caminho técnico funciona: `GET
+  /api/concorrente/testar-vendedor?empresaId=&url=` — aberta direto no
+  navegador (mesmo espírito de `GET /api/integracoes/whatsapp/testar`).
+- **Nova função `testarListagemPorVendedor`** (`lib/concorrente.js`): (1)
+  extrai o `item_id` do link informado; (2) consulta esse anúncio real
+  (`GET /items/{id}`, endpoint já usado em produção) pra descobrir o
+  `seller_id` (o ID da loja/vendedor); (3) tenta listar os anúncios ATIVOS
+  desse vendedor pelo ID (`GET /users/{seller_id}/items/search`) — um
+  endpoint DIFERENTE do `/sites/{site}/search` que está bloqueado (ver
+  entrada (49)). Qualquer etapa que falhar devolve o motivo exato vindo da
+  API, nunca inventa sucesso nem esconde o erro.
+- **Ainda não é a funcionalidade final.** Falta, depois de confirmar que
+  funciona: (a) guardar os concorrentes monitorados (loja + o que ele
+  vende) numa tabela nova, pra não precisar do link de novo; (b) cruzar os
+  anúncios do concorrente com os produtos que você já vende (por
+  título/SKU, do mesmo jeito cuidadoso que a busca por título já faz —
+  nunca dando certeza automática, sempre "candidato a confirmar" quando
+  não é o mesmo catálogo); (c) rodar isso sozinho de tempos em tempos,
+  como o restante do Radar já faz.
+- **Testado:** `test/concorrente.test.js` — 4 testes novos cobrindo o
+  caminho feliz (link → item → vendedor → listagem), link sem `item_id`,
+  erro da API sendo repassado sem esconder, e empresa sem conta do
+  Mercado Livre ativa. 8/8 no arquivo (4 antigos + 4 novos).
+- **Ação necessária do usuário:** abrir o link de teste que foi enviado
+  em separado no chat (já com o link da loja dele preenchido) e mandar de
+  volta o que aparecer, pra eu confirmar se o caminho funciona antes de
+  construir o resto.
+
 ## 2026-09-20 (50) — Visão Geral: evolução do faturamento vs. período anterior + resumo dos Agentes de IA
 - **Contexto:** pedido explícito do usuário: "em visão geral quero em
   colocar tudo que for possível, os agentes ia, resumos principalmente se

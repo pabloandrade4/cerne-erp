@@ -130,5 +130,61 @@ describe(
         (err) => { assert.equal(err.status, 404); return true; }
       );
     });
+
+    // testarListagemPorVendedor (20/09/2026) — pedido do usuário: dar o link
+    // da LOJA uma vez, sem precisar mandar link de anúncio toda vez. Ver
+    // comentário grande em lib/concorrente.js. Estes testes mockam
+    // ml.apiGet exatamente como os de cima — nunca chamam a API de verdade.
+    describe('testarListagemPorVendedor — teste de viabilidade (link da loja -> seller_id -> listagem)', () => {
+      const LINK_REAL_DO_USUARIO = 'https://www.mercadolivre.com.br/loja/nzb-embalagens?item_id=MLB4712675795&category_id=MLB270586&official_store_id=79144&client=recoview-selleritems&recos_listing=true#origin=pdp&component=seller&typeSeller=official_store';
+
+      test('caminho feliz: extrai o item_id do link, resolve o seller_id e lista os anúncios ativos dele', async () => {
+        ml.apiGet = async (path) => {
+          if (path === '/items/MLB4712675795') {
+            return { id: 'MLB4712675795', seller_id: 79144000, seller: { nickname: 'NZB EMBALAGENS' } };
+          }
+          if (path === '/users/79144000/items/search?status=active&limit=20') {
+            return { paging: { total: 137 }, results: ['MLB1', 'MLB2', 'MLB3'] };
+          }
+          throw new Error('path inesperado: ' + path);
+        };
+        const r = await concorrente.testarListagemPorVendedor({ empresaId: EMPRESA_ID, url: LINK_REAL_DO_USUARIO });
+        assert.equal(r.ok, true);
+        assert.equal(r.itemId, 'MLB4712675795');
+        assert.equal(r.sellerId, 79144000);
+        assert.equal(r.vendedorNickname, 'NZB EMBALAGENS');
+        assert.equal(r.totalAnunciosAtivos, 137);
+        assert.deepEqual(r.algunsIdsRetornados, ['MLB1', 'MLB2', 'MLB3']);
+      });
+
+      test('link sem item_id -> falha cedo, explicando o motivo, nunca chama a API à toa', async () => {
+        let chamou = false;
+        ml.apiGet = async () => { chamou = true; return {}; };
+        const r = await concorrente.testarListagemPorVendedor({ empresaId: EMPRESA_ID, url: 'https://www.mercadolivre.com.br/loja/nzb-embalagens' });
+        assert.equal(r.ok, false);
+        assert.equal(r.etapa, 'extrair_item_id');
+        assert.equal(chamou, false);
+      });
+
+      test('a API recusa listar os anúncios do vendedor -> devolve o erro real do Mercado Livre, nunca esconde nem inventa sucesso', async () => {
+        ml.apiGet = async (path) => {
+          if (path === '/items/MLB4712675795') return { id: 'MLB4712675795', seller_id: 79144000 };
+          const err = new Error('forbidden');
+          err.status = 403;
+          err.data = { message: 'forbidden', error: 'forbidden' };
+          throw err;
+        };
+        const r = await concorrente.testarListagemPorVendedor({ empresaId: EMPRESA_ID, url: LINK_REAL_DO_USUARIO });
+        assert.equal(r.ok, false);
+        assert.equal(r.etapa, 'listar_itens_do_vendedor');
+        assert.equal(r.status, 403);
+      });
+
+      test('empresa sem conta do Mercado Livre ativa -> erro claro, nunca tenta chamar a API sem token', async () => {
+        const r = await concorrente.testarListagemPorVendedor({ empresaId: 999999, url: LINK_REAL_DO_USUARIO });
+        assert.equal(r.ok, false);
+        assert.equal(r.etapa, 'conta_ml');
+      });
+    });
   }
 );
