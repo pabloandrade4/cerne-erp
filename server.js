@@ -11,6 +11,7 @@ const { iniciarGeracaoAutomaticaDeDespesasFixas } = require('./lib/despesasFixas
 const { iniciarPromocoesIA } = require('./lib/ia/promocoesScheduler');
 const { iniciarSacScheduler } = require('./lib/ia/sacScheduler');
 const { iniciarDailyAutomatico } = require('./lib/ia/dailyScheduler');
+const { iniciarConcorrenteIA } = require('./lib/ia/concorrenteScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
@@ -159,6 +160,13 @@ async function start() {
     // WhatsApp do resumo diário real (Ads e Promoções), sempre no servidor,
     // nunca dependendo do ERP aberto no navegador (ver lib/ia/dailyScheduler.js).
     iniciarDailyAutomatico();
+    // Análise de Concorrente — Etapa "agente autônomo" (19/09/2026, pedido
+    // explícito do usuário: "quero que essas ia nunca pare de trabalhar...
+    // sempre buscar concorrentes que estão vendendo o mesmo produto que
+    // eu"): varredura automática 1x por dia + aviso por WhatsApp quando
+    // aparece algo novo/pior, sempre no servidor, nunca dependendo de
+    // alguém abrir a tela (ver lib/ia/concorrenteScheduler.js).
+    iniciarConcorrenteIA();
   });
 }
 

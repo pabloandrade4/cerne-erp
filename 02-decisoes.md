@@ -3,6 +3,115 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-20 (44) — SAC entra na Daily; honestidade sobre o que o vídeo "Múltiplos Agentes IA" mostra x o que existe de verdade
+
+- **O usuário mandou um print de um vídeo (provavelmente material de
+  divulgação de terceiros) com uma arquitetura de agentes chamada
+  Analista/Criativo/Gestor/Anúncios/Ads/SAC, e perguntou se o sistema já
+  funciona assim.** Decisão: mapear com transparência o que já existe
+  (Ads, Promoções — que o vídeo nem mostra, Anúncios/Radar, Análise de
+  Concorrente como equivalente ao "Analista", SAC Mercado Livre + Shopee)
+  contra o que não existe (nenhum "Criativo": nenhuma IA aqui gera
+  texto/imagem de anúncio) — nunca fingir que o Criativo existe só
+  porque apareceu num vídeo de outra pessoa.
+
+- **A relação real entre "Gestor" e os especialistas não é bem "você fala
+  com o Gestor e ele repassa na hora pros outros".** É mais: cada
+  especialista já trabalha sozinho o dia inteiro (schedulers próprios,
+  já rodando em produção desde etapas anteriores), e uma vez por dia eles
+  se reúnem numa "Daily" que vira o relatório enviado por WhatsApp — a IA
+  Gestora (o chat) é o ponto único de conversa, mas não é ela quem
+  "delega" a tarefa pros outros em tempo real. Explicado assim ao usuário
+  em vez de confirmar uma mecânica de delegação em tempo real que não
+  existe.
+
+- **SAC ficou de fora da Daily dos Agentes desde a Etapa 4 (19/09/2026)
+  por decisão explícita de deixar pra combinar depois — este pedido do
+  usuário foi exatamente esse "depois".** Reaproveitado o mesmo contrato
+  `gerarResumoDiario` já usado pelos outros 4 especialistas, sem mudar
+  nada no orquestrador da Daily (`lib/ia/dailyCiclo.js`) além do texto da
+  mensagem de fallback.
+
+- **Atendimento urgente (flag `urgente`, já calculada pelo ciclo próprio
+  do SAC) manda mais que a classificação textual na hora de decidir a
+  prioridade do achado.** Reclamação/insatisfação/devolução são sempre
+  "problema", nunca "risco" — são casos com cliente já insatisfeito, ao
+  contrário de uma dúvida simples pré-venda, que vira "risco" de
+  prioridade baixa (não é um problema, mas demorar pra responder pode
+  custar a venda).
+
+- **Horário do relatório (9h → 7h) mudado direto na configuração do
+  Render (variável de ambiente), com autorização explícita do usuário no
+  chat, em vez de criar uma tela nova pra isso agora.** A variável já
+  existia e já era o mecanismo real usado pelo agendador
+  (`lib/ia/dailyScheduler.js`) — criar uma configuração no banco/tela
+  agora seria trabalho novo sem necessidade imediata; fica como melhoria
+  possível se o usuário quiser ajustar esse horário sozinho no futuro,
+  sem depender de mim pra mexer no Render.
+
+## 2026-09-20 (43) — Agentes de IA passam a poder EXECUTAR de verdade no Mercado Livre (começando por Ads), sempre atrás de aprovação humana
+
+- **A IA nunca age sozinha — quem decidiu executar foi o usuário, ao
+  aprovar.** Pedido explícito: "as ia elas não vão fazer sozinho mas eu
+  sou vou aprovar [e] aí vai fazer". A execução automática de qualquer
+  ação (`nivel_permissao = 'auto_execute'`) continua fora de uso — todo
+  tipo de ação de Ads está cadastrado como `approval_required`. A
+  aprovação manual do usuário é, e continua sendo, o único gatilho que
+  existe para uma ação de verdade acontecer no Mercado Livre.
+
+- **Duas travas independentes, nunca uma só.** Uma trava manual por
+  empresa (`permite_escrita_ml`, começa desligada) garante que mesmo
+  depois de reconectar a conta com permissão de escrita no Mercado
+  Livre, nada executa até o usuário decidir ativamente ligar o
+  interruptor na tela. O catálogo por tipo de ação
+  (`ia_permissoes_acao`) garante que mesmo com a trava geral ligada, só
+  os tipos de ação explicitamente marcados como executáveis rodam de
+  verdade — as outras seguem sendo só recomendação. As duas precisam
+  estar de acordo para qualquer execução acontecer.
+
+- **`escopo_oauth` nunca é fonte de verdade, só um indicador informativo
+  na tela — mesma regra que já valia para Promoções, agora estendida
+  para Ads.** O texto que o Mercado Livre devolve no token (ex.:
+  "offline_access read write") pode sugerir que a conta tem permissão de
+  escrita, mas isso nunca liga a execução sozinho — só a trava manual
+  liga. Motivo: o escopo pode estar desatualizado, ou a permissão do
+  app pode ter sido concedida sem o usuário ainda ter revisado o que
+  isso implica.
+
+- **Ads foi escolhido como primeira área a ganhar execução real, entre
+  Concorrente/Ads/Promoções, por pedido direto do usuário** — que
+  também deixou claro que a decisão de Ads precisa olhar para o
+  conjunto completo de métricas (ROAS, ACOS, TACOS, orçamento por
+  campanha), não um número isolado. Essa cobertura de métricas já
+  existia no motor de decisão (`lib/ia/adsMotor.js`) desde uma etapa
+  anterior — não foi preciso mudar o critério de decisão, só a
+  capacidade de executar a decisão já tomada.
+
+- **Colunas mortas (`ia_decisoes_ads.executado`/`executado_em`,
+  existentes desde 14/09/2026 mas nunca escritas por nenhum código)
+  foram reaproveitadas em vez de criar colunas novas com o mesmo
+  sentido.** Verificado antes, via busca no código inteiro, que nenhuma
+  tela ou rota lia/escrevia essas colunas — reaproveitá-las é seguro e
+  evita duas colunas com significado sobreposto na mesma tabela.
+
+- **A aprovação de uma decisão nunca pode falhar por causa de um
+  problema na tentativa de execução real.** São deliberadamente duas
+  etapas separadas: `status_decisao = 'aprovada'` sempre é salvo; a
+  tentativa de executar de verdade acontece depois, e qualquer motivo
+  de não-execução (trava desligada, erro real da API, conta sem token)
+  fica registrado de forma honesta em `execucao_erro`, nunca escondido
+  nem impedindo a aprovação em si de ser salva.
+
+- **Escopo desta etapa deliberadamente limitado a 4 ações de campanha
+  (pausar/ativar campanha, aumentar/diminuir orçamento).** Pausa de
+  anúncio individual (`pausar_anuncio`) e escolha automática de campanha
+  para um SKU (`colocar_sku_em_campanha`) ficam de fora por ora — a
+  primeira por falta de pesquisa/integração do endpoint específico, a
+  segunda porque o ERP não tem base pra decidir sozinho em qual
+  campanha um SKU deveria entrar. Execução real para Análise de
+  Concorrente e para Promoções também ficou fora desta etapa — o
+  usuário priorizou Ads primeiro, entre as três opções apresentadas.
+
 ## 2026-08-27 (42) — Camada de contexto de negócio + raio-X da empresa + identificar_produto_fisico
 
 - **"Nunca escolher sozinha entre candidatos ambíguos" é a regra que

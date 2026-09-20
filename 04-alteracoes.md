@@ -2,6 +2,182 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-20 (46) — SAC (Mercado Livre e Shopee) entra na Daily dos Agentes; horário do relatório mudado para 7h
+- **Contexto:** pedido explícito do usuário, no mesmo fio da entrada (45):
+  ele mandou um print de um vídeo mostrando "Múltiplos Agentes IA no
+  Mercado Livre" (Analista, Criativo, Gestor, Anúncios, Ads, SAC) e
+  perguntou se o sistema já funciona assim (só conversar com o "Gestor",
+  que repassa pros outros); junto, pediu pra ativar hoje o relatório
+  diário às 7h da manhã. Confirmado a ele, em resposta separada no chat,
+  o que já existe de verdade (Ads, Promoções, Anúncios/Radar, Análise de
+  Concorrente = "Analista", e agora SAC) e o que não existe ainda
+  (nenhum agente "Criativo"). Ele confirmou: incluir o SAC agora no
+  relatório diário.
+- **`lib/ia/especialistaSacComum.js` (novo arquivo):** lógica compartilhada
+  dos dois especialistas de SAC pra Daily — lê exclusivamente
+  `sac_atendimentos`/`sac_respostas` (nunca gera sugestão nova aqui, isso já
+  é feito pelo ciclo próprio do SAC, `lib/ia/sacCiclo.js`/
+  `lib/ia/sacRespostaIa.js`). Critério de classificação: atendimento com a
+  flag `urgente` vira achado tipo "problema"/prioridade "alta"; reclamação,
+  insatisfação, problema de entrega ou devolução viram "problema"/"média";
+  o resto (dúvida simples, pergunta pré-venda) vira "risco"/"baixa" — não é
+  um problema em si, mas demorar pra responder pode custar a venda.
+  `decisaoTabela`/`decisaoId` apontam pra `sac_respostas`, então cada achado
+  já nasce ligado à sugestão real que dá pra aprovar/editar/recusar.
+- **`lib/ia/especialistaSacMercadoLivre.js`/`especialistaSacShopee.js`
+  (novos arquivos):** wrappers finos sobre o módulo comum, um por
+  marketplace — mesmo padrão de agente-por-arquivo já usado pelos outros
+  4 especialistas.
+- **`lib/ia/especialistas.js`:** os dois novos especialistas entram no
+  array `ESPECIALISTAS` — nenhum outro arquivo da Daily precisou saber
+  nada específico deles (exatamente como o comentário do arquivo já
+  previa).
+- **`lib/ia/dailyCiclo.js`:** mensagem de WhatsApp "nenhum achado hoje"
+  atualizada pra citar também o SAC na lista de agentes (antes citava só
+  Ads/Promoções/Anúncios/Concorrente).
+- **Horário do relatório diário mudado de 9h para 7h (Brasília):**
+  alterada a variável de ambiente `DAILY_HORA_ENVIO` diretamente no
+  serviço do Render, com autorização explícita do usuário — nenhum outro
+  código mudou (a hora já era configurável desde a etapa anterior, só
+  nunca tinha sido ajustada). Isso não substitui o usuário aplicar os
+  arquivos deste zip no repositório: a mudança de horário já está em
+  produção, mas o SAC na Daily só passa a valer depois do deploy deste
+  zip.
+- **Testado:** `test/especialistaSac.test.js` (novo, 8/8 passando —
+  cobre urgência, classificação, isolamento por marketplace, sugestão já
+  decidida nunca reaparece, e o vínculo achado→`sac_respostas`).
+  Regressão direcionada (especialistaAnunciosEConcorrente, dailyCiclo,
+  dailyScheduler, dailyRoutes, sacScheduler): 40/40 passando. Suíte
+  completa do projeto rodada de novo: mesmo resultado de sempre, sem
+  nenhuma suíte nova quebrando (as falhas que aparecem são as mesmas 16
+  suítes de instabilidade antiga do ambiente, já documentadas, sem
+  relação com este código).
+- **Pendente/honesto:** o agente "Criativo" (do vídeo que o usuário
+  mostrou) não existe — nenhuma IA aqui gera texto/imagem de anúncio
+  hoje. Fica pra quando o usuário definir o que exatamente esse agente
+  deveria fazer.
+
+## 2026-09-20 (45) — Agentes IA de Ads e Performance passam a EXECUTAR de verdade no Mercado Livre quando o usuário aprova ("Fase E")
+- **Contexto:** pedido explícito do usuário, em uma mensagem que trazia três
+  pontos: (1) dúvida sobre como o alerta por WhatsApp vai funcionar na
+  prática; (2) confirmação de que a Análise de Concorrente deve buscar
+  pelos próprios anúncios/modelos dele (ex.: caixa 16x11x6) e não depender
+  do catálogo do Mercado Livre, já que caixa personalizada não é item de
+  catálogo; (3) o pedido principal: "as ia elas não vão fazer sozinho mas
+  eu sou vou aprovar [e] aí vai fazer... por enquanto só vai precisar da
+  minha permissão, tem que mudar as configurações do developers pois lá só
+  está como leitura". Perguntado qual área (Concorrente/Ads/Promoções)
+  deveria ganhar execução real primeiro, o usuário escolheu Ads: "Ads tem
+  que analisar todas as métricas dês do roas a acos, tacos e orçamento por
+  campanha, tudo que tem de métrica" — métricas essas que já existiam
+  (ver abaixo). Os itens (1) e (2) não exigiram mudança de código (ver
+  observações no final desta entrada); o item (3) é o conteúdo desta
+  entrada.
+- **Arquitetura de segurança (duas travas independentes, nenhuma nova —
+  reaproveitadas de scaffolding já existente desde 14/09/2026 para
+  Promoções e nunca ativada):** (1) uma trava manual por empresa,
+  `config_ads_ia.permite_escrita_ml` (BOOLEAN, `DEFAULT false`) — só liga
+  depois que o usuário confirmar permissão de escrita no app do Mercado
+  Livre Developers e reconectar a conta no ERP (um token emitido como
+  leitura não vira escrita sozinho); (2) o catálogo já existente
+  `ia_permissoes_acao.nivel_permissao`, por tipo de ação
+  (`recommend_only`/`approval_required`/`auto_execute`) — todas as ações de
+  Ads pré-cadastradas como `approval_required`, exceto
+  `colocar_sku_em_campanha` (`recommend_only`, permanece só recomendação
+  porque o ERP não tem como saber sozinho em qual campanha colocar um
+  SKU). O `escopo_oauth` devolvido pelo Mercado Livre (ex.: "offline_access
+  read write") é usado só como **informativo/diagnóstico** na tela — nunca
+  como fonte de verdade — seguindo o mesmo princípio já documentado em
+  `lib/mlPermissoes.js` para Promoções.
+- **`db/schema.sql` (migração idempotente, já aplicada):**
+  `ALTER TABLE config_ads_ia ADD COLUMN permite_escrita_ml BOOLEAN NOT NULL
+  DEFAULT false`. Em `ia_decisoes_ads`, as colunas `executado`/
+  `executado_em` já existiam desde 14/09/2026 mas nunca tinham sido
+  preenchidas por nenhum código (eram para uma confirmação manual que
+  nunca ganhou tela) — passam a ter significado real: `true` quando o
+  próprio ERP executou a ação com sucesso via API do Mercado Livre.
+  Adicionadas `execucao_erro TEXT` e `execucao_resposta JSONB` para
+  guardar sempre uma explicação honesta (motivo da não-execução, ou erro
+  real da API) e a resposta crua do Mercado Livre quando executa.
+- **`lib/mercadolivre.js`:** nova função `apiPut` (primeira função de
+  escrita deste arquivo — só existiam leituras até aqui).
+- **`lib/mlAds.js`:** nova função `atualizarCampanha({accessToken, siteId,
+  campanhaId, budget, status})`, usando o endpoint real e documentado `PUT
+  /marketplace/advertising/{site_id}/product_ads/campaigns/{campanha_id}`
+  (confirmado na documentação oficial do Mercado Livre, ver Fontes),
+  headers `Authorization: Bearer` + `Api-Version: 2`.
+- **`lib/mlPermissoes.js`:** generalizado — `statusIntegracaoPromocoes`
+  virou um wrapper fino de uma nova função genérica
+  `statusIntegracaoAgente(...)`, e criado o wrapper equivalente
+  `statusIntegracaoAds(...)`. Nenhuma mensagem/comportamento de Promoções
+  mudou (testes antigos de `mlPermissoes.test.js` continuam passando sem
+  alteração).
+- **`lib/ia/adsExecutor.js` (novo arquivo):** função central
+  `executarDecisaoAprovada(decisaoId)` — **nunca lança exceção**: sempre
+  devolve `{executado, motivo?, erro?}` e sempre grava uma explicação
+  honesta em `execucao_erro` para todo caso de não-execução (trava manual
+  desligada, tipo de ação não executável, conta/token/site_id ausente,
+  erro real da API do Mercado Livre). Cobre 4 ações executáveis:
+  `pausar_campanha`, `ativar_campanha`, `aumentar_orcamento`,
+  `diminuir_orcamento`. A aprovação de uma decisão **nunca falha** por
+  causa de um problema na execução real — são duas etapas
+  independentes.
+- **`routes/ads.js`:** `GET/PUT /config-ia` ganham o campo
+  `permiteEscritaMl`; nova rota `GET /status-integracao` (status por conta
+  ML + resumo da empresa); `PUT /decisoes/:id` — quando o novo status é
+  `aprovada` ou `alterada`, chama `executarDecisaoAprovada` na hora e
+  devolve na mesma resposta HTTP o resultado já atualizado (`executado`,
+  `executadoEm`, `execucaoErro`); `recusada` nunca tenta executar nada.
+- **`public/index.html` (módulo Agentes IA — Ads e Performance):** novo
+  card "Permitir que a IA execute de verdade" (checkbox, desligado por
+  padrão) com status por conta conectada (mostra se o escopo sugere
+  escrita e se a trava manual está ligada); histórico de decisões passa a
+  mostrar, quando aplicável, se a ação foi executada de verdade, quando, e
+  o motivo quando não foi. **Promoções não foi tocada** — o módulo
+  compartilhado só liga esse comportamento quando o agente declara
+  `execucao` na configuração, e `AgentePromocoes` continua sem essa chave
+  (confirmado lendo o código-fonte diretamente, sem nenhuma mudança
+  visual/funcional lá).
+- **Testado:** `test/adsExecutor.test.js` (novo, 9/9 passando — cobre
+  cada uma das 4 ações, trava manual desligada, tipo de ação não
+  executável, conta sem site_id, erro real da API mockado) e
+  `test/adsRotasExecucao.test.js` (novo, 7/7 passando — HTTP real com
+  Express + Postgres real, chamada ao Mercado Livre sempre mockada).
+  Regressão direcionada rodada em seguida (`ads.test.js`,
+  `adsScheduler.test.js`, `mlPermissoes.test.js`, `mlAds.test.js`,
+  `iaAgentesHub.test.js`, `dailyCiclo.test.js`, `agentes3d.test.js`):
+  **73/73 passando, 0 falhas** (as 4 suítes que aparecem canceladas nesse
+  lote são uma flakiness antiga do ambiente de sandbox, sem relação com
+  este código — o stack trace aponta pra um caminho de outro projeto,
+  `/home/claude/erp-ecommerce/...`). Verificado também visualmente via
+  navegador (Playwright) contra Postgres real: checkbox liga/desliga de
+  verdade, tentativa real de chamada à API do Mercado Livre (rede do
+  sandbox bloqueada) falha e é registrada honestamente em
+  `execucao_erro`, sem quebrar a aprovação.
+- **Fora do escopo desta etapa (recomendação apenas, disclosure
+  intencional):** `pausar_anuncio` (pausar um anúncio individual dentro de
+  uma campanha) — o endpoint de pausa por item ainda não foi pesquisado/
+  integrado; `colocar_sku_em_campanha` — o ERP não decide sozinho em qual
+  campanha colocar o SKU. Execução real para Análise de Concorrente e
+  Promoções também não entrou nesta etapa (o usuário priorizou Ads).
+  **Nada disto foi testado contra a API real do Mercado Livre** (o sandbox
+  de desenvolvimento bloqueia a rede para `api.mercadolibre.com`) — só
+  contra mocks e contra uma tentativa real que falhou do jeito esperado
+  (rede bloqueada). O comportamento definitivo só é confirmado depois do
+  deploy.
+- **Sobre os outros dois pontos da mensagem do usuário (sem mudança de
+  código, só confirmação/explicação):** WhatsApp já está com todo o código
+  pronto desde uma etapa anterior (`lib/whatsapp.js`/`routes/whatsapp.js`,
+  via Twilio) — falta só o usuário criar a conta Twilio e configurar as
+  variáveis de ambiente no Render, algo que a IA não pode fazer por ele
+  (credenciais nunca são inseridas por automação). A Análise de
+  Concorrente (`lib/concorrente.js`) já busca por título/modelo do próprio
+  anúncio sempre que não há correspondência de catálogo — exatamente o
+  pedido do usuário — nenhum código precisou mudar.
+- **Fontes consultadas para o endpoint de escrita de campanhas:**
+  documentação oficial do Mercado Livre, Product Ads API
+  (global-selling.mercadolibre.com/devsite/new-product-ads).
+
 ## 2026-08-27 (44) — ETAPA 3: REALIZADO do Fluxo de Caixa passa a vir do extrato bancário, saldo por conta, transferências internas
 - **Contexto:** aprovado pelo usuário depois de uma revisão técnica prévia
   (perguntas A-L + diagrama, entregues no chat) e de uma especificação

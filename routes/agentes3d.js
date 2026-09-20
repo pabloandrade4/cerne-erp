@@ -24,6 +24,7 @@ const { obterStatusSincronizacaoAds } = require('../lib/adsScheduler');
 const { obterStatusScheduler: obterStatusRadar } = require('../lib/ia/radarScheduler');
 const { obterStatusScheduler: obterStatusPromocoes } = require('../lib/ia/promocoesScheduler');
 const { obterStatusScheduler: obterStatusSac } = require('../lib/ia/sacScheduler');
+const { obterStatusScheduler: obterStatusConcorrente } = require('../lib/ia/concorrenteScheduler');
 
 const router = express.Router();
 
@@ -47,6 +48,16 @@ async function contarAlertasDeAnuncioAbertos() {
   const { rows } = await pool.query(`SELECT count(*)::int AS total FROM radar_alertas WHERE status = 'aberto' AND categoria LIKE 'anuncio_%'`);
   return rows[0].total;
 }
+// "Análise de Concorrente" virou automática (19/09/2026, pedido explícito
+// do usuário: "quero que essas ia nunca pare de trabalhar... sempre buscar
+// concorrentes que estão vendendo o mesmo produto que eu" — ver
+// lib/ia/radarConcorrente.js/concorrenteScheduler.js). Mesma categoria
+// única usada lá (`concorrente_ativo`), nunca confundida com os alertas de
+// Anúncios/Negócio que usam outros prefixos.
+async function contarAlertasDeConcorrenteAbertos() {
+  const { rows } = await pool.query(`SELECT count(*)::int AS total FROM radar_alertas WHERE status = 'aberto' AND categoria = 'concorrente_ativo'`);
+  return rows[0].total;
+}
 
 router.get('/status', async (req, res, next) => {
   try {
@@ -54,11 +65,13 @@ router.get('/status', async (req, res, next) => {
     const radar = obterStatusRadar();
     const promocoes = obterStatusPromocoes();
     const sac = obterStatusSac();
+    const concorrente = obterStatusConcorrente();
 
-    const [pendentesAds, pendentesPromocoes, alertasAnuncio] = await Promise.all([
+    const [pendentesAds, pendentesPromocoes, alertasAnuncio, alertasConcorrente] = await Promise.all([
       contarPendentesAds().catch((err) => { console.error('[Sala dos Agentes] contarPendentesAds falhou:', err.message); return null; }),
       contarPendentesPromocoes().catch((err) => { console.error('[Sala dos Agentes] contarPendentesPromocoes falhou:', err.message); return null; }),
       contarAlertasDeAnuncioAbertos().catch((err) => { console.error('[Sala dos Agentes] contarAlertasDeAnuncioAbertos falhou:', err.message); return null; }),
+      contarAlertasDeConcorrenteAbertos().catch((err) => { console.error('[Sala dos Agentes] contarAlertasDeConcorrenteAbertos falhou:', err.message); return null; }),
     ]);
 
     const agentes = [
@@ -81,14 +94,16 @@ router.get('/status', async (req, res, next) => {
         resumo: alertasAnuncio === null ? 'Não foi possível consultar agora.' : (alertasAnuncio + ' alerta(s) de anúncio em aberto'),
       },
       {
-        // Ainda sem ciclo automático — busca sob demanda (lib/concorrente.js,
-        // 19/09/2026, primeira integração deste projeto contra a busca
-        // pública do Mercado Livre, ainda não testada contra a API de
-        // verdade). Nunca finge um "último ciclo" que nunca rodou sozinho.
+        // Virou ciclo automático (19/09/2026, pedido explícito do usuário —
+        // ver lib/ia/concorrenteScheduler.js): varre os produtos com venda
+        // real no Mercado Livre 1x por dia e avisa por WhatsApp quando
+        // aparece algo novo/pior. A busca manual (Agentes IA → Análise de
+        // Concorrente) continua funcionando do mesmo jeito, pra conferir um
+        // produto específico na hora.
         id: 'concorrente-ia', nome: 'Análise de Concorrente', categoria: 'concorrente',
-        ativo: true, emExecucao: false, intervaloMs: null,
-        ultimaExecucaoEm: null, ultimoCicloOk: null,
-        resumo: 'Sob demanda — busque em Agentes IA → Análise de Concorrente (ainda sem ciclo automático).',
+        ativo: concorrente.ativo, emExecucao: concorrente.emExecucao, intervaloMs: concorrente.intervaloMs,
+        ultimaExecucaoEm: concorrente.ultimaExecucaoEm, ultimoCicloOk: concorrente.ultimoCicloOk,
+        resumo: alertasConcorrente === null ? 'Não foi possível consultar agora.' : (alertasConcorrente + ' concorrente(s) ativo(s) encontrado(s)'),
       },
       {
         id: 'sac-ia', nome: 'SAC', categoria: 'sac',

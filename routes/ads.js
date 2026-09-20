@@ -10,6 +10,8 @@ const { listarAds, sincronizarTodasAsContasAds } = require('../lib/ads');
 const { obterStatusSincronizacaoAds } = require('../lib/adsScheduler');
 const { classificarLinhasEAgregarCampanhas } = require('../lib/ia/adsMotor');
 const { executarCicloDecisoesAdsEmpresa } = require('../lib/ia/adsDecisoesCiclo');
+const { executarDecisaoAprovada } = require('../lib/ia/adsExecutor');
+const { statusIntegracaoAds } = require('../lib/mlPermissoes');
 
 const router = express.Router();
 
@@ -18,6 +20,12 @@ const MARGEM_MINIMA_PADRAO = 10;
 async function buscarMargemMinima(empresaId) {
   const { rows } = await pool.query('SELECT margem_minima_pct FROM config_ads_ia WHERE empresa_id = $1', [empresaId]);
   return rows.length ? Number(rows[0].margem_minima_pct) : MARGEM_MINIMA_PADRAO;
+}
+
+async function buscarConfigAds(empresaId) {
+  const { rows } = await pool.query('SELECT margem_minima_pct, permite_escrita_ml FROM config_ads_ia WHERE empresa_id = $1', [empresaId]);
+  if (!rows.length) return { margemMinimaPct: MARGEM_MINIMA_PADRAO, permiteEscritaMl: false };
+  return { margemMinimaPct: Number(rows[0].margem_minima_pct), permiteEscritaMl: !!rows[0].permite_escrita_ml };
 }
 
 // GET /api/ads?empresaId=ID&periodo=30d&contaId=&desde=&ate=
@@ -87,26 +95,73 @@ router.get('/config-ia', async (req, res, next) => {
   try {
     const { empresaId } = req.query;
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
-    res.json({ empresaId: Number(empresaId), margemMinimaPct: await buscarMargemMinima(empresaId) });
+    const config = await buscarConfigAds(empresaId);
+    res.json({ empresaId: Number(empresaId), ...config });
   } catch (err) { next(err); }
 });
 
-// PUT /api/ads/config-ia { empresaId, margemMinimaPct }
+// PUT /api/ads/config-ia { empresaId, margemMinimaPct, permiteEscritaMl? }
+// `permiteEscritaMl` (19/09/2026, pedido explícito do usuário — ver
+// lib/ia/adsExecutor.js): a trava manual que liga a execução real no
+// Mercado Livre. Nasce sempre desligada; o usuário só liga depois de
+// confirmar no painel do Mercado Livre Developers que o aplicativo tem
+// permissão de escrita E reconectar a conta (um token já emitido não ganha
+// permissão nova sozinho). Omitido no corpo = mantém o valor atual (nunca
+// desliga/liga sozinho como efeito colateral de salvar só a margem).
 router.put('/config-ia', async (req, res, next) => {
   try {
-    const { empresaId, margemMinimaPct } = req.body || {};
+    const { empresaId, margemMinimaPct, permiteEscritaMl } = req.body || {};
     if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
     const valor = Number(margemMinimaPct);
     if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
       return res.status(400).json({ errors: { margemMinimaPct: 'Informe um percentual entre 0 e 100.' } });
     }
+    const atual = await buscarConfigAds(empresaId);
+    const novoPermiteEscritaMl = permiteEscritaMl !== undefined ? !!permiteEscritaMl : atual.permiteEscritaMl;
     await pool.query(
-      `INSERT INTO config_ads_ia (empresa_id, margem_minima_pct, atualizado_em)
-       VALUES ($1, $2, now())
-       ON CONFLICT (empresa_id) DO UPDATE SET margem_minima_pct = EXCLUDED.margem_minima_pct, atualizado_em = now()`,
-      [empresaId, valor]
+      `INSERT INTO config_ads_ia (empresa_id, margem_minima_pct, permite_escrita_ml, atualizado_em)
+       VALUES ($1, $2, $3, now())
+       ON CONFLICT (empresa_id) DO UPDATE SET
+         margem_minima_pct = EXCLUDED.margem_minima_pct,
+         permite_escrita_ml = EXCLUDED.permite_escrita_ml,
+         atualizado_em = now()`,
+      [empresaId, valor, novoPermiteEscritaMl]
     );
-    res.json({ empresaId: Number(empresaId), margemMinimaPct: valor });
+    res.json({ empresaId: Number(empresaId), margemMinimaPct: valor, permiteEscritaMl: novoPermiteEscritaMl });
+  } catch (err) { next(err); }
+});
+
+// GET /api/ads/status-integracao?empresaId= — mesmo espírito de
+// GET /api/promocoes/status-integracao (lib/mlPermissoes.js#
+// statusIntegracaoAds): junta o diagnóstico informativo do escopo OAuth
+// com a trava manual (config_ads_ia.permite_escrita_ml, quem decide de
+// verdade) pra tela "Agentes IA → Ads e Performance" mostrar se aprovar
+// uma sugestão hoje só registra ou já executa de verdade.
+router.get('/status-integracao', async (req, res, next) => {
+  try {
+    const { empresaId } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+
+    const [{ rows: contas }, config] = await Promise.all([
+      pool.query("SELECT id, nickname, status, escopo_oauth FROM ml_contas WHERE empresa_id = $1 ORDER BY nickname", [empresaId]),
+      buscarConfigAds(empresaId),
+    ]);
+
+    const contasComStatus = contas.map((c) => ({
+      contaId: c.id,
+      loja: c.nickname,
+      statusConexao: c.status,
+      ...statusIntegracaoAds({ escopoOauth: c.escopo_oauth, permiteEscritaMl: config.permiteEscritaMl }),
+    }));
+
+    // Resumo único pra tela — se a trava está ligada, escrita disponível
+    // pra empresa inteira (é uma trava por empresa, não por conta).
+    const resumo = statusIntegracaoAds({
+      escopoOauth: contas.length ? contas[0].escopo_oauth : null,
+      permiteEscritaMl: config.permiteEscritaMl,
+    });
+
+    res.json({ empresaId: Number(empresaId), permiteEscritaMl: config.permiteEscritaMl, contas: contasComStatus, resumo });
   } catch (err) { next(err); }
 });
 
@@ -125,10 +180,12 @@ router.post('/sincronizar', async (req, res, next) => {
 // Agente de IA "Ads e Performance" — Fase 1 (14/09/2026)
 // ============================================================
 // Histórico de decisões: DADOS → ANÁLISE (já existia) → RECOMENDAÇÃO
-// (lib/ia/adsDecisor.js) → DECISÃO DO USUÁRIO (aqui) → RESULTADO (ver
+// (lib/ia/adsDecisor.js) → DECISÃO DO USUÁRIO (aqui) → EXECUÇÃO REAL
+// (lib/ia/adsExecutor.js, "Fase E", 19/09/2026 — só quando aprovada/
+// alterada, o tipo de ação tem execução direta e a escrita está liberada
+// em config_ads_ia.permite_escrita_ml) → RESULTADO (ver
 // lib/ia/adsDecisoesCiclo.js#avaliarResultadosAds) → aprendizado (Fase 2,
-// ainda não implementada). NUNCA executa nada no Mercado Livre — só
-// registra a decisão do usuário, mesmo quando aprovada.
+// ainda não implementada).
 function linhaDecisaoAdsParaApi(row) {
   return {
     id: row.id,
@@ -161,6 +218,8 @@ function linhaDecisaoAdsParaApi(row) {
     decididoEm: row.decidido_em,
     decididoPor: row.decidido_por,
     executado: row.executado,
+    executadoEm: row.executado_em,
+    execucaoErro: row.execucao_erro,
     resultadoSnapshot: row.resultado_snapshot,
     resultadoAvaliadoEm: row.resultado_avaliado_em,
     criadoEm: row.criado_em,
@@ -199,10 +258,16 @@ router.get('/decisoes', async (req, res, next) => {
 });
 
 // PUT /api/ads/decisoes/:id  { statusDecisao: 'aprovada'|'alterada'|'recusada', valorDecididoUsuario?, decididoPor? }
-// Só registra a decisão — NUNCA chama a API do Mercado Livre (ver
-// cabeçalho do bloco acima). Só permite decidir uma vez (a decisão vira
-// histórico definitivo); uma situação nova no mesmo anúncio/campanha abre
-// uma linha nova automaticamente no próximo ciclo.
+// Registra a decisão e, quando ela é 'aprovada'/'alterada', tenta EXECUTAR
+// de verdade no Mercado Livre (lib/ia/adsExecutor.js, "Fase E", 19/09/2026
+// — pedido explícito do usuário: "eu vou aprovar, aí vai fazer"). A
+// aprovação em si NUNCA falha por causa da execução — o executor nunca
+// lança, sempre grava o motivo real (sucesso, sem permissão, erro da API,
+// etc.) em execucao_erro/executado, e a resposta HTTP já devolve esse
+// resultado atualizado pro usuário ver na hora, sem precisar recarregar a
+// tela. Só permite decidir uma vez (a decisão vira histórico definitivo);
+// uma situação nova no mesmo anúncio/campanha abre uma linha nova
+// automaticamente no próximo ciclo.
 router.put('/decisoes/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -218,7 +283,14 @@ router.put('/decisoes/:id', async (req, res, next) => {
       [statusDecisao, valorDecididoUsuario ? JSON.stringify(valorDecididoUsuario) : null, decididoPor || null, id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Decisão não encontrada, ou já foi decidida antes.' });
-    res.json(linhaDecisaoAdsParaApi(rows[0]));
+
+    let decisaoAtualizada = rows[0];
+    if (statusDecisao === 'aprovada' || statusDecisao === 'alterada') {
+      await executarDecisaoAprovada(decisaoAtualizada.id);
+      const { rows: releitura } = await pool.query('SELECT * FROM ia_decisoes_ads WHERE id = $1', [decisaoAtualizada.id]);
+      if (releitura.length) decisaoAtualizada = releitura[0];
+    }
+    res.json(linhaDecisaoAdsParaApi(decisaoAtualizada));
   } catch (err) { next(err); }
 });
 
