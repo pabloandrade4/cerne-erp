@@ -18,7 +18,7 @@ const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  painelVisaoGeral, identificarCanal, porCanal, resumoRecebimentos,
+  painelVisaoGeral, identificarCanal, porCanal, evolucaoFaturamento, resumoRecebimentos,
   conexoesEEmpresas, gerarAlertas, formatMoney,
 } = require('../lib/visaoGeralPainel');
 
@@ -92,6 +92,57 @@ describe('visaoGeralPainel — funções puras (sem banco)', () => {
 
   test('formatMoney formata igual ao resto do projeto (R$, vírgula, 2 casas)', () => {
     assert.equal(formatMoney(1234.5), 'R$ 1.234,50');
+  });
+});
+
+// 20/09/2026 — pedido explícito do usuário: "em visão geral quero colocar
+// tudo que for possível... principalmente se o faturamento está caindo ou
+// aumentando, comparado ao mês passado".
+describe('evolucaoFaturamento — compara com o período anterior, nunca inventa % a partir de dado faltando', () => {
+  const periodoAnterior = { desdeStr: '01/08/2026', ateStr: '20/08/2026' };
+
+  test('faturamento subiu: variação positiva, tendência "subindo"', () => {
+    const r = evolucaoFaturamento({ faturamentoAtual: 1200, faturamentoAnterior: 1000, periodoAnterior });
+    assert.equal(r.variacaoValor, 200);
+    assert.equal(r.variacaoPct, 20);
+    assert.equal(r.tendencia, 'subindo');
+    assert.equal(r.motivoSemDado, null);
+    assert.deepEqual(r.periodoAnterior, { desde: '01/08/2026', ate: '20/08/2026' });
+  });
+
+  test('faturamento caiu: variação negativa, tendência "caindo"', () => {
+    const r = evolucaoFaturamento({ faturamentoAtual: 800, faturamentoAnterior: 1000, periodoAnterior });
+    assert.equal(r.variacaoValor, -200);
+    assert.equal(r.variacaoPct, -20);
+    assert.equal(r.tendencia, 'caindo');
+  });
+
+  test('faturamento igual: tendência "estavel", variação 0', () => {
+    const r = evolucaoFaturamento({ faturamentoAtual: 1000, faturamentoAnterior: 1000, periodoAnterior });
+    assert.equal(r.variacaoValor, 0);
+    assert.equal(r.variacaoPct, 0);
+    assert.equal(r.tendencia, 'estavel');
+  });
+
+  test('sem faturamento no período atual (null): nunca inventa uma variação, motivo explícito', () => {
+    const r = evolucaoFaturamento({ faturamentoAtual: null, faturamentoAnterior: 1000, periodoAnterior });
+    assert.equal(r.variacaoValor, null);
+    assert.equal(r.variacaoPct, null);
+    assert.equal(r.tendencia, 'sem_dado');
+    assert.match(r.motivoSemDado, /confirmado/);
+  });
+
+  test('sem faturamento no período anterior (null): nunca inventa uma variação, motivo explícito', () => {
+    const r = evolucaoFaturamento({ faturamentoAtual: 1000, faturamentoAnterior: null, periodoAnterior });
+    assert.equal(r.variacaoValor, null);
+    assert.equal(r.tendencia, 'sem_dado');
+  });
+
+  test('período anterior era 0 e o atual tem faturamento: sobe, mas sem % (base zero não tem leitura útil)', () => {
+    const r = evolucaoFaturamento({ faturamentoAtual: 500, faturamentoAnterior: 0, periodoAnterior });
+    assert.equal(r.variacaoValor, 500);
+    assert.equal(r.variacaoPct, null);
+    assert.equal(r.tendencia, 'subindo');
   });
 });
 
@@ -258,6 +309,17 @@ describe(
       assert.equal(resultado.fluxoCaixa.saldoProjetado.motivo, 'projecao_dia_a_dia_disponivel_na_tela_fluxo_de_caixa');
       assert.ok('saldoBancarioAtual' in resultado.fluxoCaixa, 'deve expor o saldo bancário real consolidado (ou null com motivo) — nunca omitido');
       assert.ok(Array.isArray(resultado.alertas));
+      // 20/09/2026 — comparação de faturamento com o período anterior e
+      // resumo dos Agentes de IA, pedidos explicitamente pelo usuário pra
+      // Visão Geral (ver evolucaoFaturamento e lib/ia/agentesResumo.js).
+      assert.ok('faturamentoEvolucao' in resultado);
+      assert.equal(resultado.faturamentoEvolucao.faturamentoAtual, resultado.porCanal.totalFaturamento);
+      assert.ok(['subindo', 'caindo', 'estavel', 'sem_dado'].includes(resultado.faturamentoEvolucao.tendencia));
+      assert.ok(resultado.faturamentoEvolucao.periodoAnterior.desde, 'período anterior precisa vir com a data explícita, nunca ambíguo');
+      assert.ok(resultado.agentesIa, 'resumo dos Agentes de IA não deveria falhar pra uma empresa com dado real');
+      assert.equal(resultado.agentesIaError, null);
+      assert.ok(Array.isArray(resultado.agentesIa.agentes));
+      assert.ok(resultado.agentesIa.agentes.length >= 6, 'os 6 agentes reais cadastrados precisam aparecer no resumo');
     });
 
     test('painelVisaoGeral: empresa vazia nunca quebra e nunca inventa dado', async () => {
@@ -266,6 +328,11 @@ describe(
       assert.equal(resultado.porCanal.totalFaturamento, null);
       assert.equal(resultado.conexoes.mercadoLivre.contasConectadas, 0);
       assert.deepEqual(resultado.alertas, []);
+      // Sem pedido nenhum em nenhum dos dois períodos: nunca inventa uma
+      // variação, vem com o motivo explícito.
+      assert.equal(resultado.faturamentoEvolucao.variacaoValor, null);
+      assert.equal(resultado.faturamentoEvolucao.tendencia, 'sem_dado');
+      assert.ok(resultado.agentesIa, 'resumo dos Agentes de IA existe mesmo pra empresa sem nenhum pedido (todos os contadores ficam 0)');
     });
   }
 );

@@ -207,6 +207,51 @@ describe(
       await pool.query(`UPDATE contas_pagar SET status = 'pendente', data_pagamento = NULL WHERE empresa_id = $1`, [EMPRESA_ID]);
     });
 
+    // 20/09/2026 — correção de bug real reportado pelo usuário ("Análise de
+    // concorrente não está funcionando"): persistirSituacoes é chamada
+    // separadamente pelo Radar principal (este describe) e pelo ciclo de
+    // Concorrente (test/radarConcorrente.test.js), cada um só com a SUA
+    // PRÓPRIA lista de situações. Sem isolar por `origem_ciclo`, o Radar
+    // principal resolvia sozinho o alerta de Concorrente 15 minutos depois,
+    // achando que "não foi detectado neste ciclo" significava "não existe
+    // mais" — mesmo o concorrente continuando ativo. Ver ALTER TABLE de
+    // `origem_ciclo` em db/schema.sql e o comentário em
+    // lib/ia/radar.js#persistirSituacoes.
+    test('persistirSituacoes nunca resolve o alerta de OUTRA origem só por não estar na lista deste ciclo', async () => {
+      const { persistirSituacoes } = require('../lib/ia/radar');
+
+      // Um "ciclo de Concorrente" cria um alerta próprio.
+      await persistirSituacoes(EMPRESA_ID, [{
+        chave: 'concorrente_ativo:999', categoria: 'concorrente_ativo', severidade: 'atencao',
+        titulo: 'Concorrente de teste', descricao: 'desc', recomendacaoPadrao: 'rec', pagina: 'concorrente', dados: {},
+      }], 'concorrente');
+
+      // O "Radar principal" roda depois (mesmo padrão dos outros testes
+      // deste arquivo: financeiro_contas_vencidas continua ativo), com uma
+      // lista de situações que NUNCA inclui a chave do concorrente.
+      const { rows: contasVencidas } = await pool.query(
+        `SELECT id FROM radar_alertas WHERE empresa_id = $1 AND chave = 'financeiro_contas_vencidas'`, [EMPRESA_ID]
+      );
+      assert.ok(contasVencidas.length, 'pré-condição: já existe um alerta financeiro de outro teste deste arquivo');
+      await persistirSituacoes(EMPRESA_ID, [{
+        chave: 'financeiro_contas_vencidas', categoria: 'financeiro_contas_vencidas', severidade: 'critico',
+        titulo: 'Contas vencidas', descricao: 'desc', recomendacaoPadrao: 'rec', pagina: 'financeiro', dados: {},
+      }], 'radar_principal');
+
+      const { rows } = await pool.query(
+        `SELECT status FROM radar_alertas WHERE empresa_id = $1 AND chave = 'concorrente_ativo:999'`, [EMPRESA_ID]
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].status, 'aberto', 'o alerta de Concorrente precisa continuar aberto — o Radar principal não é dono dele');
+
+      // Só o próprio ciclo de Concorrente pode resolver o que é dele.
+      await persistirSituacoes(EMPRESA_ID, [], 'concorrente');
+      const { rows: depois } = await pool.query(
+        `SELECT status FROM radar_alertas WHERE empresa_id = $1 AND chave = 'concorrente_ativo:999'`, [EMPRESA_ID]
+      );
+      assert.equal(depois[0].status, 'resolvido');
+    });
+
     test('4) funciona sem o navegador aberto: o resultado persistido sobrevive a um "reinício do processo" (só Postgres, nunca em memória)', async () => {
       const { executarCicloRadarEmpresa } = require('../lib/ia/radar');
       await executarCicloRadarEmpresa(EMPRESA_ID); // garante que a conta voltou a estar vencida no radar

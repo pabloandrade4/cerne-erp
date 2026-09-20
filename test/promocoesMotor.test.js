@@ -144,6 +144,49 @@ describe('classificar — margem de conforto (pedido do usuário: preferir preç
   });
 });
 
+// 20/09/2026 — pedido explícito do usuário: "só me avisar de promoções
+// quando for vender em um preço igual ou menor com a mesma margem ou uma
+// margem até 3% menor, pois se eu vender com preço maior minha margem é
+// maior mesmo". Regra SOMADA ao mínimo/conforto já existente (nunca
+// substitui): mesmo com margem acima do mínimo exigido, se ela cair mais
+// de 3 pontos percentuais abaixo da margem NORMAL do produto (preço
+// cheio), a IA não recomenda entrar.
+describe('classificar — margem normal do produto (pedido do usuário: nunca cair mais de 3 pontos abaixo da margem sem promoção)', () => {
+  const base = { margemIncompleta: false, statusItem: 'candidate', margemMinimaPct: 14, margemConfortoPct: 0, temDesconto: true };
+
+  test('margem cai exatamente 3 pontos (limite): ainda ENTRAR (>= é aceito)', () => {
+    // mínimo exigido = 14 (sem conforto); folga = 21 — margem de 17 fica
+    // dentro da faixa "entrar" (não cruza nem o mínimo nem a folga).
+    const r = classificar({ ...base, margemPromoPct: 17, margemNormalPct: 20 });
+    assert.equal(r.codigo, 'entrar');
+  });
+
+  test('margem cai 3.1 pontos (passou do limite): NÃO RECOMENDADO, mesmo bem acima do mínimo configurado', () => {
+    const r = classificar({ ...base, margemPromoPct: 16.9, margemNormalPct: 20 });
+    assert.equal(r.codigo, 'nao_recomendado');
+  });
+
+  test('mesma margem da normal (sem desconto real de margem): ENTRAR', () => {
+    const r = classificar({ ...base, margemPromoPct: 20, margemNormalPct: 20, temDesconto: false });
+    assert.equal(r.codigo, 'entrar');
+  });
+
+  test('margem promocional MAIOR que a normal (preço promocional acima do normal): nunca barrado pela regra — "se vender com preço maior, margem é maior mesmo"', () => {
+    const r = classificar({ ...base, margemPromoPct: 20.5, margemNormalPct: 20, temDesconto: false });
+    assert.equal(r.codigo, 'entrar');
+  });
+
+  test('sem margem normal calculável (precoNormal ausente): regra não se aplica, comportamento cai pro mínimo/conforto de sempre', () => {
+    const r = classificar({ ...base, margemPromoPct: 16, margemNormalPct: null });
+    assert.equal(r.codigo, 'entrar');
+  });
+
+  test('já ATIVA na promoção: regra da margem normal não se aplica (é só pra decidir ENTRAR)', () => {
+    const r = classificar({ ...base, statusItem: 'started', margemPromoPct: 20, margemNormalPct: 50 });
+    assert.equal(r.codigo, 'manter'); // 20 está acima do mínimo puro (14) e fora da faixa de risco
+  });
+});
+
 describe('calcularHistoricoPorSku — média de comissão (%) e frete (por unidade), ignorando itens com dado faltando', () => {
   test('calcula média corretamente e ignora item sem tarifas/frete', () => {
     const itensPeriodo = [
@@ -173,7 +216,7 @@ describe('analisarItemPromocao — integra tudo e nunca fabrica margem sem dado 
   ]);
   const custoPorSku = new Map([['SKU1', 30]]);
 
-  test('item com tudo disponível: calcula margem real de verdade (não é só o desconto %)', () => {
+  test('item com tudo disponível: calcula margem real de verdade (não é só o desconto %) — mas cai NÃO RECOMENDADO pela margem normal (20/09/2026)', () => {
     const linha = analisarItemPromocao({
       item: { id: 'MLB1', status: 'candidate', original_price: 100, suggested_discounted_price: 80 },
       catalogEntry: { sku: 'SKU1', titulo: 'Produto Teste', imagemUrl: 'https://x/img.jpg', preco: 100 },
@@ -192,11 +235,36 @@ describe('analisarItemPromocao — integra tudo e nunca fabrica margem sem dado 
     assert.equal(linha.freteVendedorEstimado, 8);
     assert.equal(linha.margemReal, 34);
     assert.equal(linha.margemRealPct, 42.5);
-    assert.equal(linha.classificacaoCodigo, 'oportunidade');
+    // margem NORMAL (preço cheio 100): tarifas=10, frete=8, custo=30 -> resultado=52 -> 52%
+    assert.equal(linha.margemNormalPct, 52);
+    // 42.5% é uma margem ótima em termos absolutos (bem acima do mínimo de 14%),
+    // mas cai 9.5 pontos percentuais abaixo da margem normal (52%) — mais do que
+    // a tolerância de 3 pontos pedida pelo usuário em 20/09/2026 ("só me avisar
+    // quando... a mesma margem ou uma margem até 3% menor") — por isso passa a
+    // ser NÃO RECOMENDADO, mesmo com margem alta.
+    assert.equal(linha.classificacaoCodigo, 'nao_recomendado');
     // margem real é BEM diferente do desconto % (20%) — prova que não é só desconto
     assert.notEqual(linha.margemRealPct, linha.descontoPct);
     assert.equal(linha.temDesconto, true); // preço promo (80) abaixo do normal (100)
     assert.equal(linha.margemConfortoPctUsada, 0); // não foi passado -> 0 (desligado)
+  });
+
+  test('desconto pequeno (queda de margem dentro dos 3 pontos aceitos): continua recomendando entrar', () => {
+    const linha = analisarItemPromocao({
+      // preço promo 96 (desconto de só 4%): tarifas=9.6, frete=8, custo=30 ->
+      // resultado=96-9.6-8-30=48.4 -> 50.42% de margem — só 1.58 pontos abaixo
+      // da margem normal (52%), dentro da tolerância de 3 pontos.
+      item: { id: 'MLB5', status: 'candidate', original_price: 100, suggested_discounted_price: 96 },
+      catalogEntry: { sku: 'SKU1', titulo: 'Produto Teste', imagemUrl: null, preco: 100 },
+      historicoPorSku,
+      custoPorSku,
+      aliquotaImposto: 0,
+      margemMinimaPct: 14,
+      contexto: { empresaId: 2, contaId: 1, promotionId: 'P-4', promotionType: 'DEAL', promotionLabel: 'Teste' },
+    });
+    assert.equal(linha.margemNormalPct, 52);
+    assert.equal(linha.margemRealPct, 50.42);
+    assert.equal(linha.classificacaoCodigo, 'oportunidade');
   });
 
   test('margem de conforto passa por analisarItemPromocao de ponta a ponta: desconto real + margem só um pouco acima do mínimo puro vira NÃO RECOMENDADO', () => {
