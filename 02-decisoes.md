@@ -3,6 +3,65 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-20 (45) — "Detalhe do Agente": construir pra todos os 6 de uma vez; "melhora" de quem só observa = alertas resolvidos com o tempo
+
+- **Pedido do usuário era genuinamente amplo o bastante pra justificar
+  perguntar antes de construir** (ver `AskUserQuestion` — não é a regra
+  geral de "sempre perguntar", é que aqui havia duas decisões de escopo
+  onde adivinhar errado significaria refazer trabalho pra 6 agentes
+  diferentes): "QUANDO CLICAR EM CIMA DO AGENTE DE IA, QUERO VER OQUE ELE
+  ESTA FAZENDO, OQUE TENHO PRA APROVAR PRA ELE FAZER, OQEU ELE FEZ E A
+  MELHORA QUE ELE TEVE NAQUILO QUE É PRA SER FEITO."
+
+- **Pergunta 1 — começar por 1 agente-modelo (Ads) ou já fazer os 6 de
+  uma vez? Usuário escolheu: todos os 6 de uma vez.** Decisão tomada:
+  construir um módulo único (`lib/ia/agenteDetalhe.js`) com um switch por
+  código de agente, em vez de 6 implementações separadas, justamente pra
+  viabilizar entregar os 6 juntos sem duplicar lógica nem risco de
+  inconsistência entre eles.
+
+- **Pergunta 2 — pra Anúncios/Concorrente (agentes que só observam via
+  Radar, sem nenhuma decisão pra aprovar/recusar), o que "a melhora que
+  ele teve" deveria significar, já que não existe um "antes/depois de
+  margem" pra medir? Usuário escolheu: quantos alertas ele resolveu com
+  o tempo (contagem nos últimos 30 dias).** Decisão tomada: pra
+  Ads/Promoções, "melhora" = delta real de margem (usando o sistema
+  antes/depois que já existia, `resultado_snapshot`); pra
+  Anúncios/Concorrente/SAC, "melhora" = contagem de itens resolvidos nos
+  últimos 30 dias vs. itens ainda em aberto agora — dois conceitos
+  diferentes de "melhora", explicados de forma diferente na tela, porque
+  representam tipos de trabalho genuinamente diferentes (um evita perda
+  de margem já quantificável, o outro evita que um problema fique
+  aberto).
+
+- **Corrigido, como efeito colateral necessário, um bug pré-existente em
+  `listarHistorico` que classificava TODO alerta do Radar como
+  `agente_codigo='radar'`, sem distinguir Anúncios de Concorrente.** Sem
+  essa correção, a seção "o que já fez" desses dois agentes ficaria
+  sempre vazia — não dava pra entregar o pedido do usuário sem resolver
+  isso primeiro. Corrigido via `categoria` (ver `04-alteracoes.md`),
+  nunca inventando uma atribuição que a categoria não sustenta: alertas
+  de custo/estoque/financeiro, que não pertencem a nenhum dos 6 agentes
+  cadastrados, foram deixados num grupo neutro (`radar_negocio`) em vez
+  de forçados pra dentro de um dos 6.
+
+- **O app tem duas telas de "agente" (o hub em cards e a "Sala dos
+  Agentes" 3D) — decisão de construir o detalhe nas duas, não só numa.**
+  A referência do usuário (um vídeo com uma sala/arquitetura de agentes)
+  sugere que a expectativa dele é mais próxima da Sala 3D; mas o hub em
+  cards é a tela mais densa em dado e já tinha infraestrutura pronta
+  (stats, histórico). Construir só numa arriscava entregar a metade
+  errada do pedido.
+
+- **A Sala 3D tem 1 personagem "SAC" pra 2 agentes reais cadastrados
+  (Mercado Livre + Shopee) — decisão: combinar os dois detalhes nessa
+  tela** (soma de pendentes, soma de resolvidos, histórico misturado e
+  ordenado), em vez de escolher arbitrariamente 1 dos 2 marketplaces pra
+  mostrar ou construir uma sub-aba nova dentro do personagem. É uma
+  simplificação assumida só na visualização 3D — no hub em cards, Mercado
+  Livre e Shopee continuam aparecendo como cards separados, com detalhe
+  próprio de cada um.
+
 ## 2026-09-20 (44) — SAC entra na Daily; honestidade sobre o que o vídeo "Múltiplos Agentes IA" mostra x o que existe de verdade
 
 - **O usuário mandou um print de um vídeo (provavelmente material de

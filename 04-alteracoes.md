@@ -2,6 +2,90 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-20 (47) — "Detalhe do Agente": ao clicar num agente de IA, ver o que ele está fazendo, o que tem pra aprovar, o que já fez e a melhora que teve
+- **Contexto:** pedido explícito do usuário, no mesmo fio das entradas (45)
+  e (46): "QUANDO CLICAR EM CIMA DO AGENTE DE IA, QUERO VER OQUE ELE ESTA
+  FAZENDO, OQUE TENHO PRA APROVAR PRA ELE FAZER, OQEU ELE FEZ E A MELHORA
+  QUE ELE TEVE NAQUILO QUE É PRA SER FEITO". Antes de construir, foram
+  perguntadas duas decisões de escopo genuinamente ambíguas (ver
+  `02-decisoes.md`): (1) construir pra 1 agente-modelo primeiro ou pra
+  todos os 6 de uma vez — o usuário escolheu **todos os 6 de uma vez**;
+  (2) o que "melhora" deveria significar pra Anúncios/Concorrente, que só
+  observam e não têm decisão pra aprovar — o usuário escolheu **quantos
+  alertas o agente resolveu com o tempo (últimos 30 dias)**.
+- **`lib/ia/agenteDetalhe.js` (novo arquivo):** módulo único que monta as
+  4 seções pra qualquer um dos 6 agentes reais cadastrados em `ia_agentes`
+  (`ads_performance`, `promocoes`, `sac_mercado_livre`, `sac_shopee`,
+  `anuncios_radar`, `concorrente`), reaproveitando ~100% de infraestrutura
+  já existente, sem inventar nenhum mecanismo novo de acompanhamento:
+  - **"O que está fazendo agora"** — status do scheduler de cada agente
+    (`ativo`, `emExecucao`, `ultimaExecucaoEm`, `ultimoCicloOk`), lendo
+    direto de `lib/adsScheduler.js`/`lib/ia/promocoesScheduler.js`/
+    `radarScheduler.js`/`concorrenteScheduler.js`/`sacScheduler.js` — os
+    mesmos módulos que já existiam, sem alteração neles.
+  - **"O que tem pra aprovar"** — contagem de sugestões pendentes reais
+    (`ia_decisoes_ads`/`ia_decisoes_promocoes`/`sac_respostas`, filtrados
+    por empresa e, no caso do SAC, por marketplace). Anúncios/Concorrente
+    não têm fluxo de aprovação (só observam), então retornam
+    `temFluxoDeAprovacao:false` de forma explícita, em vez de fingir um
+    número.
+  - **"O que já fez"** — histórico de eventos real, agora filtrável por
+    agente (ver correção em `agentesResumo.js` abaixo).
+  - **"A melhora que teve"** — pra Ads/Promoções, usa o sistema de
+    avaliação antes/depois que **já existia e já estava ativo**
+    (`resultado_snapshot`/`resultado_avaliado_em` em
+    `ia_decisoes_ads`/`ia_decisoes_promocoes`, calculado por
+    `lib/ia/adsDecisoesCiclo.js#avaliarResultadosAds`), comparando a
+    margem antes da decisão com a margem real medida dias depois — só
+    nunca tinha sido exposto em nenhuma tela. Pra Anúncios/Concorrente/SAC
+    (sem essa métrica financeira), conta quantos alertas/atendimentos
+    foram resolvidos nos últimos 30 dias vs. quantos continuam em aberto
+    agora, exatamente como o usuário pediu.
+- **`lib/ia/agentesResumo.js` — correção de um bug real, pré-existente:**
+  `listarHistorico` marcava **todo** alerta do Radar com
+  `agente_codigo='radar'`, fixo — ou seja, mesmo antes deste pedido, já
+  não dava pra saber, pelo histórico, quais alertas eram de Anúncios e
+  quais eram de Concorrente. Corrigido pra: `categoria LIKE 'anuncio_%'`
+  → `anuncios_radar`; `categoria = 'concorrente_ativo'` → `concorrente`;
+  o resto (custo, estoque, financeiro, fluxo de caixa — que não têm um
+  agente-dono dos 6 cadastrados) → um grupo neutro `radar_negocio`, nunca
+  atribuído a um agente errado. A função também ganhou um 3º parâmetro
+  opcional (`agenteCodigo`) pra filtrar o histórico por agente sem quebrar
+  quem já chamava sem esse parâmetro.
+- **`routes/iaAgentes.js`:** nova rota `GET
+  /api/ia-agentes/:codigo/detalhe?empresaId=ID`, restrita aos 6 códigos
+  reais (404 pra qualquer outro valor vindo da URL, nunca aceito direto
+  numa query).
+- **`public/index.html` — as DUAS telas de "agente" do sistema ganharam o
+  detalhe** (o app tem duas: o hub "Agentes de IA" em cards, e a "Sala dos
+  Agentes" 3D construída em 19/09/2026):
+  - No hub (`AgentesIaHub`): clicar num card de agente real (exceto a "IA
+    Gestora", que já abre o chat) abre um modal com as 4 seções. De
+    quebra, corrigido outro bug pré-existente: `anuncios_radar` e
+    `concorrente` não tinham entrada em `META_REAIS`, então o botão "Ver
+    detalhes" desses dois cards não fazia nada ao ser clicado.
+  - Na sala 3D (`SalaAgentes`): ao selecionar um personagem, o painel
+    lateral ganhou as mesmas 4 seções (buscadas uma vez por seleção, não
+    a cada atualização de 20s da sala). Como a sala tem só 1 personagem
+    de "SAC" pra 2 agentes reais (Mercado Livre + Shopee), os dois
+    detalhes são combinados nessa tela (soma pendentes, soma resolvidos,
+    mistura e ordena o histórico) — é uma simplificação visual assumida,
+    não uma perda de dado (cada um continua com detalhe próprio no hub).
+- **Testado:** `test/agenteDetalhe.test.js` (novo, 13/13 passando — cobre
+  os 6 agentes, isolamento por empresa e por marketplace, a correção do
+  histórico de Anúncios/Concorrente, e os dois formatos de "melhora"
+  incluindo um caso concreto de delta de margem). `test/especialistaSac`
+  e `iaAgentesHub` seguem passando (27/27 no total dos 3 arquivos novos/
+  tocados). Suíte completa do projeto rodada de novo: 578 passando, 0
+  falha nova — as únicas suítes que falham são as mesmas 16 de
+  instabilidade antiga do ambiente (stack trace de um `pg` de outro
+  repositório), já documentadas em segmentos anteriores.
+- **Pendente/honesto:** o agente "Criativo" continua não existindo (não
+  mudou nesta entrega). O agente Anúncios/Radar continua sem uma página
+  própria de aprovação (só observação) — o botão "Ver e decidir" do novo
+  detalhe leva pra página de Radar já existente, não pra um fluxo de
+  aprovação dedicado, porque esse fluxo dedicado não existe.
+
 ## 2026-09-20 (46) — SAC (Mercado Livre e Shopee) entra na Daily dos Agentes; horário do relatório mudado para 7h
 - **Contexto:** pedido explícito do usuário, no mesmo fio da entrada (45):
   ele mandou um print de um vídeo mostrando "Múltiplos Agentes IA no
