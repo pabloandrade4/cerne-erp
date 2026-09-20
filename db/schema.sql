@@ -1711,6 +1711,18 @@ INSERT INTO ia_agentes (codigo, nome, descricao, icone, ordem) VALUES
   ('sac_shopee', 'SAC Shopee', 'Centraliza mensagens e devoluções da Shopee, e sugere uma resposta pronta — você aprova, edita ou recusa. Só leitura e análise nesta fase: nada é enviado automaticamente.', 'inbox', 6)
 ON CONFLICT (codigo) DO NOTHING;
 
+-- Identidade dos agentes "Anúncios" (Radar) e "Análise de Concorrente" pro
+-- catálogo global de ia_agentes (19/09/2026, pedido explícito do usuário:
+-- "quero que essas ia nunca pare de trabalhar... e quero que os
+-- relatórios... me envie tudo no whatsapp") — precisam existir aqui pra
+-- poder participar da Daily dos Agentes (ver lib/ia/especialistaAnuncios.js
+-- e lib/ia/especialistaConcorrente.js, referenciados por
+-- ia_achados_diarios.agente_codigo).
+INSERT INTO ia_agentes (codigo, nome, descricao, icone, ordem) VALUES
+  ('anuncios_radar', 'Anúncios', 'Acompanha o desempenho de cada anúncio no Mercado Livre (parado, venda baixa, prejuízo, crescimento) e aponta o que precisa de atenção — só observa e recomenda, nunca altera nada sozinho.', 'megaphone', 7),
+  ('concorrente', 'Análise de Concorrente', 'Busca automaticamente, todo dia, quem mais está vendendo os mesmos produtos que você no Mercado Livre — preço, estoque e nível de confiança de cada achado. Só observa e recomenda, nunca altera preço sozinho.', 'search', 8)
+ON CONFLICT (codigo) DO NOTHING;
+
 -- Um atendimento real (pergunta pré-venda, mensagem pós-venda, reclamação ou
 -- devolução) por linha — SEMPRE por empresa (mesmo isolamento de
 -- ia_decisoes_ads/promocoes). Uma situação em aberto mantém UMA linha só
@@ -1808,3 +1820,32 @@ ALTER TABLE config_promocoes ADD COLUMN IF NOT EXISTS margem_conforto_pct NUMERI
 -- mesmo com margem acima do mínimo puro (ver lib/promocoesMotor.js).
 ALTER TABLE promocoes_analises ADD COLUMN IF NOT EXISTS margem_conforto_pct_usada NUMERIC(5,2);
 ALTER TABLE promocoes_analises ADD COLUMN IF NOT EXISTS tem_desconto BOOLEAN NOT NULL DEFAULT false;
+
+-- ============================================================
+-- Ads e Performance — "Fase E" ativada (19/09/2026, pedido explícito do
+-- usuário: "eu vou aprovar, aí vai fazer... por enquanto só vai precisar
+-- da minha permissão" — quer que aprovar uma sugestão de Ads já execute de
+-- verdade no Mercado Livre, não só registre a aprovação como acontecia até
+-- aqui). Mesmo desenho já usado por config_promocoes.permite_escrita_ml/
+-- lib/mlPermissoes.js (trava manual, nasce desligada, só o usuário liga
+-- depois de liberar escrita no painel do Mercado Livre Developers e
+-- reconectar a conta) — nada aqui muda o comportamento de Promoções, que
+-- continua 100% "Fase 1" (só registra a decisão) até uma etapa futura.
+ALTER TABLE config_ads_ia ADD COLUMN IF NOT EXISTS permite_escrita_ml BOOLEAN NOT NULL DEFAULT false;
+
+-- `executado`/`executado_em` já existiam nesta tabela desde 14/09/2026 mas
+-- NUNCA foram preenchidos por nenhum código (a intenção original era
+-- diferente — o usuário confirmar manualmente que fez a mudança ele mesmo
+-- no Mercado Livre — e isso nunca chegou a ganhar tela). A partir de agora
+-- passam a ter o significado real e mais útil: `executado = true` quando
+-- ESTE ERP aplicou a ação de verdade via API (ver lib/ia/adsExecutor.js).
+-- `execucao_erro` guarda a explicação legível de por que uma decisão
+-- aprovada ainda não foi (ou não pôde ser) aplicada — permissão de escrita
+-- desligada, token sem validade, erro real devolvido pelo Mercado Livre, ou
+-- tipo de ação que ainda não tem execução direta (ex.: pausar_anuncio,
+-- colocar_sku_em_campanha) — nunca fica em branco sem explicação nenhuma.
+-- `execucao_resposta` guarda o corpo real devolvido pela API em caso de
+-- sucesso, só para auditoria (nunca é o que decide o que mostrar pro
+-- usuário — quem decide é `executado`).
+ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS execucao_erro TEXT;
+ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS execucao_resposta JSONB;

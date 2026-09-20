@@ -8661,6 +8661,10 @@
       estoque_excesso:'Estoque · Excesso', compra_necessaria:'Estoque · Compra necessária',
       financeiro_contas_vencidas:'Financeiro · Contas vencidas', financeiro_contas_vencendo_semana:'Financeiro · Vencendo essa semana',
       financeiro_recebimentos_semana:'Financeiro · Recebimentos da semana', fluxo_caixa_risco:'Financeiro · Risco no fluxo de caixa',
+      // 19/09/2026, pedido explícito do usuário: "quero que essas ia nunca
+      // pare de trabalhar... sempre buscar concorrentes que estão vendendo o
+      // mesmo produto que eu" — ver lib/ia/radarConcorrente.js.
+      concorrente_ativo:'Concorrente · Vendendo o mesmo produto',
     };
     function categoriaLabel(cat){ return CATEGORIA_LABEL[cat] || String(cat||'—').replace(/_/g,' '); }
     function statusChipStyle(statusCentral){
@@ -10671,9 +10675,27 @@
         + (d.decididoEm ? '<div class="cell-stack-sub" style="margin-top:2px;">'+fmtDataHora(d.decididoEm)+(d.decididoPor?(' · '+escapeHtml(d.decididoPor)):'')+'</div>' : '');
     }
 
-    function executadoHTML(d){
+// Ações de campanha que já têm execução real ligada ao Mercado Livre
+    // (19/09/2026, ver lib/ia/adsExecutor.js) — espelha
+    // ACOES_EXECUTAVEIS de lá; as demais (pausar_anuncio,
+    // colocar_sku_em_campanha) continuam só recomendação nesta fase.
+    const ACOES_EXECUTAVEIS_ML = ['pausar_campanha','ativar_campanha','diminuir_orcamento','aumentar_orcamento'];
+
+    function executadoHTML(d, cfg){
       if(d.statusDecisao === 'recusada' || d.statusDecisao === 'expirada') return '<span style="color:var(--text-faint);">—</span>';
-      return '<span style="color:var(--text-faint);font-style:italic;" title="Fase 1: a IA só registra a decisão, nunca executa automaticamente no Mercado Livre.">Não executado (Fase 1)</span>';
+      if(!cfg || !cfg.executaDeVerdade){
+        return '<span style="color:var(--text-faint);font-style:italic;" title="Fase 1: a IA só registra a decisão, nunca executa automaticamente no Mercado Livre.">Não executado (Fase 1)</span>';
+      }
+      if(!ACOES_EXECUTAVEIS_ML.includes(d.tipoAcao)){
+        return '<span style="color:var(--text-faint);font-style:italic;" title="Este tipo de sugestão ainda não tem execução automática — continua só recomendação.">Só recomendação</span>';
+      }
+      if(d.executado){
+        return '<span style="color:var(--success);font-weight:600;" title="'+escapeHtml('Aplicado de verdade no Mercado Livre em '+fmtDataHora(d.executadoEm))+'">✅ Executado</span>';
+      }
+      if(d.execucaoErro){
+        return '<span style="color:var(--danger);cursor:help;" title="'+escapeHtml(d.execucaoErro)+'">⚠️ Não executado</span>';
+      }
+      return '<span style="color:var(--text-faint);font-style:italic;">Aguardando execução</span>';
     }
 
     function podeAlterarNumerico(d){
@@ -10688,13 +10710,68 @@
     }
 
     function criarModuloAgenteDecisoes(cfg){
-      const state = { agente:null, aba:'pendentes', itens:[], loading:false, error:null, editandoId:null, gerando:false };
+      const state = { agente:null, aba:'pendentes', itens:[], loading:false, error:null, editandoId:null, gerando:false, integStatus:null, integSalvando:false };
 
       async function apiAgente(){
         const res = await fetch('/api/ia-agentes');
         const body = await res.json().catch(()=>null);
         if(!res.ok) return null;
         return ((body && body.agentes) || []).find((a)=> a.codigo === cfg.codigoAgente) || null;
+      }
+      // Card "Integração Mercado Livre — execução automática" (19/09/2026,
+      // pedido explícito do usuário: "eu vou aprovar, aí vai fazer... tem
+      // que mudar as configurações do developers" — ver
+      // lib/ia/adsExecutor.js/routes/ads.js). Só existe pra agentes que já
+      // executam de verdade (cfg.execucao definido) — Promoções continua
+      // sem esta seção, sem nenhuma mudança de comportamento pra ela.
+      async function apiStatusIntegracao(empresaId){
+        const res = await fetch(cfg.execucao.endpointStatusIntegracao + '?empresaId=' + empresaId);
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o status da integração.');
+        return body;
+      }
+      async function apiSalvarPermiteEscrita(empresaId, permiteEscritaMl){
+        const configAtual = await fetch(cfg.execucao.endpointConfig + '?empresaId=' + empresaId).then(r=>r.json()).catch(()=>({}));
+        const res = await fetch(cfg.execucao.endpointConfig, {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ empresaId, margemMinimaPct: configAtual.margemMinimaPct, permiteEscritaMl }),
+        });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível salvar.');
+        return body;
+      }
+      async function carregarIntegracao(){
+        if(!cfg.execucao) return;
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId) return;
+        try{ state.integStatus = await apiStatusIntegracao(filtro.empresaId); }
+        catch(e){ state.integStatus = null; }
+        render();
+      }
+      async function alternarPermiteEscrita(ligar){
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId) return;
+        state.integSalvando = true; render();
+        try{
+          await apiSalvarPermiteEscrita(filtro.empresaId, ligar);
+          toast(ligar ? 'Execução automática de Ads ligada.' : 'Execução automática de Ads desligada.');
+          await carregarIntegracao();
+        }catch(e){ toast(e.message || 'Falha ao salvar.', 'error'); }
+        finally{ state.integSalvando = false; render(); }
+      }
+      function cardIntegracaoExecucaoHTML(){
+        if(!cfg.execucao) return '';
+        const r = state.integStatus && state.integStatus.resumo;
+        const ligado = !!(r && r.escritaDisponivel);
+        return '<div class="table-card" style="padding:20px;margin-bottom:14px;">'
+          + '<div class="panel-title" style="margin-bottom:10px;"><span class="panel-title-ic">'+svg('link')+'</span>Integração Mercado Livre — execução automática</div>'
+          + '<div class="field-hint" style="margin-bottom:12px;">'+escapeHtml((r && r.mensagem) || 'Carregando status da integração…')+'</div>'
+          + '<label style="display:flex;align-items:center;gap:8px;'+(state.integSalvando?'opacity:.6;':'cursor:pointer;')+'">'
+            + '<input type="checkbox" id="'+cfg.rootElId+'ToggleEscrita" '+(ligado?'checked':'')+' '+(state.integSalvando?'disabled':'')+'>'
+            + '<span>Permitir que a IA execute de verdade no Mercado Livre quando eu aprovar uma sugestão</span>'
+          + '</label>'
+          + '<div class="field-hint" style="margin-top:8px;color:var(--text-faint);">Antes de ligar: confirme no painel do Mercado Livre Developers que o aplicativo tem permissão de <strong>escrita</strong> (não só leitura) e reconecte a conta em Marketplaces — um token já emitido não ganha permissão nova sozinho.</div>'
+        + '</div>';
       }
       async function apiDecisoes(empresaId, status){
         const params = new URLSearchParams({ empresaId, status: status || 'todas' });
@@ -10751,12 +10828,12 @@
 
       async function load(){
         if(!state.agente) state.agente = await apiAgente();
-        await carregarDecisoes();
+        await Promise.all([carregarDecisoes(), carregarIntegracao()]);
       }
 
       window.CerneFiltro.onChange(()=>{
         const page = document.getElementById('page-'+cfg.pageId);
-        if(page && page.classList.contains('active')) carregarDecisoes();
+        if(page && page.classList.contains('active')){ carregarDecisoes(); carregarIntegracao(); }
         else render();
       });
 
@@ -10797,7 +10874,7 @@
             + '<td>'+cfg.referenciaHTML(d)+'</td>'
             + '<td style="max-width:380px;">'+sugestaoResumoHTML(d)+'</td>'
             + '<td>'+decisaoResumoHTML(d)+'</td>'
-            + '<td>'+executadoHTML(d)+'</td>'
+            + '<td>'+executadoHTML(d, cfg)+'</td>'
             + '<td>'+(d.resultadoAvaliadoEm ? cfg.resultadoHTML(d) : '<span style="color:var(--text-faint);font-style:italic;" title="A IA reavalia automaticamente alguns dias após a decisão.">Ainda não avaliado</span>')+'</td>'
           + '</tr>').join('')
           + '</tbody></table></div></div>';
@@ -10820,9 +10897,13 @@
           + '<div style="min-width:0;flex:1;">'
             + '<div class="panel-title" style="margin:0 0 4px;">'+escapeHtml((a && a.nome) || cfg.nomeFallback)+'</div>'
             + '<div class="field-hint" style="max-width:760px;">'+escapeHtml((a && a.descricao) || cfg.descricaoFallback)+'</div>'
-            + '<div class="field-hint" style="margin-top:8px;color:var(--text-faint);">Fase 1: a IA só analisa e recomenda — nenhuma ação é executada automaticamente no Mercado Livre. Toda decisão sua fica registrada no histórico, e é isso que o agente vai usar para aprender.</div>'
+            + '<div class="field-hint" style="margin-top:8px;color:var(--text-faint);">'+(cfg.execucao
+                ? 'A IA analisa e recomenda; ela nunca age sozinha. Quando você aprova uma sugestão, e a execução automática estiver ligada abaixo, a mudança já é aplicada de verdade no Mercado Livre. Toda decisão sua fica registrada no histórico.'
+                : 'Fase 1: a IA só analisa e recomenda — nenhuma ação é executada automaticamente no Mercado Livre. Toda decisão sua fica registrada no histórico, e é isso que o agente vai usar para aprender.')+'</div>'
           + '</div>'
         + '</div>';
+
+        html += cardIntegracaoExecucaoHTML();
 
         html += '<div class="toolbar">'
           + '<div class="seg" id="'+cfg.rootElId+'Tabs">'
@@ -10848,6 +10929,9 @@
         }
 
         root.innerHTML = html;
+
+        const toggleEscritaEl = document.getElementById(cfg.rootElId+'ToggleEscrita');
+        if(toggleEscritaEl) toggleEscritaEl.addEventListener('change', ()=> alternarPermiteEscrita(toggleEscritaEl.checked));
 
         const tabsEl = document.getElementById(cfg.rootElId+'Tabs');
         if(tabsEl) tabsEl.querySelectorAll('button').forEach((b)=> b.addEventListener('click', ()=>{ state.aba = b.dataset.aba; state.editandoId = null; carregarDecisoes(); }));
@@ -10891,6 +10975,11 @@
       endpointDecisoes: '/api/ads/decisoes',
       endpointDecidir: (id)=> '/api/ads/decisoes/'+id,
       endpointGerarAgora: '/api/ads/decisoes/gerar-agora',
+      executaDeVerdade: true,
+      execucao: {
+        endpointStatusIntegracao: '/api/ads/status-integracao',
+        endpointConfig: '/api/ads/config-ia',
+      },
       colunaReferenciaLabel: 'Anúncio / Campanha',
       referenciaHTML: (d)=>{
         const principal = d.titulo || d.campanhaNome || (d.tipoReferencia === 'campanha' ? 'Campanha' : 'Anúncio');
