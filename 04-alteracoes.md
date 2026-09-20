@@ -2,6 +2,119 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-20 (50) — Visão Geral: evolução do faturamento vs. período anterior + resumo dos Agentes de IA
+- **Contexto:** pedido explícito do usuário: "em visão geral quero em
+  colocar tudo que for possível, os agentes ia, resumos principalmente se
+  o faturamento está caindo ou aumentando, comparado ao mês passado".
+- **Faturamento vs. período anterior — resolve uma limitação já
+  documentada** (`02-decisoes.md` (37): "mostrar isso exigiria inventar um
+  número"). Nova função `evolucaoFaturamento()` em
+  `lib/visaoGeralPainel.js` compara o faturamento do período selecionado
+  com o **mesmo período imediatamente anterior**, usando
+  `periodoAnteriorEquivalente()` — a MESMA função já usada em Performance
+  de Anúncios e Visitas e Conversão, nunca uma segunda regra de
+  comparação. Nunca inventa um "%" quando falta um dos dois lados: se o
+  período atual ou o anterior não tem faturamento confirmado suficiente,
+  a tendência vem `'sem_dado'` e a % vem `null` — sem esconder isso atrás
+  de um zero. Aparece como uma seta (▲/▼/●) e a % de variação embaixo do
+  KPI de Faturamento, com o intervalo de datas do período anterior ao
+  lado.
+- **Resumo dos Agentes de IA** — nova seção "Agentes de IA" na Visão
+  Geral, reaproveitando **a mesma função que já existia** para o hub de
+  Agentes de IA, `obterResumoHub()` (`lib/ia/agentesResumo.js`) — nenhum
+  cálculo novo, nenhuma tabela nova. Mostra 3 números reais (agentes
+  ativos, tarefas executadas hoje, alertas importantes) e, por agente,
+  pendentes/sugestões novas/decisões de hoje.
+- **Decisão de segurança ao linkar cada agente:** só os agentes que hoje
+  têm página própria navegável (Ads e Performance, Promoções, Análise de
+  Concorrente) viram um item clicável. Os outros (SAC Mercado Livre, SAC
+  Shopee, Radar de Anúncios) aparecem só como texto — porque, como
+  registrado em `02-decisoes.md`/comentário de 19/09/2026 em
+  `public/index.html`, o próprio usuário pediu pra tirar "Agentes de IA",
+  "SAC Mercado Livre" e "SAC Shopee" do menu; a tela-hub e as duas telas
+  de SAC continuam existindo por baixo (nada foi apagado), só não têm
+  mais um link de menu — e este novo resumo respeita isso, nunca reabrindo
+  um caminho de navegação que o usuário tinha pedido pra fechar.
+- O novo bloco só aparece com "Todas as lojas" selecionado (mesma
+  convenção já usada por "Por marketplace" e "Alertas & IA": são sempre
+  por empresa inteira, nunca por uma loja específica).
+- **Testado:** `test/visaoGeralPainel.test.js` — 6 testes novos de
+  `evolucaoFaturamento` (subiu/caiu/igual/sem dado atual/sem dado
+  anterior/base zero) + assertões novas nos 2 testes de integração já
+  existentes (empresa real e empresa vazia), 19/19 passando. Checagem de
+  sintaxe do `public/index.html` inteiro (extração de todos os `<script>`
+  e `new Function`) sem erro.
+
+## 2026-09-20 (49) — Análise de Concorrente: bug real corrigido (alertas se autodestruindo) + bloqueio externo do Mercado Livre, documentado com honestidade
+- **Contexto:** o usuário reportou "Análise de concorrente não está
+  funcionando". Diagnóstico feito com **log real de produção** (Render,
+  serviço `cerne-erp`), nunca por suposição.
+- **Causa 1 — bug real, corrigido:** `persistirSituacoes()`
+  (`lib/ia/radar.js`) é a mesma função usada pelo ciclo principal do Radar
+  (a cada 15min) E pelo ciclo de Concorrente, e ela sempre "resolvia"
+  (marcava como encerrado) todo alerta aberto que não tivesse sido
+  detectado *naquele ciclo específico*. Sem isolar por origem, o Radar
+  principal — que roda logo depois — resolvia sozinho todo alerta de
+  Concorrente por não tê-lo detectado no SEU ciclo, mesmo com o
+  concorrente continuando ativo de verdade. Resultado: nenhum alerta de
+  Concorrente sobrevivia mais que ~15 minutos, por mais real que fosse.
+  **Corrigido** com uma coluna nova, `origem_ciclo` (`radar_alertas`,
+  `db/schema.sql`), e um 3º parâmetro em `persistirSituacoes(empresaId,
+  situacoes, origem)`: cada ciclo só resolve os alertas que ele mesmo
+  criou (`radar_principal` nunca mais mexe no que é do `concorrente`, e
+  vice-versa). Teste de regressão novo em `test/radar.test.js` prova
+  exatamente isso — 6/6 passando.
+- **Causa 2 — bloqueio externo do Mercado Livre, não é um bug daqui:** o
+  endpoint que a "busca por título" do Concorrente usa
+  (`/sites/{site}/search`, `lib/concorrente.js`) está devolvendo **403
+  Forbidden** — confirmado no log real de produção (`Error: forbidden`,
+  `status: 403`) e, de forma independente, confirmado por busca na web
+  (múltiplas reclamações no Reclame Aqui relatando exatamente essa
+  restrição): o Mercado Livre passou a bloquear esse endpoint de busca
+  pra aplicativos de terceiros, de forma ampla — não é algo que uma
+  correção de código aqui resolve. Como a maioria dos produtos deste
+  negócio não tem ID de catálogo do Mercado Livre (são produtos
+  próprios/sob medida), o modo "por catálogo" quase nunca se aplica, e a
+  "busca por título" era o único caminho que sobrava — por isso a
+  sensação de "não funciona mais".
+- **Decisão pendente com o usuário** sobre a Causa 2: ver `02-decisoes.md`
+  (46) — nenhuma decisão foi tomada sozinha aqui, é uma pergunta aberta
+  pro usuário.
+- **Testado:** `test/radar.test.js` (6/6, incluindo o teste de regressão
+  novo).
+
+## 2026-09-20 (48) — Promoções IA: nova regra — nunca recomendar entrar numa promoção que derrube a margem normal do produto em mais de 3 pontos
+- **Contexto:** pedido explícito do usuário: "Regra das promoções é só me
+  avisar de promoções quando for vender em um preço igual ou menor com a
+  mesma margem ou uma margem até 3% menor pois se eu vender com preço
+  maior minha margem é mais mesmo certo".
+- **Nova métrica `margemNormalPct`** (`lib/promocoesMotor.js`): a margem
+  que o MESMO anúncio teria vendendo no preço normal (cheio), calculada
+  com as MESMAS estimativas de comissão % e frete por unidade (vindas do
+  histórico real de vendas) já usadas pra calcular a margem da promoção —
+  nunca um segundo método de cálculo. Persistida em
+  `promocoes_analises.margem_normal_pct` e
+  `ia_decisoes_promocoes.snapshot_margem_normal_pct` (auditável depois).
+- **Regra aplicada como um filtro A MAIS, nunca no lugar do que já
+  existia:** a IA continua respeitando a margem mínima configurável e a
+  margem de conforto (já existentes); agora, além disso, só recomenda
+  "entrar" numa promoção se a margem da promoção não cair mais que
+  **3 pontos percentuais** abaixo da margem normal do produto — a
+  tolerância pedida pelo usuário (constante
+  `TOLERANCIA_QUEDA_MARGEM_NORMAL_PCT = 3`). Vender por um preço MAIOR
+  nunca é penalizado por essa regra (a margem só melhora nesse caso,
+  exatamente como o usuário observou).
+- O texto explicativo (`motivo`) mostrado ao usuário em cada recomendação
+  agora cita a margem normal do produto e a tolerância de 3 pontos usada,
+  inclusive quando é especificamente esse novo critério (e não a margem
+  mínima) que reprovou o item.
+- **Testado:** `test/promocoesMotor.test.js` (6 testes novos cobrindo a
+  regra isoladamente + 1 teste de integração ajustado — um cenário que
+  antes classificava como "oportunidade" corretamente passou a
+  "não recomendado" porque a promoção derrubava a margem normal em 9,5
+  pontos, acima da tolerância) e `test/promocoesDecisor.test.js`, 46/46
+  passando.
+
 ## 2026-09-20 (47) — "Detalhe do Agente": ao clicar num agente de IA, ver o que ele está fazendo, o que tem pra aprovar, o que já fez e a melhora que teve
 - **Contexto:** pedido explícito do usuário, no mesmo fio das entradas (45)
   e (46): "QUANDO CLICAR EM CIMA DO AGENTE DE IA, QUERO VER OQUE ELE ESTA

@@ -1849,3 +1849,43 @@ ALTER TABLE config_ads_ia ADD COLUMN IF NOT EXISTS permite_escrita_ml BOOLEAN NO
 -- usuário — quem decide é `executado`).
 ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS execucao_erro TEXT;
 ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS execucao_resposta JSONB;
+
+-- ============================================================
+-- Promoções — "margem normal do produto" (20/09/2026)
+-- ============================================================
+-- Pedido explícito do usuário: "só me avisar de promoções quando for
+-- vender em um preço igual ou menor com a mesma margem ou uma margem até
+-- 3% menor, pois se eu vender com preço maior minha margem é maior mesmo".
+-- Ver lib/promocoesMotor.js#TOLERANCIA_QUEDA_MARGEM_NORMAL_PCT — a IA de
+-- Promoções passa a comparar a margem no preço promocional com a margem
+-- NORMAL do mesmo produto (preço cheio), e só recomenda ENTRAR quando essa
+-- queda for de no máximo 3 pontos percentuais (além de continuar exigindo
+-- o mínimo/conforto configurados, que não mudaram). `margem_normal_pct`
+-- guarda esse número calculado (nunca fabricado — mesma estimativa de
+-- comissão/frete do histórico real do SKU, só aplicada ao preço normal em
+-- vez do promocional) para poder ser exibido/conferido na tela.
+ALTER TABLE promocoes_analises ADD COLUMN IF NOT EXISTS margem_normal_pct NUMERIC(6,2);
+ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS snapshot_margem_normal_pct NUMERIC(6,2);
+
+-- ============================================================
+-- Correção de bug real — alertas de Concorrente se autodestruindo
+-- (20/09/2026, usuário reportou "Análise de concorrente não está
+-- funcionando")
+-- ============================================================
+-- Causa raiz encontrada nos logs de produção (Render): `persistirSituacoes`
+-- (lib/ia/radar.js) resolve automaticamente todo alerta 'aberto' que não
+-- apareceu na lista de situações do ciclo atual — pensado pra "se o
+-- problema já não existe mais, fecha sozinho". Mas essa função é chamada
+-- separadamente pelo Radar principal (a cada 15min, só com alertas de
+-- anúncio/negócio) E pelo ciclo de Concorrente (1x/dia, só com alertas
+-- 'concorrente_ativo') — como cada chamada só conhece a SUA PRÓPRIA lista,
+-- o Radar principal, rodando 15 minutos depois, sempre enxergava o alerta
+-- de concorrente como "não detectado" e o resolvia sozinho, mesmo com o
+-- concorrente ainda ativo. Efeito colateral: as duas transações rodando ao
+-- mesmo tempo, cada uma fazendo UPDATE em massa na mesma tabela, geravam de
+-- vez em quando um "deadlock detected" no Postgres (também visto nos
+-- logs). `origem_ciclo` marca de qual ciclo cada alerta
+-- veio, e o "resolve automaticamente" (ver lib/ia/radar.js#persistirSituacoes)
+-- passa a só considerar alertas DA MESMA origem — corrige os dois problemas
+-- de uma vez, sem precisar listar categorias manualmente em lugar nenhum.
+ALTER TABLE radar_alertas ADD COLUMN IF NOT EXISTS origem_ciclo VARCHAR(40) NOT NULL DEFAULT 'radar_principal';

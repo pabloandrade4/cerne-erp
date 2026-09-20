@@ -3,6 +3,45 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-20 (46) — Margem normal como filtro aditivo (nunca substitui o mínimo/conforto); Concorrente: o que fazer com o bloqueio do Mercado Livre; hub "Agentes de IA" permanece fora do menu
+- **Promoções — a nova regra é ADITIVA, nunca uma substituição.** O
+  usuário pediu explicitamente "só me avisar de promoções quando for
+  vender em um preço igual ou menor com a mesma margem ou uma margem até
+  3% menor". Decisão: em vez de trocar a regra de margem mínima/conforto
+  já existente (que garante uma margem mínima absoluta, configurável por
+  empresa) por essa nova regra relativa, as duas passaram a valer ao
+  mesmo tempo — um item só entra em "oportunidade"/"entrar" se passar
+  nas DUAS. Motivo: a margem mínima protege contra vender no prejuízo
+  mesmo quando o preço normal já tinha margem baixa; a nova regra
+  protege contra abrir mão de margem boa demais só porque ainda está
+  acima do mínimo absoluto. Nenhuma das duas sozinha cobre o que o
+  usuário descreveu.
+- **Concorrente — decisão pendente com o usuário.** O endpoint de busca
+  por título do Mercado Livre (`/sites/{site}/search`) está bloqueado
+  (403 Forbidden) de forma ampla pra aplicativos de terceiros — não é
+  algo que se resolve só com código aqui (ver `04-alteracoes.md` (49)).
+  Como a maioria dos produtos deste negócio não tem ID de catálogo, isso
+  deixa a Análise de Concorrente praticamente sem um caminho automático
+  de busca. **Proposta em aberto, ainda não decidida pelo usuário:**
+  trocar (ou complementar) a busca automática por título por um fluxo
+  onde o próprio usuário cola o link/ID do anúncio do concorrente que já
+  conhece — esse caminho usa endpoints do Mercado Livre que continuam
+  liberados (consulta de um anúncio específico por ID), só deixa de ser
+  automático. Nada foi implementado ainda nessa frente; só o bug real
+  (alertas se autodestruindo) foi corrigido nesta entrega.
+- **Hub "Agentes de IA" (`agentesIaHub`) permanece fora do menu.** Ao
+  construir o resumo de Agentes de IA pedido pra Visão Geral
+  (`04-alteracoes.md` (50)), foi encontrada a página `agentesIaHub` —
+  ela continua existindo no código (rota interna, componente
+  `AgentesIaHub`), mas **não tem mais entrada em `GROUPS`/menu lateral**
+  desde a decisão de 19/09/2026 registrada em `public/index.html`, onde
+  o usuário pediu pra tirar do menu "Agentes de IA", "SAC Mercado Livre"
+  e "SAC Shopee". Decisão: manter essa página fora de navegação — o
+  resumo novo da Visão Geral não reabre esse caminho, e só linka para as
+  páginas de agente que o usuário manteve no menu (Ads e Performance,
+  Promoções, Análise de Concorrente). Se o usuário quiser essa tela de
+  volta ao menu, é só avisar.
+
 ## 2026-09-20 (45) — "Detalhe do Agente": construir pra todos os 6 de uma vez; "melhora" de quem só observa = alertas resolvidos com o tempo
 
 - **Pedido do usuário era genuinamente amplo o bastante pra justificar
