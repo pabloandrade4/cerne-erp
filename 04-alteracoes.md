@@ -2,6 +2,36 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-20 (52) — Corrigido bug real: tela de Concorrente quebrava com "Erro interno do servidor"
+- **Contexto:** o usuário mandou print mostrando "NÃO FOI POSSÍVEL BUSCAR —
+  Erro interno do servidor" ao clicar em "Buscar concorrentes" pra um
+  produto específico, e perguntou "a própria IA tem que entrar no mercado
+  livre e pesquisar sobre as vendas? Isso é possível?".
+- **Confirmado com log real de produção:** sim, é exatamente isso que a IA
+  faz — ela chama a busca real do Mercado Livre na hora. O que estava
+  quebrando: o bloqueio da própria plataforma (403 Forbidden em
+  `/sites/{site}/search`, já documentado em (49)) estava subindo sem
+  tratamento nesse caminho específico (`buscarCandidatosPorTitulo`, chamado
+  de dentro de `buscarConcorrentesPorProduto`) e virando um erro 500
+  genérico — diferente do ciclo automático diário, que já isolava esse
+  mesmo erro por produto e continuava rodando (por isso só a tela sob
+  demanda quebrava, não o Radar de Concorrente automático).
+- **Corrigido** (`lib/concorrente.js`): esse trecho agora tem `try/catch` —
+  quando a busca por título é recusada pelo Mercado Livre, a função nunca
+  mais lança um erro pra cima; devolve um resultado normal com
+  `modo: 'busca_bloqueada'` e a mensagem real do motivo. `public/index.html`
+  ganhou um estado próprio pra esse modo (ícone vermelho, explicação clara),
+  em vez de cair no fluxo genérico de "nenhum concorrente encontrado" (que
+  seria enganoso — a busca nem rodou, não é que não achou ninguém).
+- **Testado:** `test/concorrente.test.js` — 1 teste novo (403 vindo da API
+  → `modo: 'busca_bloqueada'`, nunca lança), 9/9 no arquivo. Checagem de
+  sintaxe do `public/index.html` sem erro.
+- **Segue valendo o que já foi dito em (49):** o bloqueio em si é da
+  plataforma do Mercado Livre, não um bug daqui — essa correção só garante
+  que a tela avise com clareza em vez de quebrar. O caminho alternativo
+  (monitorar concorrente pelo link da LOJA, sem depender dessa busca por
+  título) segue em teste — ver (51) e a resposta separada no chat.
+
 ## 2026-09-20 (51) — Concorrente: rota de TESTE pra listar os anúncios de um vendedor só pelo link da loja (ainda não é a funcionalidade final)
 - **Contexto:** o usuário esclareceu o pedido de monitorar concorrente:
   "eu posso te passar o link da loja dos concorrentes mas você não tem que
