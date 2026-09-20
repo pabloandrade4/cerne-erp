@@ -11592,6 +11592,16 @@
         return '<div class="empty-panel"><div class="empty-icon" style="color:var(--warning);background:var(--warning-soft);">'+svg('alertCircle')+'</div>'
           + '<h2>Sem dado suficiente pra buscar</h2><p class="lead">'+escapeHtml(r.mensagem || 'Não foi possível buscar concorrentes para este produto.')+'</p></div>';
       }
+      // 20/09/2026 — o Mercado Livre passou a recusar (403) a busca por
+      // título pra aplicativos de terceiros; antes isso quebrava a tela
+      // inteira com "Erro interno do servidor" (ver 04-alteracoes.md (52)).
+      // Agora o backend nunca deixa isso virar um 500 — devolve
+      // modo:'busca_bloqueada' com o motivo real, e a tela mostra isso com
+      // honestidade em vez de fingir que não achou concorrente nenhum.
+      if(r.modo === 'busca_bloqueada'){
+        return '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2>Busca indisponível no momento</h2><p class="lead">'+escapeHtml(r.mensagem || 'O Mercado Livre recusou esta busca agora.')+'</p></div>';
+      }
       const modoLabel = r.modo === 'catalogo'
         ? 'Busca por catálogo — o Mercado Livre garante que é o mesmo produto'
         : 'Busca por título do anúncio — candidatos, confirme antes de considerar concorrente';

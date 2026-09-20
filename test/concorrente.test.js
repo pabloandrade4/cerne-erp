@@ -131,6 +131,32 @@ describe(
       );
     });
 
+    // Correção de bug real (20/09/2026): o usuário reportou "erro interno do
+    // servidor" na tela; log de produção confirmou que o 403 do bloqueio do
+    // Mercado Livre (busca por título) subia sem ser tratado e virava um 500
+    // genérico. Agora nunca lança — devolve modo:'busca_bloqueada' com o
+    // motivo real.
+    test('busca por título bloqueada pelo Mercado Livre (403) -> nunca quebra, devolve modo "busca_bloqueada" com o motivo real', async () => {
+      ml.apiGet = async (path) => {
+        if (path === '/items/MLB9740001') {
+          return { title: 'Caixa de Papelão 50x24x15 Reforçada', catalog_product_id: null };
+        }
+        if (path.startsWith('/sites/MLB/search?q=')) {
+          const err = new Error('forbidden');
+          err.status = 403;
+          err.data = { message: 'forbidden', error: 'forbidden' };
+          throw err;
+        }
+        throw new Error('path inesperado: ' + path);
+      };
+
+      const r = await concorrente.buscarConcorrentesPorProduto({ empresaId: EMPRESA_ID, produtoId: PRODUTO_ID_COM_VENDA });
+      assert.equal(r.modo, 'busca_bloqueada');
+      assert.equal(r.motivo, 'busca_por_titulo_bloqueada_pelo_ml');
+      assert.deepEqual(r.concorrentes, []);
+      assert.ok(r.mensagem && r.mensagem.length > 0);
+    });
+
     // testarListagemPorVendedor (20/09/2026) — pedido do usuário: dar o link
     // da LOJA uma vez, sem precisar mandar link de anúncio toda vez. Ver
     // comentário grande em lib/concorrente.js. Estes testes mockam
