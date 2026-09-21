@@ -102,10 +102,23 @@ async function buscarPaginaAnuncios(conta, accessToken, { offset = 0, limit = PA
 // Busca os anúncios de uma conta do Mercado Livre (paginado). Retorna
 // { itens, total, offset, limit } — só devolve o que a API do Mercado Livre
 // realmente respondeu.
+//
+// 21/09/2026, pedido explícito do usuário (ver docs/02-decisoes.md e
+// docs/04-alteracoes.md): anúncio ENCERRADO ('closed') no Mercado Livre não
+// deve aparecer na tela Anúncios — pausado ('paused') continua aparecendo
+// normalmente. Filtro aplicado só aqui (não em buscarPaginaAnuncios, que é
+// compartilhada com buscarTodosAnunciosDaConta/lib/anunciosBase.js, usada
+// pelas 3 telas de Análise — essas já têm seus próprios filtros de status
+// intencionais e não devem ser alteradas por essa regra). `total` continua
+// sendo a contagem real e total do catálogo no Mercado Livre (não a
+// contagem já filtrada) — essa tela busca uma página por vez, nunca varre
+// o catálogo inteiro, então `total` só serve pra paginação e não deve
+// fingir refletir quantos itens "sobraram" depois do filtro.
 async function buscarAnunciosDaConta(contaId, { offset = 0, limit = PAGE_SIZE } = {}) {
   const conta = await getContaComTokenValido(contaId);
   const accessToken = decrypt(conta.access_token_enc);
-  return buscarPaginaAnuncios(conta, accessToken, { offset, limit });
+  const resultado = await buscarPaginaAnuncios(conta, accessToken, { offset, limit });
+  return { ...resultado, itens: resultado.itens.filter((item) => item.status !== 'closed') };
 }
 
 // Busca TODOS os anúncios de uma conta (todas as páginas), até um limite de

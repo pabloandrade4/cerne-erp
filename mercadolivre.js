@@ -103,14 +103,18 @@ async function apiGet(path, accessToken, extraHeaders) {
   return data;
 }
 
-// SEM token (20/09/2026) — usada só como diagnóstico em
+// SEM token (20/09/2026) — nasceu só como diagnóstico em
 // lib/concorrente.js#testarListagemPorVendedor: alguns endpoints públicos
 // do Mercado Livre (ex.: GET /items/{id}) tradicionalmente respondem sem
 // autenticação nenhuma pra dado público de catálogo. Serve pra distinguir
 // se um bloqueio 403 é por causa do token (chamada autenticada de um
 // vendedor tentando ver o anúncio de outro) ou um bloqueio da API
-// independente de autenticação. NUNCA usada em nenhum fluxo real do ERP —
-// só nesta rota de diagnóstico.
+// independente de autenticação.
+// Atualização (21/09/2026): esse diagnóstico confirmou que GET /items/{id}
+// funciona sem login, e por isso passou a ser usada de verdade também pelo
+// Radar de Concorrentes (lib/radarConcorrentes.js) — que só busca um
+// item_id específico que o usuário já informou (nunca faz busca/descoberta
+// por título ou por vendedor, que é a parte que fica bloqueada pela API).
 async function apiGetPublico(path) {
   const res = await fetchComTimeout(API_BASE + path, {
     headers: { Accept: 'application/json' },

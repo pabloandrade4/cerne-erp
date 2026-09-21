@@ -53,6 +53,18 @@ const { buscarItensDoPeriodo } = require('./relatorioVendas');
 const { getContaComTokenValido } = require('./mlSync');
 const { round2 } = require('./resultadoVenda');
 const { PERIODOS, calcularPeriodo, periodoParaDatasBRT, diaBRT } = require('./periodo');
+// 21/09/2026, pedido explícito do usuário (ver docs/02-decisoes.md e
+// docs/04-alteracoes.md): anúncio/campanha ENCERRADO no Mercado Livre não
+// deve aparecer nem em Ads e Performance nem em Anúncios — pausado continua
+// aparecendo normalmente (só "encerrado" é escondido). Reaproveita o mesmo
+// helper já usado pela tela "Performance de Anúncios" (lib/anunciosBase.js)
+// pra saber o status ao vivo de cada anúncio no Mercado Livre, sem criar um
+// segundo jeito de buscar isso. Regra de segurança: só escondemos quando o
+// status ao vivo vier confirmado como 'closed' — se o status não puder ser
+// checado (conta com erro, anúncio não encontrado no catálogo ao vivo), o
+// anúncio continua aparecendo, pra nunca esconder histórico financeiro real
+// por engano.
+const { buscarAnunciosVivosPorConta } = require('./anunciosBase');
 
 function toNum(v) {
   return v === null || v === undefined ? null : Number(v);
@@ -637,6 +649,12 @@ async function listarAds({ empresaId, contaId, periodoChave, desde, ate, desdeSt
   const diarioPeriodo = await buscarDiario(contaIdsAtivas, desdeStr, ateStr);
   const diarioMes = (mesDesdeStr === desdeStr && mesAteStr === ateStr) ? diarioPeriodo : await buscarDiario(contaIdsAtivas, mesDesdeStr, mesAteStr);
 
+  // 21/09/2026: status ao vivo de cada anúncio no Mercado Livre, só pra
+  // saber quais estão "encerrados" (ver comentário no topo do arquivo).
+  // Nunca lança erro — se uma conta falhar, os anúncios dela simplesmente
+  // não têm status confirmado e continuam aparecendo (ver filtro abaixo).
+  const { porItemId: catalogoAoVivo } = await buscarAnunciosVivosPorConta(contasAtivasObjetos);
+
   const chaves = new Set([...vendasPorAnuncio.keys(), ...metricasPorAnuncio.keys()]);
   const linhas = [...chaves].map((chave) => {
     const venda = vendasPorAnuncio.get(chave) || null;
@@ -699,21 +717,41 @@ async function listarAds({ empresaId, contaId, periodoChave, desde, ate, desdeSt
     };
   });
 
-  linhas.sort((a, b) => {
+  // 21/09/2026, pedido explícito do usuário: esconde da tela Ads e
+  // Performance (anúncios E campanhas, já que campanhas em routes/ads.js
+  // são agregadas a partir de `linhas`) qualquer anúncio cujo status ao
+  // vivo no Mercado Livre esteja CONFIRMADO como 'closed' (encerrado).
+  // Pausado ('paused') continua aparecendo normalmente — só 'closed' some.
+  // Se o status não puder ser confirmado (mlItemId ausente, anúncio não
+  // encontrado no catálogo ao vivo, conta com erro na sincronização),
+  // NUNCA escondemos — o padrão é sempre mostrar quando há dúvida.
+  let ocultosPorEncerrado = 0;
+  const linhasVisiveis = linhas.filter((l) => {
+    const vivo = l.mlItemId ? catalogoAoVivo.get(String(l.mlItemId)) : null;
+    const encerrado = !!(vivo && vivo.status === 'closed');
+    if (encerrado) ocultosPorEncerrado += 1;
+    return !encerrado;
+  });
+
+  linhasVisiveis.sort((a, b) => {
     const va = a.faturamentoReal || 0;
     const vb = b.faturamentoReal || 0;
     return vb - va;
   });
 
-  const cards = calcularCards({ diarioMes, hojeStr, linhas, situacaoPorConta });
+  const cards = calcularCards({ diarioMes, hojeStr, linhas: linhasVisiveis, situacaoPorConta });
 
   return {
     semConta: false,
     lojas: contasTodas.map((c) => ({ id: c.id, nickname: c.nickname })),
     situacaoPorConta,
-    linhas,
+    linhas: linhasVisiveis,
     cards,
     diario: diarioPeriodo || [],
+    // Transparência (nunca esconder em silêncio): quantos anúncios
+    // encerrados foram tirados desta lista, pra tela poder avisar o
+    // usuário se quiser.
+    ocultosPorEncerrado,
   };
 }
 
