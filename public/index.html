@@ -328,7 +328,20 @@
 
   /* ---- Content ---- */
   .content{ padding:26px 30px 68px; overflow-y:auto; }
-  .page{ display:none; max-width:1320px; }
+  /* 21/09/2026, pedido explícito do usuário ("ficou esse espaço todo vazio
+     e quando recolhe o menu fica ainda mais"): antes, TODA tela do sistema
+     (não só Visão Geral) tinha o conteúdo travado em 1320px de largura,
+     sem centralizar — em telas largas (e mais ainda com o menu lateral
+     recolhido, que libera ~194px a mais) sobrava uma faixa em branco do
+     lado direito. Aumentado o limite e adicionado "margin:0 auto" pra
+     usar bem mais o espaço disponível nas larguras comuns de monitor, sem
+     deixar os cards/gráficos esticarem sem limite em monitores
+     ultra-largos — e, se ainda sobrar espaço, ele fica dividido dos dois
+     lados (centralizado) em vez de tudo jogado à direita. Como os grids
+     (KPIs, gráficos, tabelas) já usam largura relativa (1fr/100%) com os
+     pontos de quebra responsivos que já existiam, nenhuma outra mudança
+     foi necessária — o ganho de espaço é automático em qualquer tela. */
+  .page{ display:none; max-width:1600px; margin:0 auto; }
   .page.active{ display:block; animation:fade .16s ease; }
   @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
 

@@ -2,6 +2,28 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-21 (64) — Espaço vazio à direita, em qualquer tela (mais forte com o menu recolhido)
+- **Pedido do usuário (verbatim, com print de tela):** "UMA COISA QUE QUERO
+  MELHORAR AGORA, PORQUE FICOU ESSE ESPAÇO TODO VAZIO E QUANDO RECOLHE O
+  MENU FICA AINDA MAIS, ENTAO QUERO QUE ARRUME ISSO".
+- **Causa:** o conteúdo de TODA tela do sistema (não só Visão Geral — é
+  uma regra de CSS que vale pra qualquer uma das +30 telas) tinha uma
+  largura máxima fixa de 1320px e não ficava centralizado. Em monitores
+  largos — e mais ainda com o menu lateral recolhido, que libera ~194px a
+  mais de espaço — sobrava uma faixa em branco grande do lado direito.
+- **Correção:** aumentado o limite de largura do conteúdo (de 1320px pra
+  1600px) e adicionado `margin:0 auto`, pra usar bem mais o espaço nas
+  larguras comuns de monitor, sem deixar cards/gráficos esticarem sem
+  limite em monitores ultra-largos — se ainda sobrar espaço, agora ele
+  fica dividido dos dois lados, em vez de tudo jogado à direita. Como os
+  cards/gráficos/tabelas de cada tela já usam largura relativa com os
+  pontos de quebra responsivos que já existiam, o ganho de espaço é
+  automático em qualquer tela, sem precisar mexer tela por tela.
+- **Verificação:** `node --check` no JavaScript inline (não foi tocado
+  nesta mudança, só CSS) e contagem de chaves do CSS (868/868, igual
+  antes) — os dois passaram. Suíte de testes completa: 266/281 passando,
+  mesma base de sempre (mudança não tocou em nenhum arquivo de backend).
+
 ## 2026-09-21 (63) — Ads e Performance: novo layout com 2 abas (mockup enviado pelo usuário)
 - **Pedido do usuário (verbatim):** mandou um arquivo HTML de referência
   ("pf_ads_com_agente_layout.html") pedindo "mecher no lyaut do ADS E
