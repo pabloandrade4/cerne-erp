@@ -264,6 +264,10 @@ describe(
       assert.equal(r1.totalAchados, 1);
       assert.equal(r1.whatsapp.enviado, false);
       assert.equal(r1.whatsapp.motivo, 'nao_configurado', 'ambiente de teste não tem TWILIO_* configurado — nunca finge que enviou');
+      // Telegram (21/09/2026 — alternativa ao WhatsApp): mesmo comportamento
+      // honesto — ambiente de teste também não tem TELEGRAM_* configurado.
+      assert.equal(r1.telegram.enviado, false);
+      assert.equal(r1.telegram.motivo, 'nao_configurado');
       assert.equal(r1.empresaNome, 'EMPRESA TESTE DAILY');
 
       const r2 = await dailyCiclo.executarDailyComNotificacao(EMPRESA_ID, { agora: new Date('2026-09-14T18:00:00Z') });
@@ -288,6 +292,24 @@ describe(
       assert.equal(r1.whatsapp.enviado, true);
       assert.equal(r1.whatsapp.sid, 'SM_TESTE');
       assert.match(textoEnviado, /Promo Z/);
+    });
+
+    test('executarDailyComNotificacao: WhatsApp e Telegram são independentes — só o Telegram injetado/configurado envia, WhatsApp continua nao_configurado', async () => {
+      await pool.query(
+        `INSERT INTO ia_decisoes_promocoes (empresa_id, conta_id, promotion_id, promotion_type, promotion_label, ml_item_id, sku, tipo_acao, motivo, valor_sugerido_ia, status_decisao)
+         VALUES ($1,$2,'P2','SMART','Promo Telegram','MLB4','SKU-4','entrar_promocao','Margem boa.', '{}', 'pendente')`,
+        [EMPRESA_ID, CONTA_ID]
+      );
+      let textoEnviadoTelegram = null;
+      const r1 = await dailyCiclo.executarDailyComNotificacao(EMPRESA_ID, {
+        agora: new Date('2026-09-16T13:00:00Z'),
+        enviarMensagemTelegramFn: async (texto) => { textoEnviadoTelegram = texto; return { enviado: true, messageId: 7 }; },
+      });
+      assert.equal(r1.telegram.enviado, true);
+      assert.equal(r1.telegram.messageId, 7);
+      assert.match(textoEnviadoTelegram, /Promo Telegram/);
+      assert.equal(r1.whatsapp.enviado, false);
+      assert.equal(r1.whatsapp.motivo, 'nao_configurado');
     });
 
     test('buscarUltimaReuniao: empresa sem nenhuma Daily ainda -> reuniao null (nunca inventa)', async () => {
