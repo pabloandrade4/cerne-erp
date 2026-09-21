@@ -3,6 +3,14 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-21 (50) — Telegram vira canal de conversa de verdade, não só de aviso (reaproveitando a IA Gestora)
+- **Pedido do usuário:** poder perguntar coisas pro bot do Telegram igual já faz na IA Gestora do site.
+- **Decisão principal:** nunca criar uma "segunda IA" — o Telegram chama a MESMA função (`responderPergunta`) que a IA Gestora do site já usa, então qualquer regra/ferramenta/honestidade de dado que existir lá vale automaticamente pro Telegram também, sem duplicar nada.
+- **Decisão sobre período (`AskUserQuestion`):** oferecido "sempre o mês atual" (padrão simples) vs. "últimos 30 dias". O usuário preferiu uma terceira opção, dada em texto livre: **sempre vai escrever a data que quer na própria pergunta**. Por isso foi criado um interpretador de data (`lib/ia/telegramPeriodo.js`) em vez de um padrão fixo — ele só traduz o texto pro `periodoChave`/`desde`/`ate` que o resto do sistema já entende, nunca cria uma regra de cálculo de período nova. Quando a mensagem não tem nenhuma data reconhecível, o sistema avisa isso e cai no mês atual, em vez de travar ou inventar uma data.
+- **Decisão sobre empresa (`AskUserQuestion`):** usuário confirmou que só tem uma empresa cadastrada no sistema — por isso o Telegram sempre usa essa única empresa ativa, sem precisar de nenhuma tela de escolha (que nem faria sentido no Telegram).
+- **Decisão sobre segurança:** sem login no Telegram, a única trava possível é o próprio número/chat já configurado como `TELEGRAM_CHAT_ID` (o mesmo do envio de avisos) — mensagem de qualquer outro chat é ignorada, nunca recebe dado nenhum da empresa.
+- **Decisão sobre histórico:** guardado só em memória do servidor (não no banco), por chat — decisão consciente de NÃO reusar a tabela `ia_conversas` (que é por usuário logado, sem sentido pro Telegram) nem criar uma tabela nova só pra isso nesta etapa. Efeito colateral aceito: o histórico da conversa zera a cada deploy/reinício do servidor.
+
 ## 2026-09-21 (49) — Adicionar Telegram como canal alternativo aos avisos (ao lado do WhatsApp, não no lugar)
 - **Contexto:** o WhatsApp via Twilio (11/09/2026, ver (48) anterior/`lib/whatsapp.js`)
   segue bloqueado pela exigência de um "Content Template" aprovado pela
