@@ -8,7 +8,12 @@
 const express = require('express');
 const { telegramConfigurado, enviarMensagemTelegram, listarChatsRecentes, registrarWebhook } = require('../lib/telegram');
 const { responderPergunta } = require('../lib/ia/orchestrator');
-const { resolverPeriodoDoTexto } = require('../lib/ia/telegramPeriodo');
+// Repare: o interpretador de período do Telegram vive dentro de
+// lib/periodo.js (arquivo que já existia antes desta tarefa), não num
+// arquivo novo — decisão tomada em 21/09/2026 depois de um arquivo novo
+// separado (lib/ia/telegramPeriodo.js) ficar se perdendo repetidas vezes no
+// processo manual de subir os arquivos pro GitHub (ver 04-alteracoes.md).
+const { resolverPeriodoDoTexto } = require('../lib/periodo');
 const pool = require('../db/pool');
 
 const router = express.Router();
@@ -24,8 +29,8 @@ const router = express.Router();
 // Duas decisões tomadas com o usuário (AskUserQuestion, 21/09/2026):
 //   1) Período: o Telegram não tem a telinha de escolher mês/período do
 //      site — o usuário disse "EU SEMPRE VOU FALAR A DATA QUE QUERO
-//      RELATÓRIOS", então lib/ia/telegramPeriodo.js lê a própria mensagem
-//      pra descobrir o período (nunca inventa: quando não reconhece
+//      RELATÓRIOS", então `resolverPeriodoDoTexto` (lib/periodo.js) lê a
+//      própria mensagem pra descobrir o período (nunca inventa: quando não reconhece
 //      nenhuma data, avisa isso na resposta e usa o mês atual).
 //   2) Empresa: o usuário confirmou que usa só uma empresa no sistema — por
 //      isso `buscarEmpresaUnica` abaixo pega sempre a primeira empresa
