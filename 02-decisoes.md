@@ -3,6 +3,68 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-21 (53) — Ads e Performance: uma tela só com 2 abas, cada pedaço sem dado real foi adaptado ou calculado em cima de dado real já existente
+- **Pedido do usuário:** mandou um HTML de referência com 2 abas
+  ("Visão Ads" e "Agente de Ads") dentro da mesma tela, pedindo visual
+  idêntico ("os graficos, as cores, tudo identico e funcional, sem
+  investra nada turo real").
+- **Decisão principal (mesmo critério de (52)):** "nunca inventar dado"
+  pesa mais do que "ficar idêntico ao mockup" nos pontos onde os dois
+  conflitam — cada pedaço do mockup sem dado real por trás foi ou
+  removido, ou trocado por um dado real equivalente, ou (quando dava)
+  calculado a partir de dados reais que já existiam mas não estavam
+  agregados desse jeito ainda.
+- **Decisão de arquitetura — parar de usar `criarModuloAgenteDecisoes`
+  pra este agente:** a tela "Ads e Performance" tinha uma fábrica
+  genérica de tela de agente (`criarModuloAgenteDecisoes`), usada só por
+  ela (Promoções nunca usou — sempre teve módulo próprio). Como o
+  mockup pedia um layout bem mais específico (com abas, hero do agente,
+  grid de impacto, linha do tempo, etc.), o caminho mais seguro foi criar
+  um módulo dedicado pra Ads e Performance (mesmo padrão já usado em
+  Promoções em (38)), reaproveitando os MESMOS endpoints e as mesmas
+  funções auxiliares já compartilhadas no arquivo — a fábrica genérica
+  ficou no arquivo sem nenhum ponto de uso agora (nada foi apagado, só
+  parou de ser chamada), pra não correr risco de quebrar nada com uma
+  remoção desnecessária.
+- **Decisão sobre "Melhoria gerada pelo agente" (era R$ no mockup):** a
+  IA de Ads mede o resultado em pontos percentuais de margem
+  (`GET /api/ia-agentes/ads_performance/detalhe` → `melhora.
+  deltaMedioPct`) — não existe (e não dá pra inventar) uma conversão
+  pra R$. Decisão: mostrar o número real como está ("+X,X p.p."), com a
+  margem antes/depois real ao lado, em vez de forçar um valor em R$ que
+  a IA nunca calculou.
+- **Decisão sobre o grid de impacto (lucro recuperado / economia em
+  desperdício / receita por escala / ações com sucesso):** o backend só
+  tem UM número agregado de melhora (média de todas as decisões
+  misturadas). Decisão: calcular os 4 números no navegador, a partir da
+  MESMA lista de decisões já reavaliadas que a tela já carrega (campo
+  `snapshot` "antes" × campo `resultadoSnapshot` "depois", os dois
+  reais), agrupando por tipo de ação (pausar/diminuir orçamento = 
+  economia; aumentar orçamento/ativar campanha = receita por escala;
+  soma de tudo que melhorou = lucro recuperado). É uma reagregação no
+  navegador de dados 100% reais — não um cálculo novo inventado no
+  servidor.
+- **Decisão sobre a regra "Estoque" do mockup:** o decisor de Ads
+  (`lib/ia/adsDecisor.js`) não usa estoque em nenhuma regra — essa regra
+  do mockup não tem equivalente real neste agente (existe em outro,
+  não em Ads). Decisão: trocar por uma regra que É real e relevante pra
+  Ads — a permissão de execução automática no Mercado Livre — reusando o
+  mesmo switch funcional que já existia antes (`permite_escrita_ml`), só
+  reposicionado dentro do novo painel "Regras do agente".
+- **Decisão sobre o filtro "Mercado Livre / Shopee / Todos" do mockup:**
+  hoje o sistema só tem integração de Ads com o Mercado Livre (não existe
+  Shopee Ads implementado). Decisão: não criar um filtro fake que não
+  filtra nada de verdade — usar o seletor real de loja/conta que a tela
+  "Ads" já tinha, no lugar.
+- **Decisão sobre cores de classificação:** usar a mesma paleta que a
+  tela "Ads" já usa pra pausar/ajustar/manter/escalar
+  (`--danger`/`--warning`/`--success`/`--copper`), em vez das cores
+  arbitrárias do mockup — pra mesma classificação ter a mesma cor em
+  qualquer tela do sistema (mesmo raciocínio de (52) pra cores gerais).
+- **Decisão sobre menu lateral e cabeçalho:** mantidos os componentes
+  reais e compartilhados do sistema, o mockup foi seguido a partir do
+  conteúdo da página — mesmo raciocínio já registrado em (52).
+
 ## 2026-09-21 (52) — Visão Geral: mockup vira layout novo, mas cada pedaço sem dado real foi adaptado, nunca inventado
 - **Pedido do usuário:** mandou um HTML de referência e pediu visual
   idêntico ("os graficos, as cores, tudo identico e funcional, sem

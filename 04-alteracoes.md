@@ -2,6 +2,82 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-21 (63) — Ads e Performance: novo layout com 2 abas (mockup enviado pelo usuário)
+- **Pedido do usuário (verbatim):** mandou um arquivo HTML de referência
+  ("pf_ads_com_agente_layout.html") pedindo "mecher no lyaut do ADS E
+  PERFOMANCE... quero que faça completamente igual esta no arquivo, os
+  graficos, as cores, tudo identico e funcional, sem investra nada turo
+  real". O mockup tinha DUAS abas dentro da mesma tela: "Visão Ads"
+  (KPIs, resumo da IA, situação das campanhas, tabela por anúncio) e
+  "Agente de Ads" (status do agente, melhoria gerada, impacto, o que
+  fazer/o que o agente está fazendo/o que já melhorou, linha do tempo,
+  regras e aprovações pendentes).
+- **O que mudou de verdade:** só o `public/index.html` (visual + a lógica
+  de tela que já buscava dados reais, agora reorganizada em 2 abas).
+  Nenhum arquivo de backend foi tocado — todos os números continuam
+  vindo exatamente dos mesmos cálculos de sempre
+  (`lib/ads.js`/`lib/ia/adsMotor.js`/`lib/ia/adsDecisor.js`/`lib/ia/
+  adsDecisoesCiclo.js`/`lib/ia/agenteDetalhe.js`), só lidos e agrupados
+  de um jeito novo no navegador.
+- **Aba "Visão Ads":** os 6 cards de KPI (Investimento Ads, Faturamento
+  via Ads, Vendas atribuídas, ROAS médio, Lucro após Ads, Margem real), o
+  resumo da IA e a grade "Situação das campanhas" (Escalar/Manter/Ajustar/
+  Pausar) e a tabela "Resultado real por anúncio" — tudo formado a partir
+  dos campos reais já devolvidos por `GET /api/ads` (cards, linhas,
+  campanhas), sem nenhum cálculo novo no servidor. Ganhou um botão
+  "Exportar CSV" (gera o arquivo no navegador a partir da própria tabela
+  já carregada).
+- **Aba "Agente de Ads":** o card de status do agente e a linha do tempo
+  usam `GET /api/ia-agentes/ads_performance/detalhe` (já existia, feito
+  pro modal "Detalhe do Agente"); o card de melhoria, o grid de impacto e
+  as listas de tarefas usam `GET /api/ads/decisoes?status=todas` (mesmo
+  endpoint de sempre); o painel de regras usa `GET /api/ads/status-
+  integracao` e a margem mínima que já vem em `GET /api/ads`; as
+  aprovações pendentes usam os mesmos `PUT /api/ads/decisoes/:id` /
+  `POST /api/ads/decisoes/gerar-agora` de sempre (aprovar/alterar/
+  recusar/gerar agora continuam funcionando exatamente como antes, só com
+  cara nova).
+- **Pontos do mockup sem dado real, e como foram adaptados** (nunca
+  inventados — ver decisão completa em `02-decisoes.md` (53)):
+  - Setinhas de tendência (↑8,2% etc.) nos KPIs → removidas (não existe
+    comparação com o período anterior em `/api/ads`); cada card mostra o
+    período real selecionado.
+  - "Melhoria gerada pelo agente" em R$ → a IA de Ads mede resultado em
+    pontos percentuais de margem, não em R$; mostrado como "+X,X p.p."
+    real, com a comparação real de margem antes/depois.
+  - ROAS antes/depois no card de melhoria → só existe o ROAS "antes"
+    salvo; o resultado reavaliado não guarda ROAS "depois" — linha
+    removida.
+  - Lucro recuperado / Economia em desperdício / Receita criada por
+    escala / Ações com sucesso → calculados no navegador a partir das
+    decisões já reavaliadas pela IA (`snapshot` × `resultadoSnapshot`,
+    os dois reais), agrupados por tipo de ação — nunca uma projeção
+    mensal inventada.
+  - Barra de progresso "74% concluído" → não existe progresso parcial
+    real nenhum; substituída por 3 cards descritivos com o status real da
+    sincronização automática, geração de sugestões e reavaliação.
+  - Regra "Estoque: ATIVO" → o decisor de Ads não usa estoque (isso é de
+    outro agente); substituída pela regra real que de fato existe:
+    permissão de execução automática no Mercado Livre (com o mesmo botão
+    liga/desliga que já existia).
+  - Filtro "Mercado Livre / Shopee / Todos" → hoje o Ads só integra com
+    Mercado Livre (não existe Shopee Ads no sistema); virou o seletor
+    real de loja/conta que a tela "Ads" já usava.
+  - Filtro de período (Hoje/7 dias/30 dias) → já existe no cabeçalho
+    global de todo o app; não duplicado dentro da tela.
+  - Cores de Escalar/Manter/Ajustar/Pausar → usa a mesma paleta que a
+    tela "Ads" já usa pra essa classificação (não as cores arbitrárias do
+    mockup), pra mesma cor = mesmo significado em qualquer tela.
+- **Verificação:** `node --check` no JavaScript inline inteiro do arquivo
+  (876 mil caracteres, extraído e checado isoladamente) e checagem de
+  chaves do novo bloco de CSS — os dois passaram. Sem `jsdom` disponível
+  neste ambiente pra rodar a tela de verdade num navegador headless (ver
+  limitação já registrada em (61)); conferência campo a campo feita à mão
+  contra o código real do backend. Rodada a suíte de testes completa
+  (`node --test`) — 266/281 passando, mesma base de sempre (as 15 falhas
+  são de um módulo `pg` ausente neste ambiente de teste, sem relação com
+  esta mudança, que não tocou nenhum arquivo de backend).
+
 ## 2026-09-21 (62) — Análise de Concorrente: corrigido o erro ao cadastrar (causa raiz encontrada nos logs do Render)
 - **Pedido do usuário:** "tem que arrumar é analise de concorrente pois esta
   dando erro quando vai cadastrar o anúncio do concorrente".
