@@ -59,6 +59,15 @@ function diaBRT(instante) {
   return brt.getUTCFullYear() + '-' + p(brt.getUTCMonth() + 1) + '-' + p(brt.getUTCDate());
 }
 
+// Devolve a HORA (0-23) em Brasília de um instante — usado pelo agendamento
+// automático da Daily dos Agentes (lib/ia/dailyScheduler.js) pra saber
+// quando já passou do horário configurado de envio, sem depender do fuso do
+// servidor (Render roda em UTC).
+function horaBRT(instante) {
+  const brt = new Date(new Date(instante).getTime() - BRT_OFFSET_MS);
+  return brt.getUTCHours();
+}
+
 // Converte uma data de calendário ('YYYY-MM-DD', pensada como um dia em
 // America/Sao_Paulo) no instante UTC correspondente a 00:00:00 BRT daquele
 // dia. Usado pela sincronização histórica (lib/mlSync.js) para andar dia a
@@ -148,4 +157,4 @@ function periodoParaDatasBRT({ desde, ate }) {
   return { desde: diaBRT(desde), ate: diaBRT(new Date(ate.getTime() - 1)) };
 }
 
-module.exports = { PERIODOS, calcularPeriodo, diaBRT, dataCalendarioISO, inicioDoDiaBRTDeString, periodoParaDatasBRT };
+module.exports = { PERIODOS, calcularPeriodo, diaBRT, horaBRT, dataCalendarioISO, inicioDoDiaBRTDeString, periodoParaDatasBRT };

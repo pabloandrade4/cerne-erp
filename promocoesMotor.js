@@ -31,6 +31,34 @@ const AMOSTRAS_MINIMAS = 1;
 // Janela de histórico usada para estimar comissão/frete por SKU.
 const DIAS_HISTORICO_PADRAO = 90;
 
+// Regra pedida pelo usuário em 20/09/2026, verbatim: "só me avisar de
+// promoções quando for vender em um preço igual ou menor com a mesma
+// margem ou uma margem até 3% menor, pois se eu vender com preço maior
+// minha margem é maior mesmo". Ou seja: pra um item CANDIDATO (ainda não
+// ativo), a margem no preço promocional só é considerada aceitável se não
+// cair mais que estes pontos percentuais abaixo da margem NORMAL do MESMO
+// produto (a margem que ele já tem hoje vendendo no preço cheio, calculada
+// com a mesma estimativa de comissão/frete usada pro preço promocional —
+// nunca um segundo jeito de calcular). Quando o preço promocional é igual
+// ou maior que o normal, a margem só tende a ficar igual ou melhor, então
+// esta regra nunca barra esses casos (não precisa de código especial pra
+// isso, a comparação abaixo já resolve sozinha). Este limite é SOMADO à
+// regra de margem mínima/conforto já existente (ver `classificar` abaixo)
+// — nunca a substitui, só deixa a recomendação de ENTRAR ainda mais
+// seletiva, como pedido ("só me avisar quando").
+const TOLERANCIA_QUEDA_MARGEM_NORMAL_PCT = 3;
+
+// Regra pedida pelo usuário em 20/09/2026, verbatim: "sobre, meu estoque
+// daquele produto estiver alto, quero que me avise". Ele escolheu
+// (pergunta feita de volta pra ele) definir "estoque alto" PELOS DIAS QUE O
+// ESTOQUE DURA no ritmo real de vendas — nunca uma quantidade fixa em
+// unidades (produtos diferentes vendem em ritmos bem diferentes, uma
+// quantidade fixa seria enganosa). Limite padrão de 60 dias — configurável
+// por empresa em `config_promocoes.dias_cobertura_alta` (mesmo padrão de
+// `margem_minima_pct`); o usuário pode pedir pra mudar esse número a
+// qualquer momento.
+const DIAS_COBERTURA_ALTA_PADRAO = 60;
+
 function toNum(v) {
   return v === null || v === undefined ? null : Number(v);
 }
@@ -39,15 +67,19 @@ function toNum(v) {
 // usada em "Margem por Anúncio"), calcula por SKU a comissão média (como %
 // do valor vendido) e o frete do vendedor médio por unidade, nos últimos ~90
 // dias. Nunca usa item com tarifas/frete ausentes (calculado com dado
-// faltando não é uma média confiável).
+// faltando não é uma média confiável). `unidadesVendidas` (20/09/2026, ver
+// DIAS_COBERTURA_ALTA_PADRAO acima) soma TODA unidade vendida no período,
+// independente de ter tarifa/frete registrados — é o ritmo de vendas real,
+// não depende da mesma amostra mínima da comissão/frete.
 function calcularHistoricoPorSku(itensPeriodo) {
   const acumulador = new Map();
   (itensPeriodo || []).forEach((it) => {
     if (!it.sku) return;
-    if (!acumulador.has(it.sku)) acumulador.set(it.sku, { tarifasPct: [], freteUnit: [] });
+    if (!acumulador.has(it.sku)) acumulador.set(it.sku, { tarifasPct: [], freteUnit: [], unidadesVendidas: 0 });
     const acc = acumulador.get(it.sku);
     if (it.tarifas !== null && it.valorTotalItem) acc.tarifasPct.push(it.tarifas / it.valorTotalItem);
     if (it.freteVendedor !== null && it.quantidade) acc.freteUnit.push(it.freteVendedor / it.quantidade);
+    if (it.quantidade) acc.unidadesVendidas += Number(it.quantidade);
   });
 
   const media = (arr) => (arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null);
@@ -57,9 +89,46 @@ function calcularHistoricoPorSku(itensPeriodo) {
       tarifasPctMedia: media(acc.tarifasPct),
       freteVendedorMedio: media(acc.freteUnit),
       amostras: Math.min(acc.tarifasPct.length, acc.freteUnit.length),
+      unidadesVendidas: acc.unidadesVendidas,
     });
   });
   return resultado;
+}
+
+// Dias que o estoque atual ainda dura, no ritmo real de vendas dos últimos
+// DIAS_HISTORICO_PADRAO dias — e se isso conta como "estoque alto" (acima
+// do limite configurado). Nunca inventa: sem `estoqueAtual` (SKU sem
+// sincronização de estoque ainda), devolve tudo null/false, nunca assume
+// zero. Zero vendas no período COM estoque > 0 também conta como "alto"
+// (produto parado) mesmo sem dar pra calcular um número de dias exato.
+function calcularCoberturaEstoque({ estoqueAtual, unidadesVendidas90d, diasCoberturaAltaLimite }) {
+  if (estoqueAtual === null || estoqueAtual === undefined) {
+    return { coberturaDiasEstoque: null, estoqueAlto: false, motivoEstoqueAlto: null };
+  }
+  const limite = Number(diasCoberturaAltaLimite) > 0 ? Number(diasCoberturaAltaLimite) : DIAS_COBERTURA_ALTA_PADRAO;
+  const vendas = Number(unidadesVendidas90d) || 0;
+
+  if (vendas <= 0) {
+    if (estoqueAtual > 0) {
+      return {
+        coberturaDiasEstoque: null,
+        estoqueAlto: true,
+        motivoEstoqueAlto: `Nenhuma venda registrada nos últimos ${DIAS_HISTORICO_PADRAO} dias, mas ainda há ${estoqueAtual} unidade(s) em estoque.`,
+      };
+    }
+    return { coberturaDiasEstoque: null, estoqueAlto: false, motivoEstoqueAlto: null };
+  }
+
+  const ritmoDiario = vendas / DIAS_HISTORICO_PADRAO;
+  const coberturaDiasEstoque = round2(estoqueAtual / ritmoDiario);
+  const estoqueAlto = coberturaDiasEstoque > limite;
+  return {
+    coberturaDiasEstoque,
+    estoqueAlto,
+    motivoEstoqueAlto: estoqueAlto
+      ? `No ritmo de vendas dos últimos ${DIAS_HISTORICO_PADRAO} dias, esse estoque dura ${Math.round(coberturaDiasEstoque)} dias — acima do limite configurado (${limite} dias).`
+      : null,
+  };
 }
 
 // Descobre o preço promocional do item, conforme o formato que CADA tipo de
@@ -130,7 +199,7 @@ function divisaoDesconto(item, precoNormal, precoPromo) {
 // exigindo só o mínimo puro, porque nada está sendo sacrificado. Quando
 // `margemConfortoPct` é 0 (padrão, ninguém configurou ainda — ver
 // db/schema.sql), o comportamento é idêntico ao de antes desta regra.
-function classificar({ statusItem, margemIncompleta, margemPromoPct, margemMinimaPct, temDesconto, margemConfortoPct }) {
+function classificar({ statusItem, margemIncompleta, margemPromoPct, margemMinimaPct, temDesconto, margemConfortoPct, margemNormalPct }) {
   if (margemIncompleta || margemPromoPct === null || margemPromoPct === undefined) {
     return { codigo: 'dados_insuficientes', emoji: '⚠️', label: 'DADOS INSUFICIENTES' };
   }
@@ -144,7 +213,15 @@ function classificar({ statusItem, margemIncompleta, margemPromoPct, margemMinim
     // — nunca pra quem já está de fato ativo na promoção (esse caso segue a
     // mesma regra de sempre: sair/risco/manter contra o mínimo puro).
     const minimoExigido = temDesconto ? minimo + conforto : minimo;
-    const acimaDoMinimoExigido = margemPromoPct >= minimoExigido;
+    // Regra de 20/09/2026 (ver TOLERANCIA_QUEDA_MARGEM_NORMAL_PCT acima):
+    // além do mínimo exigido, a margem no preço promocional nunca pode cair
+    // mais que a tolerância abaixo da margem normal DESTE MESMO produto.
+    // Sem margem normal calculável (dado insuficiente à parte), a regra
+    // simplesmente não se aplica — nunca bloqueia por falta de um dado que
+    // não é, em si, motivo de "dados insuficientes".
+    const respeitaMargemNormal = margemNormalPct === null || margemNormalPct === undefined
+      || margemPromoPct >= (Number(margemNormalPct) - TOLERANCIA_QUEDA_MARGEM_NORMAL_PCT);
+    const acimaDoMinimoExigido = margemPromoPct >= minimoExigido && respeitaMargemNormal;
     const limiteFolga = minimoExigido > 0 ? minimoExigido * 1.5 : 20;
 
     if (!acimaDoMinimoExigido) return { codigo: 'nao_recomendado', emoji: '🔴', label: 'NÃO RECOMENDADO' };
@@ -152,7 +229,18 @@ function classificar({ statusItem, margemIncompleta, margemPromoPct, margemMinim
     return { codigo: 'entrar', emoji: '🟢', label: 'ENTRAR' };
   }
   if (margemPromoPct < minimo) return { codigo: 'sair', emoji: '🔴', label: 'SAIR' };
-  if (margemPromoPct <= limiteRisco) return { codigo: 'risco_margem', emoji: '⚠️', label: 'RISCO DE MARGEM' };
+  // Confirmado pelo usuário em 20/09/2026 ("isso mesmo"): a mesma tolerância
+  // de queda (TOLERANCIA_QUEDA_MARGEM_NORMAL_PCT) que já vale pra decidir
+  // ENTRAR numa promoção nova também vale pra decidir se continua fazendo
+  // sentido MANTER uma promoção que já está ativa — não deixa uma promoção
+  // "de boa" pra sempre só porque está acima do mínimo absoluto, se a
+  // margem dela já caiu mais que o aceitável em relação à margem normal
+  // deste mesmo produto. Nunca vira "SAIR" sozinho por isso (SAIR continua
+  // reservado pra abaixo do mínimo absoluto) — vira "RISCO DE MARGEM", pra
+  // o usuário revisar/decidir, nunca uma saída automática.
+  const respeitaMargemNormalAtiva = margemNormalPct === null || margemNormalPct === undefined
+    || margemPromoPct >= (Number(margemNormalPct) - TOLERANCIA_QUEDA_MARGEM_NORMAL_PCT);
+  if (margemPromoPct <= limiteRisco || !respeitaMargemNormalAtiva) return { codigo: 'risco_margem', emoji: '⚠️', label: 'RISCO DE MARGEM' };
   return { codigo: 'manter', emoji: '🟡', label: 'MANTER' };
 }
 
@@ -160,7 +248,7 @@ function classificar({ statusItem, margemIncompleta, margemPromoPct, margemMinim
 // catálogo ao vivo (título/imagem/SKU — lib/mlAnuncios.js), custo cadastrado
 // (produtos.custo) e histórico de comissão/frete (calcularHistoricoPorSku) —
 // e devolve a linha completa pronta para gravar em `promocoes_analises`.
-function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku, aliquotaImposto, margemMinimaPct, margemConfortoPct, contexto }) {
+function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku, aliquotaImposto, margemMinimaPct, margemConfortoPct, estoqueAtualPorSku, diasCoberturaAltaLimite, contexto }) {
   const { precoPromo, origemPrecoPromo } = precoPromocionalDoItem(item);
   const precoNormal = item.original_price !== undefined && item.original_price !== null
     ? round2(Number(item.original_price))
@@ -189,6 +277,7 @@ function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku
   let impostoEstimado = null;
   let margemReal = null;
   let margemRealPct = null;
+  let margemNormalPct = null;
 
   if (!margemIncompleta) {
     tarifasEstimadas = round2(precoPromo * historico.tarifasPctMedia);
@@ -206,7 +295,40 @@ function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku
     impostoEstimado = calc.imposto;
     margemReal = calc.resultado;
     margemRealPct = margemReal !== null && precoPromo ? round2((margemReal / precoPromo) * 100) : null;
+
+    // Margem NORMAL do mesmo produto (20/09/2026, ver
+    // TOLERANCIA_QUEDA_MARGEM_NORMAL_PCT): a margem que ele já tem hoje
+    // vendendo no preço cheio (precoNormal), usando a MESMA estimativa de
+    // comissão (% do valor, por isso escala com o preço) e frete (valor
+    // fixo por unidade) do histórico real do SKU — nunca uma segunda forma
+    // de calcular. Só calculada quando precoNormal é um número utilizável.
+    if (precoNormal !== null && precoNormal !== undefined && precoNormal > 0) {
+      const calcNormal = calcularResultadoVenda({
+        valorVenda: precoNormal,
+        taxaVenda: round2(precoNormal * historico.tarifasPctMedia),
+        pagamentoTaxas: null,
+        pagamentoTaxaMarketplace: null,
+        freteVendedor: freteVendedorEstimado,
+        custoProduto,
+        aliquotaImposto,
+        desconto: 0,
+      });
+      margemNormalPct = calcNormal.resultado !== null ? round2((calcNormal.resultado / precoNormal) * 100) : null;
+    }
   }
+
+  // "Estoque alto" (20/09/2026, ver DIAS_COBERTURA_ALTA_PADRAO acima) —
+  // completamente independente de `margemIncompleta`: mesmo um item sem
+  // custo cadastrado (margem incompleta) pode e deve mostrar o alerta de
+  // estoque parado, já que são dados diferentes. `estoqueAtualPorSku` vem
+  // de `ml_estoque_itens` (mesma fonte real da tela Estoque) — sem SKU
+  // identificado ou sem essa fonte sincronizada ainda, fica null (nunca
+  // assume zero).
+  const estoqueAtual = sku && estoqueAtualPorSku && estoqueAtualPorSku.has(sku) ? Number(estoqueAtualPorSku.get(sku)) : null;
+  const unidadesVendidas90d = historico ? historico.unidadesVendidas : 0;
+  const { coberturaDiasEstoque, estoqueAlto, motivoEstoqueAlto } = calcularCoberturaEstoque({
+    estoqueAtual, unidadesVendidas90d, diasCoberturaAltaLimite,
+  });
 
   const { descontoPct, descontoBancadoMeliPct, descontoBancadoVendedorPct } = divisaoDesconto(item, precoNormal, precoPromo);
 
@@ -224,6 +346,7 @@ function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku
     margemMinimaPct,
     margemConfortoPct,
     temDesconto,
+    margemNormalPct,
   });
 
   return {
@@ -245,11 +368,17 @@ function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku
     impostoEstimado,
     margemReal,
     margemRealPct,
+    margemNormalPct,
     margemMinimaPctUsada: margemMinimaPct,
     margemConfortoPctUsada: margemConfortoPct || 0,
     temDesconto,
     margemIncompleta: margemIncompleta || margemRealPct === null,
     motivoIncompleto: motivos.length ? motivos.join(' ') : null,
+    estoqueAtual,
+    unidadesVendidas90d,
+    coberturaDiasEstoque,
+    estoqueAlto,
+    motivoEstoqueAlto,
     classificacaoCodigo: classificacao.codigo,
     classificacaoLabel: classificacao.label,
     classificacaoEmoji: classificacao.emoji,
@@ -259,7 +388,10 @@ function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku
 module.exports = {
   AMOSTRAS_MINIMAS,
   DIAS_HISTORICO_PADRAO,
+  TOLERANCIA_QUEDA_MARGEM_NORMAL_PCT,
+  DIAS_COBERTURA_ALTA_PADRAO,
   calcularHistoricoPorSku,
+  calcularCoberturaEstoque,
   precoPromocionalDoItem,
   divisaoDesconto,
   classificar,

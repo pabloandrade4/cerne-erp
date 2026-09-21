@@ -103,6 +103,57 @@ async function apiGet(path, accessToken, extraHeaders) {
   return data;
 }
 
+// SEM token (20/09/2026) — usada só como diagnóstico em
+// lib/concorrente.js#testarListagemPorVendedor: alguns endpoints públicos
+// do Mercado Livre (ex.: GET /items/{id}) tradicionalmente respondem sem
+// autenticação nenhuma pra dado público de catálogo. Serve pra distinguir
+// se um bloqueio 403 é por causa do token (chamada autenticada de um
+// vendedor tentando ver o anúncio de outro) ou um bloqueio da API
+// independente de autenticação. NUNCA usada em nenhum fluxo real do ERP —
+// só nesta rota de diagnóstico.
+async function apiGetPublico(path) {
+  const res = await fetchComTimeout(API_BASE + path, {
+    headers: { Accept: 'application/json' },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err = new Error((data && (data.message || data.error)) || `Erro na API do Mercado Livre (${path}).`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+// PRIMEIRA função de ESCRITA deste arquivo (19/09/2026, pedido explícito do
+// usuário: "eu vou aprovar, aí vai fazer" — quer que a IA de Ads já execute
+// de verdade no Mercado Livre depois que ele aprovar uma sugestão, não só
+// anote a aprovação no banco como fazia até aqui — ver lib/mlAds.js#
+// atualizarCampanha e lib/ia/adsExecutor.js). Mesmo padrão de erro do
+// apiGet acima (nunca lança silenciosamente, sempre carrega status HTTP +
+// corpo da resposta real do Mercado Livre em err.data). `body` já deve vir
+// serializado (JSON.stringify) de quem chamar.
+async function apiPut(path, accessToken, body, extraHeaders) {
+  const res = await fetchComTimeout(API_BASE + path, {
+    method: 'PUT',
+    headers: {
+      Authorization: 'Bearer ' + accessToken,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(extraHeaders || {}),
+    },
+    body,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err = new Error((data && (data.message || data.error)) || `Erro na API do Mercado Livre (${path}).`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
 // ============================================================================
 // SAC (Perguntas, Mensagens pós-venda, Reclamações) — 14/09/2026, agente
 // "SAC Mercado Livre" (ver lib/ia/sacMercadoLivre.js). Só LEITURA — nenhuma
@@ -155,6 +206,6 @@ async function buscarMensagensReclamacao({ accessToken, claimId }) {
 }
 
 module.exports = {
-  buildAuthorizationUrl, exchangeCodeForToken, refreshAccessToken, apiGet,
+  buildAuthorizationUrl, exchangeCodeForToken, refreshAccessToken, apiGet, apiGetPublico, apiPut,
   buscarPerguntas, buscarMensagensPosVenda, buscarReclamacoes, buscarMensagensReclamacao,
 };
