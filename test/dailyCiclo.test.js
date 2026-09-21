@@ -55,22 +55,50 @@ describe('formatarMensagemWhatsappDaily — Etapa 4 (19/09/2026)', () => {
     });
     assert.match(texto, /… e mais 4\./);
   });
+
+  // Etapa 3 — Agente Coordenador (20/09/2026): as conclusões do Coordenador
+  // precisam aparecer em DESTAQUE, ANTES do detalhe por agente — é o
+  // "pontual o que deve ser feito" que o usuário pediu, não pode ficar
+  // perdido no meio da mensagem.
+  test('com correlações do Coordenador: aparecem no TOPO da mensagem, antes dos blocos por agente', () => {
+    const texto = formatarMensagemWhatsappDaily({
+      empresaNome: 'Teste', dataReferencia: '2026-09-20',
+      achadosPorAgente: { anuncios_radar: [{ titulo: 'Anúncio X parado', prioridade: 'alta' }] },
+      nomesAgentes: { anuncios_radar: 'Anúncios' },
+      correlacoes: [{ conclusao: 'SKU CX-1: causa provável identificada — Ads pausado.', prioridade: 'alta' }],
+    });
+    const posicaoCorrelacao = texto.indexOf('O que fazer primeiro');
+    const posicaoBlocoAgente = texto.indexOf('*Anúncios*');
+    assert.ok(posicaoCorrelacao !== -1 && posicaoBlocoAgente !== -1 && posicaoCorrelacao < posicaoBlocoAgente);
+    assert.match(texto, /causa provável identificada — Ads pausado\./);
+  });
+
+  test('sem correlações do Coordenador (parâmetro omitido): mensagem funciona igual, sem bloco de destaque', () => {
+    const texto = formatarMensagemWhatsappDaily({
+      empresaNome: 'Teste', dataReferencia: '2026-09-20',
+      achadosPorAgente: { anuncios_radar: [{ titulo: 'Anúncio X parado', prioridade: 'alta' }] },
+      nomesAgentes: { anuncios_radar: 'Anúncios' },
+    });
+    assert.doesNotMatch(texto, /O que fazer primeiro/);
+  });
 });
 
 describe(
-  'Daily dos Agentes — Etapa 2 (especialistas + ciclo, sem Coordenador)',
+  'Daily dos Agentes — Etapa 2 (especialistas + ciclo) e Etapa 3 (Agente Coordenador)',
   { skip: !TEM_BANCO && 'defina DATABASE_URL apontando pra um Postgres de teste (ver topo de relatorioVendas.integration.test.js)' },
   () => {
     let pool;
     let especialistaAds;
     let especialistaPromocoes;
     let dailyCiclo;
+    let concorrente;
 
     before(async () => {
       pool = require('../db/pool');
       especialistaAds = require('../lib/ia/especialistaAds');
       especialistaPromocoes = require('../lib/ia/especialistaPromocoes');
       dailyCiclo = require('../lib/ia/dailyCiclo');
+      concorrente = require('../lib/concorrente');
 
       await pool.query(
         `INSERT INTO empresas (id, cnpj, razao_social, ativo) VALUES ($1, '97370707000199', 'EMPRESA TESTE DAILY', TRUE)
@@ -86,17 +114,26 @@ describe(
     });
 
     beforeEach(async () => {
+      // Ordem importa: ia_correlacoes_diarias/ia_achados_diarios referenciam
+      // reuniao_id (sem CASCADE) — precisam sumir ANTES de apagar a reunião,
+      // senão o DELETE de ia_reunioes_diarias quebra por FK.
+      await pool.query('DELETE FROM ia_correlacoes_diarias WHERE reuniao_id IN (SELECT id FROM ia_reunioes_diarias WHERE empresa_id = $1)', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_achados_diarios WHERE reuniao_id IN (SELECT id FROM ia_reunioes_diarias WHERE empresa_id = $1)', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_reunioes_diarias WHERE empresa_id = $1', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_decisoes_ads WHERE empresa_id = $1', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_decisoes_promocoes WHERE empresa_id = $1', [EMPRESA_ID]);
+      await pool.query('DELETE FROM radar_alertas WHERE empresa_id = $1', [EMPRESA_ID]);
+      await pool.query('DELETE FROM concorrentes_monitorados WHERE empresa_id = $1', [EMPRESA_ID]);
     });
 
     after(async () => {
+      await pool.query('DELETE FROM ia_correlacoes_diarias WHERE reuniao_id IN (SELECT id FROM ia_reunioes_diarias WHERE empresa_id = $1)', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_achados_diarios WHERE reuniao_id IN (SELECT id FROM ia_reunioes_diarias WHERE empresa_id = $1)', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_reunioes_diarias WHERE empresa_id = $1', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_decisoes_ads WHERE empresa_id = $1', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_decisoes_promocoes WHERE empresa_id = $1', [EMPRESA_ID]);
+      await pool.query('DELETE FROM radar_alertas WHERE empresa_id = $1', [EMPRESA_ID]);
+      await pool.query('DELETE FROM concorrentes_monitorados WHERE empresa_id = $1', [EMPRESA_ID]);
       await pool.query('DELETE FROM ml_contas WHERE id = $1', [CONTA_ID]);
       await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_ID]);
     });
@@ -254,9 +291,112 @@ describe(
     });
 
     test('buscarUltimaReuniao: empresa sem nenhuma Daily ainda -> reuniao null (nunca inventa)', async () => {
-      const { reuniao, achadosPorAgente } = await dailyCiclo.buscarUltimaReuniao(999998);
+      const { reuniao, achadosPorAgente, correlacoes } = await dailyCiclo.buscarUltimaReuniao(999998);
       assert.equal(reuniao, null);
       assert.deepEqual(achadosPorAgente, {});
+      assert.deepEqual(correlacoes, []);
+    });
+
+    // ---------------- Etapa 3: Agente Coordenador — wiring real ----------------
+    // (20/09/2026) Os testes de lib/ia/coordenadorDiario.js já cobrem as 4
+    // regras isoladamente (função pura, sem banco). Aqui o que importa é
+    // provar que executarDailyEmpresa: (a) devolve os IDs REAIS gerados
+    // pelo Postgres pro Coordenador cruzar; (b) persiste o resultado em
+    // ia_correlacoes_diarias; (c) buscarUltimaReuniao devolve isso de
+    // volta; (d) nunca duplica ao rodar 2x no mesmo dia.
+    test('executarDailyEmpresa: achado de Anúncios (radar_alertas) + achado de Ads (pausar_campanha) no mesmo SKU -> gera e persiste a correlação R1', async () => {
+      await pool.query(
+        `INSERT INTO radar_alertas (empresa_id, chave, categoria, severidade, titulo, descricao, recomendacao, dados, status)
+         VALUES ($1, 'anuncio_parado:teste-coord-1', 'anuncio_parado', 'atencao', 'Caixa Coordenador parada', 'Sem venda há 15 dias.', 'Revise o anúncio.',
+                 $2::jsonb, 'aberto')`,
+        [EMPRESA_ID, JSON.stringify({ sku: 'SKU-COORD-1', diasSemVenda: 15, estoqueDisponivel: 8, estoqueSincronizado: true })]
+      );
+      await pool.query(
+        `INSERT INTO ia_decisoes_ads (empresa_id, conta_id, tipo_referencia, campanha_id, campanha_nome, sku, tipo_acao, motivo, snapshot_orcamento_atual, valor_sugerido_ia, status_decisao)
+         VALUES ($1,$2,'campanha','C-COORD-1','Campanha Coordenador','SKU-COORD-1','pausar_campanha','Resultado negativo real.', 250, '{}', 'pendente')`,
+        [EMPRESA_ID, CONTA_ID]
+      );
+
+      const resultado = await dailyCiclo.executarDailyEmpresa(EMPRESA_ID, { dataReferencia: '2026-09-16' });
+      assert.equal(resultado.status, 'concluida');
+      assert.equal(resultado.totalCorrelacoes, 1);
+      assert.equal(resultado.comErro.length, 0);
+
+      const { correlacoes, achadosPorAgente } = await dailyCiclo.buscarUltimaReuniao(EMPRESA_ID);
+      assert.equal(correlacoes.length, 1);
+      assert.equal(correlacoes[0].regraCodigo, 'r1_ads_pausado_correlaciona_queda_anuncio');
+      assert.equal(correlacoes[0].sku, 'SKU-COORD-1');
+      assert.match(correlacoes[0].conclusao, /R\$ 250,00/);
+
+      // os ids citados na correlação precisam ser os ids REAIS gravados em
+      // ia_achados_diarios — nunca um id inventado/fora de ordem.
+      const idAnuncio = achadosPorAgente.anuncios_radar[0].id;
+      const idAds = achadosPorAgente.ads_performance[0].id;
+      assert.deepEqual(correlacoes[0].achadosRelacionados.sort(), [idAnuncio, idAds].sort());
+    });
+
+    test('executarDailyEmpresa: anúncio com estoque zerado -> correlação R2, mesmo sem nenhum outro agente envolvido', async () => {
+      await pool.query(
+        `INSERT INTO radar_alertas (empresa_id, chave, categoria, severidade, titulo, descricao, recomendacao, dados, status)
+         VALUES ($1, 'anuncio_venda_baixa:teste-coord-2', 'anuncio_venda_baixa', 'atencao', 'Caixa Coordenador sem estoque', 'Vendeu pouco.', 'Revise.',
+                 $2::jsonb, 'aberto')`,
+        [EMPRESA_ID, JSON.stringify({ sku: 'SKU-COORD-2', estoqueDisponivel: 0, estoqueSincronizado: true })]
+      );
+
+      const resultado = await dailyCiclo.executarDailyEmpresa(EMPRESA_ID, { dataReferencia: '2026-09-16' });
+      assert.equal(resultado.totalCorrelacoes, 1);
+
+      const { correlacoes } = await dailyCiclo.buscarUltimaReuniao(EMPRESA_ID);
+      assert.equal(correlacoes[0].regraCodigo, 'r2_estoque_zerado_anuncio');
+      assert.equal(correlacoes[0].sku, 'SKU-COORD-2');
+    });
+
+    test('executarDailyEmpresa: anúncio em queda + concorrente CADASTRADO (lib/concorrente.js) pro mesmo SKU -> correlação R4 com o link real', async () => {
+      await pool.query(
+        `INSERT INTO radar_alertas (empresa_id, chave, categoria, severidade, titulo, descricao, recomendacao, dados, status)
+         VALUES ($1, 'anuncio_parado:teste-coord-4', 'anuncio_parado', 'atencao', 'Caixa Coordenador concorrente', 'Sem venda há 9 dias.', 'Revise.',
+                 $2::jsonb, 'aberto')`,
+        [EMPRESA_ID, JSON.stringify({ sku: 'SKU-COORD-4', diasSemVenda: 9 })]
+      );
+      await concorrente.cadastrarConcorrente({
+        empresaId: EMPRESA_ID, sku: 'SKU-COORD-4', url: 'https://exemplo.com/concorrente-coordenador', apelido: 'Loja Rival Coordenador',
+      });
+
+      const resultado = await dailyCiclo.executarDailyEmpresa(EMPRESA_ID, { dataReferencia: '2026-09-16' });
+      assert.equal(resultado.totalCorrelacoes, 1);
+
+      const { correlacoes } = await dailyCiclo.buscarUltimaReuniao(EMPRESA_ID);
+      assert.equal(correlacoes[0].regraCodigo, 'r4_concorrente_cadastrado_anuncio');
+      assert.match(correlacoes[0].conclusao, /Loja Rival Coordenador/);
+      assert.match(correlacoes[0].conclusao, /https:\/\/exemplo\.com\/concorrente-coordenador/);
+    });
+
+    test('executarDailyEmpresa: sem nenhum cruzamento possível -> zero correlações (honesto, nunca inventa causa)', async () => {
+      await pool.query(
+        `INSERT INTO ia_decisoes_ads (empresa_id, conta_id, tipo_referencia, campanha_id, campanha_nome, tipo_acao, motivo, valor_sugerido_ia, status_decisao)
+         VALUES ($1,$2,'campanha','C-COORD-5','Campanha sem cruzamento','aumentar_orcamento','Margem folgada.', '{}', 'pendente')`,
+        [EMPRESA_ID, CONTA_ID]
+      );
+      const resultado = await dailyCiclo.executarDailyEmpresa(EMPRESA_ID, { dataReferencia: '2026-09-16' });
+      assert.equal(resultado.totalCorrelacoes, 0);
+      const { correlacoes } = await dailyCiclo.buscarUltimaReuniao(EMPRESA_ID);
+      assert.deepEqual(correlacoes, []);
+    });
+
+    test('executarDailyEmpresa: rodar 2x no mesmo dia regenera a correlação sem duplicar', async () => {
+      await pool.query(
+        `INSERT INTO radar_alertas (empresa_id, chave, categoria, severidade, titulo, descricao, recomendacao, dados, status)
+         VALUES ($1, 'anuncio_parado:teste-coord-6', 'anuncio_parado', 'atencao', 'Caixa Coordenador repete', 'Sem venda.', 'Revise.',
+                 $2::jsonb, 'aberto')`,
+        [EMPRESA_ID, JSON.stringify({ sku: 'SKU-COORD-6', estoqueDisponivel: 0, estoqueSincronizado: true })]
+      );
+      const r1 = await dailyCiclo.executarDailyEmpresa(EMPRESA_ID, { dataReferencia: '2026-09-16' });
+      const r2 = await dailyCiclo.executarDailyEmpresa(EMPRESA_ID, { dataReferencia: '2026-09-16' });
+      assert.equal(r1.reuniaoId, r2.reuniaoId);
+      assert.equal(r2.totalCorrelacoes, 1);
+
+      const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM ia_correlacoes_diarias WHERE reuniao_id = $1', [r1.reuniaoId]);
+      assert.equal(rows[0].n, 1);
     });
   }
 );

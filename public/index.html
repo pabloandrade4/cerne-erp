@@ -1368,6 +1368,17 @@
     // outras 3, só a frase final "deixar apenas ads e performance"; avise
     // se quiser que ela saia também.
     { id:'agentesIa', label:'Agentes IA', open:true, items:[
+      // 20/09/2026, pedido explícito do usuário: "preciso que o analista
+      // analise a conta toda... como podemos fazer com que os agentes
+      // analise a conta por completo e coloque pontual oque deve ser
+      // feito, lembrando que nao pode ser no chute ou inventado tem que
+      // ser com base em metricas e numeros da conta". Etapa 3 (Agente
+      // Coordenador, lib/ia/coordenadorDiario.js) + Etapa 5 (esta tela) —
+      // cruza os achados que os agentes já produzem todo dia (Ads,
+      // Promoções, Anúncios, Concorrente, SAC) e aponta a causa provável +
+      // o que fazer, sempre citando o dado real por trás.
+      { id:'planoAcaoDia', title:'Plano de Ação do Dia', icon:'checkCircle', desc:'A cada dia, o Agente Coordenador cruza os achados de Ads, Promoções, Anúncios, Concorrente e SAC pro mesmo SKU e aponta a causa provável e o que fazer — sempre citando o número real por trás, nunca um chute.',
+        bullets:['Cruza achados de agentes diferentes pro mesmo SKU (ex.: anúncio caiu + Ads pausado)','Cada conclusão cita o dado real que a embasa — nunca um texto solto','Acompanha estoque zerado, promoção com margem comprometida e concorrente cadastrado','Roda automaticamente todo dia — "Analisar agora" pra rodar na hora'] },
       { id:'agenteAds', title:'Ads e Performance', icon:'megaphone', desc:'O agente de IA analisa suas campanhas e anúncios e sugere ações de orçamento, ACOS e pausa/escala — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
         bullets:['Sugestões com base nos dados reais de cada campanha/anúncio','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
       { id:'agentePromocoes', title:'Promoções', icon:'sparkle', desc:'O agente de IA identifica oportunidades de promoção, calcula a margem real e sugere entrar, não entrar ou alterar o preço — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
@@ -1452,7 +1463,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','agenteAds','agentePromocoes','concorrente','sacMercadoLivre','sacShopee','salaAgentes'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','planoAcaoDia','agenteAds','agentePromocoes','concorrente','sacMercadoLivre','sacShopee','salaAgentes'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1486,6 +1497,8 @@
         + '<button class="ghost-btn" id="btnNovaContaBancaria" type="button" style="cursor:pointer;opacity:1;">'+svg('plus')+'<span>Nova conta bancária</span></button>'
         + '<button class="primary-btn enabled" id="btnImportExtrato" type="button">'+svg('download')+'<span>Importar extrato</span></button>'
       + '</div>';
+    } else if(id === 'planoAcaoDia'){
+      inner += '<button class="primary-btn enabled" id="btnAnalisarAgoraPlano" type="button">'+svg('refreshCw')+'<span>Analisar agora</span></button>';
     } else if(id !== 'overview' && !REAL_MODULES.includes(id)){
       inner += '<button class="primary-btn" disabled>'+svg('plus')+'<span>'+(p.action||'Em breve')+'</span></button>';
     }
@@ -1520,6 +1533,7 @@
     else if(id === 'reports'){ inner += '<div id="relatoriosRoot"></div>'; }
     else if(id === 'alerts'){ inner += '<div id="alertasRoot"></div>'; }
     else if(id === 'agentesIaHub'){ inner += '<div id="agentesIaHubRoot"></div>'; }
+    else if(id === 'planoAcaoDia'){ inner += '<div id="planoAcaoDiaRoot"></div>'; }
     else if(id === 'agenteAds'){ inner += '<div id="agenteAdsRoot"></div>'; }
     else if(id === 'agentePromocoes'){ inner += '<div id="agentePromocoesRoot"></div>'; }
     else if(id === 'concorrente'){ inner += '<div id="concorrenteRoot"></div>'; }
@@ -1576,6 +1590,7 @@
     if(id === 'reports' && window.Relatorios) window.Relatorios.load();
     if(id === 'alerts' && window.Alertas) window.Alertas.load();
     if(id === 'agentesIaHub' && window.AgentesIaHub) window.AgentesIaHub.load();
+    if(id === 'planoAcaoDia' && window.PlanoAcaoDia) window.PlanoAcaoDia.load();
     if(id === 'agenteAds' && window.AgenteAds) window.AgenteAds.load();
     if(id === 'agentePromocoes' && window.AgentePromocoes) window.AgentePromocoes.load();
     if(id === 'concorrente' && window.AgenteConcorrente) window.AgenteConcorrente.load();
@@ -11598,7 +11613,7 @@
 
     async function load(){
       state.produtoSelecionadoId = null; state.resultado = null; state.erro = null; state.buscaProduto = '';
-      await carregarProdutos();
+      await Promise.all([carregarProdutos(), carregarCadastrados()]);
     }
 
     window.CerneFiltro.onChange(()=>{
@@ -11606,6 +11621,7 @@
       if(page && page.classList.contains('active')){
         state.produtoSelecionadoId = null; state.resultado = null; state.erro = null; state.buscaProduto = '';
         carregarProdutos();
+        carregarCadastrados();
       }
     });
 
@@ -11696,6 +11712,8 @@
         html += resultadoHTML();
       }
 
+      html += cadastroSectionHTML();
+
       root.innerHTML = html;
 
       const inputBusca = document.getElementById('concorrenteBuscaProduto');
@@ -11716,9 +11734,329 @@
       }
       const btnBuscar = document.getElementById('concorrenteBuscarBtn');
       if(btnBuscar) btnBuscar.addEventListener('click', buscar);
+
+      // ---- Cadastro manual de concorrente por SKU (20/09/2026) ----
+      const inputSku = document.getElementById('concorrenteCadastroSku');
+      const inputUrl = document.getElementById('concorrenteCadastroUrl');
+      const inputApelido = document.getElementById('concorrenteCadastroApelido');
+      const btnSalvarCadastro = document.getElementById('concorrenteCadastroSalvarBtn');
+      function atualizarBotaoSalvar(){
+        if(!btnSalvarCadastro) return;
+        const habilitado = !!stateCadastro.sku.trim() && !!stateCadastro.url.trim() && !stateCadastro.salvando;
+        btnSalvarCadastro.disabled = !habilitado;
+        btnSalvarCadastro.classList.toggle('enabled', habilitado);
+      }
+      if(inputSku) inputSku.addEventListener('input', ()=>{ stateCadastro.sku = inputSku.value; atualizarBotaoSalvar(); });
+      if(inputUrl) inputUrl.addEventListener('input', ()=>{ stateCadastro.url = inputUrl.value; atualizarBotaoSalvar(); });
+      if(inputApelido) inputApelido.addEventListener('input', ()=>{ stateCadastro.apelido = inputApelido.value; });
+      if(btnSalvarCadastro) btnSalvarCadastro.addEventListener('click', salvarCadastro);
+      document.querySelectorAll('.concorrenteCadastroRemoverBtn').forEach((btn)=>{
+        btn.addEventListener('click', ()=> removerCadastro(Number(btn.dataset.id)));
+      });
+    }
+
+    // ============== Cadastro manual de concorrente por SKU (20/09/2026) ==============
+    // Resposta direta do usuário ao bloqueio da busca automática (ver
+    // comentário grande no topo deste IIFE e em lib/concorrente.js): "sobre
+    // o concorrente eu vou mandar o link do anuncio do concorrente para
+    // ficar mais facil". Usa as rotas novas GET/POST/DELETE
+    // /api/concorrente/monitorados (ver routes/concorrente.js). Alimenta o
+    // Agente Coordenador (regra R4, lib/ia/coordenadorDiario.js) — nunca
+    // valida/busca o link automaticamente, só guarda o que o usuário colou.
+    const stateCadastro = { lista:[], loading:false, error:null, sku:'', url:'', apelido:'', salvando:false };
+
+    async function apiListarCadastrados(empresaId){
+      const res = await fetch('/api/concorrente/monitorados?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar os concorrentes cadastrados.');
+      return (body && body.concorrentes) || [];
+    }
+    async function apiCadastrarConcorrente(empresaId, sku, url, apelido){
+      const res = await fetch('/api/concorrente/monitorados', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ empresaId, sku, url, apelido: apelido || null }),
+      });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível cadastrar este concorrente.');
+      return body;
+    }
+    async function apiRemoverConcorrente(empresaId, id){
+      const res = await fetch('/api/concorrente/monitorados/'+id+'?empresaId='+empresaId, { method:'DELETE' });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível remover este concorrente.');
+      return body;
+    }
+
+    async function carregarCadastrados(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ stateCadastro.lista = []; render(); return; }
+      stateCadastro.loading = true; stateCadastro.error = null; render();
+      try{ stateCadastro.lista = await apiListarCadastrados(filtro.empresaId); }
+      catch(e){ stateCadastro.error = e.message; stateCadastro.lista = []; }
+      stateCadastro.loading = false; render();
+    }
+
+    async function salvarCadastro(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId || !stateCadastro.sku.trim() || !stateCadastro.url.trim() || stateCadastro.salvando) return;
+      stateCadastro.salvando = true; stateCadastro.error = null; render();
+      try{
+        await apiCadastrarConcorrente(filtro.empresaId, stateCadastro.sku.trim(), stateCadastro.url.trim(), stateCadastro.apelido.trim());
+        stateCadastro.sku = ''; stateCadastro.url = ''; stateCadastro.apelido = '';
+        await carregarCadastrados();
+      } catch(e){
+        stateCadastro.error = e.message;
+      } finally {
+        stateCadastro.salvando = false; render();
+      }
+    }
+
+    async function removerCadastro(id){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId) return;
+      try{ await apiRemoverConcorrente(filtro.empresaId, id); await carregarCadastrados(); }
+      catch(e){ stateCadastro.error = e.message; render(); }
+    }
+
+    function cadastroSectionHTML(){
+      let html = '<div class="table-card" style="padding:20px;margin-bottom:14px;">'
+        + '<div class="panel-title" style="margin:0 0 4px;">Concorrentes cadastrados manualmente por SKU</div>'
+        + '<div class="field-hint" style="max-width:760px;margin-bottom:14px;">A busca automática acima é bloqueada pelo Mercado Livre pra alguns casos (ver aviso no topo da tela) — aqui você cola o link do anúncio/loja do concorrente uma vez, por SKU, e o sistema guarda pra sempre citar esse link nas análises (Plano de Ação do Dia). Nunca busca ou confirma preço automaticamente — é só o link, pra você conferir quando quiser.</div>'
+        + '<div class="inline-form" style="margin:0;flex-wrap:wrap;">'
+          + '<div class="field" style="min-width:160px;"><label>SKU</label>'
+            + '<input type="text" id="concorrenteCadastroSku" placeholder="Ex.: CX-19X12X12" value="'+escapeHtml(stateCadastro.sku)+'">'
+          + '</div>'
+          + '<div class="field" style="min-width:280px;flex:1;"><label>Link do anúncio/loja do concorrente</label>'
+            + '<input type="text" id="concorrenteCadastroUrl" placeholder="Cole o link aqui…" value="'+escapeHtml(stateCadastro.url)+'">'
+          + '</div>'
+          + '<div class="field" style="min-width:180px;"><label>Apelido (opcional)</label>'
+            + '<input type="text" id="concorrenteCadastroApelido" placeholder="Ex.: Loja Rival" value="'+escapeHtml(stateCadastro.apelido)+'">'
+          + '</div>'
+          + '<button class="primary-btn'+(stateCadastro.sku.trim() && stateCadastro.url.trim() && !stateCadastro.salvando ? ' enabled' : '')+'" id="concorrenteCadastroSalvarBtn" type="button" '+(!stateCadastro.sku.trim() || !stateCadastro.url.trim() || stateCadastro.salvando ? 'disabled' : '')+'>'
+            + svg('plus')+'<span>'+(stateCadastro.salvando ? 'Salvando…' : 'Cadastrar')+'</span>'
+          + '</button>'
+        + '</div>'
+        + (stateCadastro.error ? '<div class="field-hint" style="margin-top:10px;color:var(--danger);">'+escapeHtml(stateCadastro.error)+'</div>' : '')
+      + '</div>';
+
+      if(stateCadastro.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando concorrentes cadastrados…</span></div></div>';
+      } else if(!stateCadastro.lista.length){
+        html += '<div class="empty-panel" style="padding:18px;"><div class="field-hint">Nenhum concorrente cadastrado ainda.</div></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>SKU</th><th>Apelido</th><th>Link</th><th>Cadastrado em</th><th></th>'
+          + '</tr></thead><tbody>'
+          + stateCadastro.lista.map((c)=>{
+              return '<tr>'
+                + '<td class="mono">'+escapeHtml(c.sku)+'</td>'
+                + '<td>'+escapeHtml(c.apelido || '—')+'</td>'
+                + '<td style="max-width:340px;"><a href="'+escapeHtml(c.url)+'" target="_blank" rel="noopener" class="prod-title" title="'+escapeHtml(c.url)+'">'+escapeHtml(c.url)+'</a></td>'
+                + '<td>'+fmtDataHora(c.criadoEm)+'</td>'
+                + '<td><button class="row-ic-btn concorrenteCadastroRemoverBtn" data-id="'+c.id+'" type="button" title="Remover">'+svg('trash')+'</button></td>'
+              + '</tr>';
+            }).join('')
+          + '</tbody></table></div></div>';
+      }
+      return html;
     }
 
     window.AgenteConcorrente = { load };
+  })();
+
+  /* ================= PLANO DE AÇÃO DO DIA — Agente Coordenador (20/09/2026) =================
+     Pedido explícito do usuário: "claude agora com os meus agentes ligado
+     praciso que o analista analise a conta toda um exeplo anuncios o
+     porque um anuncio que vendia muito parou, pode ser ads pode ser o
+     concorrente entre outras coisas, como podemos fazer com que os
+     agentes analise a conta por completo e coloque pontual oque deve ser
+     feito, lembrando que nao pode ser no chute ou inventado tem que ser
+     com base em metricas e numeros da conta".
+
+     Etapa 5 do processo em etapas da "Daily dos Agentes" — a tela que
+     faltava pra ver o resultado do Agente Coordenador (Etapa 3, ver
+     lib/ia/coordenadorDiario.js) sem depender do WhatsApp (que hoje está
+     falhando por configuração do Twilio — ver 05-problemas-conhecidos.md).
+     Reaproveita 100%: GET /api/ia/daily/ultima (achados + correlações da
+     última reunião) e POST /api/ia/daily/gerar-agora ("Analisar agora",
+     mesmo botão que o agendador automático chama todo dia) — nenhuma
+     lógica nova no backend pra esta tela, só exibição.
+
+     "O que fazer primeiro" (as correlações do Coordenador) aparece SEMPRE
+     no topo, antes do detalhe por agente — é exatamente o "pontual o que
+     deve ser feito" que o usuário pediu. Cada conclusão já vem do backend
+     citando o número real por trás (nunca um texto solto aqui no
+     front-end) — esta tela só formata, nunca inventa nem completa nada. */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      try{ const d = new Date(v); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '—'; }
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      if(!wrap) return;
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+
+    const PRIORIDADE_INFO = {
+      critica: { label:'Crítica', cor:'--danger' },
+      alta: { label:'Alta', cor:'--warning' },
+      media: { label:'Média', cor:'--copper' },
+      baixa: { label:'Baixa', cor:'--text-faint' },
+    };
+    const NOME_AGENTE_FALLBACK = {
+      ads_performance:'Ads e Performance', promocoes:'Promoções', anuncios_radar:'Anúncios',
+      concorrente:'Análise de Concorrente', sac_mercado_livre:'SAC Mercado Livre', sac_shopee:'SAC Shopee',
+    };
+
+    const state = { loading:false, error:null, analisando:false, dados:null };
+
+    async function apiUltima(empresaId){
+      const res = await fetch('/api/ia/daily/ultima?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar o plano de ação.');
+      return body;
+    }
+    async function apiGerarAgora(empresaId){
+      const res = await fetch('/api/ia/daily/gerar-agora', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }),
+      });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível rodar a análise agora.');
+      return body;
+    }
+
+    async function carregar(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.dados = null; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.dados = await apiUltima(filtro.empresaId); }
+      catch(e){ state.error = e.message; state.dados = null; }
+      state.loading = false; render();
+    }
+
+    async function analisarAgora(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId || state.analisando) return;
+      state.analisando = true; render();
+      try{
+        await apiGerarAgora(filtro.empresaId);
+        await carregar();
+        toast('Análise concluída.', 'success');
+      } catch(e){
+        toast(e.message || 'Não foi possível rodar a análise agora.', 'error');
+      } finally {
+        state.analisando = false; render();
+      }
+    }
+
+    async function load(){ await carregar(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-planoAcaoDia');
+      if(page && page.classList.contains('active')) carregar();
+    });
+
+    function correlacaoCardHTML(c){
+      const pri = PRIORIDADE_INFO[c.prioridade] || { label:'Informativa', cor:'--text-faint' };
+      return '<div class="table-card" style="padding:16px 18px;margin-bottom:10px;border-left:4px solid var('+pri.cor+');">'
+        + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
+          + '<div style="flex:1;">'
+            + (c.sku ? '<div class="field-hint" style="margin-bottom:4px;">SKU <span class="mono">'+escapeHtml(c.sku)+'</span></div>' : '')
+            + '<div style="line-height:1.5;">'+escapeHtml(c.conclusao)+'</div>'
+          + '</div>'
+          + '<span class="badge-status" style="color:var('+pri.cor+');background:var('+pri.cor+'-soft);white-space:nowrap;">'+pri.label+'</span>'
+        + '</div>'
+      + '</div>';
+    }
+
+    function achadoLinhaHTML(a){
+      const pri = a.prioridade ? (PRIORIDADE_INFO[a.prioridade]||{cor:'--text-faint'}) : {cor:'--text-faint'};
+      return '<div style="padding:9px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;">'
+        + '<span style="width:8px;height:8px;border-radius:50%;background:var('+pri.cor+');margin-top:6px;flex:none;"></span>'
+        + '<div style="flex:1;">'
+          + '<div>'+escapeHtml(a.titulo)+'</div>'
+          + (a.descricao ? '<div class="field-hint" style="margin-top:2px;">'+escapeHtml(a.descricao)+'</div>' : '')
+        + '</div>'
+      + '</div>';
+    }
+
+    function agenteBlocoHTML(codigo, achados){
+      if(!achados || !achados.length) return '';
+      const nome = NOME_AGENTE_FALLBACK[codigo] || codigo;
+      return '<div class="table-card" style="padding:16px 18px;margin-bottom:10px;">'
+        + '<div class="panel-title" style="margin:0 0 6px;">'+escapeHtml(nome)+' <span class="field-hint" style="font-weight:500;">('+achados.length+')</span></div>'
+        + achados.map(achadoLinhaHTML).join('')
+      + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('planoAcaoDiaRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      const btnAnalisar = document.getElementById('btnAnalisarAgoraPlano');
+      if(btnAnalisar){
+        const habilitado = !state.analisando && !!filtro.empresaId;
+        btnAnalisar.disabled = !habilitado;
+        btnAnalisar.classList.toggle('enabled', habilitado);
+        btnAnalisar.innerHTML = svg('refreshCw')+'<span>'+(state.analisando ? 'Analisando…' : 'Analisar agora')+'</span>';
+      }
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para usar o Plano de Ação do Dia.</p></div>';
+        return;
+      }
+
+      if(state.loading){
+        root.innerHTML = '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando o plano de ação…</span></div></div>';
+        return;
+      }
+      if(state.error){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+        return;
+      }
+
+      const dados = state.dados;
+      if(!dados || !dados.reuniao){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('checkCircle')+'</div>'
+          + '<h2>Nenhuma análise ainda hoje</h2><p class="lead">Clique em "Analisar agora" pra rodar a Daily dos Agentes pela primeira vez — ela também roda automaticamente todo dia.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:14px;">Última análise: '+fmtDataHora(dados.reuniao.finalizadaEm || dados.reuniao.iniciadaEm)+' — status: '+escapeHtml(dados.reuniao.status)+(dados.reuniao.status === 'falhou' ? ' (nenhum especialista conseguiu produzir achados desta vez)' : '')+'</div>';
+
+      if(dados.correlacoes && dados.correlacoes.length){
+        html += '<div class="panel-title" style="margin:0 0 8px;">🧭 O que fazer primeiro</div>'
+          + dados.correlacoes.map(correlacaoCardHTML).join('');
+      } else {
+        html += '<div class="empty-panel" style="padding:18px;"><div class="field-hint">Nenhum cruzamento entre agentes identificado hoje — sem causa provável em comum entre os achados de Ads, Promoções, Anúncios e Concorrente pro mesmo SKU.</div></div>';
+      }
+
+      const porAgente = dados.achadosPorAgente || {};
+      const algumAchado = Object.keys(porAgente).some((codigo)=> (porAgente[codigo]||[]).length);
+      if(algumAchado){
+        html += '<div class="panel-title" style="margin:20px 0 8px;">Achados por agente</div>'
+          + Object.keys(porAgente).map((codigo)=> agenteBlocoHTML(codigo, porAgente[codigo])).join('');
+      } else if(!(dados.correlacoes && dados.correlacoes.length)){
+        html += '<div class="empty-panel" style="padding:18px;margin-top:10px;"><div class="field-hint">Nenhum achado de nenhum agente hoje.</div></div>';
+      }
+
+      root.innerHTML = html;
+    }
+
+    const btnAnalisarInicial = document.getElementById('btnAnalisarAgoraPlano');
+    if(btnAnalisarInicial) btnAnalisarInicial.addEventListener('click', analisarAgora);
+
+    window.PlanoAcaoDia = { load };
   })();
 
   /* ================= AGENTES DE IA — HUB (14/09/2026) =================

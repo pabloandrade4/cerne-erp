@@ -46,12 +46,16 @@ describe(
     });
 
     beforeEach(async () => {
+      // ia_correlacoes_diarias precisa sumir ANTES da reunião (FK sem
+      // CASCADE) — mesma ordem de test/dailyCiclo.test.js.
+      await pool.query('DELETE FROM ia_correlacoes_diarias WHERE reuniao_id IN (SELECT id FROM ia_reunioes_diarias WHERE empresa_id = $1)', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_achados_diarios WHERE reuniao_id IN (SELECT id FROM ia_reunioes_diarias WHERE empresa_id = $1)', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_reunioes_diarias WHERE empresa_id = $1', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_decisoes_ads WHERE empresa_id = $1', [EMPRESA_ID]);
     });
 
     after(async () => {
+      await pool.query('DELETE FROM ia_correlacoes_diarias WHERE reuniao_id IN (SELECT id FROM ia_reunioes_diarias WHERE empresa_id = $1)', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_achados_diarios WHERE reuniao_id IN (SELECT id FROM ia_reunioes_diarias WHERE empresa_id = $1)', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_reunioes_diarias WHERE empresa_id = $1', [EMPRESA_ID]);
       await pool.query('DELETE FROM ia_decisoes_ads WHERE empresa_id = $1', [EMPRESA_ID]);
@@ -72,6 +76,7 @@ describe(
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.equal(body.reuniao, null);
+      assert.deepEqual(body.correlacoes, []);
     });
 
     test('POST /gerar-agora + GET /ultima: fluxo completo com uma decisão pendente real', async () => {
@@ -94,6 +99,10 @@ describe(
       assert.equal(bodyUltima.reuniao.status, 'concluida');
       assert.equal(bodyUltima.achadosPorAgente.ads_performance.length, 1);
       assert.equal(bodyUltima.achadosPorAgente.ads_performance[0].tipo, 'oportunidade');
+      // "aumentar_orcamento" sozinho (sem achado de Anúncios/Promoções no
+      // mesmo SKU) nunca cruza com nenhuma regra do Coordenador — honesto,
+      // nunca inventa uma correlação sem base real.
+      assert.deepEqual(bodyUltima.correlacoes, []);
     });
   }
 );

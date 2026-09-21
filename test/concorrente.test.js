@@ -275,3 +275,114 @@ describe(
     });
   }
 );
+
+// ============================================================================
+// Cadastro manual de concorrente por SKU (20/09/2026) — ver comentário
+// grande em lib/concorrente.js e db/schema.sql (tabela
+// concorrentes_monitorados). Resposta direta do usuário ao bloqueio da
+// descoberta automática: "sobre o concorrente eu vou mandar o link do
+// anuncio do concorrente para ficar mais facil". Nenhuma chamada à API do
+// Mercado Livre nestes testes — é CRUD puro contra o Postgres.
+describe(
+  'Cadastro manual de concorrente — concorrentes_monitorados (20/09/2026)',
+  { skip: !TEM_BANCO && 'defina DATABASE_URL apontando pra um Postgres de teste' },
+  () => {
+    let pool, concorrente;
+    const EMPRESA_ID_CADASTRO = 975;
+
+    before(async () => {
+      pool = require('../db/pool');
+      concorrente = require('../lib/concorrente');
+      await pool.query(
+        `INSERT INTO empresas (id, cnpj, razao_social, ativo) VALUES ($1, '97570707000199', 'EMPRESA TESTE CADASTRO CONCORRENTE', TRUE)
+         ON CONFLICT (id) DO UPDATE SET ativo = TRUE`,
+        [EMPRESA_ID_CADASTRO]
+      );
+    });
+
+    afterEach(async () => {
+      await pool.query('DELETE FROM concorrentes_monitorados WHERE empresa_id = $1', [EMPRESA_ID_CADASTRO]);
+    });
+
+    after(async () => {
+      await pool.query('DELETE FROM empresas WHERE id = $1', [EMPRESA_ID_CADASTRO]);
+    });
+
+    test('cadastrarConcorrente exige sku e url — nunca grava cadastro incompleto', async () => {
+      await assert.rejects(
+        () => concorrente.cadastrarConcorrente({ empresaId: EMPRESA_ID_CADASTRO, sku: '', url: 'https://exemplo.com/x' }),
+        (err) => { assert.equal(err.status, 400); return true; }
+      );
+      await assert.rejects(
+        () => concorrente.cadastrarConcorrente({ empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-1', url: '' }),
+        (err) => { assert.equal(err.status, 400); return true; }
+      );
+    });
+
+    test('cadastrarConcorrente grava e listarConcorrentesMonitorados devolve só os ativos da empresa', async () => {
+      const linha = await concorrente.cadastrarConcorrente({
+        empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-1', url: 'https://exemplo.com/anuncio-concorrente', apelido: 'Loja Rival',
+      });
+      assert.equal(linha.sku, 'CX-1');
+      assert.equal(linha.url, 'https://exemplo.com/anuncio-concorrente');
+      assert.equal(linha.apelido, 'Loja Rival');
+      assert.equal(linha.ativo, true);
+
+      const listados = await concorrente.listarConcorrentesMonitorados({ empresaId: EMPRESA_ID_CADASTRO });
+      assert.equal(listados.length, 1);
+      assert.equal(listados[0].id, linha.id);
+    });
+
+    test('cadastrar o MESMO sku+url de novo (empresa igual) nunca duplica — upsert reativa e mantém apelido quando o novo vier vazio', async () => {
+      const primeira = await concorrente.cadastrarConcorrente({
+        empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-2', url: 'https://exemplo.com/anuncio-dup', apelido: 'Nome Original',
+      });
+      const segunda = await concorrente.cadastrarConcorrente({
+        empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-2', url: 'https://exemplo.com/anuncio-dup',
+      });
+      assert.equal(segunda.id, primeira.id);
+      assert.equal(segunda.apelido, 'Nome Original');
+
+      const listados = await concorrente.listarConcorrentesMonitorados({ empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-2' });
+      assert.equal(listados.length, 1);
+    });
+
+    test('removerConcorrenteMonitorado desativa (nunca apaga) e some da listagem padrão, mas continua visível com incluirInativos', async () => {
+      const linha = await concorrente.cadastrarConcorrente({
+        empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-3', url: 'https://exemplo.com/anuncio-remover',
+      });
+      await concorrente.removerConcorrenteMonitorado({ empresaId: EMPRESA_ID_CADASTRO, id: linha.id });
+
+      const ativos = await concorrente.listarConcorrentesMonitorados({ empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-3' });
+      assert.equal(ativos.length, 0);
+
+      const todos = await concorrente.listarConcorrentesMonitorados({ empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-3', incluirInativos: true });
+      assert.equal(todos.length, 1);
+      assert.equal(todos[0].ativo, false);
+    });
+
+    test('removerConcorrenteMonitorado com id de outra empresa (ou inexistente) -> erro claro, nunca desativa cadastro de outra empresa', async () => {
+      const linha = await concorrente.cadastrarConcorrente({
+        empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-4', url: 'https://exemplo.com/anuncio-de-outra-empresa',
+      });
+      await assert.rejects(
+        () => concorrente.removerConcorrenteMonitorado({ empresaId: 999999, id: linha.id }),
+        (err) => { assert.equal(err.status, 404); return true; }
+      );
+      const aindaAtivo = await concorrente.listarConcorrentesMonitorados({ empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-4' });
+      assert.equal(aindaAtivo.length, 1);
+      assert.equal(aindaAtivo[0].ativo, true);
+    });
+
+    test('mapaConcorrentesMonitoradosPorSku agrupa por sku, incluindo mais de um concorrente pro mesmo sku', async () => {
+      await concorrente.cadastrarConcorrente({ empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-5', url: 'https://exemplo.com/a' });
+      await concorrente.cadastrarConcorrente({ empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-5', url: 'https://exemplo.com/b' });
+      await concorrente.cadastrarConcorrente({ empresaId: EMPRESA_ID_CADASTRO, sku: 'CX-6', url: 'https://exemplo.com/c' });
+
+      const mapa = await concorrente.mapaConcorrentesMonitoradosPorSku(EMPRESA_ID_CADASTRO);
+      assert.equal(mapa['CX-5'].length, 2);
+      assert.equal(mapa['CX-6'].length, 1);
+      assert.equal(mapa['CX-7'], undefined);
+    });
+  }
+);
