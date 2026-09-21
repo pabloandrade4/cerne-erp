@@ -3,6 +3,32 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-21 (49) — Adicionar Telegram como canal alternativo aos avisos (ao lado do WhatsApp, não no lugar)
+- **Contexto:** o WhatsApp via Twilio (11/09/2026, ver (48) anterior/`lib/whatsapp.js`)
+  segue bloqueado pela exigência de um "Content Template" aprovado pela
+  Meta. O usuário perguntou se a Evolution API (WhatsApp não-oficial, sem
+  essa exigência) resolveria — pesquisado e explicado (self-hosted, sem
+  aprovação, risco pequeno de bloqueio pro uso de avisos internos a um só
+  número) — mas o usuário decidiu inicialmente manter o Twilio
+  ("entao vamos tentar como twilio"). Depois de real dificuldade pra achar
+  a tela de Content Template Builder no Console da Twilio (o caminho certo
+  é "Products & Services > Templates", não "Comunicações" — confirmado por
+  pesquisa na documentação oficial da Twilio), o usuário pediu outro
+  caminho.
+- **Opções apresentadas (`AskUserQuestion`):** (1) insistir no Twilio com
+  instrução mais precisa, (2) Telegram (sem aprovação, gratuito, funciona
+  na hora — mas muda o canal de recebimento), (3) Evolution API (continua
+  sendo WhatsApp, mas exige manter um servidor rodando + QR code). Usuário
+  escolheu **Telegram**.
+- **Decisão de implementação:** Telegram foi adicionado como canal
+  ADITIVO, nunca substituindo o WhatsApp — o código do Twilio continua
+  intacto e funcional (ver (57) em `04-alteracoes.md`), então se o usuário
+  eventualmente conseguir aprovar o Content Template, os dois passam a
+  funcionar juntos sem esforço extra. Motivo: nunca descartar uma
+  integração que já funciona (mesmo que hoje esteja bloqueada só por uma
+  etapa de configuração pendente) só porque surgiu uma alternativa mais
+  simples agora.
+
 ## 2026-09-20 (48) — Não criar um "Analista de Conta" novo: implementar o Agente Coordenador (Etapa 3) já planejado em cima da Daily dos Agentes que já existia
 - **Pedido original do usuário:** "claude agora com os meus agentes ligado
   praciso que o analista analise a conta toda um exeplo anuncios o porque

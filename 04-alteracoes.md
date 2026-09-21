@@ -2,6 +2,65 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-21 (57) — Telegram como alternativa ao WhatsApp pros avisos automáticos
+- **Contexto:** o WhatsApp via Twilio segue exigindo um "Content Template"
+  aprovado pela Meta pra funcionar fora da janela de 24h (ver comentário em
+  `lib/whatsapp.js` e (54)); confirmado por log do Render que o erro
+  `ContentSid Required` persiste mesmo depois de o usuário subir uma versão
+  nova (21/09/2026, verificado via `mcp__Render__list_logs` comparando
+  timestamps antes/depois do deploy `dep-dao7d1m8bjmc73b4fcfg`, que foi ao
+  ar às 00:13:23 e mesmo assim recebeu o mesmo erro às 00:13:48). Foi
+  pesquisado (com o usuário) usar a Evolution API como troca completa do
+  WhatsApp, mas ele preferiu manter o WhatsApp e, diante da dificuldade real
+  de achar a tela de Content Template Builder no Console da Twilio, pediu
+  uma alternativa: **"trocar pra Telegram"**.
+- **`lib/telegram.js` (novo, mesmo padrão de `lib/whatsapp.js`, zero
+  dependência nova — usa só `fetch` nativo do Node, já que a API do Telegram
+  é HTTP puro):** `telegramConfigurado()` checa `TELEGRAM_BOT_TOKEN` e
+  `TELEGRAM_CHAT_ID`; `enviarMensagemTelegram(texto)` manda a mensagem via
+  `POST /bot<token>/sendMessage` (nunca lança pra quem chama, sempre
+  devolve `{ enviado, motivo?, detalhe? }` — mesmo contrato do WhatsApp);
+  corta mensagens maiores que 4096 caracteres (limite real da API) em vez de
+  falhar; remove os asteriscos de negrito (formato WhatsApp) do texto antes
+  de mandar, sem usar `parse_mode` do Telegram — decisão deliberada pra
+  nunca arriscar a API rejeitar a mensagem inteira por causa de um caractere
+  especial não escapado numa recomendação gerada pela IA.
+  `listarChatsRecentes()` lê `getUpdates` do bot — usada só pra ajudar o
+  usuário a descobrir o `TELEGRAM_CHAT_ID` sem precisar mexer em nada
+  técnico.
+- **`routes/telegram.js` (novo, registrado em `server.js` como
+  `/api/integracoes/telegram`):** `GET /status` (se já configurado),
+  `GET /descobrir-chat-id` (lista os chats que já mandaram mensagem pro bot,
+  pra copiar o id certo), `GET /testar` (manda uma mensagem de teste) — três
+  rotas no mesmo espírito de `routes/whatsapp.js`.
+- **`lib/ia/radar.js`, `lib/ia/radarConcorrente.js`, `lib/ia/dailyCiclo.js`:**
+  Telegram foi ligado EXATAMENTE nos mesmos pontos onde o WhatsApp já era
+  chamado (aviso do Radar por situação nova/escalada, aviso do Radar de
+  Concorrente, resumo diário da Daily) — os dois canais são independentes:
+  se só um estiver configurado, só ele envia; se os dois estiverem, os dois
+  recebem o mesmo aviso; se nenhum, nada quebra (mesma filosofia defensiva
+  de sempre — nunca lança, só loga e segue). `executarDailyComNotificacao`
+  agora devolve também `telegram: { enviado, motivo?, detalhe? }` ao lado de
+  `whatsapp`, e aceita `enviarMensagemTelegramFn` pra teste (mesmo padrão de
+  `enviarMensagemWhatsappFn`).
+- **Configuração (feita pelo usuário, sem entregar nenhuma credencial pra
+  IA):** criar um bot conversando com `@BotFather` no Telegram (`/newbot`),
+  mandar uma mensagem qualquer pro bot novo, e configurar
+  `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (descoberto via
+  `GET /api/integracoes/telegram/descobrir-chat-id`) nas variáveis de
+  ambiente do Render.
+- **Testes:** `test/telegram.test.js` (novo, 8 testes puros, sem rede real,
+  mesmo padrão de `test/whatsapp.test.js` — todos passando: configuração,
+  envio com sucesso, erro da API, erro de rede, corte de mensagem grande,
+  descoberta de chats); `test/dailyCiclo.test.js` ganhou 2 novas asserções/
+  1 teste novo cobrindo o campo `telegram` no retorno de
+  `executarDailyComNotificacao` (não executável neste ambiente por falta do
+  módulo `pg`, mesma limitação de sempre — ver (56) — mas sintaticamente
+  verificado e revisado manualmente linha a linha).
+- **Nada do WhatsApp foi removido ou alterado** — é 100% aditivo; se o
+  usuário conseguir configurar o Content Template do Twilio no futuro, os
+  dois canais passam a funcionar ao mesmo tempo sem nenhuma mudança extra.
+
 ## 2026-09-20 (56) — Agente Coordenador (Etapa 3) + tela "Plano de Ação do Dia" (Etapa 5) + cadastro manual de concorrente por SKU
 - **Pedido explícito do usuário:** "claude agora com os meus agentes ligado
   praciso que o analista analise a conta toda um exeplo anuncios o porque
