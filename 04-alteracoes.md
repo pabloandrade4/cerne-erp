@@ -2,6 +2,169 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-21 (62) — Análise de Concorrente: corrigido o erro ao cadastrar (causa raiz encontrada nos logs do Render)
+- **Pedido do usuário:** "tem que arrumar é analise de concorrente pois esta
+  dando erro quando vai cadastrar o anúncio do concorrente".
+- **Causa raiz (achada lendo os logs reais do servidor no Render, não
+  suposição):** `TypeError: cadastrarConcorrente is not a function` e
+  `TypeError: listarConcorrentesMonitorados is not a function`, repetidos
+  em TODAS as instâncias do servidor desde a madrugada de 21/09 — ou seja,
+  não era um bug passageiro de reinício (diferente do que uma checagem
+  anterior, mais rápida, tinha concluído por engano). O código deste
+  projeto (aqui, no ambiente onde eu trabalho) já está certo — `lib/
+  concorrente.js` já tem as duas funções, testadas e com os testes
+  passando. O problema é que a versão desse arquivo especificamente NUNCA
+  chegou a subir de verdade pro GitHub/Render no dia em que o cadastro
+  manual de concorrente foi criado (20/09) — o mesmo tipo de falha de
+  upload já visto antes com `lib/telegram.js` (ver (59)), só que desta vez
+  ninguém tinha percebido ainda porque o resto da tela (buscar concorrente
+  automaticamente) continuava funcionando normalmente.
+- **A correção:** nenhuma mudança de código foi necessária — `lib/
+  concorrente.js` já estava certo aqui. A correção é simplesmente garantir
+  que ESTE arquivo específico suba certo desta vez (ele já vai incluído
+  neste pacote ml103/ml104). Ver aviso especial pro usuário no chat sobre
+  como confirmar que esse arquivo em especial realmente atualizou no
+  GitHub.
+- **Verificação:** lidos os logs de erro reais do Render (`mcp__Render__
+  list_logs`, filtro "concorrente"/"concorrentes_monitorados") cobrindo o
+  período de 19/09 a 21/09 — confirmado que o erro se repete em toda
+  instância nova do servidor desde a criação do recurso, nunca some
+  sozinho; conferido também que a tabela `concorrentes_monitorados` e a
+  restrição UNIQUE que o cadastro usa já existem certas em `db/schema.sql`
+  (não é problema de banco de dados).
+
+## 2026-09-21 (61) — Visão Geral: novo layout (mockup enviado pelo usuário)
+- **Pedido do usuário (verbatim):** mandou um arquivo HTML de referência
+  ("pf_embalagens_visao_geral.html") pedindo "mecher no lyaut de visao
+  geral... é pra mecher apenas visuais e eu quero que faça completamente
+  igual esta no arquivo, os graficos, as cores, tudo identico e funcional,
+  sem investra nada turo real".
+- **O que mudou de verdade:** só o CONTEÚDO da tela Visão Geral (o menu
+  lateral e o cabeçalho do topo, que são compartilhados com todas as
+  outras telas do sistema, continuam exatamente iguais — mudar esses
+  quebraria as outras 30+ telas). Layout novo: saudação com a data, 6
+  cartões de indicador em destaque (Faturamento, Margem de contribuição em
+  R$ e %, Pedidos, Ticket médio, Cancelamentos), uma fileira compacta com
+  o detalhamento (Taxas, Frete, Imposto, Custo dos produtos), e 9 cartões
+  organizados em 3 fileiras: Vendas por Marketplace / gráfico de
+  Faturamento x Margem / Atenção hoje (alertas), depois Estoque / Contas e
+  Fluxo de Caixa / Anúncios e Performance, e por fim Agentes de IA / Saúde
+  da operação / banner da marca.
+- **Cores:** o mockup do usuário era um tema escuro fixo com cores em
+  hexadecimal soltas. Em vez de copiar os hexadecimais (que quebrariam o
+  tema claro, que é o padrão do sistema, e ficariam dessincronizados do
+  tema escuro de verdade do sistema), o layout novo usa as MESMAS
+  variáveis de cor que o resto do ERP já usa (`var(--copper)`, `var(--
+  success)`, `var(--danger)` etc.) — mesmo critério já usado da última vez
+  que um mockup do usuário virou tela real (ver (58), Promoções) —
+  continua funcionando certo nos temas claro e escuro, sem CSS novo pra
+  isso.
+- **Honestidade dos números (regra permanente deste projeto):** todo
+  número mostrado já existia de verdade no backend ou é uma conta direta
+  em cima de números reais (nunca um segundo cálculo divergente). Alguns
+  pedaços do mockup do usuário não tinham nenhum dado real equivalente no
+  sistema hoje — em vez de inventar, cada um foi adaptado (ver comentário
+  grande no início do código da Visão Geral, em `public/index.html`, pra
+  os detalhes técnicos de cada um):
+  - "Lucro Líquido" / "Margem Líquida" do mockup viraram "Margem de
+    contribuição (R$) / (%)" — os nomes que o sistema já usa pra esse
+    cálculo exato, pra nunca sugerir um "lucro líquido" mais completo do
+    que o sistema realmente calcula.
+  - "Ticket médio" e "% de cancelamento" não vinham prontos do backend,
+    mas dá pra montar 100% com números reais já existentes (faturamento ÷
+    pedidos; cancelados ÷ total de pedidos) — sem inventar nada.
+  - O gráfico de rosca "Status dos Pedidos" (Entregues / Em trânsito / A
+    preparar / Cancelados) não tem contagem real hoje (o sistema não
+    guarda esse status de entrega de um jeito consultável ainda) — em vez
+    de inventar esses números, esse espaço continua sendo o painel
+    "Atenção hoje" (alertas), que já existia e é 100% real.
+  - "Estoque Total" mostra Full + fora do Full (os dois já eram calculados
+    nos bastidores, só faltava a tela de Estoque Full também devolver o
+    segundo — ver `routes/estoqueFull.js`, mudança pequena e aditiva). A
+    3ª fatia do mockup ("A caminho") não existe no sistema hoje — comprar
+    um produto não gera entrada de estoque automaticamente ainda — por
+    isso não aparece.
+  - "Próximas Ações" (lista de tarefas do mockup) não tem nenhum sistema
+    de tarefas real por trás — o cartão equivalente aqui continua
+    mostrando o resumo real dos Agentes de IA (o mesmo que já existia),
+    só com a cara de lista de ações.
+  - "Anúncios ativos" / "ROAS médio" / os 4 status (Lucrativos / Ajustar /
+    Pausar / Sem dados) são 100% reais: o ROAS já vinha pronto da tela de
+    Ads; "ativos" conta o status ao vivo de cada anúncio (tela Performance
+    de Anúncios); os 4 status vêm da classificação de 5 categorias que o
+    Agente de Ads já calcula pra cada anúncio (juntando "manter" +
+    "escalar" num só "Lucrativos").
+- **Verificação:** `node --check` sem erro no HTML/JavaScript inteiro
+  extraído da página; chaves do CSS novo conferidas uma a uma (nenhuma
+  sobrando/faltando); todo nome de campo usado (ex.:
+  `resumo.margemContribuicao.valor`, `painel.porCanal.linhas`,
+  `estoque.fisicoForaDoFull.unidadesFisicas`, `linhas[].
+  classificacaoCodigo`) conferido contra o código real que gera cada um
+  desses dados no backend, um por um. **Não foi possível testar a tela
+  rodando de verdade num navegador nesta etapa** (ambiente sem acesso a
+  navegador) — importante conferir depois do deploy; vou olhar os logs do
+  Render assim que a nova versão estiver no ar pra confirmar que não
+  sobrou nenhum erro.
+
+## 2026-09-21 (60) — Promoções: nunca mais recomendar uma promoção que fica mais cara do que o item já vende hoje
+- **Pedido do usuário (verbatim):** "so sugerir promoçoes que seja com o
+  valor abaixo do que ja vendo ou que ja esta em promoçao ou seja se eu ja
+  tiver em uma promoção que eu vendo a 78 e vier uma promoçao nova vendendo
+  a 77 quero quie me recomenda mesmo que caia 1 a 2,5% agora se eu to
+  vendendo a 78 e tem promoção a 100 mesmo que for aumentar minha margem eu
+  nao quero nem que recomendda".
+- **O problema:** o agente de Promoções só olhava pra margem (a conta de
+  quanto sobra depois de tarifa/frete/imposto/custo) na hora de decidir se
+  valia recomendar entrar numa promoção nova. Isso podia recomendar uma
+  promoção com preço MAIOR do que o item já vende hoje, contanto que a
+  margem calculada desse acima do mínimo — o que não faz sentido nenhum na
+  prática (ninguém quer "promoção" mais cara que o preço normal).
+- **A regra nova:** antes de qualquer conta de margem, o sistema agora
+  compara o preço da promoção candidata com o preço que o item JÁ vende
+  hoje de verdade — que pode ser o preço normal do catálogo OU, se o item
+  já estiver ativo em OUTRA promoção rodando ao mesmo tempo, o preço dessa
+  outra promoção (o mais baixo, se houver mais de uma). Se o preço da
+  promoção nova for maior que essa referência, a resposta agora é "preço
+  acima do atual" — e, exatamente como o usuário pediu ("nem quero que
+  recomende"), isso NUNCA vira uma sugestão pendente, nem como "não
+  recomendado" — simplesmente não aparece na lista, pra não virar ruído.
+  Só quando o preço novo é igual ou menor é que a conta de margem de
+  sempre continua decidindo se entra ou não — e nesse caso a tolerância que
+  já existia de até 3 pontos percentuais de queda de margem (ver (48) em
+  `02-decisoes.md`, pedido de 20/09/2026) continua valendo exatamente igual
+  — é o que já cobria o "mesmo que caia 1 a 2,5%" deste pedido.
+- **Como o sistema agora sabe o preço de uma promoção "concorrente" no
+  mesmo item:** antes, o ciclo automático de Promoções (`lib/ia/
+  promocoesCiclo.js`) analisava uma promoção de cada vez, sem saber o que
+  acontecia nas outras. Agora ele primeiro lê TODAS as promoções ativas da
+  conta, monta um mapa de "preço mais baixo em que cada item já está
+  vendendo agora" e só depois analisa cada item — assim ele sabe comparar
+  com o preço de uma promoção diferente da que está sendo avaliada no
+  momento, exatamente o cenário do exemplo do usuário (vende a 78 numa
+  promoção, chega uma nova a 77).
+- **Arquivos tocados:** `lib/promocoesMotor.js` (nova checagem de preço,
+  roda antes da checagem de margem — código `preco_acima_do_atual`),
+  `lib/ia/promocoesDecisor.js` (só um comentário explicando por que esse
+  código nunca vira sugestão — o comportamento já era esse por padrão),
+  `lib/ia/promocoesCiclo.js` (agora lê todas as promoções da conta antes de
+  decidir, pra saber o preço em outras promoções do mesmo item).
+- **O que NÃO mudou:** a regra dos "1 a 2,5% de queda aceitável" continua
+  sendo a mesma de sempre (tolerância de 3 pontos percentuais, pedida em
+  20/09/2026) — não foi preciso mexer nela, ela já cobria essa parte do
+  pedido. Itens já ativos numa promoção continuam sendo decididos só pela
+  margem (sair/manter/revisar preço) — essa checagem de preço nova só vale
+  pra promoção candidata (ainda não ativa).
+- **Verificação:** `node --check` sem erro nos 3 arquivos tocados; 8 testes
+  novos (`test/promocoesMotor.test.js`) cobrindo exatamente os exemplos que
+  o usuário deu (vende a 78, promoção nova a 77 → recomenda; vende a 78,
+  "promoção" a 100 → nunca recomenda, mesmo com margem ótima calculada),
+  mais os casos de borda (preço igual não bloqueia, sem preço de referência
+  disponível cai no comportamento de sempre, item já ativo nunca usa essa
+  checagem) — todos passando. Suíte completa rodada de novo depois
+  (`node --test`): 266 de 281 testes passando, as mesmas 15 falhas de
+  sempre (só o módulo `pg`, que não existe neste ambiente de
+  desenvolvimento — nada relacionado a esta mudança), nenhuma regressão.
+
 ## 2026-09-21 (59) — Conversa de verdade pelo Telegram (pedir números pro bot, igual a IA Gestora)
 - **Pedido do usuário:** "E O TELEGRAN JA ESTA FUNCIONANDO , POIS O BOT AINDA NAO ME RESPONDEU , QUEROQ EU DE PRA MIM PEDIR AS COISAS POR LA , MESMA COISA QUANDO CONVERSO COM A AI GESTORA , É POSSIVEL??" — até aqui (ver (57)) o Telegram só mandava avisos automáticos (Radar/Daily), nunca lia nem respondia o que a pessoa escrevia pro bot.
 - **Decisão de arquitetura:** reaproveitar EXATAMENTE o mesmo motor da IA Gestora (`responderPergunta`, `lib/ia/orchestrator.js`) — nenhuma regra financeira nova, nenhuma ferramenta nova, nenhum cálculo novo. O Telegram só vira mais um "jeito de entrar", ao lado do site.

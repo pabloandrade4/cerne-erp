@@ -3,6 +3,74 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-21 (52) — Visão Geral: mockup vira layout novo, mas cada pedaço sem dado real foi adaptado, nunca inventado
+- **Pedido do usuário:** mandou um HTML de referência e pediu visual
+  idêntico ("os graficos, as cores, tudo identico e funcional, sem
+  investra nada turo real").
+- **Decisão principal:** a regra permanente deste projeto ("nunca inventar
+  dado") pesa mais do que "ficar idêntico ao mockup" nos pontos onde os
+  dois conflitam. Em vez de perguntar de novo pro usuário item por item
+  (ele já deixou claro, repetidas vezes ao longo do projeto, que prefere
+  isso resolvido direto e explicado depois em linguagem simples), cada
+  pedaço do mockup sem dado real por trás foi adaptado seguindo o mesmo
+  critério já usado da última vez que isso aconteceu (ver (37) e (38)):
+  manter o espaço/card, mas trocar o conteúdo por um dado real equivalente
+  ou parecido, e documentar a troca com clareza.
+- **Decisão sobre cores:** reusar as variáveis de cor que o sistema já tem
+  (`var(--copper)`, `var(--success)` etc.) em vez dos hexadecimais fixos
+  do mockup — mesma decisão já tomada em (38) pro layout de Promoções,
+  pelo mesmo motivo (o sistema tem tema claro/escuro; hexadecimal fixo
+  quebra um dos dois).
+- **Decisão sobre menu lateral e cabeçalho do topo:** o mockup do usuário
+  trazia sua própria barra lateral e cabeçalho, diferentes dos do sistema
+  real — mantidos os componentes REAIS e compartilhados do sistema (menu/
+  cabeçalho usados por todas as +30 telas), e o mockup foi seguido só a
+  partir do conteúdo da página (a partir da saudação "Bom dia"). Mudar o
+  menu/cabeçalho compartilhado pra bater com o mockup quebraria a
+  identidade visual de todas as outras telas — fora do pedido do usuário,
+  que falou especificamente "layout de Visão Geral".
+- **Decisão sobre Estoque:** em vez de criar uma rota nova, `routes/
+  estoqueFull.js` passou a devolver mais um campo (`fisicoForaDoFull`) que
+  a função de cálculo (`lib/estoqueFisico.js`) já calculava por dentro,
+  mas que nunca tinha sido exposto — mudança aditiva, sem nenhuma fórmula
+  nova, sem risco pra nenhuma tela que já usa essa rota hoje.
+- **Decisão sobre Anúncios e Performance:** em vez de criar um endpoint
+  novo agregando "anúncios ativos"/"ROAS"/classificação, a tela busca os
+  dois endpoints que já existem (`/api/ads` e `/api/performance-anuncios`)
+  e cruza os campos reais que cada um já devolve — nenhum cálculo
+  duplicado, só duas chamadas a mais em paralelo (mesmo padrão de
+  resiliência por fonte já usado nesta tela desde 26/08).
+
+## 2026-09-21 (51) — Promoções: preço acima do que já vende hoje nunca é recomendado, mesmo que a margem melhore
+- **Pedido do usuário (verbatim):** "so sugerir promoçoes que seja com o
+  valor abaixo do que ja vendo ou que ja esta em promoçao... se eu ja
+  tiver em uma promoção que eu vendo a 78 e vier uma promoçao nova vendendo
+  a 77 quero quie me recomenda mesmo que caia 1 a 2,5% agora se eu to
+  vendendo a 78 e tem promoção a 100 mesmo que for aumentar minha margem eu
+  nao quero nem que recomendda".
+- **Decisão principal:** o preço passa a ser uma checagem OBRIGATÓRIA,
+  separada e anterior à checagem de margem — nunca uma troca de uma pela
+  outra. Preço da promoção candidata acima do preço atual do item = sem
+  sugestão nenhuma, ponto final, mesmo que a margem calculada fosse ótima.
+  Só depois dessa checagem passar é que a margem (com a tolerância de 3
+  pontos já existente, ver (48)) continua decidindo como sempre decidiu.
+- **Decisão sobre "preço atual":** o usuário deu um exemplo em que o preço
+  de referência não é o preço normal do catálogo, e sim o preço de OUTRA
+  promoção em que o item já está ativo ao mesmo tempo. Por isso o "preço
+  atual" usado na comparação é: preço da promoção ativa mais barata em que
+  o item já está (se houver alguma), senão o preço normal do catálogo. Isso
+  exigiu que o ciclo de análise (`lib/ia/promocoesCiclo.js`) passasse a
+  olhar todas as promoções da conta de uma vez antes de decidir cada item,
+  em vez de analisar uma promoção isolada por vez.
+- **Decisão sobre onde essa sugestão "reprovada por preço" aparece:** em
+  nenhum lugar — nem como "não recomendado" na lista de pendências. Pedido
+  explícito do usuário ("nem quero que recomende"): o objetivo é reduzir
+  ruído, não trocar um tipo de aviso por outro.
+- **Decisão sobre a regra de tolerância de margem já existente (3 pontos
+  percentuais, ver (48)):** mantida exatamente igual, sem nenhuma mudança —
+  ela já cobria a parte do pedido sobre "cair 1 a 2,5%" ser aceitável, e só
+  se aplica DEPOIS que a checagem de preço já aprovou o candidato.
+
 ## 2026-09-21 (50) — Telegram vira canal de conversa de verdade, não só de aviso (reaproveitando a IA Gestora)
 - **Pedido do usuário:** poder perguntar coisas pro bot do Telegram igual já faz na IA Gestora do site.
 - **Decisão principal:** nunca criar uma "segunda IA" — o Telegram chama a MESMA função (`responderPergunta`) que a IA Gestora do site já usa, então qualquer regra/ferramenta/honestidade de dado que existir lá vale automaticamente pro Telegram também, sem duplicar nada.

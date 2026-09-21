@@ -18,6 +18,14 @@
 // HTTP nem tela. `itens` (cru, por anúncio) continua sendo devolvido sem
 // mudança nenhuma, para não quebrar nada que já lê esta rota — `fisico` é um
 // campo NOVO e aditivo.
+//
+// `fisicoForaDoFull` (21/09/2026, pedido do usuário: novo layout da Visão
+// Geral precisa mostrar o estoque TOTAL — Full + fora do Full — mas essa
+// rota, até aqui, só devolvia o bloco `full` de calcularEstoqueFisico (a
+// própria função já calcula os dois blocos separados desde sempre, ver
+// lib/estoqueFisico.js). Mais um campo aditivo — nenhum cálculo novo,
+// nenhuma tela existente quebra: só passa a expor um dado que já era
+// calculado e ficava sem uso nesta resposta.
 const express = require('express');
 const pool = require('../db/pool');
 const { calcularEstoqueFisico } = require('../lib/estoqueFisico');
@@ -90,6 +98,7 @@ router.get('/', async (req, res, next) => {
       itens: itens.map(serializeItem),
       ultimaSincronizacaoGeral,
       fisico: estoqueFisico.full,
+      fisicoForaDoFull: estoqueFisico.foraDoFull,
     });
   } catch (err) { next(err); }
 });

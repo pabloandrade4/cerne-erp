@@ -489,6 +489,93 @@
   .ov2-ia-cta{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:11px 16px; border-radius:12px; background:var(--copper); color:#fff; font-weight:700; font-size:13px; text-decoration:none; transition:opacity .15s; }
   .ov2-ia-cta:hover{ opacity:.88; }
 
+  /* ---- Visão Geral — layout novo (21/09/2026, mockup enviado pelo
+     usuário — ver comentário grande no topo da IIFE window.Overview em
+     public/index.html). Prefixo "ov3-" isolado, mesma regra do "ov2-"
+     acima: nenhuma outra tela usa essas classes. Reaproveita .panel/
+     .panel-head/.panel-title/.kpi-sec* (já genéricos, usados em várias
+     telas) em vez de duplicar — só o que é realmente novo ganhou classe
+     nova aqui. ---- */
+  .ov3-greeting{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
+  .ov3-greeting h1{ font-family:"Archivo",sans-serif; font-size:23px; margin:0 0 3px; letter-spacing:-.4px; color:var(--text); }
+  .ov3-greeting .sub{ font-size:12.5px; color:var(--text-muted); }
+  .ov3-greeting-date{ text-align:right; font-size:12px; color:var(--text-muted); padding-top:4px; }
+
+  .ov3-kpi-grid{ display:grid; grid-template-columns:repeat(6,1fr); gap:12px; }
+  @media (max-width:1400px){ .ov3-kpi-grid{ grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:760px){ .ov3-kpi-grid{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:460px){ .ov3-kpi-grid{ grid-template-columns:1fr; } }
+  .ov3-kpi{ position:relative; overflow:hidden; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:15px 15px 13px; box-shadow:var(--shadow-sm); }
+  .ov3-kpi::before{ content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--tint,var(--copper)); }
+  .ov3-kpi-top{ display:flex; align-items:center; justify-content:flex-end; position:relative; }
+  .ov3-kpi-icon{ width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--tint-soft,var(--copper-soft)); color:var(--tint,var(--copper)); }
+  .ov3-kpi-icon svg{ width:14px; height:14px; }
+  .ov3-kpi-label{ font-size:11px; color:var(--text-muted); font-weight:700; margin-top:8px; position:relative; }
+  .ov3-kpi-value{ font-family:"Archivo",sans-serif; font-size:19px; font-weight:800; letter-spacing:-.3px; margin-top:3px; color:var(--text); position:relative; }
+  .ov3-kpi-value .dash{ color:var(--text-faint); font-weight:700; font-size:14px; }
+  .ov3-kpi-value .pos{ color:var(--success); }
+  .ov3-kpi-value .neg{ color:var(--danger); }
+  .ov3-kpi-note{ font-size:10.5px; color:var(--text-faint); margin-top:5px; min-height:13px; position:relative; }
+  .ov3-kpi-spark{ margin-top:8px; height:26px; position:relative; color:var(--tint,var(--copper)); }
+  .ov3-kpi-spark svg{ width:100%; height:100%; display:block; overflow:visible; }
+
+  .ov3-row3{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:14px; align-items:stretch; }
+  .ov3-row3.wide-chart{ grid-template-columns:1fr 1.3fr .85fr; }
+  @media (max-width:1200px){ .ov3-row3, .ov3-row3.wide-chart{ grid-template-columns:1fr 1fr; } .ov3-row3>*:nth-child(3){ grid-column:span 2; } }
+  @media (max-width:760px){ .ov3-row3, .ov3-row3.wide-chart{ grid-template-columns:1fr; } .ov3-row3>*{ grid-column:auto!important; } }
+
+  .ov3-market-list{ display:flex; flex-direction:column; gap:12px; }
+  .ov3-market-row{ display:grid; grid-template-columns:32px 1fr auto; gap:10px; align-items:center; }
+  .ov3-market-logo{ width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; flex-shrink:0; }
+  .ov3-market-name{ font-size:12.5px; color:var(--text-muted); font-weight:600; }
+  .ov3-market-value{ font-size:14px; font-weight:800; color:var(--text); margin-top:2px; font-family:"Archivo",sans-serif; }
+  .ov3-market-bar-wrap{ height:6px; border-radius:999px; background:var(--surface-2); overflow:hidden; margin-top:6px; }
+  .ov3-market-bar{ height:100%; border-radius:999px; background:var(--copper); }
+  .ov3-market-meta{ text-align:right; font-size:11px; color:var(--text-faint); line-height:1.5; white-space:nowrap; }
+
+  .ov3-stock-number{ font-family:"Archivo",sans-serif; font-size:21px; font-weight:800; color:var(--text); }
+  .ov3-stock-number span{ font-size:11.5px; font-weight:600; color:var(--text-muted); }
+  .ov3-stockbar{ display:flex; height:13px; border-radius:999px; overflow:hidden; background:var(--surface-2); margin:10px 0; box-shadow:inset 0 0 0 1px var(--border); }
+  .ov3-stock-legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--text-muted); }
+  .ov3-stock-legend b{ display:inline-block; width:8px; height:8px; border-radius:3px; margin-right:5px; background:var(--c); }
+
+  .ov3-cash-main .label{ font-size:11px; color:var(--text-faint); font-weight:600; }
+  .ov3-cash-main .big{ font-family:"Archivo",sans-serif; font-size:19px; font-weight:800; margin-top:3px; color:var(--text); }
+  .ov3-cash-pills{ display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+  .ov3-cash-pill{ display:flex; gap:10px; align-items:center; padding:9px 10px; border-radius:10px; background:var(--surface-2); border:1px solid var(--border); }
+  .ov3-cash-arrow{ width:26px; height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--success-soft); color:var(--success); flex-shrink:0; }
+  .ov3-cash-arrow svg{ width:14px; height:14px; }
+  .ov3-cash-arrow.down{ background:var(--danger-soft); color:var(--danger); }
+  .ov3-cash-pill small{ display:block; color:var(--text-faint); font-size:10px; }
+  .ov3-cash-pill b{ font-size:12.5px; color:var(--text); }
+
+  .ov3-ads-head{ display:grid; grid-template-columns:1fr 1fr; gap:12px; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:11px; }
+  .ov3-ads-head small{ display:block; color:var(--text-faint); font-size:10.5px; font-weight:600; }
+  .ov3-ads-head strong{ display:block; font-size:17px; margin-top:3px; font-family:"Archivo",sans-serif; color:var(--text); }
+  .ov3-ads-status{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .ov3-ads-status div{ text-align:center; padding:8px 4px; border-radius:9px; border:1px solid var(--border); background:var(--surface-2); font-size:9.5px; color:var(--text-muted); font-weight:600; }
+  .ov3-ads-status div strong{ display:block; font-size:14px; margin-bottom:2px; font-family:"Archivo",sans-serif; color:var(--text); }
+  .ov3-ads-status .green strong{ color:var(--success); }
+  .ov3-ads-status .orange strong{ color:var(--warning); }
+  .ov3-ads-status .red strong{ color:var(--danger); }
+  .ov3-ads-status .gray strong{ color:var(--text-faint); }
+
+  .ov3-task-list{ display:flex; flex-direction:column; }
+  .ov3-task-ic{ width:26px; height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--teal-soft); color:var(--teal); flex-shrink:0; }
+  .ov3-task-ic svg{ width:13px; height:13px; }
+  a.alert-row .ov3-task-ic, div.ov3-task-body{ margin:0; }
+  .ov3-task-list > a, .ov3-task-list > div{ display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--border); }
+  .ov3-task-list > a:first-child, .ov3-task-list > div:first-child{ border-top:none; }
+  .ov3-task-body{ min-width:0; flex:1; }
+  .ov3-task-title{ font-weight:700; color:var(--text); font-size:12px; }
+  .ov3-task-sub{ color:var(--text-muted); font-size:11px; margin-top:1px; }
+
+  .ov3-promo{ position:relative; min-height:170px; padding:0; overflow:hidden; background:linear-gradient(135deg, var(--copper) 0%, var(--purple) 100%); border:1px solid var(--border); border-radius:14px; display:flex; align-items:flex-end; }
+  .ov3-promo-content{ position:relative; z-index:2; padding:22px; color:#fff; }
+  .ov3-promo .mark{ font-size:26px; font-weight:900; font-style:italic; letter-spacing:-3px; }
+  .ov3-promo strong{ display:block; font-size:13px; margin-top:2px; }
+  .ov3-promo p{ font-size:11.5px; opacity:.85; margin:6px 0 0; line-height:1.4; }
+
   /* ---- Sala dos Agentes — cena 3D (19/09/2026, pedido explícito do
      usuário: "sala 3d onde vai mostrar todos agentes trabalhando").
      Three.js só é carregado quando esta tela é aberta pela 1ª vez (ver
@@ -2482,29 +2569,61 @@
     window.Marketplaces = { load };
   })();
 
-  /* ================= VISÃO GERAL — indicadores reais (Mercado Livre) =================
-     Usa /api/relatorios/resumo-vendas, a MESMA fonte que Financeiro consulta e que a
-     listagem de Pedidos usa por trás (lib/relatorioVendas.js no backend) — os três
-     nunca calculam o resultado de um jeito diferente pro mesmo período.
-
-     Empresa e período NÃO são estado próprio desta tela — vêm só do filtro do
-     header (window.CerneFiltro), pra existir uma única fonte de verdade (era
-     duplicado antes: um seletor aqui dentro e outro no header, cada um com seu
-     próprio estado). */
+  /* ================= VISÃO GERAL — novo layout (21/09/2026) =================
+     Pedido explícito do usuário: mandou um arquivo HTML de referência
+     ("pf_embalagens_visao_geral.html") pedindo pra deixar a Visão Geral
+     visualmente igual — cards de indicadores, "Vendas por Marketplace",
+     gráfico de Faturamento x Margem, Estoque, Fluxo de Caixa, Anúncios,
+     Alertas, Agentes de IA — e reforçou: "quero que faça completamente
+     igual esta no arquivo... sem inventar nada, tudo real, deu pra
+     entender?". Mesma regra permanente deste projeto (nunca inventar
+     dado) aplicada aqui: cada card abaixo só usa número que já existe de
+     verdade no backend — quando um pedaço do mockup do usuário não tinha
+     nenhum dado real por trás, ele foi ADAPTADO (nunca preenchido com
+     número inventado) — ver docs/04-alteracoes.md pra a lista completa de
+     adaptações e o motivo de cada uma:
+       - "Lucro Líquido"/"Margem Líquida" do mockup viraram "Margem de
+         contribuição (R$)/(%)" — os nomes que o sistema já usa há tempo
+         pra esse cálculo exato (venda − taxas − frete vendedor − imposto
+         − custo), pra nunca sugerir um "lucro líquido" mais completo do
+         que o sistema realmente calcula.
+       - "Ticket médio" e "Cancelamentos %" não existiam prontos no
+         backend, mas dá pra montar com 100% de dado real já calculado
+         (faturamento÷pedidos; cancelados÷(pedidos+cancelados)) — nunca um
+         segundo cálculo divergente, só uma conta em cima do que
+         resumirPeriodo() já devolve.
+       - O donut "Status dos Pedidos" do mockup (Entregues/Em trânsito/A
+         preparar/...) não tem hoje nenhuma contagem real por trás (o
+         status de envio nem chega no payload usado aqui) — em vez de
+         inventar essa contagem, o terceiro card desta fileira continua
+         sendo "Atenção hoje" (Alertas & IA), que já existia e é 100% real.
+       - "Estoque Total" mostra Full + fora do Full (os dois já eram
+         calculados por lib/estoqueFisico.js, só faltava expor o segundo —
+         ver routes/estoqueFull.js) — a 3ª fatia do mockup ("A caminho")
+         não existe hoje como conceito de estoque no sistema (Compras não
+         gera entrada de estoque), por isso não aparece.
+       - "Próximas Ações" (lista de tarefas do mockup) não tem nenhum
+         sistema de tarefas real por trás — o card equivalente aqui
+         continua mostrando o resumo real dos Agentes de IA (o mesmo que
+         já existia), só com a aparência de lista de ações.
+       - "Anúncios ativos"/"ROAS médio"/status (Lucrativos/Ajustar/Pausar/
+         Sem dados) são 100% reais: ROAS já vem pronto de GET /api/ads
+         (lib/ads.js#calcularCards); "ativos" conta o status ao vivo de
+         GET /api/performance-anuncios; os 4 status vêm da classificação
+         de 5 categorias que o Agente de Ads já calcula (lib/ia/
+         adsMotor.js) — Lucrativos = "manter"+"escalar" somados.
+     Empresa e período continuam vindo só do filtro do header
+     (window.CerneFiltro) — nada mudou aí. */
   (function(){
-    // contaId/lojas (14/09/2026, pedido explícito do usuário: "em visão
-    // geral não tem o botão para selecionar qual loja ou todas as lojas" —
-    // mesmo bug relatado em Pedidos, mas aqui nem existia o seletor) — mesmo
-    // padrão de estado local já usado por Ads/Financeiro/Relatórios (cada
-    // tela guarda sua própria loja selecionada; só empresa/período vêm do
-    // filtro do header, ver comentário logo acima desta IIFE).
-    const state = { loading:false, error:null, data:null, painel:null, painelError:null, contaId:'', lojas:[] };
+    const state = { loading:false, error:null, data:null, painel:null, painelError:null, contaId:'', lojas:[],
+      ads:null, adsError:null, perf:null, perfError:null, estoque:null, estoqueError:null };
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function money(v, moeda){ return v===null||v===undefined ? null : (moeda==='BRL'||!moeda?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function moneySigned(v, moeda){ if(v===null||v===undefined) return null; const abs = money(Math.abs(v), moeda); return v<0 ? '− '+abs : abs; }
     function pctFmt(v){ return v===null||v===undefined ? null : (v<0?'− ':'')+Math.abs(Number(v)).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
     function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
+    function intFmt(n){ return Number(n||0).toLocaleString('pt-BR'); }
 
     async function apiResumo(empresaId, periodo, extra, contaId){
       const params = new URLSearchParams({ empresaId, periodo });
@@ -2516,14 +2635,11 @@
     }
 
     // Evolução diária já vem de apiResumo (campo serieDiaria) — este
-    // segundo endpoint cobre só Por marketplace, Fluxo de Caixa, Conexões &
-    // Empresas e Alertas & IA (lib/visaoGeralPainel.js). Buscado em
-    // paralelo e com erro isolado: se este falhar, os indicadores/gráfico
-    // principal (que não dependem dele) continuam aparecendo normalmente.
-    // NÃO recebe contaId de propósito (14/09/2026): "Por marketplace"
-    // compara lojas entre si, e Fluxo de Caixa/Alertas são da empresa
-    // inteira — só os indicadores vindos de apiResumo (hero + linha
-    // secundária) respeitam a loja selecionada nesta etapa.
+    // segundo endpoint cobre Vendas por Marketplace, Fluxo de Caixa,
+    // Conexões & Empresas e Alertas & IA (lib/visaoGeralPainel.js).
+    // Buscado em paralelo e com erro isolado. NÃO recebe contaId de
+    // propósito (mesma regra de sempre): "Vendas por Marketplace" compara
+    // lojas entre si, e Fluxo de Caixa/Alertas são da empresa inteira.
     async function apiPainel(empresaId, periodo, extra){
       const res = await fetch('/api/visao-geral/painel?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
       let body = null; try{ body = await res.json(); }catch(e){}
@@ -2536,6 +2652,44 @@
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar as lojas.');
       return (body && body.lojas) || [];
+    }
+
+    // Anúncios e Performance (21/09/2026, novo card da Visão Geral — ver
+    // comentário grande no topo desta IIFE). Dois endpoints já existentes,
+    // nenhum cálculo novo: GET /api/ads dá o ROAS médio real
+    // (cards.roasPeriodo) e a classificação por margem de cada anúncio
+    // (linhas[].classificacaoCodigo, lib/ia/adsMotor.js); GET
+    // /api/performance-anuncios dá o status AO VIVO de cada anúncio no
+    // Mercado Livre (linhas[].status), usado só pra contar quantos estão
+    // 'active' agora. Respeitam a loja selecionada, igual aos indicadores
+    // principais e ao gráfico de desempenho.
+    async function apiAds(empresaId, periodo, extra, contaId){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      const res = await fetch('/api/ads?'+params.toString()+(extra||''));
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os anúncios.');
+      return body;
+    }
+    async function apiPerformanceAnuncios(empresaId, periodo, extra, contaId){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      const res = await fetch('/api/performance-anuncios?'+params.toString()+(extra||''));
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar a performance dos anúncios.');
+      return body;
+    }
+
+    // Estoque (21/09/2026) — mesmo endpoint da tela Estoque Full
+    // (routes/estoqueFull.js), que agora também devolve o bloco "fora do
+    // Full" (fisicoForaDoFull) — os dois já eram calculados por
+    // lib/estoqueFisico.js, só não chegavam os dois no front-end antes.
+    // Sempre a empresa inteira (o endpoint não aceita loja/período).
+    async function apiEstoque(empresaId){
+      const res = await fetch('/api/estoque-full?empresaId='+empresaId);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o estoque.');
+      return body;
     }
 
     // Recarrega a lista de lojas só quando a empresa muda (nunca a cada
@@ -2552,18 +2706,33 @@
 
     async function loadResumo(){
       const filtro = window.CerneFiltro.state;
-      if(!filtro.empresaId){ state.data = null; state.error = null; state.painel = null; state.painelError = null; state.loading = false; render(); return; }
+      if(!filtro.empresaId){
+        state.data = null; state.error = null; state.painel = null; state.painelError = null;
+        state.ads = null; state.adsError = null; state.perf = null; state.perfError = null;
+        state.estoque = null; state.estoqueError = null; state.loading = false; render(); return;
+      }
       await garantirLojasCarregadas(filtro.empresaId);
-      state.loading = true; state.error = null; state.painelError = null; render();
+      state.loading = true; state.error = null; state.painelError = null;
+      state.adsError = null; state.perfError = null; state.estoqueError = null;
+      render();
       const extra = window.CerneFiltro.periodoExtra();
-      const [resumoResult, painelResult] = await Promise.allSettled([
+      const [resumoResult, painelResult, adsResult, perfResult, estoqueResult] = await Promise.allSettled([
         apiResumo(filtro.empresaId, filtro.periodo, extra, state.contaId),
         apiPainel(filtro.empresaId, filtro.periodo, extra),
+        apiAds(filtro.empresaId, filtro.periodo, extra, state.contaId),
+        apiPerformanceAnuncios(filtro.empresaId, filtro.periodo, extra, state.contaId),
+        apiEstoque(filtro.empresaId),
       ]);
       if(resumoResult.status==='fulfilled'){ state.data = resumoResult.value; state.error = null; }
       else { state.data = null; state.error = resumoResult.reason.message; }
       if(painelResult.status==='fulfilled'){ state.painel = painelResult.value; state.painelError = null; }
       else { state.painel = null; state.painelError = painelResult.reason.message; }
+      if(adsResult.status==='fulfilled'){ state.ads = adsResult.value; state.adsError = null; }
+      else { state.ads = null; state.adsError = adsResult.reason.message; }
+      if(perfResult.status==='fulfilled'){ state.perf = perfResult.value; state.perfError = null; }
+      else { state.perf = null; state.perfError = perfResult.reason.message; }
+      if(estoqueResult.status==='fulfilled'){ state.estoque = estoqueResult.value; state.estoqueError = null; }
+      else { state.estoque = null; state.estoqueError = estoqueResult.reason.message; }
       state.loading = false; render();
     }
 
@@ -2577,23 +2746,20 @@
       else render();
     });
 
-    // ---- KPI cards ----
+    // ---- helpers de cor por card ----
     function tintVars(tint){
       return tint === 'muted'
         ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);'
         : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);';
     }
 
-    // Mini gráfico de tendência (sparkline) dentro de cada KPI em destaque —
-    // reaproveita a MESMA série diária (serieDiaria) já buscada pra montar o
-    // gráfico principal abaixo, nunca um segundo cálculo. "values" é uma
-    // lista de números reais já prontos (um por dia); dias sem dado válido
-    // pra esse indicador (ex.: faturamento zerado ao calcular a margem %)
-    // são descartados antes de chegar aqui — nunca interpolados/inventados.
-    let ov2SparkIdSeq = 0;
+    // Mini gráfico de tendência (sparkline) — reaproveita a MESMA série
+    // diária (serieDiaria) já buscada pra montar o gráfico principal
+    // abaixo, nunca um segundo cálculo.
+    let ov3SparkIdSeq = 0;
     function sparklineAreaSVG(values){
       if(!values || values.length < 2) return '';
-      const W = 300, H = 44, pad = 3;
+      const W = 300, H = 36, pad = 3;
       const maxV = Math.max(...values), minV = Math.min(...values);
       const range = (maxV - minV) || 1;
       const stepX = (W - pad*2) / (values.length - 1);
@@ -2601,11 +2767,11 @@
       const pts = values.map((v,i) => [pad + i*stepX, yFor(v)]);
       const line = pts.map((p,i) => (i===0?'M':'L') + p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(' ');
       const area = line + ' L' + pts[pts.length-1][0].toFixed(2) + ',' + (H-pad) + ' L' + pts[0][0].toFixed(2) + ',' + (H-pad) + ' Z';
-      const gid = 'ov2Spark' + (ov2SparkIdSeq++);
-      return '<div class="ov2-hero-spark">'
+      const gid = 'ov3Spark' + (ov3SparkIdSeq++);
+      return '<div class="ov3-kpi-spark">'
         + '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'
           + '<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1">'
-            + '<stop offset="0%" stop-color="currentColor" stop-opacity="0.32"/>'
+            + '<stop offset="0%" stop-color="currentColor" stop-opacity="0.30"/>'
             + '<stop offset="100%" stop-color="currentColor" stop-opacity="0"/>'
           + '</linearGradient></defs>'
           + '<path d="'+area+'" fill="url(#'+gid+')" stroke="none"/>'
@@ -2613,118 +2779,121 @@
         + '</svg></div>';
     }
 
-    // ---- Linha 1 — KPIs principais em destaque (Faturamento, Margem R$,
-    // Margem %), com mini gráfico de tendência quando há série diária.
-    //
-    // "vs. período anterior" no Faturamento (20/09/2026, pedido explícito
-    // do usuário: "em visão geral quero colocar tudo que for
-    // possível... principalmente se o faturamento está caindo ou
-    // aumentando, comparado ao mês passado") — até aqui isso ficava de fora
-    // de propósito porque /api/relatorios/resumo-vendas não calculava
-    // comparação nenhuma (ver docs/02-decisoes.md (37): "mostrar isso
-    // exigiria inventar um número"). Agora existe um cálculo real
-    // (lib/visaoGeralPainel.js#evolucaoFaturamento, mesmo período anterior
-    // de sempre — ver lib/periodoComparacao.js), então a nota antiga deixou
-    // de ser verdade. `faturamentoEvolucao` vem de `painel` (empresa
-    // inteira) — por isso só é mostrado quando NENHUMA loja específica está
-    // selecionada (o Faturamento em si, vindo de `resumo`, muda por loja;
-    // comparar o valor de 1 loja com a evolução da empresa toda seria
-    // enganoso), mesma regra já usada por "Por marketplace"/"Alertas & IA".
+    // ---- Cabeçalho de saudação (novo, 21/09/2026 — só decorativo/data
+    // real, nenhum dado de negócio aqui) ----
+    function saudacaoTexto(){
+      const h = new Date().getHours();
+      if(h < 12) return 'Bom dia';
+      if(h < 18) return 'Boa tarde';
+      return 'Boa noite';
+    }
+    function greetingHTML(empresaNome){
+      const agora = new Date();
+      const dataLabel = agora.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+      const dataCap = dataLabel.charAt(0).toUpperCase() + dataLabel.slice(1);
+      return '<div class="ov3-greeting">'
+        + '<div><h1>'+escapeHtml(saudacaoTexto())+'!</h1>'
+          + '<div class="sub">Resumo de '+escapeHtml(empresaNome || 'sua operação')+'.</div></div>'
+        + '<div class="ov3-greeting-date">'+escapeHtml(dataCap)+'</div>'
+      + '</div>';
+    }
+
+    // ---- Linha de 6 KPIs em destaque (Faturamento, Margem de contribuição
+    // R$/%, Pedidos, Ticket médio, Cancelamentos %). Os 3 primeiros já
+    // existiam (com sparkline e "vs. período anterior" no Faturamento); os
+    // 3 novos (Pedidos/Ticket médio/Cancelamentos %) são 100% derivados de
+    // campos reais que resumirPeriodo() já devolve — nunca um cálculo
+    // paralelo. ----
     function faturamentoTendenciaHTML(evolucao){
       if(!evolucao || evolucao.tendencia === 'sem_dado') return '';
       const seta = evolucao.tendencia === 'subindo' ? '▲' : (evolucao.tendencia === 'caindo' ? '▼' : '●');
       const cor = evolucao.tendencia === 'subindo' ? 'pos' : (evolucao.tendencia === 'caindo' ? 'neg' : 'dash');
       const pctTxt = evolucao.variacaoPct !== null ? pctFmt(Math.abs(evolucao.variacaoPct)) : 'sem base pra comparar %';
-      const periodoTxt = (evolucao.periodoAnterior && evolucao.periodoAnterior.desde) ? ' ('+evolucao.periodoAnterior.desde+'–'+evolucao.periodoAnterior.ate+')' : '';
-      return '<div class="ov2-hero-note" style="margin-top:2px;"><span class="'+cor+'" style="font-weight:700;">'+seta+' '+escapeHtml(pctTxt)+'</span> vs. período anterior'+escapeHtml(periodoTxt)+'</div>';
+      return '<span class="'+cor+'" style="font-weight:700;">'+seta+' '+escapeHtml(pctTxt)+'</span> vs. período anterior';
     }
 
-    function heroKpisHTML(resumo, moeda, hasOrders, serieDiaria, faturamentoEvolucao){
+    function kpi6RowHTML(resumo, moeda, hasOrders, serieDiaria, faturamentoEvolucao){
       const serie = serieDiaria || [];
       const spFaturamento = sparklineAreaSVG(serie.map(d => d.faturamento));
       const spMargem = sparklineAreaSVG(serie.map(d => d.margemContribuicao));
       const spMargemPct = sparklineAreaSVG(serie.filter(d => d.faturamento > 0).map(d => (d.margemContribuicao / d.faturamento) * 100));
 
-      const pendCurta = (pendentes) => hasOrders ? '<span class="dash">Pendente</span>' : '<span class="dash">Sem dados</span>';
-      const pendNota = (label, pendentes) => pendentes>0 ? (pendentes===1?'1 pedido sem '+label:pendentes+' pedidos sem '+label) : null;
-      const heroes = [
+      const pendCurta = hasOrders ? '<span class="dash">Pendente</span>' : '<span class="dash">Sem dados</span>';
+
+      // Ticket médio e taxa de cancelamento — derivados aqui (mesma conta
+      // já usada em duas outras telas: faturamento÷pedidos e
+      // cancelados÷(pedidos+cancelados)), nunca um número novo vindo do
+      // backend.
+      const ticketMedio = (resumo.faturamento.valor !== null && resumo.qtdPedidos > 0) ? resumo.faturamento.valor / resumo.qtdPedidos : null;
+      const totalBruto = resumo.qtdPedidos + resumo.cancelados.quantidade;
+      const taxaCancelamento = totalBruto > 0 ? (resumo.cancelados.quantidade / totalBruto) * 100 : null;
+
+      const kpis = [
         { label:'Faturamento', icon:'barChart', tint:'copper', spark: spFaturamento,
-          note: resumo.faturamento.valor!==null ? 'Bruto no período (vendas não canceladas)' : (pendNota('essa informação', resumo.faturamento.pendentes) || 'Bruto no período (vendas não canceladas)'),
-          extraHtml: resumo.faturamento.valor!==null ? faturamentoTendenciaHTML(faturamentoEvolucao) : '',
-          valueHtml: resumo.faturamento.valor!==null ? escapeHtml(money(resumo.faturamento.valor, moeda)) : pendCurta(resumo.faturamento.pendentes) },
+          note: resumo.faturamento.valor!==null ? faturamentoTendenciaHTML(faturamentoEvolucao) || 'Bruto no período (vendas não canceladas)' : 'Bruto no período (vendas não canceladas)',
+          valueHtml: resumo.faturamento.valor!==null ? escapeHtml(money(resumo.faturamento.valor, moeda)) : pendCurta },
         { label:'Margem de contribuição (R$)', icon:'wallet', tint: resumo.margemContribuicao.valor===null ? 'muted' : (resumo.margemContribuicao.valor>=0?'success':'danger'), spark: spMargem,
-          note: resumo.margemContribuicao.valor!==null
-            ? (resumo.comComissaoEstimada ? (resumo.comComissaoEstimada===1?'Inclui 1 pedido Shopee com comissão estimada':'Inclui '+resumo.comComissaoEstimada+' pedidos Shopee com comissão estimada') : 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto')
-            : (pendNota('custo cadastrado', resumo.margemContribuicao.pendentes) || 'Venda − desconto (cupom) − taxas − frete vendedor − imposto − custo produto'),
+          note: 'Venda − taxas − frete vendedor − imposto − custo produto',
           valueHtml: resumo.margemContribuicao.valor!==null
             ? '<span class="'+(resumo.margemContribuicao.valor>=0?'pos':'neg')+'">'+escapeHtml(moneySigned(resumo.margemContribuicao.valor, moeda))+'</span>'
-            : pendCurta(resumo.margemContribuicao.pendentes) },
+            : pendCurta },
         { label:'Margem de contribuição (%)', icon:'percent', tint: resumo.margemPercentual===null ? 'muted' : (resumo.margemPercentual>=0?'success':'danger'), spark: spMargemPct,
-          note: resumo.margemPercentual!==null ? 'Margem de contribuição sobre o faturamento' : (pendNota('custo cadastrado', resumo.margemContribuicao.pendentes) || 'Margem de contribuição sobre o faturamento'),
+          note: 'Sobre o faturamento do período',
           valueHtml: resumo.margemPercentual!==null
             ? '<span class="'+(resumo.margemPercentual>=0?'pos':'neg')+'">'+escapeHtml(pctFmt(resumo.margemPercentual))+'</span>'
-            : pendCurta(resumo.margemContribuicao.pendentes) },
+            : pendCurta },
+        { label:'Pedidos no período', icon:'bag', tint:'teal',
+          note:'Não cancelados',
+          valueHtml: String(resumo.qtdPedidos) },
+        { label:'Ticket médio', icon:'tag', tint:'petrol',
+          note:'Faturamento ÷ pedidos',
+          valueHtml: ticketMedio!==null ? escapeHtml(money(ticketMedio, moeda)) : pendCurta },
+        { label:'Cancelamentos', icon:'x', tint: taxaCancelamento===null ? 'muted' : (taxaCancelamento>10?'danger':taxaCancelamento>0?'warning':'success'),
+          note: resumo.cancelados.quantidade + ' pedido'+(resumo.cancelados.quantidade===1?'':'s')+' cancelado'+(resumo.cancelados.quantidade===1?'':'s'),
+          valueHtml: taxaCancelamento!==null ? escapeHtml(pctFmt(taxaCancelamento)) : '<span class="dash">Sem dados</span>' },
       ];
-      return '<div class="ov2-hero-grid">' + heroes.map(k =>
-        '<div class="ov2-hero" style="'+tintVars(k.tint)+'">'
-          + '<div class="ov2-hero-top"><div class="ov2-hero-icon">'+svg(k.icon)+'</div></div>'
-          + '<div class="ov2-hero-label">'+k.label+'</div>'
-          + '<div class="ov2-hero-value">'+k.valueHtml+'</div>'
-          + '<div class="ov2-hero-note">'+k.note+'</div>'
-          + (k.extraHtml || '')
+      return '<div class="ov3-kpi-grid">' + kpis.map(k =>
+        '<div class="ov3-kpi" style="'+tintVars(k.tint)+'">'
+          + '<div class="ov3-kpi-top"><div class="ov3-kpi-icon">'+svg(k.icon)+'</div></div>'
+          + '<div class="ov3-kpi-label">'+k.label+'</div>'
+          + '<div class="ov3-kpi-value">'+k.valueHtml+'</div>'
+          + '<div class="ov3-kpi-note">'+(k.note||'')+'</div>'
           + (k.spark || '')
         + '</div>'
       ).join('') + '</div>';
     }
 
-    // ---- Linha 2 — indicadores secundários compactos (pedido explícito:
-    // Pedidos, Taxas/comissões, Frete do vendedor, Imposto, Custo dos
-    // produtos, A receber, A pagar). "A receber"/"A pagar" reaproveitam
-    // painel.fluxoCaixa — mesmo dado que a tela de Financeiro já mostra,
-    // nenhum cálculo novo. Cancelados/Descontos (que também são reais)
-    // continuam disponíveis em Pedidos e DRE — só não repetidos aqui, pra
-    // seguir a lista exata pedida.
-    function secondaryKpisHTML(resumo, moeda, hasOrders, painel, painelError){
+    // ---- Detalhamento do resultado (Taxas/comissões, Frete do vendedor,
+    // Imposto, Custo dos produtos) — os 4 componentes que, junto com o
+    // faturamento, formam a margem de contribuição mostrada acima. Mesmos
+    // 4 campos que já existiam nesta tela, só reorganizados numa fileira
+    // compacta pra abrir espaço pro resto do novo layout. ----
+    function detalhamentoStripHTML(resumo, moeda, hasOrders){
       function secMoneyCard(label, icon, obj){
         const pendNote = obj.pendentes>0 ? (obj.pendentes===1?'1 pedido pendente':obj.pendentes+' pedidos pendentes') : null;
-        return { label, icon, tint:'muted',
+        return { label, icon,
           valueHtml: obj.valor!==null ? escapeHtml(money(obj.valor, moeda)) : '<span class="dash">'+(hasOrders?'Pendente':'Sem dados')+'</span>',
           subNote: obj.valor!==null ? (obj.pendentes>0 ? pendNote : null) : pendNote };
       }
-      const fluxoCaixa = painel ? painel.fluxoCaixa : null;
-      function fluxoCard(label, icon, valor){
-        return { label, icon, tint:'muted',
-          valueHtml: painelError ? '<span class="dash">Não foi possível carregar</span>'
-            : (valor===undefined ? '<span class="dash">Carregando…</span>'
-              : (valor===null ? '<span class="dash">Sem dados</span>' : escapeHtml(money(valor, moeda)))) };
-      }
       const secs = [
-        { label:'Pedidos no período', icon:'bag', tint:'teal', valueHtml: String(resumo.qtdPedidos) },
         secMoneyCard('Taxas/comissões', 'receipt', resumo.tarifas),
         secMoneyCard('Frete do vendedor', 'truck', resumo.freteVendedor),
         secMoneyCard('Imposto', 'fileText', resumo.imposto),
         secMoneyCard('Custo dos produtos', 'box', resumo.custoProduto),
-        fluxoCard('A receber', 'arrowDownCircle', fluxoCaixa ? fluxoCaixa.contasAReceber.totalAReceber : undefined),
-        fluxoCard('A pagar', 'arrowUpCircle', fluxoCaixa ? fluxoCaixa.contasAPagar.totalAPagar : undefined),
       ];
-      return '<div class="ov2-sec-grid">' + secs.map(k =>
-        '<div class="ov2-sec" style="'+tintVars(k.tint)+'">'
-          + '<div class="ov2-sec-icon">'+svg(k.icon)+'</div>'
-          + '<div class="ov2-sec-label">'+k.label+'</div>'
-          + '<div class="ov2-sec-value">'+k.valueHtml+'</div>'
-          + (k.subNote ? '<div class="ov2-sec-note">'+k.subNote+'</div>' : '')
+      return '<div class="kpi-sec-grid" style="margin-top:12px;">' + secs.map(k =>
+        '<div class="kpi-sec">'
+          + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
+          + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+(k.subNote?'<div class="ov3-kpi-note" style="margin-top:2px;">'+k.subNote+'</div>':'')+'</div></div>'
         + '</div>'
       ).join('') + '</div>';
     }
 
-    // ---- Gráfico: Faturamento x Margem de contribuição por dia (SVG simples) ----
-    // opts.heightPx/opts.emptyClass/opts.emptyMsg permitem uma versão compacta
-    // (mini card "Evolução diária" da grade de 3, dentro de secondaryChartsHTML)
-    // reaproveitando exatamente o mesmo desenho/dado do gráfico principal —
-    // nunca um segundo cálculo, só um tamanho menor.
+    // ---- Gráfico: Faturamento x Margem de contribuição por dia (SVG
+    // simples) — mesmo desenho/dado de sempre, nenhuma mudança de cálculo. ----
     function chartHTML(serie, moeda, opts){
       opts = opts || {};
-      const heightPx = opts.heightPx || 200;
+      const heightPx = opts.heightPx || 260;
       if(!serie.length){
         return '<div class="chart-canvas '+(opts.emptyClass||'h-lg')+'">' + chartGridLines(4)
           + chartEmptyState('lineChart', opts.emptyMsg || 'Sem dados no período selecionado. O gráfico aparece assim que houver pedidos não cancelados sincronizados.')
@@ -2777,31 +2946,68 @@
 
     function chartCardHTML(data){
       const serie = data ? data.serieDiaria : [];
-      return '<div class="chart-card" style="margin-bottom:0;">'
-        + '<div class="chart-card-head">'
+      return '<div class="panel" style="height:100%;">'
+        + '<div class="panel-head">'
           + '<div class="panel-title"><span class="panel-title-ic">'+svg('lineChart')+'</span>Faturamento x Margem de contribuição</div>'
           + '<div class="chart-legend">'
             + '<span class="legend-item"><span class="legend-dot" style="background:var(--copper)"></span>Faturamento</span>'
-            + '<span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>Margem de contribuição</span>'
-            + '<span class="panel-note">'+(data?escapeHtml(data.periodo.label):'')+'</span>'
+            + '<span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>Margem</span>'
           + '</div>'
         + '</div>'
-        + chartHTML(serie, 'BRL', { heightPx: 340 })
-        + (serie.length ? '<div class="field-hint" style="margin-top:8px;">Dias com pedido sem custo de SKU cadastrado somam só a margem já conhecida daquele dia — nunca um valor estimado.</div>' : '')
+        + '<div class="panel-note" style="margin:-6px 0 8px;color:var(--text-faint);font-size:11px;">'+(data?escapeHtml(data.periodo.label):'')+'</div>'
+        + chartHTML(serie, 'BRL', { heightPx: 260 })
       + '</div>';
     }
 
-    // ---- Alertas & IA (regras simples sobre dado real, 26/08/2026 — Passo 3) ----
-    const ALERTA_SEVERIDADE_COR = { danger:'danger', warning:'warning', info:'teal' };
-
-    function alertsPanelHTML(painel, painelError){
+    // ---- Vendas por Marketplace (real — lib/visaoGeralPainel.js#porCanal,
+    // painel.porCanal.linhas) ----
+    const CANAL_BADGE = {
+      'Mercado Livre': { sigla:'ML', bg:'#FFE600', fg:'#1A1A1A' },
+      'Shopee': { sigla:'S', bg:'#EE4D2D', fg:'#FFFFFF' },
+    };
+    function marketplacePanelHTML(painel, painelError, contaId){
+      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('store')+'</span>Vendas por Marketplace</div></div>';
+      if(contaId){
+        return '<div class="panel" style="height:100%;">'+head+'<p class="field-hint" style="padding:0 2px;">Considera todas as lojas da empresa — não muda com a loja selecionada acima.</p></div>';
+      }
       if(painelError){
-        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Atenção hoje</div></div>'
-          + '<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar os alertas.</p></div>';
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar.</p></div>';
       }
       if(!painel){
-        return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Atenção hoje</div></div>'
-          + '<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+        return '<div class="panel" style="height:100%;">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      const canal = painel.porCanal;
+      if(!canal || !canal.linhas.length){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('store')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">Nenhuma venda no período pra comparar por marketplace.</p></div></div>';
+      }
+      const total = canal.totalFaturamento;
+      const linhas = canal.linhas.map(l => {
+        const badge = CANAL_BADGE[l.canal] || { sigla: l.canal.slice(0,2).toUpperCase(), bg:'var(--surface-2)', fg:'var(--text-muted)' };
+        const larguraPct = l.participacaoPercentual !== null ? Math.max(2, l.participacaoPercentual) : 0;
+        return '<div class="ov3-market-row">'
+          + '<div class="ov3-market-logo" style="background:'+badge.bg+';color:'+badge.fg+';">'+escapeHtml(badge.sigla)+'</div>'
+          + '<div><div class="ov3-market-name">'+escapeHtml(l.canal)+'</div>'
+            + '<div class="ov3-market-value">'+(l.faturamento.valor!==null ? escapeHtml(money(l.faturamento.valor,'BRL')) : '<span class="dash">Pendente</span>')+'</div>'
+            + '<div class="ov3-market-bar-wrap"><div class="ov3-market-bar" style="width:'+larguraPct+'%;"></div></div>'
+          + '</div>'
+          + '<div class="ov3-market-meta">'+l.qtdPedidos+' pedido'+(l.qtdPedidos===1?'':'s')+'<br>'+(l.participacaoPercentual!==null?escapeHtml(pctFmt(l.participacaoPercentual)):'—')+'</div>'
+        + '</div>';
+      }).join('');
+      return '<div class="panel" style="height:100%;">'+head
+        + '<div class="ov3-market-list">'+linhas+'</div>'
+        + (total!==null ? '<div class="field-hint" style="margin-top:10px;">Total do período: '+escapeHtml(money(total,'BRL'))+'</div>' : '')
+      + '</div>';
+    }
+
+    // ---- Alertas & IA (real — já existia) ----
+    const ALERTA_SEVERIDADE_COR = { danger:'danger', warning:'warning', info:'teal' };
+    function alertsPanelHTML(painel, painelError){
+      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Atenção hoje</div></div>';
+      if(painelError){
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar os alertas.</p></div>';
+      }
+      if(!painel){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
       }
       const alertas = painel.alertas;
       const body = alertas.length
@@ -2816,20 +3022,110 @@
           }).join('')
         : '<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('checkCircle')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">Nenhum alerta no momento — tudo certo com os dados sincronizados.</p></div>';
 
-      return '<div class="panel">'
+      return '<div class="panel" style="height:100%;display:flex;flex-direction:column;">'
         + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Atenção hoje</div>'
           + (alertas.length ? '<span class="panel-note">'+alertas.length+' alerta'+(alertas.length===1?'':'s')+'</span>' : '<span class="status-chip" style="color:var(--success);background:var(--success-soft);">'+svg('checkCircle')+'Tudo certo</span>')
         + '</div>'
-        + '<div>' + body + '</div>'
+        + '<div style="overflow-y:auto;flex:1;min-height:0;">' + body + '</div>'
       + '</div>';
     }
 
-    // ---- "Saúde da operação" (26/08/2026 — reorganização visual) ----
-    // 3 indicadores reais, cada um "soma de exibição" (razão entre números
-    // que o backend já retorna, documentado abaixo) — nunca nível de
-    // serviço/entrega/avaliação/giro de estoque, porque essa telemetria não
-    // existe hoje na integração (ver docs/02-decisoes.md (37) — "adapte ou
-    // omita" o indicador da referência que ainda não tem dado real).
+    // ---- Estoque (real — Full + fora do Full, lib/estoqueFisico.js. "A
+    // caminho" não existe como conceito de estoque hoje — ver comentário
+    // grande no topo desta IIFE — por isso só 2 fatias. ----
+    function estoquePanelHTML(estoque, estoqueError){
+      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('warehouse')+'</span>Estoque</div></div>';
+      if(estoqueError){
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar.</p></div>';
+      }
+      if(!estoque){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      const full = (estoque.fisico && estoque.fisico.unidadesFisicas) || 0;
+      const fora = (estoque.fisicoForaDoFull && estoque.fisicoForaDoFull.unidadesFisicas) || 0;
+      const total = full + fora;
+      if(total <= 0){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('warehouse')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">'+escapeHtml(estoque.mensagem || 'Nenhum estoque sincronizado ainda.')+'</p></div></div>';
+      }
+      const pctFora = Math.round((fora/total)*1000)/10;
+      const pctFull = Math.round((full/total)*1000)/10;
+      return '<div class="panel" style="height:100%;">'+head
+        + '<div class="ov3-stock-number">'+intFmt(total)+' <span>unidades (caixas físicas)</span></div>'
+        + '<div class="ov3-stockbar"><span style="width:'+pctFora+'%;background:var(--copper);"></span><span style="width:'+pctFull+'%;background:var(--teal);"></span></div>'
+        + '<div class="ov3-stock-legend">'
+          + '<span><b style="--c:var(--copper);"></b>Fora do Full '+intFmt(fora)+' ('+escapeHtml(pctFmt(pctFora))+')</span>'
+          + '<span><b style="--c:var(--teal);"></b>Full '+intFmt(full)+' ('+escapeHtml(pctFmt(pctFull))+')</span>'
+        + '</div>'
+        + '<div class="field-hint" style="margin-top:10px;">Estoque em trânsito (compras a caminho) ainda não é rastreado separadamente no sistema.</div>'
+      + '</div>';
+    }
+
+    // ---- Contas e Fluxo de Caixa (real — painel.fluxoCaixa) ----
+    function caixaPanelHTML(painel, painelError){
+      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('wallet')+'</span>Contas e Fluxo de Caixa</div></div>';
+      if(painelError){
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar.</p></div>';
+      }
+      if(!painel){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      const fx = painel.fluxoCaixa;
+      const saldo = fx.saldoBancarioAtual;
+      return '<div class="panel" style="height:100%;">'+head
+        + '<div class="ov3-cash-main"><div class="label">Saldo bancário consolidado</div>'
+          + '<div class="big">'+(saldo.valor!==null ? escapeHtml(money(saldo.valor,'BRL')) : '<span class="dash">Não informado</span>')+'</div>'
+        + '</div>'
+        + '<div class="ov3-cash-pills">'
+          + '<div class="ov3-cash-pill"><span class="ov3-cash-arrow">'+svg('arrowDownCircle')+'</span><div><small>A receber</small><b>'+escapeHtml(money(fx.contasAReceber.totalAReceber,'BRL'))+'</b></div></div>'
+          + '<div class="ov3-cash-pill"><span class="ov3-cash-arrow down">'+svg('arrowUpCircle')+'</span><div><small>A pagar</small><b>'+escapeHtml(money(fx.contasAPagar.totalAPagar,'BRL'))+'</b></div></div>'
+        + '</div>'
+      + '</div>';
+    }
+
+    // ---- Anúncios e Performance (real — ver comentário grande no topo
+    // desta IIFE: ROAS de GET /api/ads, "ativos" de GET
+    // /api/performance-anuncios, os 4 status a partir da classificação de
+    // 5 categorias que o Agente de Ads já calcula). ----
+    const ADS_STATUS_LABEL = { lucrativos:'Lucrativos', ajustar:'Ajustar', pausar:'Pausar', semDados:'Sem dados' };
+    function adsPanelHTML(ads, adsError, perf, perfError){
+      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('megaphone')+'</span>Anúncios e Performance</div></div>';
+      if(adsError && perfError){
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar.</p></div>';
+      }
+      if(!ads && !perf){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      const roas = (ads && ads.cards && ads.cards.disponivel && ads.cards.roasPeriodo!==null) ? ads.cards.roasPeriodo : null;
+      const ativos = (perf && !perf.semConta) ? perf.linhas.filter(l => l.status === 'active').length : null;
+
+      const buckets = { lucrativos:0, ajustar:0, pausar:0, semDados:0 };
+      if(ads && ads.linhas){
+        ads.linhas.forEach(l => {
+          if(l.classificacaoCodigo === 'manter' || l.classificacaoCodigo === 'escalar') buckets.lucrativos++;
+          else if(l.classificacaoCodigo === 'ajustar') buckets.ajustar++;
+          else if(l.classificacaoCodigo === 'pausar') buckets.pausar++;
+          else buckets.semDados++;
+        });
+      }
+      const semClassificacao = !ads || !ads.linhas || !ads.linhas.length;
+
+      return '<div class="panel" style="height:100%;">'+head
+        + '<div class="ov3-ads-head">'
+          + '<div><small>Anúncios ativos agora</small><strong>'+(ativos!==null ? intFmt(ativos) : '<span class="dash">Sem dados</span>')+'</strong></div>'
+          + '<div><small>ROAS médio no período</small><strong>'+(roas!==null ? escapeHtml(String(roas).replace('.',','))+'x' : '<span class="dash">Sem dados</span>')+'</strong></div>'
+        + '</div>'
+        + (semClassificacao
+          ? '<p class="field-hint">Sem anúncios classificados no período selecionado.</p>'
+          : '<div class="ov3-ads-status">'
+            + '<div class="green"><strong>'+buckets.lucrativos+'</strong>Lucrativos</div>'
+            + '<div class="orange"><strong>'+buckets.ajustar+'</strong>Ajustar</div>'
+            + '<div class="red"><strong>'+buckets.pausar+'</strong>Pausar</div>'
+            + '<div class="gray"><strong>'+buckets.semDados+'</strong>Sem dados</div>'
+          + '</div>')
+      + '</div>';
+    }
+
+    // ---- "Saúde da operação" (real — já existia) ----
     function healthPanelHTML(resumo, painel, painelError){
       const totalBruto = resumo.qtdPedidos + resumo.cancelados.quantidade;
       const taxaCancelamento = totalBruto > 0 ? (resumo.cancelados.quantidade / totalBruto) * 100 : null;
@@ -2854,7 +3150,7 @@
         { label:'Sincronização empresas/ML/Shopee', icon:'link', tint:'teal', valueHtml: sincronizacaoValueHtml, status:null },
       ];
 
-      return '<div class="panel">'
+      return '<div class="panel" style="height:100%;">'
         + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Saúde da operação</div></div>'
         + '<div class="ov2-health-row">' + chips.map(c =>
             '<div class="ov2-health-chip" style="'+tintVars(c.tint)+'">'
@@ -2867,92 +3163,27 @@
       + '</div>';
     }
 
-    // ---- "Resumo da IA" (26/08/2026 — reorganização visual) ----
-    // Usa a MESMA estrutura do Radar da IA já existente (painel.radar,
-    // GET /radar-resumo em segundo plano — nunca dispara uma análise nova
-    // ao abrir esta tela). A frase-resumo só soma as contagens reais
-    // (radar.contagem) já calculadas pelo backend; os itens mostrados são
-    // os do próprio radar.resumoHoje, sem reescrever nem resumir o texto.
-    const RADAR_SEVERIDADE_COR = { critico:'danger', atencao:'warning', oportunidade:'success', informativo:'teal' };
-
-    function iaSummaryPanelHTML(painel, painelError){
-      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('sparkle')+'</span>Resumo da IA</div></div>';
-      const ctaAbrir = '<div class="ov2-ia-cta-wrap"><a href="#" class="ov2-ia-cta alert-row" data-page="iaGestora">'+svg('sparkle')+'Abrir IA Gestora</a></div>';
-      if(painelError){
-        return '<div class="panel ov2-ia-card">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;padding:0 18px 16px;">Não foi possível carregar.</p></div>';
-      }
-      if(!painel){
-        return '<div class="panel ov2-ia-card">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
-      }
-      const radar = painel.radar;
-      if(!radar){
-        return '<div class="panel ov2-ia-card">'+head+'<p class="ov2-ia-summary">'+escapeHtml(painel.radarError || 'O Radar da IA ainda não rodou o primeiro ciclo — ele roda automaticamente em segundo plano, sem precisar desta tela aberta.')+'</p>'+ctaAbrir+'</div>';
-      }
-
-      const contagem = radar.contagem || {};
-      const partes = [];
-      if(contagem.critico) partes.push('<strong>'+contagem.critico+'</strong> crítico'+(contagem.critico===1?'':'s'));
-      if(contagem.atencao) partes.push('<strong>'+contagem.atencao+'</strong> de atenção');
-      if(contagem.oportunidade) partes.push('<strong>'+contagem.oportunidade+'</strong> oportunidade'+(contagem.oportunidade===1?'':'s'));
-      const fraseResumo = partes.length
-        ? partes.join(', ') + ' identificado'+(partes.length===1 && (contagem.critico===1||contagem.atencao===1||contagem.oportunidade===1)?'':'s')+' pelo Radar da IA.'
-        : 'Nada exigindo atenção agora — o Radar continua acompanhando em segundo plano.';
-
-      const itens = (radar.resumoHoje || []).slice(0, 2).map(r => {
-        const cor = RADAR_SEVERIDADE_COR[r.severidade] || 'teal';
-        return '<div class="ov2-ia-item"><div class="ov2-ia-item-title" style="color:var(--'+cor+');">'+r.emoji+' '+escapeHtml(r.titulo)+'</div>'
-          + '<div class="ov2-ia-item-body">'+escapeHtml(r.oQueRecomenda || r.oQueAconteceu || '')+'</div></div>';
-      }).join('');
-
-      const atualizadoEmFmt = fmtDateTime(radar.ultimaExecucaoEm);
-
-      return '<div class="panel ov2-ia-card">'
-        + head
-        + '<p class="ov2-ia-summary">'+fraseResumo+(atualizadoEmFmt?' <span style="color:var(--text-faint);">Atualizado '+escapeHtml(atualizadoEmFmt)+'.</span>':'')+'</p>'
-        + itens
-        + '<div class="ov2-ia-cta-wrap"><a href="#" class="ov2-ia-cta alert-row" data-page="iaGestora">Ver insights completos<span style="display:inline-flex;">→</span></a></div>'
-      + '</div>';
-    }
-
-    // ---- "Agentes de IA" (20/09/2026 — pedido do usuário: "em visão geral
-    // quero colocar tudo que for possível, os agentes ia, resumos") ----
-    // Dado real vindo de obterResumoHub (lib/ia/agentesResumo.js), o MESMO
-    // usado pela tela "Sala dos Agentes"/hub — nunca um cálculo novo aqui.
-    // Só linka pra uma página quando ela realmente existe na navegação
-    // atual (ver comentário de 19/09/2026 acima de GROUPS — "Agentes de
-    // IA", SAC Mercado Livre e SAC Shopee foram tirados do menu a pedido
-    // do usuário); pra esses e pro Radar de Anúncios (ainda sem tela
-    // própria), o item aparece só como texto, sem link fingindo existir.
+    // ---- Agentes de IA, com aparência de lista de ações (real — mesmo
+    // dado de sempre, obterResumoHub via painel.agentesIa; substitui o
+    // "Próximas Ações" do mockup do usuário, que não tem nenhum sistema de
+    // tarefas real por trás — ver comentário grande no topo desta IIFE). ----
     const AGENTES_IA_PAGINA = { ads_performance:'agenteAds', promocoes:'agentePromocoes', concorrente:'concorrente' };
-
-    function agentesIaSummaryHTML(painel, painelError){
+    function tasksPanelHTML(painel, painelError){
       const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('users')+'</span>Agentes de IA</div></div>';
       if(painelError){
-        return '<div class="panel">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;padding:0 18px 16px;">Não foi possível carregar.</p></div>';
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar.</p></div>';
       }
       if(!painel){
-        return '<div class="panel"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+        return '<div class="panel" style="height:100%;">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
       }
       const agentesIa = painel.agentesIa;
       if(!agentesIa){
-        return '<div class="panel">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;padding:0 18px 16px;">'+escapeHtml(painel.agentesIaError || 'Não foi possível carregar o resumo dos Agentes de IA agora.')+'</p></div>';
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">'+escapeHtml(painel.agentesIaError || 'Não foi possível carregar o resumo dos Agentes de IA agora.')+'</p></div>';
       }
-
-      const kpis = agentesIa.kpis || {};
-      const chips = [
-        { label:'Agentes ativos', valueHtml:String(kpis.agentesAtivos||0), icon:'sparkle', tint:'teal' },
-        { label:'Tarefas hoje', valueHtml:String(kpis.tarefasHoje||0), icon:'activity', tint:'petrol' },
-        { label:'Alertas importantes', valueHtml:String(kpis.alertasImportantes||0), icon:'alertCircle', tint:(kpis.alertasImportantes>0?'danger':'success') },
-      ];
-      const chipsHtml = '<div class="ov2-health-row">' + chips.map(c=>
-        '<div class="ov2-health-chip" style="'+tintVars(c.tint)+'">'
-          + '<div class="ov2-health-ring">'+svg(c.icon)+'</div>'
-          + '<div class="ov2-health-value">'+c.valueHtml+'</div>'
-          + '<div class="ov2-health-label">'+c.label+'</div>'
-        + '</div>'
-      ).join('') + '</div>';
-
       const agentes = agentesIa.agentes || [];
+      if(!agentes.length){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('users')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">Nenhum agente com novidade agora.</p></div></div>';
+      }
       const itensHtml = agentes.map(a=>{
         const pagina = AGENTES_IA_PAGINA[a.codigo] || null;
         const partes = [];
@@ -2960,14 +3191,25 @@
         if(a.pendentes) partes.push(a.pendentes+' pendente'+(a.pendentes===1?'':'s'));
         if(a.decididasHoje) partes.push(a.decididasHoje+' decidida'+(a.decididasHoje===1?'':'s')+' hoje');
         const corpo = partes.length ? partes.join(' · ') : 'Sem novidade hoje.';
-        const tagAbre = pagina ? '<a href="#" class="alert-row" data-page="'+pagina+'" style="display:block;color:inherit;text-decoration:none;">' : '<div>';
+        const tagAbre = pagina ? '<a href="#" class="alert-row" data-page="'+pagina+'" style="display:flex;color:inherit;text-decoration:none;">' : '<div style="display:flex;">';
         const tagFecha = pagina ? '</a>' : '</div>';
-        return tagAbre + '<div class="ov2-ia-item" style="margin:0 18px;">'
-          + '<div class="ov2-ia-item-title">'+escapeHtml(a.nome)+'</div>'
-          + '<div class="ov2-ia-item-body">'+escapeHtml(corpo)+'</div></div>' + tagFecha;
+        return tagAbre + '<div class="ov3-task-ic">'+svg('sparkle')+'</div>'
+          + '<div class="ov3-task-body"><div class="ov3-task-title">'+escapeHtml(a.nome)+'</div><div class="ov3-task-sub">'+escapeHtml(corpo)+'</div></div>'
+        + tagFecha;
       }).join('');
+      return '<div class="panel" style="height:100%;">'+head+'<div class="ov3-task-list">'+itensHtml+'</div></div>';
+    }
 
-      return '<div class="panel">'+head+chipsHtml+itensHtml+'</div>';
+    // ---- Banner decorativo (mesmo do mockup do usuário — sem dado
+    // nenhum, só identidade visual da marca). ----
+    function promoPanelHTML(){
+      return '<div class="ov3-promo">'
+        + '<div class="ov3-promo-content">'
+          + '<div class="mark">PF</div>'
+          + '<strong>PF EMBALAGENS</strong>'
+          + '<p>Direto da fábrica<br>para todo o Brasil.</p>'
+        + '</div>'
+      + '</div>';
     }
 
     function render(){
@@ -2982,12 +3224,11 @@
         return;
       }
 
-      let html = '';
+      const empresaSelecionada = filtro.empresas.find(e => e.id === filtro.empresaId);
+      let html = greetingHTML(empresaSelecionada ? (empresaSelecionada.nomeFantasia || empresaSelecionada.razaoSocial) : null);
 
-      // Seletor de Loja (14/09/2026) — só aparece quando há mais de uma loja
-      // conectada (ML + Shopee juntas); com 0 ou 1 loja não faz diferença
-      // pro usuário escolher, então não polui a tela à toa. "Todas as lojas"
-      // sempre disponível pra voltar ao total da empresa.
+      // Seletor de Loja — só aparece quando há mais de uma loja conectada
+      // (ML + Shopee juntas).
       if(state.lojas.length > 1){
         html += '<div class="toolbar" style="margin-bottom:14px;">'
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="ov2LojaSelect">'
@@ -3005,19 +3246,24 @@
       } else if(state.data){
         const resumo = state.data.resumo;
         const hasOrders = resumo.qtdPedidos > 0;
-        html += sectionLabel('Indicadores principais — '+state.data.periodo.label)
-          + heroKpisHTML(resumo, 'BRL', hasOrders, state.data.serieDiaria, (!state.contaId && state.painel) ? state.painel.faturamentoEvolucao : null)
-          + secondaryKpisHTML(resumo, 'BRL', hasOrders, state.painel, state.painelError)
-          + (state.contaId ? '<div class="field-hint" style="margin:-8px 0 14px;">"Por marketplace", Fluxo de Caixa e Alertas &amp; IA abaixo continuam considerando todas as lojas da empresa — só os indicadores acima e o gráfico de desempenho respeitam a loja selecionada.</div>' : '')
-          + sectionLabel('Desempenho')
-          + '<div class="ov2-row-chart">'
+        html += kpi6RowHTML(resumo, 'BRL', hasOrders, state.data.serieDiaria, (!state.contaId && state.painel) ? state.painel.faturamentoEvolucao : null)
+          + detalhamentoStripHTML(resumo, 'BRL', hasOrders)
+          + (state.contaId ? '<div class="field-hint" style="margin:8px 0 0;">"Vendas por Marketplace", Estoque, Contas e Fluxo de Caixa e Alertas &amp; IA abaixo continuam considerando todas as lojas da empresa — os indicadores acima, o gráfico de desempenho e Anúncios e Performance respeitam a loja selecionada.</div>' : '')
+          + '<div class="ov3-row3 wide-chart">'
+            + marketplacePanelHTML(state.painel, state.painelError, state.contaId)
             + chartCardHTML(state.data)
-            + '<div class="ov2-attention-panel">'+alertsPanelHTML(state.painel, state.painelError)+'</div>'
+            + alertsPanelHTML(state.painel, state.painelError)
           + '</div>'
-          + sectionLabel('Status da operação')
-          + '<div class="ov2-row-bottom">' + healthPanelHTML(resumo, state.painel, state.painelError) + iaSummaryPanelHTML(state.painel, state.painelError) + '</div>'
-          + sectionLabel('Agentes de IA')
-          + agentesIaSummaryHTML(state.painel, state.painelError);
+          + '<div class="ov3-row3">'
+            + estoquePanelHTML(state.estoque, state.estoqueError)
+            + caixaPanelHTML(state.painel, state.painelError)
+            + adsPanelHTML(state.ads, state.adsError, state.perf, state.perfError)
+          + '</div>'
+          + '<div class="ov3-row3">'
+            + tasksPanelHTML(state.painel, state.painelError)
+            + healthPanelHTML(resumo, state.painel, state.painelError)
+            + promoPanelHTML()
+          + '</div>';
       }
 
       root.innerHTML = html;
