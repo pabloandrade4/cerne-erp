@@ -2,6 +2,124 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-21 (67) — Radar de Concorrentes (nova tela): cadastra um anúncio concorrente específico e monitora sozinho preço, promoção, foto, título e frete
+- **Pedido do usuário (verbatim), com mockup de referência visual
+  (`pf_radar_concorrentes_v2.html`):** "Quero adicionar ao sistema a nova
+  área Radar de Concorrentes... Preciso conseguir cadastrar: nome do
+  concorrente, link do anúncio, SKU relacionado, marketplace. Depois de
+  cadastrado, o sistema deve monitorar preço, promoção, foto de capa,
+  título, frete e outras mudanças do anúncio, salvando histórico e
+  gerando alertas."
+- **O que é diferente do que já existia:** este projeto já tinha DUAS
+  coisas parecidas com "concorrente", nenhuma delas alterada por esta
+  tarefa — (a) `concorrentes_monitorados`/tela "Análise de Concorrente":
+  só guarda um link, nunca busca nada sozinho; (b)
+  `lib/ia/radarConcorrente.js`: descobre AUTOMATICAMENTE outros
+  vendedores do mesmo produto e só compara preço, sem histórico. O Radar
+  de Concorrentes é o terceiro conceito: o usuário informa o LINK EXATO
+  de UM anúncio específico já escolhido por ele, e o sistema acompanha
+  ESSE anúncio ao longo do tempo — nome, SKU, preço, promoção, foto,
+  título e frete, com histórico salvo e alertas de mudança.
+- **Novos arquivos (nada existente foi removido/renomeado):**
+  `db/schema.sql` (tabelas `radar_concorrentes`,
+  `radar_concorrentes_leituras`, `radar_concorrentes_alertas`),
+  `lib/radarConcorrentes.js` (cadastro, leitura do anúncio, geração de
+  alertas, resumo/KPIs), `lib/ia/radarConcorrentesScheduler.js` (ciclo
+  automático, a cada 3h por padrão, configurável via
+  `RADAR_CONCORRENTES_INTERVALO_MS`), `routes/radarConcorrentes.js`
+  (`/api/radar-concorrentes`), `test/radarConcorrentes.test.js`. Uma nova
+  aba "Radar de Concorrentes" foi adicionada em `public/index.html`
+  (grupo "Agentes IA" da barra lateral), sem tocar em nenhuma aba/tela
+  existente.
+- **Monitoramento automático real só para Mercado Livre nesta versão:** o
+  formulário de cadastro oferece as 3 opções do mockup (Mercado
+  Livre/Shopee/TikTok Shop), mas só Mercado Livre tem leitura pública
+  confirmada neste projeto (`GET /items/{id}`, já usada em produção — ver
+  `lib/concorrente.js#testarListagemPorVendedor`). Shopee/TikTok Shop
+  ficam cadastrados como referência, sem leitura automática — nunca
+  finge ter buscado um dado que não buscou de verdade. Detalhes da
+  decisão em `02-decisoes.md`.
+- **Nunca inventa dado:** todo campo salvo (preço, título, foto, frete,
+  status, quantidade vendida) vem direto da resposta real da API do
+  Mercado Livre; quando a leitura falha, fica salvo `ok=false` com o
+  motivo real do erro, nunca um valor chutado. "Vendas/dia estimadas" —
+  pedido explícito do mockup como estimativa — é CALCULADA por este
+  sistema comparando duas leituras reais (nunca vem pronta da API); só
+  aparece a partir da 2ª leitura de cada concorrente.
+- **Verificação:** `node --check` em todos os arquivos novos e em
+  `server.js`/`lib/mercadolivre.js` (únicos arquivos existentes tocados,
+  ver `02-decisoes.md`) — todos passaram. `node --check` no JavaScript
+  inline de `public/index.html` também passou. Suíte de testes completa:
+  **400/400 passando** (rodada com o pacote `pg` disponível — neste
+  ambiente de desenvolvimento sem internet ele normalmente falta, o que
+  já causava as falhas conhecidas de outras sessões; com ele presente,
+  zero falhas, incluindo os 11 testes novos deste arquivo). Sem acesso à
+  API real do Mercado Livre neste ambiente de desenvolvimento — mesma
+  ressalva já registrada para `lib/concorrente.js`: a primeira leitura
+  real só pode ser confirmada depois do deploy, testando com um link de
+  anúncio de verdade.
+
+## 2026-09-21 (66) — Importação de Contas a Pagar: corrigido cadastro em duplicidade quando o código do documento (coluna "CR") vem com/sem o prefixo "CR"
+- **Pedido do usuário (verbatim):** "outra coisa, quando for fazer uplow
+  de arquivos em contas a pagar nunca fazer de coisas duplicadas,
+  principalmente em cr" — confirmado que já tinha acontecido de verdade em
+  produção.
+- **Causa raiz confirmada via consulta direta ao banco (Supabase):**
+  achado um par de linhas em `contas_pagar` com o mesmíssimo fornecedor,
+  valor e vencimento, mas com o campo `documento` diferente só por causa
+  do prefixo — uma vez salvo como "CR9801", outra vez só "9801". A chave
+  de duplicidade (`chaveDuplicidade`, em
+  `lib/contasPagarImportacao.js`) comparava esse campo exatamente como
+  veio do arquivo, então as duas linhas pareciam documentos diferentes e
+  a mesma conta foi importada duas vezes.
+- **Correção:** nova função `normalizarDocumentoParaChave` remove o
+  prefixo "CR" (com ou sem espaço/hífen depois) só para efeito de
+  COMPARAÇÃO da chave de duplicidade — o valor do documento salvo e
+  mostrado na tela continua exatamente como veio no arquivo original,
+  nunca é alterado. "CR9801", "CR 9801", "CR-9801" e "9801" agora são
+  todos reconhecidos como o mesmo documento.
+- **Verificação:** novo teste em `test/contasPagarImportacao.test.js`
+  reproduzindo o caso real (documento com e sem prefixo "CR" gerando a
+  mesma chave, e documentos realmente diferentes continuando com chaves
+  diferentes) — passou. Suíte completa: 400/400 passando (ver ressalva
+  sobre o pacote `pg` na entrada (67) acima).
+
+## 2026-09-21 (65) — Anúncio/campanha ENCERRADO some do Ads e Performance e de Anúncios (pausado continua aparecendo)
+- **Pedido do usuário (verbatim):** "OURRA REGRA DO ADS É ANUNCIOS QUE NAO
+  ESTOA MAIS ATIVOS NAO DEVEM APARECER NEM NO ADS NEM ANUNCIOS, CERTO?" —
+  esclarecido depois, também verbatim: "APENAS ENCERRADO, ANUCNIOS E
+  CAMPNHAS, OS PAUSADOS DEVEM APARECER". Ou seja: só o status "encerrado"
+  (closed) deve sumir — "pausado" continua aparecendo normalmente nas duas
+  telas.
+- **Onde mudou:**
+  - `lib/ads.js` (tela Ads e Performance): depois de montar a lista de
+    anúncios (`linhas`), cada um é conferido contra o status ao vivo dele
+    no Mercado Livre (reaproveitando o mesmo helper já usado pela tela
+    Performance de Anúncios — `buscarAnunciosVivosPorConta`, de
+    `lib/anunciosBase.js`, nenhuma consulta nova criada). Só é escondido
+    quando o status vier confirmado como "closed". Como as campanhas
+    (aba "Campanhas") e os cards de topo (investimento, ROAS, ACOS etc.)
+    são todos calculados EM CIMA dessa mesma lista de anúncios, o filtro
+    aplicado uma vez já tira o anúncio encerrado dos dois lugares, sem
+    precisar mexer em mais nada.
+  - `lib/mlAnuncios.js` (tela Anúncios): a busca de anúncios de uma conta
+    agora tira da lista quem estiver com status "closed", antes de
+    devolver pra tela.
+- **Regra de segurança (nunca esconder por engano):** um anúncio só é
+  escondido quando o status ao vivo dele foi CONFIRMADO como encerrado. Se
+  não der pra confirmar — por exemplo, a conta está com erro de conexão,
+  ou o anúncio não foi encontrado na busca ao vivo — ele continua
+  aparecendo normalmente. Isso evita que uma falha temporária de conexão
+  com o Mercado Livre apague, por engano, histórico financeiro real da
+  tela.
+- **O que não muda:** anúncio pausado continua aparecendo nas duas telas,
+  exatamente como hoje. Nenhum número de venda/margem/investimento já
+  registrado é apagado — só deixa de aparecer NA LISTA quando o anúncio
+  está encerrado no Mercado Livre.
+- **Verificação:** `node --check` em `lib/ads.js` e `lib/mlAnuncios.js` —
+  os dois passaram. Suíte de testes completa: 266/281 passando, mesma
+  base de sempre (nenhum teste novo quebrou).
+
 ## 2026-09-21 (64) — Espaço vazio à direita, em qualquer tela (mais forte com o menu recolhido)
 - **Pedido do usuário (verbatim, com print de tela):** "UMA COISA QUE QUERO
   MELHORAR AGORA, PORQUE FICOU ESSE ESPAÇO TODO VAZIO E QUANDO RECOLHE O

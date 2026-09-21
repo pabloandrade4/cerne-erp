@@ -12,6 +12,7 @@ const { iniciarPromocoesIA } = require('./lib/ia/promocoesScheduler');
 const { iniciarSacScheduler } = require('./lib/ia/sacScheduler');
 const { iniciarDailyAutomatico } = require('./lib/ia/dailyScheduler');
 const { iniciarConcorrenteIA } = require('./lib/ia/concorrenteScheduler');
+const { iniciarRadarConcorrentesScheduler } = require('./lib/ia/radarConcorrentesScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
@@ -51,6 +52,7 @@ const dailyRouter = require('./routes/daily');
 const sacRouter = require('./routes/sac');
 const agentes3dRouter = require('./routes/agentes3d');
 const concorrenteRouter = require('./routes/concorrente');
+const radarConcorrentesRouter = require('./routes/radarConcorrentes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -99,6 +101,7 @@ app.use('/api/ia/daily', dailyRouter);
 app.use('/api/sac', sacRouter);
 app.use('/api/agentes-3d', agentes3dRouter);
 app.use('/api/concorrente', concorrenteRouter);
+app.use('/api/radar-concorrentes', radarConcorrentesRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -169,6 +172,15 @@ async function start() {
     // aparece algo novo/pior, sempre no servidor, nunca dependendo de
     // alguém abrir a tela (ver lib/ia/concorrenteScheduler.js).
     iniciarConcorrenteIA();
+    // Radar de Concorrentes — 21/09/2026, pedido explícito do usuário (com
+    // mockup de referência visual): cadastra concorrente por link do
+    // anúncio (nome + SKU + marketplace) e o sistema relê esse anúncio
+    // sozinho de tempos em tempos, salvando histórico e gerando alertas —
+    // sempre no servidor, nunca dependendo de alguém abrir a tela (ver
+    // lib/ia/radarConcorrentesScheduler.js). Funcionalidade nova e
+    // independente da Análise de Concorrente acima (ver comentário grande
+    // em db/schema.sql, tabela radar_concorrentes, sobre a diferença).
+    iniciarRadarConcorrentesScheduler();
   });
 }
 

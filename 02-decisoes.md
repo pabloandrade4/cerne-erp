@@ -3,6 +3,112 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-21 (56) — Radar de Concorrentes: escopo real de monitoramento automático e adaptações do mockup
+- **Por que só Mercado Livre tem leitura automática de verdade:** antes
+  de escrever qualquer código novo, foi reaproveitada uma investigação já
+  feita neste mesmo projeto em 20/09/2026
+  (`lib/concorrente.js#testarListagemPorVendedor`): buscar um anúncio
+  ESPECÍFICO pelo ID (`GET /items/{id}`) funciona sem bloqueio — "este
+  endpoint já é usado em produção" — mas BUSCAR/DESCOBRIR concorrentes
+  (por título ou por vendedor) é bloqueado pela API (403, testado de
+  verdade). Como o Radar de Concorrentes só precisa do primeiro caminho
+  (o usuário já escolhe e cola o link do anúncio específico, nunca pede
+  pro sistema descobrir sozinho quem são os concorrentes), dava pra
+  construir o monitoramento automático de verdade — só para Mercado
+  Livre, porque foi o único caminho confirmado neste projeto. Shopee e
+  TikTok Shop entram no formulário de cadastro (o mockup oferece as 3
+  opções) mas ficam com `monitoramento_automatico=false`: cadastro válido,
+  sem leitura automática — nunca finge ter buscado um dado que não tem
+  capacidade real de buscar.
+- **Por que os alertas ficam numa tabela própria, fora da Central de
+  Alertas existente:** o mockup já tem seu próprio painel "Alertas
+  prioritários" dentro da tela; manter `radar_concorrentes_alertas`
+  separada da tabela `radar_alertas`/`persistirSituacoes` (usada por
+  Radar da IA, Promoções, Ads, Concorrente automático, SAC) evita
+  qualquer risco de mexer no pipeline de alertas que várias outras partes
+  do sistema já dependem — decisão conservadora, dado que o pedido do
+  usuário foi explícito em "não altere, remova, renomeie ou quebre
+  nenhuma função... que já existe no sistema".
+- **Como "vendas/dia estimadas" foi resolvido honestamente:** a API do
+  Mercado Livre não tem um campo de "vendas por dia" — só
+  `sold_quantity`, um total acumulado e aproximado (o próprio Mercado
+  Livre arredonda esse número). O próprio mockup já previa isso, com uma
+  nota de rodapé: "Vendas/dia deve ser tratado como estimativa quando o
+  dado exato do concorrente não estiver disponível pela API." Decisão:
+  calcular a estimativa por este sistema, comparando `sold_quantity` da
+  leitura atual com o da leitura anterior bem-sucedida (diferença ÷ dias
+  entre as duas) — nunca inventando um número pronto. Por isso fica "—"
+  até existir uma 2ª leitura de cada concorrente.
+- **Card "O que o agente monitora" do mockup (com toggles) virou uma
+  lista informativa, sem nenhum toggle clicável:** os interruptores do
+  mockup não correspondem a nenhuma configuração real hoje (não existe
+  "desligar só o monitoramento de foto", por exemplo) — um toggle
+  clicável que não muda nada seria enganoso. Adaptado para uma lista que
+  mostra o que É monitorado de verdade hoje.
+- **Texto do "agente" do mockup (parágrafo gerado) virou um resumo com os
+  alertas reais mais recentes**, em vez de um texto de IA generativa —
+  para esta primeira versão, evitar adicionar uma nova chamada de IA
+  (custo, latência, mais uma coisa que pode falhar) quando os próprios
+  alertas já contam a história de forma honesta e verificável.
+- **Comentário atualizado em `lib/mercadolivre.js#apiGetPublico`** (única
+  alteração feita em um arquivo de backend já existente, fora
+  `server.js`): o comentário dizia "NUNCA usada em nenhum fluxo real do
+  ERP — só nesta rota de diagnóstico", o que deixou de ser verdade a
+  partir desta tarefa (o Radar de Concorrentes passou a usar essa função
+  de verdade). Só o comentário foi alterado — a função em si (assinatura,
+  comportamento) não mudou nem uma linha.
+- **Intervalo do ciclo automático (3h, configurável):** mais curto que o
+  ciclo de 24h de `lib/ia/concorrenteScheduler.js` porque o custo é bem
+  menor — este ciclo só relê os anúncios específicos já cadastrados (1
+  chamada por concorrente), não varre o catálogo inteiro em busca de
+  concorrentes novos. Ainda assim não é "tempo real" (mockup mostra "há 4
+  min" como dado ilustrativo do layout) — quem quiser conferir na hora
+  tem o botão "Ler agora" (re-leitura sob demanda) além da leitura
+  automática do ciclo.
+
+## 2026-09-21 (55) — Contas a Pagar: normalizar o prefixo "CR" só na comparação da chave de duplicidade, nunca no valor salvo
+- Decisão de corrigir só a COMPARAÇÃO (função nova
+  `normalizarDocumentoParaChave`), nunca alterar o valor de `documento`
+  que é salvo e mostrado na tela — o usuário precisa continuar vendo o
+  código exatamente como veio no arquivo original (auditoria/conferência
+  com o fornecedor), só a checagem de "é o mesmo documento?" precisava
+  ficar mais esperta.
+- Decisão de remover o prefixo com uma regra simples (`cr` seguido de
+  espaço/hífen opcional) em vez de tentar reconhecer todos os formatos
+  possíveis de prefixo — cobre os 3 casos reais observados ("CR9801",
+  "CR 9801", "CR-9801") sem arriscar normalizar demais e juntar
+  documentos que na verdade são diferentes.
+
+## 2026-09-21 (54) — Só "encerrado" esconde anúncio/campanha do Ads; "pausado" sempre aparece
+- Pedido inicial do usuário era ambíguo ("anúncios que não estão mais
+  ativos não devem aparecer") — "não ativo" poderia significar só
+  "encerrado" ou também "pausado". Como esconder um anúncio pausado por
+  engano apagaria da tela um histórico financeiro real (investimento,
+  vendas, margem já registrados), perguntei antes de implementar em vez
+  de assumir. Resposta do usuário: só "encerrado" deve sumir; "pausado"
+  continua aparecendo nas duas telas (Ads e Performance, Anúncios).
+- Decisão de reaproveitar a infraestrutura que já existia (o helper
+  `buscarAnunciosVivosPorConta`, de `lib/anunciosBase.js`, já usado pela
+  tela "Performance de Anúncios" pra saber o status ao vivo de cada
+  anúncio) em vez de criar um jeito novo de consultar isso — mesmo padrão
+  já estabelecido no projeto de nunca duplicar uma fonte de dado.
+- Decisão de filtrar em `lib/ads.js` (tela Ads e Performance) só a lista
+  de anúncios (`linhas`), sem tocar em `lib/ia/adsMotor.js`: como os
+  cards de topo e as campanhas já são somados/agregados em cima dessa
+  lista, filtrar uma vez só já resolve os dois lugares, sem precisar
+  duplicar a regra.
+- Decisão de filtrar `buscarAnunciosDaConta` (tela Anúncios) e não a
+  função compartilhada `buscarPaginaAnuncios`, porque essa função também é
+  usada pelas 3 telas de "Análise" (Performance de Anúncios, Visitas e
+  Conversão, Margem por Anúncio), que já têm seus próprios filtros de
+  status intencionais — mudar a função compartilhada mudaria o
+  comportamento dessas 3 telas sem ter sido pedido.
+- Decisão de segurança: só esconder quando o status ao vivo vier
+  CONFIRMADO como "closed" — nunca quando não for possível checar (conta
+  com erro, anúncio não encontrado na busca ao vivo). Segue o mesmo
+  princípio já usado em `lib/anunciosBase.js#resolverIdentidade`: status
+  desconhecido nunca é tratado como "encerrado".
+
 ## 2026-09-21 (53) — Ads e Performance: uma tela só com 2 abas, cada pedaço sem dado real foi adaptado ou calculado em cima de dado real já existente
 - **Pedido do usuário:** mandou um HTML de referência com 2 abas
   ("Visão Ads" e "Agente de Ads") dentro da mesma tela, pedindo visual

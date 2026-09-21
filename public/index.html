@@ -1624,6 +1624,17 @@
       // nova pra buscar concorrentes de um produto (ver lib/concorrente.js).
       { id:'concorrente', title:'Análise de Concorrente', icon:'search', desc:'Escolha um produto seu e a IA busca, no Mercado Livre, quem mais está vendendo o mesmo produto agora — com preço, estoque e o nível de confiança de cada achado.',
         bullets:['Busca pelo anúncio real que já vendeu o SKU, nunca um termo inventado','Prioriza o catálogo do Mercado Livre (mesmo produto garantido)','Sem catálogo, mostra candidatos por título — você confirma','Só entram concorrentes realmente vendendo agora (ativo + com estoque)'] },
+      // 21/09/2026, pedido explícito do usuário (com mockup de referência
+      // visual, pf_radar_concorrentes_v2.html): cadastrar UM anúncio
+      // específico de um concorrente (nome, link, SKU, marketplace) e o
+      // sistema passa a monitorar sozinho preço, promoção, foto de capa,
+      // título e frete, guardando histórico e gerando alertas — diferente
+      // da Análise de Concorrente acima (que busca/descobre concorrentes
+      // automaticamente; aqui é o usuário que já escolheu o anúncio). Ver
+      // comentário grande em db/schema.sql (tabela radar_concorrentes) e em
+      // lib/radarConcorrentes.js.
+      { id:'radarConcorrentes', title:'Radar de Concorrentes', icon:'eye', desc:'Cadastre o link de um anúncio concorrente específico e o sistema monitora sozinho preço, promoção, foto de capa, título e frete — guardando histórico e avisando quando algo muda.',
+        bullets:['Monitoramento automático real para Mercado Livre (relê o anúncio de tempos em tempos)','Shopee/TikTok Shop podem ser cadastrados, mas sem leitura automática nesta versão','Histórico de preço e alertas de mudança por concorrente','Nunca inventa dado: quando a leitura falha, mostra o motivo real'] },
     ]},
   ];
 
@@ -1698,7 +1709,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','planoAcaoDia','agenteAds','agentePromocoes','concorrente','sacMercadoLivre','sacShopee','salaAgentes'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','planoAcaoDia','agenteAds','agentePromocoes','concorrente','sacMercadoLivre','sacShopee','salaAgentes','radarConcorrentes'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1775,6 +1786,7 @@
     else if(id === 'sacMercadoLivre'){ inner += '<div id="sacMercadoLivreRoot"></div>'; }
     else if(id === 'sacShopee'){ inner += '<div id="sacShopeeRoot"></div>'; }
     else if(id === 'salaAgentes'){ inner += '<div id="salaAgentesRoot"></div>'; }
+    else if(id === 'radarConcorrentes'){ inner += '<div id="radarConcorrentesRoot"></div>'; }
     else{ inner += moduleEmptyHTML(p); }
 
     section.innerHTML = inner;
@@ -1829,6 +1841,7 @@
     if(id === 'agenteAds' && window.AgenteAds) window.AgenteAds.load();
     if(id === 'agentePromocoes' && window.AgentePromocoes) window.AgentePromocoes.load();
     if(id === 'concorrente' && window.AgenteConcorrente) window.AgenteConcorrente.load();
+    if(id === 'radarConcorrentes' && window.RadarConcorrentes) window.RadarConcorrentes.load();
     if(id === 'sacMercadoLivre' && window.SacMercadoLivre) window.SacMercadoLivre.load();
     if(id === 'sacShopee' && window.SacShopee) window.SacShopee.load();
     // Sala dos Agentes (cena 3D) é a única tela que precisa de um "unload"
@@ -13273,6 +13286,369 @@
     }
 
     window.AgenteConcorrente = { load };
+  })();
+
+  /* ================= RADAR DE CONCORRENTES (21/09/2026) =================
+     Pedido explícito do usuário, com um mockup de referência visual
+     (pf_radar_concorrentes_v2.html): "Quero adicionar ao sistema a nova
+     área Radar de Concorrentes... Preciso conseguir cadastrar: nome do
+     concorrente, link do anúncio, SKU relacionado, marketplace. Depois de
+     cadastrado, o sistema deve monitorar preço, promoção, foto de capa,
+     título, frete e outras mudanças do anúncio, salvando histórico e
+     gerando alertas."
+
+     Backend novo e independente: lib/radarConcorrentes.js,
+     routes/radarConcorrentes.js, lib/ia/radarConcorrentesScheduler.js e as
+     tabelas radar_concorrentes/radar_concorrentes_leituras/
+     radar_concorrentes_alertas (db/schema.sql) — nada disso toca a Análise
+     de Concorrente (tela acima) nem lib/ia/radarConcorrente.js/
+     concorrentes_monitorados, que continuam existindo do jeito que estavam.
+
+     Adaptações do mockup pra dados reais (documentadas em detalhe em
+     02-decisoes.md, decisão "Radar de Concorrentes"):
+       - O mockup mostra 3 opções de marketplace no cadastro (Mercado
+         Livre/Shopee/TikTok Shop) — mantidas aqui, mas só Mercado Livre
+         tem leitura automática real nesta versão (ver aviso no formulário
+         e coluna "Status" da tabela) — Shopee/TikTok Shop ficam
+         cadastrados só como referência, igual concorrentes_monitorados já
+         fazia antes desta tela.
+       - O card "O que o agente monitora" do mockup (toggles) virou uma
+         lista informativa (sem toggle nenhum) — os "interruptores" do
+         mockup não correspondem a nenhuma configuração real por concorrente
+         hoje; mostrar um toggle clicável que não faz nada seria enganoso.
+       - O texto do "agente" no mockup (parágrafo gerado) virou um resumo
+         com os alertas reais mais recentes — nunca um texto de IA
+         inventado pra esta primeira versão.
+       - Os cards de produto do mockup (com fundo de "caixa" desenhado)
+         usam a foto de capa REAL do anúncio (imagem_url da última leitura)
+         quando existe, e o texto "Sem foto ainda" honestamente quando não
+         existe leitura bem-sucedida ainda.
+       - "Vendas/dia estimadas": nunca vem pronta da API — ver o cálculo
+         real em lib/radarConcorrentes.js#calcularVendasDiaEstimado (compara
+         duas leituras). Aparece "—" até existir uma segunda leitura,
+         exatamente como o próprio mockup já avisa em nota de rodapé.
+  */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtMoeda(v){
+      if(v === null || v === undefined || !Number.isFinite(Number(v))) return '—';
+      return Number(v).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+    }
+    function fmtRelativo(iso){
+      if(!iso) return '—';
+      const diffMs = Date.now() - new Date(iso).getTime();
+      const min = Math.floor(diffMs/60000);
+      if(min < 1) return 'agora mesmo';
+      if(min < 60) return 'há '+min+' min';
+      const h = Math.floor(min/60);
+      if(h < 24) return 'há '+h+'h';
+      const d = Math.floor(h/24);
+      return 'há '+d+'d';
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      if(!wrap) return;
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+
+    const MARKETPLACE_OPCOES = [
+      { value:'mercado_livre', label:'Mercado Livre' },
+      { value:'shopee', label:'Shopee' },
+      { value:'tiktok_shop', label:'TikTok Shop' },
+    ];
+
+    const state = {
+      lista:[], resumo:null, alertas:[], loading:false, error:null,
+      form:{ nomeConcorrente:'', linkAnuncio:'', sku:'', marketplace:'mercado_livre' }, salvando:false, formErro:null,
+      filtroTexto:'', filtroMarketplace:'',
+    };
+
+    async function apiListar(empresaId){
+      const res = await fetch('/api/radar-concorrentes?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar os concorrentes monitorados.');
+      return (body && body.concorrentes) || [];
+    }
+    async function apiResumo(empresaId){
+      const res = await fetch('/api/radar-concorrentes/resumo?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar o resumo.');
+      return body;
+    }
+    async function apiAlertas(empresaId){
+      const res = await fetch('/api/radar-concorrentes/alertas?empresaId='+empresaId+'&limite=12');
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar os alertas.');
+      return (body && body.alertas) || [];
+    }
+    async function apiCadastrar(empresaId, dados){
+      const res = await fetch('/api/radar-concorrentes', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ empresaId, ...dados }),
+      });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível cadastrar este concorrente.');
+      return body;
+    }
+    async function apiReler(empresaId, id){
+      const res = await fetch('/api/radar-concorrentes/'+id+'/reler?empresaId='+empresaId, { method:'POST' });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível atualizar a leitura deste concorrente.');
+      return body;
+    }
+    async function apiRemover(empresaId, id){
+      const res = await fetch('/api/radar-concorrentes/'+id+'?empresaId='+empresaId, { method:'DELETE' });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível remover este concorrente.');
+      return body;
+    }
+
+    async function carregarTudo(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.lista = []; state.resumo = null; state.alertas = []; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const [lista, resumo, alertas] = await Promise.all([apiListar(filtro.empresaId), apiResumo(filtro.empresaId), apiAlertas(filtro.empresaId)]);
+        state.lista = lista; state.resumo = resumo; state.alertas = alertas;
+      } catch(e){ state.error = e.message; }
+      state.loading = false; render();
+    }
+
+    async function salvar(){
+      const filtro = window.CerneFiltro.state;
+      const f = state.form;
+      if(!filtro.empresaId || !f.nomeConcorrente.trim() || !f.linkAnuncio.trim() || !f.sku.trim() || state.salvando) return;
+      state.salvando = true; state.formErro = null; render();
+      try{
+        await apiCadastrar(filtro.empresaId, { nomeConcorrente:f.nomeConcorrente.trim(), linkAnuncio:f.linkAnuncio.trim(), sku:f.sku.trim(), marketplace:f.marketplace });
+        state.form = { nomeConcorrente:'', linkAnuncio:'', sku:'', marketplace:'mercado_livre' };
+        toast('Concorrente cadastrado.', 'success');
+        await carregarTudo();
+      } catch(e){ state.formErro = e.message; }
+      finally{ state.salvando = false; render(); }
+    }
+
+    async function reler(id){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId) return;
+      try{ await apiReler(filtro.empresaId, id); toast('Leitura atualizada.', 'success'); await carregarTudo(); }
+      catch(e){ toast(e.message, 'error'); }
+    }
+
+    async function remover(id){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId) return;
+      try{ await apiRemover(filtro.empresaId, id); toast('Concorrente removido do monitoramento.', 'success'); await carregarTudo(); }
+      catch(e){ toast(e.message, 'error'); }
+    }
+
+    function listaFiltrada(){
+      const busca = state.filtroTexto.trim().toLowerCase();
+      return state.lista.filter((c)=>{
+        if(state.filtroMarketplace && c.marketplace !== state.filtroMarketplace) return false;
+        if(!busca) return true;
+        return (c.nomeConcorrente||'').toLowerCase().includes(busca)
+          || (c.sku||'').toLowerCase().includes(busca)
+          || (c.mlItemId||'').toLowerCase().includes(busca)
+          || (c.linkAnuncio||'').toLowerCase().includes(busca);
+      });
+    }
+
+    function kpiCardHTML(label, valor, sub, corSub){
+      return '<div class="table-card" style="padding:16px;">'
+        + '<div style="font-size:12px;color:var(--text-muted);font-weight:700;">'+escapeHtml(label)+'</div>'
+        + '<div style="font-size:24px;font-weight:800;margin-top:8px;font-family:\'Archivo\',sans-serif;">'+valor+'</div>'
+        + (sub ? '<div style="font-size:12px;margin-top:4px;color:var('+(corSub||'--text-muted')+');">'+sub+'</div>' : '')
+        + '</div>';
+    }
+
+    function resumoHTML(){
+      const r = state.resumo;
+      if(!r) return '';
+      const menor = r.menorPreco;
+      let menorValor = menor ? fmtMoeda(menor.preco) : '—';
+      let menorSub = null, menorCor = '--text-muted';
+      if(menor && menor.precoProprio !== null){
+        const diff = menor.precoProprio - menor.preco;
+        if(diff > 0){ menorSub = fmtMoeda(diff) + ' abaixo do seu preço (SKU '+escapeHtml(menor.sku)+')'; menorCor = '--danger'; }
+        else if(diff < 0){ menorSub = fmtMoeda(-diff) + ' acima do seu preço (SKU '+escapeHtml(menor.sku)+')'; menorCor = '--success'; }
+        else { menorSub = 'Igual ao seu preço'; }
+      } else if(menor){ menorSub = 'Sem venda registrada deste SKU pra comparar'; }
+      return '<div class="grid-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px;">'
+        + kpiCardHTML('Concorrentes monitorados', r.totalMonitorados, r.totalComMonitoramentoAutomatico+' com leitura automática')
+        + kpiCardHTML('Mudanças nas últimas 24h', r.mudancasUltimas24h, null)
+        + kpiCardHTML('Em promoção agora', r.emPromocaoAgora, null)
+        + kpiCardHTML('Menor preço encontrado', menorValor, menorSub, menorCor)
+        + '</div>';
+    }
+
+    function statusChipHTML(c){
+      if(!c.monitoramentoAutomatico) return '<span class="status-chip" style="opacity:.8;">'+svg('clock')+'Sem leitura automática</span>';
+      if(!c.ultimaLeitura) return '<span class="status-chip">'+svg('clock')+'Aguardando 1ª leitura</span>';
+      if(!c.ultimaLeitura.ok) return '<span class="status-chip" style="color:var(--danger);">'+svg('alertCircle')+'Falha na última leitura</span>';
+      return '<span class="status-chip" style="color:var(--success);">'+svg('checkCircle')+'Monitorando</span>';
+    }
+
+    function formHTML(){
+      const f = state.form;
+      const podeSalvar = f.nomeConcorrente.trim() && f.linkAnuncio.trim() && f.sku.trim() && !state.salvando;
+      return '<div class="table-card" style="padding:20px;margin-bottom:16px;">'
+        + '<div class="panel-title" style="margin:0 0 4px;">+ Cadastrar concorrente</div>'
+        + '<div class="field-hint" style="max-width:760px;margin-bottom:14px;">Vincule cada anúncio concorrente ao SKU correspondente. Ao salvar, o sistema busca a foto de capa, título, preço e demais dados públicos do anúncio na hora (só Mercado Livre nesta versão) e passa a acompanhar as próximas mudanças.</div>'
+        + '<div class="inline-form" style="margin:0;flex-wrap:wrap;">'
+          + '<div class="field" style="min-width:180px;"><label>Nome do concorrente</label>'
+            + '<input type="text" id="radarNome" placeholder="Ex.: Caixas Forte" value="'+escapeHtml(f.nomeConcorrente)+'"></div>'
+          + '<div class="field" style="min-width:280px;flex:1.4;"><label>Link do anúncio</label>'
+            + '<input type="text" id="radarLink" placeholder="https://produto.mercadolivre.com.br/MLB-..." value="'+escapeHtml(f.linkAnuncio)+'"></div>'
+          + '<div class="field" style="min-width:180px;"><label>SKU relacionado</label>'
+            + '<input type="text" id="radarSku" placeholder="Ex.: 100CX-19X12X12" value="'+escapeHtml(f.sku)+'"></div>'
+          + '<div class="field" style="min-width:170px;"><label>Marketplace</label>'
+            + '<select id="radarMarketplace">'+MARKETPLACE_OPCOES.map(o=>'<option value="'+o.value+'"'+(f.marketplace===o.value?' selected':'')+'>'+o.label+'</option>').join('')+'</select></div>'
+          + '<button class="primary-btn'+(podeSalvar?' enabled':'')+'" id="radarSalvarBtn" type="button" '+(!podeSalvar?'disabled':'')+'>'
+            + svg('plus')+'<span>'+(state.salvando?'Salvando…':'Salvar e monitorar')+'</span></button>'
+        + '</div>'
+        + (f.marketplace !== 'mercado_livre' ? '<div class="field-hint" style="margin-top:10px;">Shopee e TikTok Shop ficam cadastrados como referência — este sistema ainda não tem uma leitura pública automática pra essas plataformas, então a leitura de preço/foto/título precisa ser conferida manualmente pelo link.</div>' : '')
+        + (state.formErro ? '<div class="field-hint" style="margin-top:10px;color:var(--danger);">'+escapeHtml(state.formErro)+'</div>' : '')
+      + '</div>';
+    }
+
+    function tabelaHTML(){
+      const linhas = listaFiltrada();
+      let html = '<div class="table-card" style="margin-bottom:16px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px 0;">'
+          + '<div class="panel-title" style="margin:0;">Concorrentes cadastrados</div>'
+          + '<span class="field-hint" style="margin:0;">'+state.lista.length+' monitorado'+(state.lista.length===1?'':'s')+'</span>'
+        + '</div>'
+        + '<div class="toolbar" style="margin:0 16px 12px;">'
+          + '<div class="search-box">'+svg('search')+'<input type="text" id="radarBusca" placeholder="Buscar concorrente, SKU ou anúncio…" value="'+escapeHtml(state.filtroTexto)+'"></div>'
+          + '<div class="field" style="margin:0;"><select id="radarFiltroMarketplace"><option value="">Todos os marketplaces</option>'
+            + MARKETPLACE_OPCOES.map(o=>'<option value="'+o.value+'"'+(state.filtroMarketplace===o.value?' selected':'')+'>'+o.label+'</option>').join('')
+          + '</select></div>'
+        + '</div>';
+      if(!state.lista.length){
+        html += '<div class="empty-panel" style="padding:18px;"><div class="field-hint">Nenhum concorrente cadastrado ainda — use o formulário acima.</div></div></div>';
+        return html;
+      }
+      if(!linhas.length){
+        html += '<div class="empty-panel" style="padding:18px;"><div class="field-hint">Nenhum concorrente encontrado com esse filtro.</div></div></div>';
+        return html;
+      }
+      html += '<div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Concorrente</th><th>SKU</th><th>Anúncio</th><th>Marketplace</th><th>Status</th><th>Última leitura</th><th></th>'
+        + '</tr></thead><tbody>'
+        + linhas.map((c)=>{
+          const linkTexto = c.mlItemId || (c.linkAnuncio||'').slice(0,40)+((c.linkAnuncio||'').length>40?'…':'');
+          return '<tr>'
+            + '<td><b>'+escapeHtml(c.nomeConcorrente)+'</b></td>'
+            + '<td><span style="font-weight:800;background:var(--copper-soft);color:var(--copper);border-radius:7px;padding:4px 7px;display:inline-block;font-size:11px;">'+escapeHtml(c.sku)+'</span></td>'
+            + '<td><a href="'+escapeHtml(c.linkAnuncio)+'" target="_blank" rel="noopener" style="color:var(--copper);font-weight:700;">'+escapeHtml(linkTexto)+' ↗</a></td>'
+            + '<td>'+escapeHtml(c.marketplaceLabel)+'</td>'
+            + '<td>'+statusChipHTML(c)+'</td>'
+            + '<td>'+(c.ultimaLeitura ? fmtRelativo(c.ultimaLeitura.lidoEm) : '—')+'</td>'
+            + '<td style="white-space:nowrap;">'
+              + (c.monitoramentoAutomatico ? '<button class="ghost-btn radarRelerBtn" type="button" data-id="'+c.id+'" style="cursor:pointer;opacity:1;padding:6px 9px;" title="Ler agora">'+svg('refreshCw')+'</button>' : '')
+              + ' <button class="ghost-btn radarRemoverBtn" type="button" data-id="'+c.id+'" style="cursor:pointer;opacity:1;padding:6px 9px;" title="Remover do monitoramento">'+svg('trash')+'</button>'
+            + '</td>'
+          + '</tr>';
+        }).join('')
+        + '</tbody></table></div></div>';
+      return html;
+    }
+
+    function monitoraCardHTML(){
+      const itens = [
+        'Alteração de preço', 'Entrada/saída de promoção', 'Troca da foto de capa',
+        'Alteração de título', 'Frete grátis / tipo de envio', 'Encerramento do anúncio',
+      ];
+      return '<div class="table-card" style="padding:18px;">'
+        + '<div class="panel-title" style="margin:0 0 12px;">O que é monitorado automaticamente</div>'
+        + itens.map(i=>'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;"><span>'+escapeHtml(i)+'</span><span style="color:var(--success);font-weight:700;">Mercado Livre ✓</span></div>').join('')
+        + '<div class="field-hint" style="margin-top:10px;">"Vendas/dia" é uma estimativa calculada por este sistema comparando duas leituras — só aparece depois da 2ª leitura de cada concorrente. Shopee e TikTok Shop entram só como cadastro de referência (sem leitura automática nesta versão).</div>'
+      + '</div>';
+    }
+
+    function insightHTML(){
+      const recentes = state.alertas.slice(0, 3);
+      let corpo;
+      if(!state.lista.length){
+        corpo = 'Cadastre o primeiro concorrente acima para o Radar começar a acompanhar mudanças de preço, promoção, foto e frete.';
+      } else if(!recentes.length){
+        corpo = 'Nenhuma mudança detectada ainda nos concorrentes monitorados — assim que uma leitura automática encontrar uma diferença real, ela aparece aqui.';
+      } else {
+        corpo = recentes.map(a=>'<div class="agent-item-line" style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,.12);font-size:12px;">'+escapeHtml(a.mensagem)+'</div>').join('');
+      }
+      return '<div class="agent-insight-card" style="padding:19px;background:linear-gradient(135deg,#111827,#1f2937);color:#fff;border-radius:16px;margin-bottom:16px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:start;">'
+          + '<div><span class="badge" style="font-size:11px;padding:6px 9px;border-radius:999px;background:rgba(255,255,255,.12);">Radar de Concorrentes</span>'
+          + '<h3 style="margin:8px 0 6px;font-size:17px;">'+(recentes.length ? 'Mudanças recentes nos anúncios monitorados' : 'Nenhuma mudança recente')+'</h3></div>'
+        + '</div>'
+        + '<div style="color:#cbd5e1;">'+corpo+'</div>'
+      + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('radarConcorrentesRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('eye')+'</div><h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para usar o Radar de Concorrentes.</p></div>';
+        return;
+      }
+      let html = formHTML() + tabelaHTML();
+      if(state.error){
+        html += '<div class="empty-panel"><p class="lead" style="color:var(--danger);">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.loading && !state.lista.length){
+        html += '<div class="table-skel"><span class="spin"></span><span>Carregando Radar de Concorrentes…</span></div>';
+      } else if(state.lista.length){
+        html += resumoHTML() + insightHTML() + monitoraCardHTML();
+      }
+      root.innerHTML = html;
+
+      const inputNome = document.getElementById('radarNome');
+      const inputLink = document.getElementById('radarLink');
+      const inputSku = document.getElementById('radarSku');
+      const selectMkt = document.getElementById('radarMarketplace');
+      if(inputNome) inputNome.addEventListener('input', ()=>{ state.form.nomeConcorrente = inputNome.value; atualizarBotaoSalvar(); });
+      if(inputLink) inputLink.addEventListener('input', ()=>{ state.form.linkAnuncio = inputLink.value; atualizarBotaoSalvar(); });
+      if(inputSku) inputSku.addEventListener('input', ()=>{ state.form.sku = inputSku.value; atualizarBotaoSalvar(); });
+      if(selectMkt) selectMkt.addEventListener('change', ()=>{ state.form.marketplace = selectMkt.value; render(); });
+      const btnSalvar = document.getElementById('radarSalvarBtn');
+      if(btnSalvar) btnSalvar.addEventListener('click', salvar);
+
+      const inputBusca = document.getElementById('radarBusca');
+      if(inputBusca) inputBusca.addEventListener('input', ()=>{
+        state.filtroTexto = inputBusca.value;
+        clearTimeout(inputBusca._t);
+        inputBusca._t = setTimeout(render, 300);
+      });
+      const selectFiltroMkt = document.getElementById('radarFiltroMarketplace');
+      if(selectFiltroMkt) selectFiltroMkt.addEventListener('change', ()=>{ state.filtroMarketplace = selectFiltroMkt.value; render(); });
+
+      document.querySelectorAll('.radarRelerBtn').forEach(btn=> btn.addEventListener('click', ()=> reler(Number(btn.dataset.id))));
+      document.querySelectorAll('.radarRemoverBtn').forEach(btn=> btn.addEventListener('click', ()=>{
+        if(window.confirm('Remover este concorrente do monitoramento? O histórico já salvo é mantido.')) remover(Number(btn.dataset.id));
+      }));
+    }
+
+    function atualizarBotaoSalvar(){
+      const btn = document.getElementById('radarSalvarBtn');
+      if(!btn) return;
+      const f = state.form;
+      const pode = f.nomeConcorrente.trim() && f.linkAnuncio.trim() && f.sku.trim() && !state.salvando;
+      btn.disabled = !pode;
+      btn.classList.toggle('enabled', pode);
+    }
+
+    async function load(){
+      await carregarTudo();
+    }
+
+    window.CerneFiltro.onChange(load);
+    window.RadarConcorrentes = { load };
   })();
 
   /* ================= PLANO DE AÇÃO DO DIA — Agente Coordenador (20/09/2026) =================

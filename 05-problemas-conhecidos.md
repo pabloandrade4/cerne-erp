@@ -3,6 +3,76 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## [RESOLVIDO 21/09/2026] Cadastro manual de Concorrente por SKU: "Erro interno do servidor" continua acontecendo em produção — o arquivo `lib/concorrente.js` nunca chegou a subir certo pro GitHub, mesmo depois de várias tentativas (21/09/2026)
+- **RESOLVIDO.** A causa real (achada depois de mais algumas tentativas
+  de upload) era mais específica do que "algum arquivo cai do upload em
+  massa" (explicação original abaixo): o arquivo estava indo pro lugar
+  ERRADO — `concorrente.js` na RAIZ do repositório (`cerne-erp/
+  concorrente.js`), em vez de dentro da pasta `lib` (`cerne-erp/lib/
+  concorrente.js`), que é o caminho que o `require('./lib/concorrente')`
+  do servidor realmente lê. Cada tentativa criava/atualizava um arquivo
+  solto na raiz (com o conteúdo certo!) sem nunca tocar no arquivo de
+  dentro de `lib`, que continuava com a versão antiga. Confirmado via
+  print do usuário mostrando o caminho no GitHub (`cerne-erp /
+  concorrente.js`, sem "lib" no meio) — resolvido copiando o conteúdo
+  certo direto pro editor do GitHub, especificamente no arquivo
+  `cerne-erp / lib / concorrente.js`. Confirmado do lado do servidor:
+  novo deploy (`dep-daoj5jfavr4c73bb6t00`, commit `a281d31b`) ficou "live"
+  às 13:36:42, e os logs seguintes não mostram mais nenhum `TypeError:
+  cadastrarConcorrente is not a function`. **Lição pra qualquer upload
+  futuro que continuar falhando do mesmo jeito, repetidas vezes, pro
+  mesmo arquivo:** sempre conferir o caminho completo mostrado no GitHub
+  (breadcrumb tipo "cerne-erp / lib / arquivo.js") antes de assumir que é
+  o conteúdo que está errado — pode ser só a pasta errada.
+- **Print enviado pelo usuário:** tentou cadastrar um concorrente (SKU
+  "50cx-16x11x6") na tela de Análise de Concorrente e recebeu "Erro
+  interno do servidor" — a lista continua "Nenhum concorrente cadastrado
+  ainda".
+- **Já tinha sido "corrigido" antes (ver (62) em `04-alteracoes.md`)** —
+  mas confirmado agora, lendo os logs reais do servidor no Render, que o
+  erro **continua acontecendo hoje**, às 13:00, no deploy mais recente
+  (o de 21/09 10:44h): `TypeError: cadastrarConcorrente is not a
+  function` e `TypeError: listarConcorrentesMonitorados is not a
+  function`, exatamente como antes.
+- **Causa raiz confirmada (lendo o arquivo que está DE VERDADE no GitHub
+  agora, não só o daqui):** `lib/concorrente.js` no GitHub (branch
+  `main`) nem sequer TEM essas duas funções escritas nele — é uma versão
+  bem mais antiga do arquivo, de antes do dia 20/09 (quando esse cadastro
+  manual foi criado). Ou seja: apesar de pelo menos 5 uploads de zip
+  terem sido feitos hoje entre 10:37h e 10:44h (confirmado pela lista de
+  deploys do Render), esse UM arquivo específico nunca foi realmente
+  substituído no GitHub em nenhuma dessas vezes — mesmo ele estando 100%
+  certo em todos os zips que entreguei (conferido de novo agora).
+- **Não é um bug de código.** É o mesmo tipo de problema já visto antes
+  com `lib/telegram.js` (ver (59)) e com as 3 telas de Análise (ver
+  (35)): quando se arrasta a pasta inteira do projeto (100+ arquivos) pro
+  GitHub de uma vez, de vez em quando algum arquivo específico não é
+  realmente substituído, sem nenhum aviso de erro — o GitHub simplesmente
+  não conta esse arquivo como alterado. Diferente de antes, dessa vez o
+  mesmo arquivo falhou em pelo menos 5 tentativas seguidas, então
+  repetir o mesmo upload da pasta inteira não é confiável pra esse
+  arquivo específico.
+- **Como resolver (upload só desse UM arquivo, pra eliminar a dúvida):**
+  1. Abra o repositório no GitHub e entre na pasta `lib`.
+  2. Clique em "Add file" → "Upload files" (fazendo isso DE DENTRO da
+     pasta `lib`, não da raiz do projeto).
+  3. Arraste só o arquivo `concorrente.js` (de dentro do zip mais recente
+     que baixou, pasta `lib`) pra caixa de upload — só esse um arquivo,
+     nada mais.
+  4. Confirme o commit. O deploy no Render começa sozinho, leva menos de
+     1 minuto.
+  5. Espere terminar e teste de novo o cadastro de concorrente por SKU.
+- **Verificação:** lidos os logs reais do Render (`mcp__Render__
+  list_logs`, filtro "concorrente", período de 21/09 00:00 até agora) —
+  confirmado que o erro se repete até às 13:00 de hoje, no deploy mais
+  recente; conferido o conteúdo real e atual de `lib/concorrente.js` no
+  GitHub (`raw.githubusercontent.com`) — confirmado que as funções não
+  existem lá. Pra descartar que fosse um problema geral de upload,
+  também conferido `public/index.html` no GitHub (arquivo gigante,
+  876 mil caracteres) — a correção do espaço vazio (64) chegou lá
+  certinha (`max-width:1600px`), então o problema é mesmo só desse
+  arquivo específico, não do processo de upload como um todo.
+
 ## Estoque Full: sem detalhe de "em trânsito/aguardando conferência"; sem UI para cadastrar Produto Base; estoque compartilhado entre variações nunca deduplicado (26/08/2026)
 - **Estoque "em trânsito/aguardando conferência" não é consultável pelo
   ERP.** A chamada usada hoje (`GET /inventories/{id}/stock/fulfillment`,

@@ -1963,3 +1963,104 @@ CREATE INDEX IF NOT EXISTS idx_concorrentes_monitorados_empresa_sku ON concorren
 -- tela "Plano de Ação do Dia" (Etapa 5) ter que voltar em
 -- ia_achados_diarios só pra saber de qual produto cada conclusão fala.
 ALTER TABLE ia_correlacoes_diarias ADD COLUMN IF NOT EXISTS sku VARCHAR(120);
+
+-- ============================================================
+-- Radar de Concorrentes (21/09/2026)
+-- ============================================================
+-- Pedido explícito do usuário, com um mockup de referência
+-- (pf_radar_concorrentes_v2.html): cadastrar um concorrente por nome +
+-- link do anúncio + SKU + marketplace, e o sistema passar a MONITORAR
+-- sozinho preço, promoção, foto de capa, título, frete e outras mudanças
+-- desse anúncio específico, guardando histórico e gerando alertas.
+--
+-- Isso é DIFERENTE das duas coisas que já existiam antes desta tabela
+-- (nenhuma das duas foi alterada por esta funcionalidade):
+--   1) concorrentes_monitorados (ver comentário grande acima): só guarda o
+--      link, nunca busca nada automaticamente — porque a busca automática
+--      POR TÍTULO/POR VENDEDOR (descoberta de quem são os concorrentes) é
+--      bloqueada pela API do Mercado Livre (403, testado de verdade nesse
+--      dia — ver lib/concorrente.js#testarListagemPorVendedor).
+--   2) lib/ia/radarConcorrente.js: compara preço (só preço) contra OUTROS
+--      vendedores do MESMO produto, descobertos automaticamente a cada
+--      ciclo — sem guardar histórico nem acompanhar um anúncio específico.
+-- Este Radar de Concorrentes é diferente dos dois: o usuário informa o
+-- LINK EXATO de UM anúncio específico que ele já escolheu (não é busca/
+-- descoberta) — e para isso o Mercado Livre confirma que funciona: buscar
+-- um item PELO ID (GET /items/{id}) é uma chamada pública, já usada em
+-- produção neste mesmo arquivo de teste (testarListagemPorVendedor,
+-- comentário: "GET /items/{item_id}... Este endpoint já é usado em
+-- produção"). Por isso o monitoramento automático aqui é honesto e real
+-- só para Mercado Livre — Shopee e TikTok Shop entram no cadastro (o
+-- formulário do mockup oferece as 3 opções), mas ficam marcados como
+-- "sem monitoramento automático" (radar_concorrentes.monitoramento_automatico
+-- = FALSE) porque não existe, neste sistema, nenhuma chamada pública
+-- equivalente pra essas duas plataformas — nunca finge que buscou um dado
+-- que não buscou de verdade.
+--
+-- `sku` é texto livre (mesmo padrão de concorrentes_monitorados/
+-- ia_achados_diarios.sku) — não é FK pra produtos.sku.
+CREATE TABLE IF NOT EXISTS radar_concorrentes (
+  id                          SERIAL PRIMARY KEY,
+  empresa_id                  INTEGER NOT NULL REFERENCES empresas(id),
+  sku                         VARCHAR(100) NOT NULL,
+  nome_concorrente            VARCHAR(120) NOT NULL,
+  marketplace                 VARCHAR(30) NOT NULL, -- 'mercado_livre' | 'shopee' | 'tiktok_shop'
+  link_anuncio                TEXT NOT NULL,
+  ml_item_id                  VARCHAR(20), -- só quando marketplace='mercado_livre' e o link trouxer um MLB reconhecível
+  monitoramento_automatico    BOOLEAN NOT NULL DEFAULT FALSE, -- true só quando ml_item_id foi reconhecido (ver comentário acima)
+  ativo                       BOOLEAN NOT NULL DEFAULT TRUE,
+  criado_em                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em                TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_radar_concorrentes_empresa ON radar_concorrentes (empresa_id) WHERE ativo = TRUE;
+
+-- Uma linha por leitura (snapshot) do anúncio monitorado — é o histórico
+-- pedido pelo usuário ("salvando histórico"). `ok=false` guarda o motivo
+-- real do erro quando a consulta ao Mercado Livre falhar (nunca inventa um
+-- valor quando a busca não funcionou). `vendidos_total` é o campo real
+-- `sold_quantity` que a API pública do Mercado Livre devolve (contagem
+-- acumulada, aproximada — o próprio Mercado Livre arredonda esse número, é
+-- limitação da API, não desta implementação). `vendas_dia_estimado` NUNCA
+-- vem da API — é calculado por este sistema comparando a leitura atual com
+-- a leitura anterior bem-sucedida do MESMO anúncio (diferença de
+-- vendidos_total ÷ dias entre as duas leituras); por isso fica NULL na
+-- primeira leitura (ainda não tem uma leitura anterior pra comparar) — é
+-- exatamente a mesma estimativa que o mockup do usuário já previa
+-- ("* Vendas/dia deve ser tratado como estimativa quando o dado exato do
+-- concorrente não estiver disponível pela API").
+CREATE TABLE IF NOT EXISTS radar_concorrentes_leituras (
+  id                     SERIAL PRIMARY KEY,
+  radar_concorrente_id   INTEGER NOT NULL REFERENCES radar_concorrentes(id),
+  lido_em                TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ok                     BOOLEAN NOT NULL,
+  erro                   TEXT,
+  titulo                 TEXT,
+  preco                  NUMERIC(12,2),
+  preco_original         NUMERIC(12,2), -- item.original_price (quando presente = está em promoção)
+  em_promocao            BOOLEAN,
+  imagem_url             TEXT,
+  status_anuncio         VARCHAR(30), -- item.status (active/paused/closed) da API do ML
+  frete_tipo             VARCHAR(60), -- item.shipping.logistic_type
+  frete_gratis           BOOLEAN,     -- item.shipping.free_shipping
+  vendidos_total         INTEGER,     -- item.sold_quantity (real, acumulado, aproximado pelo ML)
+  vendas_dia_estimado    NUMERIC(10,2) -- calculado por este sistema (ver comentário acima), nunca vindo direto da API
+);
+CREATE INDEX IF NOT EXISTS idx_radar_concorrentes_leituras_concorrente ON radar_concorrentes_leituras (radar_concorrente_id, lido_em DESC);
+
+-- Um alerta por mudança real detectada entre duas leituras consecutivas
+-- bem-sucedidas do mesmo anúncio (preço, promoção, foto, título, frete ou
+-- status) — é o "gerando alertas" pedido pelo usuário. Fica de fora da
+-- Central de Alertas existente (radar_alertas/persistirSituacoes) de
+-- propósito: o mockup já tem seu próprio painel "Alertas prioritários"
+-- dentro da tela do Radar de Concorrentes, e manter esta tabela separada
+-- evita qualquer risco de mexer no pipeline de alertas que já existe hoje.
+CREATE TABLE IF NOT EXISTS radar_concorrentes_alertas (
+  id                     SERIAL PRIMARY KEY,
+  radar_concorrente_id   INTEGER NOT NULL REFERENCES radar_concorrentes(id),
+  leitura_id             INTEGER REFERENCES radar_concorrentes_leituras(id),
+  tipo                   VARCHAR(30) NOT NULL, -- 'preco' | 'promocao' | 'foto' | 'titulo' | 'frete' | 'status' | 'vendas'
+  severidade             VARCHAR(20) NOT NULL, -- 'critico' | 'atencao' | 'informativo' | 'oportunidade'
+  mensagem               TEXT NOT NULL,
+  criado_em              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_radar_concorrentes_alertas_empresa ON radar_concorrentes_alertas (radar_concorrente_id, criado_em DESC);
