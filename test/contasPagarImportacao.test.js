@@ -80,6 +80,32 @@ test('gera a mesma chave de duplicidade para o mesmo documento/parcela', () => {
   assert.equal(importacao.chaveDuplicidade(base, 2), importacao.chaveDuplicidade({ ...base, descricao:'Descrição diferente' }, 2));
 });
 
+// 21/09/2026: caso real encontrado em produção — o mesmo título de Contas a
+// Pagar foi importado duas vezes porque o código do documento (coluna
+// "CR") veio uma vez como "CR9801" e outra vez só como "9801" no arquivo.
+// A chave de duplicidade precisa reconhecer que é o mesmo documento.
+test('reconhece o mesmo documento com e sem o prefixo "CR" (duplicidade real encontrada em produção)', () => {
+  const base = { fornecedorId: null, fornecedorNomeImportado: 'PLACK BOX', descricao: 'CR 9801 - PLACK BOX', parcela: null, valor: 6500, vencimento: '2026-09-19' };
+  assert.equal(
+    importacao.chaveDuplicidade({ ...base, documento: 'CR9801' }, 2),
+    importacao.chaveDuplicidade({ ...base, documento: '9801' }, 2)
+  );
+  assert.equal(
+    importacao.chaveDuplicidade({ ...base, documento: 'CR 9801' }, 2),
+    importacao.chaveDuplicidade({ ...base, documento: '9801' }, 2)
+  );
+  assert.equal(
+    importacao.chaveDuplicidade({ ...base, documento: 'CR-9801' }, 2),
+    importacao.chaveDuplicidade({ ...base, documento: '9801' }, 2)
+  );
+  // Um documento diferente (não é só variação do prefixo CR) continua
+  // gerando uma chave diferente — a normalização não pode juntar tudo.
+  assert.notEqual(
+    importacao.chaveDuplicidade({ ...base, documento: 'CR9801' }, 2),
+    importacao.chaveDuplicidade({ ...base, documento: 'CR9802' }, 2)
+  );
+});
+
 test('avalia erros, duplicidades já existentes e duplicidade dentro da própria planilha', () => {
   const mapa = { descricao:'Descrição', vencimento:'Vencimento', valor:'Valor', documento:'Documento', parcela:'Parcela' };
   const linhas = [
