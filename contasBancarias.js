@@ -1,6 +1,7 @@
 function poolPadrao(){ return require('../db/pool'); }
 const { dataCalendarioISO } = require('./periodo');
 const { normalizarData } = require('./contasPagarImportacao');
+const categoriasFinanceiras = require('./categoriasFinanceiras');
 
 function round2(n){ return Math.round(Number(n)*100)/100; }
 function isoData(v){ return v ? dataCalendarioISO(v) : null; }
@@ -21,26 +22,38 @@ function resolverSaldoBase(saldoBancario, saldoManual){
 async function listarContasBancarias({empresaId}, db=null){
   const id=Number(empresaId); if(!id) return [];
   db = db || poolPadrao();
-  // CORREÇÃO (31/08/2026, diagnóstico do 500 no Fluxo de Caixa): a coluna
-  // real em `contas_bancarias` é `ativa` (confirmado pelo próprio erro do
-  // Postgres em produção: "column \"ativo\" does not exist... Perhaps you
-  // meant to reference the column \"contas_bancarias.ativa\"."). Este
-  // arquivo consultava `ativo` (sem a coluna existir), o que derrubava
-  // toda vez que gerarFluxoDeCaixa chamava saldoConsolidado(). O nome do
-  // campo exposto pro resto do app continua `ativo` (só a consulta SQL
-  // muda) — nada no restante do código, nem no front-end, precisa mudar.
-  const {rows}=await db.query(`SELECT id, empresa_id, nome, banco, agencia, conta, ativa, saldo_atual, saldo_data, saldo_atualizado_em
+  // A coluna real na tabela (criada fora do schema.sql, antes desta etapa) é
+  // "ativa", não "ativo" — daqui pra baixo o código inteiro continua falando
+  // "ativo" (mesmo nome usado em despesas_fixas/empresas/users), só o SQL
+  // que sabe do nome real da coluna via "AS ativo". Ver CORREÇÃO (31/08/2026)
+  // no schema.sql e docs do incidente do Fluxo de Caixa.
+  const {rows}=await db.query(`SELECT id, empresa_id, nome, banco, agencia, conta, ativa AS ativo, saldo_atual, saldo_data, saldo_atualizado_em
     FROM contas_bancarias WHERE empresa_id=$1 ORDER BY ativa DESC, nome`,[id]);
-  return rows.map(r=>({id:Number(r.id),empresaId:Number(r.empresa_id),nome:r.nome,banco:r.banco,agencia:r.agencia,conta:r.conta,ativo:r.ativa!==false,
+  return rows.map(r=>({id:Number(r.id),empresaId:Number(r.empresa_id),nome:r.nome,banco:r.banco,agencia:r.agencia,conta:r.conta,ativo:r.ativo!==false,
     saldoAtual:r.saldo_atual===null?null:Number(r.saldo_atual),saldoData:isoData(r.saldo_data),saldoAtualizadoEm:r.saldo_atualizado_em||null}));
 }
 
 async function saldoConsolidado(empresaId, db=null){
   const id=Number(empresaId); if(!id) return null;
   db = db || poolPadrao();
-  // Mesma correção de coluna de listarContasBancarias acima (ativa, não ativo).
-  const {rows}=await db.query(`SELECT id, nome, banco, ativa, saldo_atual, saldo_data FROM contas_bancarias WHERE empresa_id=$1 ORDER BY nome`,[id]);
-  const ativas=rows.filter(r=>r.ativa!==false);
+  let rows;
+  try {
+    // Mesma correção de nome de coluna ("ativa" no banco, "ativo" no código)
+    // usada em listarContasBancarias acima.
+    ({rows}=await db.query(`SELECT id, nome, banco, ativa AS ativo, saldo_atual, saldo_data FROM contas_bancarias WHERE empresa_id=$1 ORDER BY nome`,[id]));
+  } catch (err) {
+    // O módulo bancário não pode derrubar o Fluxo de Caixa inteiro durante
+    // um deploy/migração. Em bancos antigos, a tabela pode existir sem as
+    // colunas de saldo adicionadas na ML39. Nessa janela usamos o fallback
+    // de saldo manual (ou "não informado") e o próximo boot/migrate corrige
+    // a estrutura com ALTER ... ADD COLUMN IF NOT EXISTS no schema.sql.
+    if (err && (err.code === '42P01' || err.code === '42703')) {
+      console.warn('[contas-bancarias] schema bancário ainda não compatível; fluxo seguirá sem saldo bancário:', err.message);
+      return null;
+    }
+    throw err;
+  }
+  const ativas=rows.filter(r=>r.ativo!==false);
   const conhecidas=ativas.filter(r=>r.saldo_atual!==null&&r.saldo_atual!==undefined&&r.saldo_data);
   if(!conhecidas.length) return null;
   const valor=round2(conhecidas.reduce((s,r)=>s+Number(r.saldo_atual),0));
@@ -67,6 +80,12 @@ async function confirmarImportacao(payload, pool=null){
   const temSaldoFinal = payload.saldoFinal!==null && payload.saldoFinal!==undefined && payload.saldoFinal!=='';
   const saldoFinalNumero = temSaldoFinal ? Number(payload.saldoFinal) : null;
   if(temSaldoFinal && !Number.isFinite(saldoFinalNumero)) throw new Error('O saldo final é inválido.');
+  // Proteção pedida pelo usuário: um extrato com data de saldo mais antiga
+  // que o saldo já registrado NUNCA regride o saldo da conta sozinho. Só
+  // substitui se quem está importando confirmar explicitamente que quer
+  // isso (forcarSubstituicaoSaldo=true, vindo de um clique de confirmação
+  // na tela, nunca automático).
+  const forcarSubstituicaoSaldo = payload.forcarSubstituicaoSaldo===true;
   pool = pool || poolPadrao();
   const client=await pool.connect();
   try{
@@ -89,17 +108,20 @@ async function confirmarImportacao(payload, pool=null){
       const {rows:ja}=await client.query('SELECT id FROM extrato_importacoes WHERE conta_bancaria_id=$1 AND arquivo_hash=$2 LIMIT 1',[contaBancariaId,hash]);
       if(ja.length){
         const importacaoId=Number(ja[0].id);
-        let saldoAtualizado=false;
+        let saldoAtualizado=false, saldoIgnoradoPorSerMaisAntigo=false;
         if(temSaldoFinal&&saldoDataNormalizada){
           await client.query('UPDATE extrato_importacoes SET saldo_final=$1, saldo_data=$2 WHERE id=$3',[saldoFinalNumero,saldoDataNormalizada,importacaoId]);
           const saldoDataAtual=isoData(conta.saldo_data);
-          if(!saldoDataAtual || String(saldoDataNormalizada)>=saldoDataAtual){
+          if(forcarSubstituicaoSaldo || !saldoDataAtual || String(saldoDataNormalizada)>=saldoDataAtual){
             await client.query(`UPDATE contas_bancarias SET saldo_atual=$1,saldo_data=$2,saldo_atualizado_em=now(),updated_at=now() WHERE id=$3`,[saldoFinalNumero,saldoDataNormalizada,contaBancariaId]);
             saldoAtualizado=true;
+          } else {
+            saldoIgnoradoPorSerMaisAntigo=true;
           }
         }
         await client.query('COMMIT');
-        return {jaImportado:true,importacaoId,importadas:0,duplicidades:0,saldoAtualizado};
+        return {jaImportado:true,importacaoId,importadas:0,duplicidades:0,saldoAtualizado,saldoIgnoradoPorSerMaisAntigo,
+          mensagemSaldoIgnorado:saldoIgnoradoPorSerMaisAntigo?'Este extrato possui data anterior ao saldo bancário atualmente registrado.':null};
       }
     }
     const {rows:impRows}=await client.query(`INSERT INTO extrato_importacoes
@@ -118,28 +140,112 @@ async function confirmarImportacao(payload, pool=null){
         ]);
       if(rows.length) importadas++; else duplicidades++;
     }
-    let saldoAtualizado=false;
+    let saldoAtualizado=false, saldoIgnoradoPorSerMaisAntigo=false;
     if(temSaldoFinal&&saldoDataNormalizada){
       const saldoDataAtual=isoData(conta.saldo_data);
-      if(!saldoDataAtual || String(saldoDataNormalizada)>=saldoDataAtual){
+      if(forcarSubstituicaoSaldo || !saldoDataAtual || String(saldoDataNormalizada)>=saldoDataAtual){
         await client.query(`UPDATE contas_bancarias SET saldo_atual=$1,saldo_data=$2,saldo_atualizado_em=now(),updated_at=now() WHERE id=$3`,[saldoFinalNumero,saldoDataNormalizada,contaBancariaId]);
         saldoAtualizado=true;
+      } else {
+        saldoIgnoradoPorSerMaisAntigo=true;
       }
     }
     await client.query('UPDATE extrato_importacoes SET quantidade_importada=$1, quantidade_duplicada=$2 WHERE id=$3',[importadas,duplicidades,importacaoId]);
     await client.query('COMMIT');
-    return {jaImportado:false,importacaoId,importadas,duplicidades,saldoAtualizado};
+    return {jaImportado:false,importacaoId,importadas,duplicidades,saldoAtualizado,saldoIgnoradoPorSerMaisAntigo,
+      mensagemSaldoIgnorado:saldoIgnoradoPorSerMaisAntigo?'Este extrato possui data anterior ao saldo bancário atualmente registrado.':null};
   }catch(err){ try{await client.query('ROLLBACK');}catch(_){} throw err; }
   finally{ client.release(); }
 }
 
+// (31/08/2026) Passa a expor também categoria_id/conta_pagar_id/
+// conta_receber_id/transferencia_interna — as mesmas colunas que
+// lib/despesasFinanceiras.js usa pra nunca duplicar uma despesa: um
+// movimento com conta_pagar_id preenchido já está contado do lado de
+// contas_pagar (nunca de novo aqui); transferencia_interna=true nunca é
+// despesa em lugar nenhum.
 async function listarMovimentos({empresaId,contaBancariaId,limite=100}, db=null){
   db = db || poolPadrao();
   const params=[Number(empresaId)]; let where='empresa_id=$1';
   if(Number(contaBancariaId)){params.push(Number(contaBancariaId));where+=` AND conta_bancaria_id=$${params.length}`;}
   params.push(Math.min(Math.max(Number(limite)||100,1),500));
-  const {rows}=await db.query(`SELECT id,conta_bancaria_id,data,descricao,tipo,valor,conciliado,created_at FROM extrato_movimentos WHERE ${where} ORDER BY data DESC,id DESC LIMIT $${params.length}`,params);
-  return rows.map(r=>({id:Number(r.id),contaBancariaId:Number(r.conta_bancaria_id),data:isoData(r.data),descricao:r.descricao,tipo:r.tipo,valor:Number(r.valor),conciliado:!!r.conciliado,createdAt:r.created_at}));
+  const {rows}=await db.query(`SELECT id,conta_bancaria_id,data,descricao,tipo,valor,conciliado,categoria_id,conta_pagar_id,conta_receber_id,transferencia_interna,created_at FROM extrato_movimentos WHERE ${where} ORDER BY data DESC,id DESC LIMIT $${params.length}`,params);
+  return rows.map(r=>({id:Number(r.id),contaBancariaId:Number(r.conta_bancaria_id),data:isoData(r.data),descricao:r.descricao,tipo:r.tipo,valor:Number(r.valor),
+    conciliado:!!r.conciliado,categoriaId:r.categoria_id?Number(r.categoria_id):null,contaPagarId:r.conta_pagar_id?Number(r.conta_pagar_id):null,
+    contaReceberId:r.conta_receber_id?Number(r.conta_receber_id):null,transferenciaInterna:!!r.transferencia_interna,createdAt:r.created_at}));
 }
 
-module.exports={resolverSaldoBase,listarContasBancarias,saldoConsolidado,criarContaBancaria,confirmarImportacao,listarMovimentos};
+// Marca/desmarca um movimento do extrato como transferência interna entre
+// contas da própria empresa (ex.: PIX entre duas contas do próprio CNPJ) —
+// nunca entra na DRE nem no detalhamento de despesas, dos dois lados (ver
+// `em.transferencia_interna = false` em
+// lib/despesasFinanceiras.js#listarDespesasDetalhadas). Independente de
+// conta_pagar_id/conta_receber_id — os três marcadores nunca se sobrepõem
+// por regra de negócio (um movimento marcado como transferência não deveria
+// também estar vinculado a uma conta a pagar/receber), mas o código não
+// impede fisicamente isso pra não travar uma correção manual do usuário.
+async function marcarTransferenciaInterna(movimentoId, {empresaId, transferenciaInterna}, db=null){
+  db = db || poolPadrao();
+  const id=Number(movimentoId), emp=Number(empresaId);
+  if(!id||!emp) return {notFound:true};
+  const {rows}=await db.query(`UPDATE extrato_movimentos SET transferencia_interna=$1 WHERE id=$2 AND empresa_id=$3 RETURNING id`,
+    [transferenciaInterna===true, id, emp]);
+  if(!rows.length) return {notFound:true};
+  return {ok:true};
+}
+
+// Conciliação simples (manual): vincula um movimento do extrato a uma conta
+// a pagar já existente, pro caso em que a importação automática (por
+// fingerprint) não bateu sozinha. A partir daqui,
+// extrato_movimentos.conta_pagar_id passa a excluir esse movimento de
+// listarDespesasDetalhadas — ele já é contado do lado de contas_pagar, nunca
+// duas vezes. `conciliado` (coluna que já existia antes desta etapa) vira
+// true só como indicador visual na tela de extrato.
+async function vincularContaPagar(movimentoId, contaPagarId, {empresaId}, db=null){
+  db = db || poolPadrao();
+  const id=Number(movimentoId), cpId=Number(contaPagarId), emp=Number(empresaId);
+  if(!cpId) return {errors:{contaPagarId:'Informe a conta a pagar.'}};
+  if(!id||!emp) return {notFound:true};
+  const {rows:cp}=await db.query('SELECT id FROM contas_pagar WHERE id=$1 AND empresa_id=$2',[cpId,emp]);
+  if(!cp.length) return {errors:{contaPagarId:'Conta a pagar não encontrada nesta empresa.'}};
+  const {rows}=await db.query(`UPDATE extrato_movimentos SET conta_pagar_id=$1, conciliado=true WHERE id=$2 AND empresa_id=$3 RETURNING id`,
+    [cpId, id, emp]);
+  if(!rows.length) return {notFound:true};
+  return {ok:true};
+}
+
+// Desfaz a conciliação manual acima — o movimento volta a aparecer em
+// listarDespesasDetalhadas (como saída de extrato, se ainda fizer sentido)
+// até ser vinculado de novo ou virar outra coisa.
+async function desvincularContaPagar(movimentoId, {empresaId}, db=null){
+  db = db || poolPadrao();
+  const id=Number(movimentoId), emp=Number(empresaId);
+  if(!id||!emp) return {notFound:true};
+  const {rows}=await db.query(`UPDATE extrato_movimentos SET conta_pagar_id=NULL, conciliado=false WHERE id=$1 AND empresa_id=$2 RETURNING id`,
+    [id, emp]);
+  if(!rows.length) return {notFound:true};
+  return {ok:true};
+}
+
+// Categoriza diretamente um movimento do extrato (ex.: uma tarifa bancária
+// que nunca vai virar uma conta a pagar) — é essa categoria_id que faz o
+// movimento aparecer agrupado corretamente no bloco por categoria da DRE
+// (ver lib/despesasFinanceiras.js#mapCategoria).
+async function definirCategoriaMovimento(movimentoId, categoriaId, {empresaId}, db=null){
+  db = db || poolPadrao();
+  const id=Number(movimentoId), emp=Number(empresaId);
+  if(!id||!emp) return {notFound:true};
+  let catId=null;
+  if(categoriaId){
+    const cat=await categoriasFinanceiras.buscarPorId(Number(categoriaId), emp, db);
+    if(!cat) return {errors:{categoriaId:'Categoria não encontrada nesta empresa.'}};
+    catId=cat.id;
+  }
+  const {rows}=await db.query(`UPDATE extrato_movimentos SET categoria_id=$1 WHERE id=$2 AND empresa_id=$3 RETURNING id`,
+    [catId, id, emp]);
+  if(!rows.length) return {notFound:true};
+  return {ok:true};
+}
+
+module.exports={resolverSaldoBase,listarContasBancarias,saldoConsolidado,criarContaBancaria,confirmarImportacao,listarMovimentos,
+  marcarTransferenciaInterna,vincularContaPagar,desvincularContaPagar,definirCategoriaMovimento};
