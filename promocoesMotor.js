@@ -199,7 +199,7 @@ function divisaoDesconto(item, precoNormal, precoPromo) {
 // exigindo só o mínimo puro, porque nada está sendo sacrificado. Quando
 // `margemConfortoPct` é 0 (padrão, ninguém configurou ainda — ver
 // db/schema.sql), o comportamento é idêntico ao de antes desta regra.
-function classificar({ statusItem, margemIncompleta, margemPromoPct, margemMinimaPct, temDesconto, margemConfortoPct, margemNormalPct }) {
+function classificar({ statusItem, margemIncompleta, margemPromoPct, margemMinimaPct, temDesconto, margemConfortoPct, margemNormalPct, precoPromo, precoReferenciaAtual }) {
   if (margemIncompleta || margemPromoPct === null || margemPromoPct === undefined) {
     return { codigo: 'dados_insuficientes', emoji: '⚠️', label: 'DADOS INSUFICIENTES' };
   }
@@ -209,6 +209,29 @@ function classificar({ statusItem, margemIncompleta, margemPromoPct, margemMinim
   const limiteRisco = minimo > 0 ? minimo * 1.15 : 5;
 
   if (!jaAtiva) {
+    // Regra pedida pelo usuário em 21/09/2026, verbatim: "só sugerir
+    // promoções que seja com o valor abaixo do que já vendo ou que já está
+    // em promoção (...) se eu to vendendo a 78 e tem promoção a 100 mesmo
+    // que for aumentar minha margem eu não quero nem que recomende". Ou
+    // seja: uma promoção CANDIDATA só pode virar sugestão de "entrar" se o
+    // preço promocional for MENOR OU IGUAL ao preço que o item já vende
+    // hoje de verdade — o preço normal (sem nenhuma promoção ativa) OU, se
+    // o mesmo item já estiver ativo em OUTRA promoção agora, o preço dessa
+    // outra promoção já ativa (nunca o `original_price` isolado desta
+    // promoção específica, que pode estar inflado/desatualizado em relação
+    // ao que o cliente realmente vê hoje — ver `precoAtualEfetivo` em
+    // lib/ia/promocoesCiclo.js). Preço promocional ACIMA do preço atual
+    // nunca vira sugestão, mesmo com margem ótima — não é uma promoção de
+    // verdade pro cliente, então a IA nem recomenda nem avisa "não
+    // recomendado" (isso ficaria como ruído) — o item simplesmente não gera
+    // nenhuma decisão neste ciclo (ver lib/ia/promocoesDecisor.js).
+    if (
+      precoPromo !== null && precoPromo !== undefined
+      && precoReferenciaAtual !== null && precoReferenciaAtual !== undefined
+      && Number(precoPromo) > Number(precoReferenciaAtual)
+    ) {
+      return { codigo: 'preco_acima_do_atual', emoji: '⚪', label: 'PREÇO ACIMA DO ATUAL' };
+    }
     // A margem de conforto só entra em jogo pra candidato COM desconto real
     // — nunca pra quem já está de fato ativo na promoção (esse caso segue a
     // mesma regra de sempre: sair/risco/manter contra o mínimo puro).
@@ -248,11 +271,23 @@ function classificar({ statusItem, margemIncompleta, margemPromoPct, margemMinim
 // catálogo ao vivo (título/imagem/SKU — lib/mlAnuncios.js), custo cadastrado
 // (produtos.custo) e histórico de comissão/frete (calcularHistoricoPorSku) —
 // e devolve a linha completa pronta para gravar em `promocoes_analises`.
-function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku, aliquotaImposto, margemMinimaPct, margemConfortoPct, estoqueAtualPorSku, diasCoberturaAltaLimite, contexto }) {
+//
+// `precoAtualEfetivo` (21/09/2026, pedido explícito do usuário — ver
+// `classificar` acima): o preço que este MESMO item já está vendendo de
+// verdade agora, considerando TODAS as promoções da conta neste ciclo —
+// calculado em lib/ia/promocoesCiclo.js (nunca aqui, que só analisa UMA
+// promoção por vez e não tem essa visão). `null`/`undefined` quando o item
+// não está ativo em nenhuma outra promoção agora — nesse caso o preço
+// normal desta própria promoção (`precoNormal` abaixo) já é a referência
+// certa, comportamento idêntico ao de antes desta regra.
+function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku, aliquotaImposto, margemMinimaPct, margemConfortoPct, estoqueAtualPorSku, diasCoberturaAltaLimite, precoAtualEfetivo, contexto }) {
   const { precoPromo, origemPrecoPromo } = precoPromocionalDoItem(item);
   const precoNormal = item.original_price !== undefined && item.original_price !== null
     ? round2(Number(item.original_price))
     : (catalogEntry && catalogEntry.preco !== null && catalogEntry.preco !== undefined ? round2(Number(catalogEntry.preco)) : null);
+  const precoReferenciaAtual = (precoAtualEfetivo !== null && precoAtualEfetivo !== undefined)
+    ? round2(Number(precoAtualEfetivo))
+    : precoNormal;
 
   const sku = (catalogEntry && catalogEntry.sku) || null;
   const titulo = (catalogEntry && catalogEntry.titulo) || null;
@@ -347,6 +382,8 @@ function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku
     margemConfortoPct,
     temDesconto,
     margemNormalPct,
+    precoPromo,
+    precoReferenciaAtual,
   });
 
   return {
@@ -357,6 +394,7 @@ function analisarItemPromocao({ item, catalogEntry, historicoPorSku, custoPorSku
     imagemUrl,
     sku,
     precoNormal,
+    precoReferenciaAtual,
     precoPromo,
     origemPrecoPromo,
     descontoPct,

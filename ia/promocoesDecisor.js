@@ -75,7 +75,12 @@ function sugerirAcaoPromocao(linha) {
         valorSugeridoIa: { acao: 'nao_entrar', precoPromoAtual: linha.precoPromo },
       };
     }
-    return null; // dados_insuficientes: sem ação
+    // 'preco_acima_do_atual' (21/09/2026, ver lib/promocoesMotor.js#classificar)
+    // cai aqui de propósito: preço promocional maior que o preço que o item
+    // já vende hoje nunca vira sugestão nenhuma, nem "não recomendado" —
+    // pedido explícito do usuário ("nem quero que recomende"), pra não virar
+    // ruído na lista de pendências.
+    return null; // dados_insuficientes / preco_acima_do_atual: sem ação
   }
 
   if (codigo === 'sair') {

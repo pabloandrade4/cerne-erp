@@ -24,7 +24,7 @@ const { getContaComTokenValido } = require('../mlSync');
 const { buscarTodosAnunciosDaConta } = require('../mlAnuncios');
 const { buscarItensDoPeriodo } = require('../relatorioVendas');
 const { buscarPromocoesDaConta, buscarItensDaPromocao } = require('../mlPromocoes');
-const { calcularHistoricoPorSku, analisarItemPromocao, DIAS_HISTORICO_PADRAO } = require('../promocoesMotor');
+const { calcularHistoricoPorSku, analisarItemPromocao, precoPromocionalDoItem, DIAS_HISTORICO_PADRAO } = require('../promocoesMotor');
 const { sincronizarDecisaoPromocao, expirarDecisoesPromocaoNaoTocadas, avaliarResultadosPromocoes } = require('./promocoesDecisoesStore');
 
 async function buscarConfigPromocoes(empresaId) {
@@ -196,6 +196,13 @@ async function executarCicloPromocoesConta({ conta, custoPorSku, historicoPorSku
   const linhasPorChave = new Map();
   let itensAnalisados = 0;
 
+  // Passo 1: busca TODOS os itens de TODAS as promoções rodando desta conta
+  // antes de analisar qualquer um — pra dar tempo de descobrir, pra cada
+  // item, se ele já está ATIVO em alguma outra promoção agora (precisa ver
+  // a lista inteira primeiro; não dá pra saber isso analisando promoção por
+  // promoção na hora). Regra pedida pelo usuário em 21/09/2026 — ver
+  // lib/promocoesMotor.js#classificar.
+  const todosItens = []; // { item, promotionId, promotionType, promotionLabel }
   for (const promocao of promocoesRodando) {
     const promotionId = promocao.id;
     const promotionType = promocao.type;
@@ -217,38 +224,64 @@ async function executarCicloPromocoesConta({ conta, custoPorSku, historicoPorSku
     const itensDaPromocao = (respostaItens.data && respostaItens.data.results) || [];
     for (const item of itensDaPromocao) {
       if (!item.id) continue;
-      const catalogEntry = catalogoPorItemId.get(String(item.id)) || null;
-      const linha = analisarItemPromocao({
-        item,
-        catalogEntry,
-        historicoPorSku,
-        custoPorSku,
-        aliquotaImposto,
-        margemMinimaPct,
-        margemConfortoPct,
-        estoqueAtualPorSku,
-        diasCoberturaAltaLimite,
-        contexto: {
-          empresaId: conta.empresa_id,
-          contaId: conta.id,
-          promotionId,
-          promotionType,
-          promotionLabel,
-        },
-      });
-      await upsertAnalise(linha);
-      chavesAtuais.push(promotionId + '::' + item.id);
-      linhasPorChave.set(conta.id + '::' + promotionId + '::' + item.id, linha);
-      itensAnalisados += 1;
-
-      // Agente de IA "Promoções" Fase 1 (14/09/2026): transforma a
-      // classificação que acabou de ser calculada numa sugestão de ação
-      // concreta (ver lib/ia/promocoesDecisor.js). `sincronizarDecisaoPromocao`
-      // já protege contra erro sozinha (nunca lança) — nunca deve derrubar a
-      // análise principal, que já foi gravada acima.
-      const idDecisao = await sincronizarDecisaoPromocao(linha);
-      if (idDecisao) idsDecisoesTocadas.push(idDecisao);
+      todosItens.push({ item, promotionId, promotionType, promotionLabel });
     }
+  }
+
+  // Passo 2: pra cada item que JÁ ESTÁ ATIVO em alguma promoção agora
+  // (status diferente de "candidate"), guarda o preço real que ele está
+  // vendendo — essa é a referência de "preço que eu já vendo" pedida pelo
+  // usuário, usada abaixo pra decidir se uma OUTRA promoção candidata desse
+  // mesmo item vale a pena sugerir. Um item ativo em mais de uma promoção
+  // ao mesmo tempo (raro) usa o menor preço entre elas — nunca deixa passar
+  // uma sugestão comparando com um preço mais alto do que o cliente
+  // realmente vê hoje.
+  const precoAtualEfetivoPorItem = new Map();
+  for (const { item } of todosItens) {
+    const ativo = !!item.status && item.status !== 'candidate';
+    if (!ativo) continue;
+    const { precoPromo } = precoPromocionalDoItem(item);
+    if (precoPromo === null) continue;
+    const atual = precoAtualEfetivoPorItem.get(item.id);
+    if (atual === undefined || precoPromo < atual) precoAtualEfetivoPorItem.set(item.id, precoPromo);
+  }
+
+  // Passo 3: analisa cada item de verdade, agora já com a referência de
+  // preço atual (quando existir) — comportamento idêntico ao de antes desta
+  // regra pra item que não está ativo em nenhuma outra promoção.
+  for (const { item, promotionId, promotionType, promotionLabel } of todosItens) {
+    const catalogEntry = catalogoPorItemId.get(String(item.id)) || null;
+    const linha = analisarItemPromocao({
+      item,
+      catalogEntry,
+      historicoPorSku,
+      custoPorSku,
+      aliquotaImposto,
+      margemMinimaPct,
+      margemConfortoPct,
+      estoqueAtualPorSku,
+      diasCoberturaAltaLimite,
+      precoAtualEfetivo: precoAtualEfetivoPorItem.get(item.id),
+      contexto: {
+        empresaId: conta.empresa_id,
+        contaId: conta.id,
+        promotionId,
+        promotionType,
+        promotionLabel,
+      },
+    });
+    await upsertAnalise(linha);
+    chavesAtuais.push(promotionId + '::' + item.id);
+    linhasPorChave.set(conta.id + '::' + promotionId + '::' + item.id, linha);
+    itensAnalisados += 1;
+
+    // Agente de IA "Promoções" Fase 1 (14/09/2026): transforma a
+    // classificação que acabou de ser calculada numa sugestão de ação
+    // concreta (ver lib/ia/promocoesDecisor.js). `sincronizarDecisaoPromocao`
+    // já protege contra erro sozinha (nunca lança) — nunca deve derrubar a
+    // análise principal, que já foi gravada acima.
+    const idDecisao = await sincronizarDecisaoPromocao(linha);
+    if (idDecisao) idsDecisoesTocadas.push(idDecisao);
   }
 
   await removerAnalisesForaDaLista(conta.id, chavesAtuais);
