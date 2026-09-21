@@ -12,6 +12,7 @@ const { analisarAnuncios, listarAdsSeguro } = require('./radarAnuncios');
 const { analisarNegocio } = require('./radarNegocio');
 const { obterProvedorConfigurado } = require('./providers');
 const { whatsappConfigurado, enviarMensagemWhatsapp } = require('../whatsapp');
+const { telegramConfigurado, enviarMensagemTelegram } = require('../telegram');
 
 const SEVERIDADE_ORDEM = { critico: 0, atencao: 1, oportunidade: 2, informativo: 3 };
 const SEVERIDADE_LABEL = { critico: 'Crítico', atencao: 'Atenção', oportunidade: 'Oportunidade', informativo: 'Informativo' };
@@ -254,6 +255,23 @@ async function notificarWhatsapp(empresa, itens) {
   }
 }
 
+// Mesma ideia de notificarWhatsapp acima, só que por Telegram (alternativa
+// pedida pelo usuário em 21/09/2026 — lib/telegram.js). Os dois canais são
+// independentes: se só um estiver configurado, só ele envia; se os dois
+// estiverem, os dois enviam o mesmo aviso.
+async function notificarTelegram(empresa, itens) {
+  if (!itens.length || !telegramConfigurado()) return;
+  try {
+    const texto = formatarMensagemWhatsapp(empresa, itens);
+    const resultado = await enviarMensagemTelegram(texto);
+    if (!resultado.enviado) {
+      console.error(`[radar da ia] não foi possível enviar aviso por Telegram (empresa ${empresa.id}): motivo=${resultado.motivo}${resultado.detalhe ? ' detalhe=' + resultado.detalhe : ''}`);
+    }
+  } catch (err) {
+    console.error(`[radar da ia] erro inesperado ao enviar aviso por Telegram (empresa ${empresa.id}): ${err && err.message}`);
+  }
+}
+
 // ---------------- "O que precisa da minha atenção hoje" ----------------
 // Puramente uma SELEÇÃO/formatação do que já foi determinado (nunca uma
 // nova chamada à IA aqui) — os top alertas abertos, priorizando severidade
@@ -302,6 +320,7 @@ async function executarCicloRadarEmpresa(empresaId) {
   await interpretarComIA({ empresa, itens: novasOuEscaladas });
   await aplicarRecomendacoesIA(empresaId, novasOuEscaladas);
   await notificarWhatsapp(empresa, novasOuEscaladas);
+  await notificarTelegram(empresa, novasOuEscaladas);
 
   const resumoHoje = await gerarResumoHoje(empresaId);
   const { rows: abertosCount } = await pool.query(`SELECT count(*)::int AS total FROM radar_alertas WHERE empresa_id = $1 AND status = 'aberto'`, [empresaId]);
@@ -508,4 +527,5 @@ module.exports = {
   formatMoney,
   formatarMensagemWhatsapp,
   notificarWhatsapp,
+  notificarTelegram,
 };

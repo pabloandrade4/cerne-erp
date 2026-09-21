@@ -33,7 +33,7 @@
 const pool = require('../../db/pool');
 const { buscarConcorrentesPorProduto, listarProdutosElegiveisParaVarredura } = require('../concorrente');
 const {
-  persistirSituacoes, interpretarComIA, aplicarRecomendacoesIA, notificarWhatsapp,
+  persistirSituacoes, interpretarComIA, aplicarRecomendacoesIA, notificarWhatsapp, notificarTelegram,
 } = require('./radar');
 
 // Limite de produtos varridos por empresa por ciclo — mesma proteção de
@@ -174,6 +174,7 @@ async function executarCicloConcorrenteEmpresa(empresaId) {
   await interpretarComIA({ empresa, itens: novasOuEscaladas });
   await aplicarRecomendacoesIA(empresaId, novasOuEscaladas);
   await notificarWhatsapp(empresa, novasOuEscaladas);
+  await notificarTelegram(empresa, novasOuEscaladas);
 
   return {
     empresaId, produtosAnalisados, produtosComErro: comErro.length,

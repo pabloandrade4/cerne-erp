@@ -29,6 +29,7 @@ const pool = require('../../db/pool');
 const { diaBRT } = require('../periodo');
 const { ESPECIALISTAS } = require('./especialistas');
 const { whatsappConfigurado, enviarMensagemWhatsapp } = require('../whatsapp');
+const { telegramConfigurado, enviarMensagemTelegram } = require('../telegram');
 const { gerarCorrelacoes } = require('./coordenadorDiario');
 const { mapaConcorrentesMonitoradosPorSku } = require('../concorrente');
 
@@ -336,7 +337,7 @@ function formatarMensagemWhatsappDaily({ empresaNome, dataReferencia, achadosPor
 // Quem decide QUANDO chamar isto (respeitando o horário configurado) é
 // lib/ia/dailyScheduler.js — esta função nunca olha o relógio, só o que já
 // foi ou não enviado hoje.
-async function executarDailyComNotificacao(empresaId, { agora = new Date(), enviarMensagemWhatsappFn } = {}) {
+async function executarDailyComNotificacao(empresaId, { agora = new Date(), enviarMensagemWhatsappFn, enviarMensagemTelegramFn } = {}) {
   const dataRef = diaBRT(agora);
   const statusEnvio = await buscarStatusEnvioHoje(empresaId, dataRef);
   if (statusEnvio.jaEnviou) {
@@ -369,14 +370,32 @@ async function executarDailyComNotificacao(empresaId, { agora = new Date(), envi
     console.error(`[Daily] não foi possível enviar o resumo por WhatsApp (empresa ${empresaId}): motivo=${whatsapp.motivo}${whatsapp.detalhe ? ' detalhe=' + whatsapp.detalhe : ''}`);
   }
 
-  // Marca como "tentado hoje" mesmo se o WhatsApp falhar/não estiver
-  // configurado — a Daily em si já rodou e os achados já estão reais e
-  // consultáveis em tela; não faz sentido tentar de novo a cada ciclo do
-  // agendador até amanhã (mesma filosofia resiliente do Radar da IA: loga e
-  // segue, nunca trava o resto do sistema por causa do WhatsApp).
+  // Mesma ideia acima, só que por Telegram (alternativa pedida pelo usuário
+  // em 21/09/2026 — lib/telegram.js). Independente do WhatsApp: se só um dos
+  // dois estiver configurado, só ele envia; se os dois estiverem, os dois
+  // recebem o mesmo resumo.
+  const enviarTelegramFn = enviarMensagemTelegramFn || enviarMensagemTelegram;
+  let telegram = { enviado: false, motivo: 'nao_configurado' };
+  if (enviarMensagemTelegramFn || telegramConfigurado()) {
+    try {
+      telegram = await enviarTelegramFn(texto);
+    } catch (err) {
+      telegram = { enviado: false, motivo: 'erro_inesperado', detalhe: String((err && err.message) || err) };
+    }
+  }
+  if (!telegram.enviado) {
+    console.error(`[Daily] não foi possível enviar o resumo por Telegram (empresa ${empresaId}): motivo=${telegram.motivo}${telegram.detalhe ? ' detalhe=' + telegram.detalhe : ''}`);
+  }
+
+  // Marca como "tentado hoje" mesmo se WhatsApp/Telegram falharem/não
+  // estiverem configurados — a Daily em si já rodou e os achados já estão
+  // reais e consultáveis em tela; não faz sentido tentar de novo a cada
+  // ciclo do agendador até amanhã (mesma filosofia resiliente do Radar da
+  // IA: loga e segue, nunca trava o resto do sistema por causa de um canal
+  // de notificação).
   if (resultado.reuniaoId) await marcarWhatsappEnviado(resultado.reuniaoId);
 
-  return { ...resultado, empresaNome, whatsapp };
+  return { ...resultado, empresaNome, whatsapp, telegram };
 }
 
 module.exports = {
