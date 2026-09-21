@@ -3,7 +3,10 @@
 // porquê: é a primeira integração deste projeto contra a busca pública do
 // Mercado Livre, ainda não testada contra a API de verdade).
 const express = require('express');
-const { buscarConcorrentesPorProduto, testarListagemPorVendedor } = require('../lib/concorrente');
+const {
+  buscarConcorrentesPorProduto, testarListagemPorVendedor,
+  cadastrarConcorrente, listarConcorrentesMonitorados, removerConcorrenteMonitorado,
+} = require('../lib/concorrente');
 
 const router = express.Router();
 
@@ -30,6 +33,42 @@ router.get('/testar-vendedor', async (req, res, next) => {
     if (!empresaId || !url) return res.status(400).json({ error: 'Informe empresaId e url (o link do anúncio/loja do concorrente, com o item_id nele).' });
     const resultado = await testarListagemPorVendedor({ empresaId: Number(empresaId), url });
     res.status(resultado.ok ? 200 : 502).json(resultado);
+  } catch (err) { next(err); }
+});
+
+// ============================================================================
+// Cadastro manual de concorrente por SKU (20/09/2026) — ver comentário
+// grande em lib/concorrente.js e db/schema.sql (tabela
+// concorrentes_monitorados). Nunca valida/busca o link automaticamente:
+// só guarda o que o usuário colou, pra alimentar o Agente Coordenador da
+// Daily (regra R4) e pra ele mesmo abrir o link quando quiser conferir.
+// GET /api/concorrente/monitorados?empresaId=&sku=
+router.get('/monitorados', async (req, res, next) => {
+  try {
+    const { empresaId, sku } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const linhas = await listarConcorrentesMonitorados({ empresaId: Number(empresaId), sku: sku || null });
+    res.json({ concorrentes: linhas });
+  } catch (err) { next(err); }
+});
+
+// POST /api/concorrente/monitorados  { empresaId, sku, url, apelido? }
+router.post('/monitorados', async (req, res, next) => {
+  try {
+    const { empresaId, sku, url, apelido } = req.body || {};
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const linha = await cadastrarConcorrente({ empresaId: Number(empresaId), sku, url, apelido });
+    res.status(201).json(linha);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/concorrente/monitorados/:id?empresaId=
+router.delete('/monitorados/:id', async (req, res, next) => {
+  try {
+    const { empresaId } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    await removerConcorrenteMonitorado({ empresaId: Number(empresaId), id: Number(req.params.id) });
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

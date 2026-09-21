@@ -1,9 +1,12 @@
-// "Daily dos Agentes" — Etapa 2 (14/09/2026, pedido explícito do usuário).
-// Nesta etapa só existe disparo MANUAL (mesmo padrão de
+// "Daily dos Agentes" — Etapa 2 (14/09/2026, pedido explícito do usuário),
+// com o disparo manual daqui (mesmo padrão de
 // POST /api/ads/decisoes/gerar-agora) — o agendamento automático das 09:00
-// é a Etapa 4, ainda não implementada. Sem Agente Coordenador ainda
-// (Etapa 3): estas rotas só expõem os achados que cada especialista gerou,
-// sem nenhum cruzamento entre eles.
+// é a Etapa 4 (lib/ia/dailyScheduler.js, já implementada). Desde 20/09/2026
+// (Etapa 3 — Agente Coordenador), GET /ultima também devolve `correlacoes`
+// — o cruzamento entre achados de agentes diferentes pro mesmo SKU (ver
+// lib/ia/coordenadorDiario.js) — junto com `achadosPorAgente`, sem nenhuma
+// mudança de rota: dailyCiclo.js#buscarUltimaReuniao já devolve tudo no
+// mesmo objeto.
 const express = require('express');
 const { executarDailyEmpresa, buscarUltimaReuniao } = require('../lib/ia/dailyCiclo');
 

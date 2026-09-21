@@ -2,6 +2,140 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-20 (56) — Agente Coordenador (Etapa 3) + tela "Plano de Ação do Dia" (Etapa 5) + cadastro manual de concorrente por SKU
+- **Pedido explícito do usuário:** "claude agora com os meus agentes ligado
+  praciso que o analista analise a conta toda um exeplo anuncios o porque
+  um anuncio que vendia muito parou, pode ser ads pode ser o concorrente
+  entre outras coisas, como podemos fazer com que os agentes analise a
+  conta por completo e coloque pontual oque deve ser feito, lembrando que
+  nao pode ser no chute ou inventado tem que ser com base em metricas e
+  numeros da conta".
+- **Antes de construir um agente novo do zero**, foi confirmado por leitura
+  direta do código que ~80% do pedido já existia rodando em produção: a
+  "Daily dos Agentes" (`lib/ia/dailyCiclo.js`, `lib/ia/especialistas.js`) já
+  roda todo dia, com 6 especialistas reais (Ads, Promoções, Anúncios,
+  Concorrente, SAC Mercado Livre, SAC Shopee) gerando achados com números
+  reais por trás. O que faltava era exatamente a peça que o usuário pediu:
+  um "Agente Coordenador" que cruza esses achados entre si — já estava
+  planejado (`ia_correlacoes_diarias` em `db/schema.sql`, comentário com o
+  exemplo do próprio usuário: "Ads acusa margem baixa + Promoções acusa
+  desconto ativo + Buy Box confirma preço competitivo -> 'reduza o desconto
+  antes de reduzir Ads'"), só nunca tinha sido implementado (Etapa 3), e não
+  existia tela nenhuma pra ver o resultado sem depender do WhatsApp, que
+  está falhando por configuração do Twilio (Etapa 5, "Plano de Ação do
+  Dia"). Decisão comunicada ao usuário no chat antes de começar a construir.
+- **`lib/ia/coordenadorDiario.js` (novo, função pura, sem banco/API):**
+  `gerarCorrelacoes({ achados, concorrentesMonitoradosPorSku })` cruza
+  achados de agentes DIFERENTES pro MESMO SKU com 4 regras determinísticas,
+  cada uma citando o número real do achado que a embasa (nunca um texto
+  solto):
+  - **R1** — anúncio com queda de vendas (agente Anúncios) + Ads sugerindo
+    pausar anúncio/campanha do mesmo SKU (agente Ads) → a queda pode estar
+    ligada à redução/pausa do investimento em Ads.
+  - **R2** — anúncio com estoque sincronizado ZERADO (o próprio achado do
+    agente Anúncios já traz esse número) → motivo mais óbvio de descartar
+    antes de qualquer outra hipótese.
+  - **R3** — anúncio com queda de vendas + Promoções sugerindo sair de uma
+    promoção do mesmo SKU (margem comprometida) → a queda pode estar
+    ligada ao preço promocional atual.
+  - **R4** — anúncio com queda de vendas + um concorrente CADASTRADO
+    MANUALMENTE pelo usuário pra esse SKU → nunca afirma que o concorrente
+    é a causa (a API do Mercado Livre não permite confirmar preço
+    automaticamente, ver (49)/(51)/(52)), só aponta o link real cadastrado
+    pra conferência manual.
+  - SKU sem nenhum cruzamento possível não gera correlação nenhuma — nunca
+    inventa uma causa provável sem base real.
+- **Cadastro manual de concorrente por SKU** (resposta direta do usuário ao
+  bloqueio confirmado da busca automática: "sobre o concorrente eu vou
+  mandar o link do anuncio do concorrente para ficar mais facil"): nova
+  tabela `concorrentes_monitorados` (`db/schema.sql`), novas funções em
+  `lib/concorrente.js` (`cadastrarConcorrente`, `listarConcorrentesMonitorados`,
+  `mapaConcorrentesMonitoradosPorSku`, `removerConcorrenteMonitorado` —
+  "remover" desativa, nunca apaga de verdade), novas rotas `GET/POST/DELETE
+  /api/concorrente/monitorados` (`routes/concorrente.js`). Nunca
+  valida/busca o link automaticamente — é só o cadastro, alimentando a
+  regra R4 acima.
+- **`lib/ia/dailyCiclo.js`:** `inserirAchados` agora usa `RETURNING id` e
+  devolve os achados com o id real gerado pelo Postgres (antes descartava);
+  `executarDailyEmpresa` chama `coordenadorDiario.gerarCorrelacoes` logo
+  depois de coletar os achados de todos os especialistas e grava o
+  resultado em `ia_correlacoes_diarias` (nova coluna `sku` adicionada nela,
+  pra a tela nunca precisar voltar em `ia_achados_diarios` só pra saber de
+  qual produto cada conclusão fala); uma falha no Coordenador nunca derruba
+  a Daily inteira (mesmo padrão de resiliência já usado pros especialistas).
+  `buscarUltimaReuniao` agora também devolve `correlacoes`. Nenhum
+  agendamento novo — continua reaproveitando 100% o scheduler que já existe
+  (`lib/ia/dailyScheduler.js`).
+- **WhatsApp** (`formatarMensagemWhatsappDaily`): as conclusões do
+  Coordenador agora aparecem em DESTAQUE, no TOPO da mensagem, antes do
+  detalhe por agente — é o "pontual o que deve ser feito" que o usuário
+  pediu, não pode ficar perdido no meio da mensagem. (O envio por WhatsApp
+  em si segue falhando por configuração do Twilio — avisado ao usuário
+  separadamente, fora do escopo desta entrega.)
+- **Tela nova "Plano de Ação do Dia"** (`public/index.html`, menu "Agentes
+  IA"): mostra as conclusões do Coordenador em destaque no topo (cor por
+  prioridade), os achados de cada agente agrupados abaixo, e um botão
+  "Analisar agora" (mesma rota `POST /api/ia/daily/gerar-agora` que o
+  agendador automático já chama todo dia). **Tela "Análise de Concorrente"**
+  ganhou uma seção nova pra cadastrar/listar/remover o link do concorrente
+  por SKU (ver cadastro manual acima).
+- **Testado:** `test/coordenadorDiario.test.js` (novo, 15 testes — função
+  pura, roda sem precisar de Postgres/`node_modules`, cobre as 4 regras
+  isoladas, combinadas e o caso "sem cruzamento nenhum"); `test/concorrente.test.js`
+  (6 testes novos pro cadastro manual — validação, upsert sem duplicar,
+  remover desativa sem apagar, isolamento entre empresas, agrupamento por
+  SKU); `test/dailyCiclo.test.js`/`test/dailyRoutes.test.js` (testes novos
+  pra formatação da mensagem com correlações no topo — puro, roda sempre —
+  e testes de integração pra todo o fluxo real: achados reais → id real →
+  Coordenador → `ia_correlacoes_diarias` → `buscarUltimaReuniao`, incluindo
+  o caso de rodar 2x no mesmo dia sem duplicar). **Nesta sessão o
+  `node_modules` não estava disponível** (bloqueio de rede do sandbox pra
+  `registry.npmjs.org`, já visto antes nesta conta) — os testes de
+  integração (que precisam do pacote `pg`) não puderam ser executados por
+  aqui desta vez; foram escritos seguindo exatamente o mesmo padrão dos
+  testes de integração já existentes e devem rodar normalmente no ambiente
+  do usuário (Render, que já tem `node_modules` instalado). Como reforço
+  extra nesta sessão, todo o fluxo SQL real (achados com `RETURNING id` →
+  `gerarCorrelacoes` → `ia_correlacoes_diarias` → busca de volta) foi
+  verificado manualmente contra um Postgres local via `psql`, com o
+  resultado batendo exatamente com o esperado.
+
+## 2026-09-20 (55) — Concorrente: diagnóstico confirma que o Mercado Livre bloqueia até a consulta direta do anúncio (não só a busca por título)
+- **Contexto:** o usuário testou o link de diagnóstico de (51) com um
+  concorrente real e mandou o resultado: `{"ok":false,"etapa":"buscar_item",
+  ...,"status":403,"erro":{"message":"Access to the requested resource is
+  forbidden","error":"access_denied",...}}` — ou seja, nem o primeiro passo
+  (`GET /items/{id}`, autenticado) funcionou desta vez, mais restritivo do
+  que o já confirmado em (49)/(52) (que era só a busca por título).
+- **`lib/mercadolivre.js`:** nova função `apiGetPublico(path)` — mesma
+  chamada `GET`, mas SEM header `Authorization`. Existe só pra diagnóstico
+  (nunca usada em nenhum fluxo real do ERP): alguns dados de catálogo do
+  Mercado Livre tradicionalmente são públicos, então tentar sem login serve
+  pra separar duas causas bem diferentes — (a) o bloqueio é só pra chamada
+  AUTENTICADA de um vendedor vendo o anúncio de outro (a pública ainda
+  funcionaria), ou (b) o bloqueio é do próprio anúncio/endpoint,
+  independente de login (a pública falha igual).
+- **`lib/concorrente.js#testarListagemPorVendedor`:** as duas chamadas
+  (`GET /items/{id}` e `GET /users/{sellerId}/items/search`) agora tentam
+  autenticado primeiro e, só se falhar, tentam sem login como diagnóstico
+  adicional. Sucesso agora informa `itemBuscadoSemLogin`/
+  `listagemBuscadaSemLogin` (importante pro próximo passo: se só funcionou
+  sem login, um monitoramento automático futuro não pode depender de
+  nenhuma conta conectada). Falha total agora devolve os DOIS erros reais
+  (`autenticado`/`semLogin`, cada um com status e corpo da resposta) em vez
+  de só um — nunca esconde qual das duas tentativas falhou.
+- **Testado:** `test/concorrente.test.js` — testes atualizados/novos
+  cobrindo sucesso autenticado (flags `false`), autenticado falha mas
+  público funciona, e os dois falham (mesmo formato do resultado real que
+  o usuário reportou).
+- **Ainda sem resposta definitiva:** este resultado real do usuário
+  mostrou que mesmo a consulta pública ao anúncio específico dele está
+  bloqueada — o caminho de (51) (listar pelo `seller_id`) ainda não foi
+  reconfirmado depois desta mudança. Ver decisão sobre como seguir em
+  (56) acima: o usuário optou por cadastrar o link do concorrente
+  manualmente em vez de depender de mais tentativas de descoberta
+  automática pela API.
+
 ## 2026-09-20 (54) — Promoções: "estoque alto" agora avisa o usuário
 - **Pedido explícito do usuário:** "sobre, meu estoque daquele produto
   estiver alto, quero que me avise". Perguntado de volta como definir

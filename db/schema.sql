@@ -1923,3 +1923,43 @@ ALTER TABLE promocoes_analises ADD COLUMN IF NOT EXISTS estoque_alto BOOLEAN NOT
 ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS snapshot_estoque_atual INTEGER;
 ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS snapshot_cobertura_dias_estoque NUMERIC(8,1);
 ALTER TABLE ia_decisoes_promocoes ADD COLUMN IF NOT EXISTS snapshot_estoque_alto BOOLEAN NOT NULL DEFAULT false;
+
+-- ============================================================
+-- Concorrente cadastrado manualmente por SKU (20/09/2026)
+-- ============================================================
+-- Pedido explícito do usuário, depois de confirmado por teste real dele
+-- (link de teste devolveu 403 tanto autenticado quanto sem login — ver
+-- lib/concorrente.js#testarListagemPorVendedor e o comentário grande ali)
+-- que a API do Mercado Livre bloqueia a descoberta automática de
+-- concorrente: perguntado como resolver, respondeu "sobre o concorrente eu
+-- vou mandar o link do anuncio do concorrente para ficar mais facil" — ou
+-- seja, ELE cola o link manualmente por produto, e o sistema guarda isso
+-- pra usar depois (hoje: alimentar o Agente Coordenador da Daily, ver
+-- ia_correlacoes_diarias acima — regra R4 em lib/ia/coordenadorDiario.js).
+-- Nunca tenta validar/buscar o link automaticamente nesta tabela — é só o
+-- cadastro; a tela mostra o link pro usuário abrir e comparar preço ele
+-- mesmo, honestamente, já que a checagem automática está bloqueada pela
+-- API. `sku` é texto livre (não FK pra produtos.sku) pelo mesmo motivo de
+-- outras tabelas deste arquivo (ia_achados_diarios.sku etc.) — permite
+-- cadastrar um concorrente mesmo pra um SKU que ainda não tem produto
+-- formalmente cadastrado. `ativo` permite "arquivar" sem apagar o
+-- histórico (mesmo padrão de produtos.ativo).
+CREATE TABLE IF NOT EXISTS concorrentes_monitorados (
+  id             SERIAL PRIMARY KEY,
+  empresa_id     INTEGER NOT NULL REFERENCES empresas(id),
+  sku            VARCHAR(100) NOT NULL,
+  url            TEXT NOT NULL,
+  apelido        VARCHAR(120), -- nome livre pro usuário identificar o concorrente na lista (opcional)
+  ativo          BOOLEAN NOT NULL DEFAULT TRUE,
+  criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, sku, url)
+);
+CREATE INDEX IF NOT EXISTS idx_concorrentes_monitorados_empresa_sku ON concorrentes_monitorados (empresa_id, sku) WHERE ativo = TRUE;
+
+-- Coluna aditiva em ia_correlacoes_diarias (20/09/2026) — todas as 4 regras
+-- do Agente Coordenador (lib/ia/coordenadorDiario.js) são cruzamentos
+-- ancorados num SKU específico; guardar isso direto na correlação evita a
+-- tela "Plano de Ação do Dia" (Etapa 5) ter que voltar em
+-- ia_achados_diarios só pra saber de qual produto cada conclusão fala.
+ALTER TABLE ia_correlacoes_diarias ADD COLUMN IF NOT EXISTS sku VARCHAR(120);

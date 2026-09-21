@@ -3,6 +3,59 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-20 (48) — Não criar um "Analista de Conta" novo: implementar o Agente Coordenador (Etapa 3) já planejado em cima da Daily dos Agentes que já existia
+- **Pedido original do usuário:** "claude agora com os meus agentes ligado
+  praciso que o analista analise a conta toda um exeplo anuncios o porque
+  um anuncio que vendia muito parou, pode ser ads pode ser o concorrente
+  entre outras coisas, como podemos fazer com que os agentes analise a
+  conta por completo e coloque pontual oque deve ser feito, lembrando que
+  nao pode ser no chute ou inventado tem que ser com base em metricas e
+  numeros da conta". Perguntado de volta (`AskUserQuestion`) sobre onde
+  isso deveria aparecer, com que frequência, e como tratar a hipótese "pode
+  ser concorrente" — respostas: (1) "Novo agente 'Analista de Conta'"
+  (recomendado, aceito); (2) "Automático, todo dia" (recomendado, aceito);
+  (3) sobre concorrente, resposta livre: "sobre o concorrente eu vou mandar
+  o link do anuncio do concorrente para ficar mais facil" — ele cadastra o
+  link manualmente por produto, em vez do sistema tentar descobrir sozinho
+  (confirma o que já estava documentado em `04-alteracoes.md` (49)/(52): a descoberta automática está bloqueada
+  pela própria API do Mercado Livre).
+- **Antes de começar a construir o "Analista de Conta" do zero (como
+  literalmente combinado acima), a exploração direta do código mostrou que
+  isso duplicaria trabalho já existente:** a "Daily dos Agentes"
+  (`lib/ia/dailyCiclo.js`) já roda todo dia, com 6 especialistas reais
+  (Ads, Promoções, Anúncios/Radar, Concorrente, SAC Mercado Livre, SAC
+  Shopee — `lib/ia/especialistas.js`) gerando achados com números reais já
+  calculados por trás (ex.: `lib/ia/radarAnuncios.js#analisarAnuncios` já é
+  exatamente o detector de "anúncio que vendia muito parou" que o usuário
+  descreveu, cruzando vendas 30d/7d, estoque e investimento em Ads por
+  anúncio). O que faltava não era um agente novo — era só a peça de
+  CRUZAMENTO entre os agentes, que já estava desenhada desde antes
+  (`ia_correlacoes_diarias` em `db/schema.sql`, com o próprio exemplo do
+  usuário no comentário da tabela) e citada no código como "Etapa 3, ainda
+  não implementada" — e uma tela pra ver o resultado sem depender do
+  WhatsApp (que está falhando por configuração do Twilio, então é bem
+  provável que o usuário nunca tenha visto a Daily funcionando de verdade
+  até agora).
+- **Decisão (comunicada ao usuário no chat antes de começar):** implementar
+  o "Agente Coordenador" (Etapa 3, `lib/ia/coordenadorDiario.js`) e a tela
+  "Plano de Ação do Dia" (Etapa 5) reaproveitando 100% da infraestrutura
+  que já existe — scheduler, especialistas, achados, persistência — em vez
+  de duplicar lógica num agente novo e paralelo. Mais honesto (usa dado que
+  já é real e testado) e sai valendo a partir do próximo ciclo automático,
+  sem precisar de nenhum agendamento novo.
+- **Regras do Coordenador (R1-R4) são determinísticas, nunca um modelo de
+  IA "decidindo" livremente:** cada regra só dispara quando SKUs batem
+  entre achados de agentes diferentes e cita, na conclusão, o número real
+  do achado que a embasou (`achados_relacionados` guarda os ids reais de
+  `ia_achados_diarios`) — nunca um texto solto. Ver detalhe das 4 regras em
+  `04-alteracoes.md` (56). Regra explícita de honestidade: SKU sem nenhum
+  cruzamento possível não gera correlação nenhuma.
+- **R4 (concorrente) nunca afirma causalidade:** só cita o link cadastrado
+  pelo usuário pra ele conferir manualmente — consistente com
+  `04-alteracoes.md` (49)/(52), onde já ficou confirmado que a API do
+  Mercado Livre não permite ao ERP confirmar preço de concorrente de
+  forma automática.
+
 ## 2026-09-20 (47) — "Estoque alto": definição escolhida pelo usuário (dias de cobertura, não quantidade fixa) e limite padrão de 60 dias
 - **Pedido do usuário era ambíguo o bastante pra justificar perguntar
   antes de construir:** "sobre, meu estoque daquele produto estiver
