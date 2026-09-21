@@ -212,6 +212,52 @@ describe('classificar — margem normal do produto (pedido do usuário: nunca ca
   });
 });
 
+// 21/09/2026 — pedido explícito do usuário, verbatim: "só sugerir promoções
+// que seja com o valor abaixo do que já vendo ou que já está em promoção
+// (...) se eu já tiver em uma promoção que eu vendo a 78 e vier uma
+// promoção nova vendendo a 77 quero que me recomenda mesmo que caia 1 a
+// 2,5% (...) agora se eu to vendendo a 78 e tem promoção a 100 mesmo que
+// for aumentar minha margem eu não quero nem que recomende". Uma promoção
+// CANDIDATA só pode virar sugestão de entrar se o preço promocional for
+// menor ou igual ao preço que o item já vende hoje (`precoReferenciaAtual`
+// — preço normal, ou preço de outra promoção já ativa nesse mesmo item,
+// calculado em lib/ia/promocoesCiclo.js) — nunca recomendada com preço
+// maior, mesmo com margem ótima.
+describe('classificar — preço da promoção nunca pode ser maior que o preço que o item já vende hoje (pedido do usuário, 21/09/2026)', () => {
+  const base = { margemIncompleta: false, statusItem: 'candidate', margemMinimaPct: 14, margemConfortoPct: 0 };
+
+  test('exemplo real do usuário: já vende a 78, promoção nova a 77 (menor) — ENTRAR mesmo com pequena queda de margem', () => {
+    const r = classificar({ ...base, margemPromoPct: 17, margemNormalPct: 18.5, temDesconto: true, precoPromo: 77, precoReferenciaAtual: 78 });
+    assert.equal(r.codigo, 'entrar');
+  });
+
+  test('exemplo real do usuário: já vende a 78, "promoção" na verdade custa 100 (maior) — nunca recomenda, mesmo com margem ótima', () => {
+    const r = classificar({ ...base, margemPromoPct: 40, margemNormalPct: 20, temDesconto: false, precoPromo: 100, precoReferenciaAtual: 78 });
+    assert.equal(r.codigo, 'preco_acima_do_atual');
+  });
+
+  test('preço da promoção igual ao preço atual (nem sobe nem desce): continua podendo entrar (regra é "abaixo OU igual")', () => {
+    const r = classificar({ ...base, margemPromoPct: 20, margemNormalPct: 20, temDesconto: false, precoPromo: 78, precoReferenciaAtual: 78 });
+    assert.equal(r.codigo, 'entrar');
+  });
+
+  test('sem precoReferenciaAtual disponível (não sabemos o preço atual): regra não se aplica, cai no comportamento de sempre (só margem decide)', () => {
+    const r = classificar({ ...base, margemPromoPct: 30, margemNormalPct: 20, temDesconto: false, precoPromo: 100, precoReferenciaAtual: null });
+    assert.equal(r.codigo, 'oportunidade');
+  });
+
+  test('preço acima do atual vence a checagem ANTES da margem — nunca vira "oportunidade" mesmo com margem excelente', () => {
+    const r = classificar({ ...base, margemPromoPct: 90, margemNormalPct: 20, temDesconto: false, precoPromo: 150, precoReferenciaAtual: 78 });
+    assert.equal(r.codigo, 'preco_acima_do_atual');
+    assert.notEqual(r.codigo, 'oportunidade');
+  });
+
+  test('a regra só vale pra CANDIDATO (ainda não ativo) — item já ativo continua decidido só pela margem, nunca por este preço', () => {
+    const r = classificar({ ...base, statusItem: 'started', margemPromoPct: 25, precoPromo: 100, precoReferenciaAtual: 78 });
+    assert.equal(r.codigo, 'manter');
+  });
+});
+
 // 20/09/2026 — pedido explícito do usuário: "sobre, meu estoque daquele
 // produto estiver alto, quero que me avise". Ele confirmou (via pergunta
 // feita de volta) o método: dias que o estoque dura, no ritmo real de
@@ -453,5 +499,47 @@ describe('analisarItemPromocao — integra tudo e nunca fabrica margem sem dado 
     });
     assert.equal(linha.estoqueAtual, null);
     assert.equal(linha.estoqueAlto, false);
+  });
+
+  // 21/09/2026 — pedido explícito do usuário: mesmo que a margem desta
+  // promoção pareça ótima OLHANDO SÓ PRA ELA, se o item já está sendo
+  // vendido mais barato em OUTRA promoção rodando ao mesmo tempo (dado que
+  // vem de fora, via precoAtualEfetivo — ver lib/ia/promocoesCiclo.js, que
+  // varre todas as promoções ativas da conta antes de classificar), essa
+  // promoção nova não pode ser recomendada. Aqui testamos isso de ponta a
+  // ponta por analisarItemPromocao (não só a função classificar isolada).
+  test('precoAtualEfetivo passa de ponta a ponta: margem ótima na promoção isolada, mas preço já é mais baixo em outra promoção ativa -> nunca recomenda', () => {
+    const linha = analisarItemPromocao({
+      // preço promo 96 (desconto de só 4% sobre o preço cheio 100): olhando só
+      // pra essa promoção a margem é ótima (mesmo caso do teste "desconto
+      // pequeno" acima, que dá 'oportunidade' sem precoAtualEfetivo).
+      item: { id: 'MLB8', status: 'candidate', original_price: 100, suggested_discounted_price: 96 },
+      catalogEntry: { sku: 'SKU1', titulo: 'Produto Teste', imagemUrl: null, preco: 100 },
+      historicoPorSku,
+      custoPorSku,
+      aliquotaImposto: 0,
+      margemMinimaPct: 14,
+      // mas esse mesmo item já está ativo em OUTRA promoção vendendo a 78
+      precoAtualEfetivo: 78,
+      contexto: { empresaId: 2, contaId: 1, promotionId: 'P-7', promotionType: 'DEAL', promotionLabel: 'Teste' },
+    });
+    assert.equal(linha.precoPromo, 96);
+    assert.equal(linha.precoReferenciaAtual, 78);
+    assert.equal(linha.classificacaoCodigo, 'preco_acima_do_atual');
+    assert.notEqual(linha.classificacaoCodigo, 'oportunidade');
+  });
+
+  test('sem precoAtualEfetivo (item não está ativo em nenhuma outra promoção): usa o preço normal do catálogo como referência, igual sempre foi', () => {
+    const linha = analisarItemPromocao({
+      item: { id: 'MLB9', status: 'candidate', original_price: 100, suggested_discounted_price: 96 },
+      catalogEntry: { sku: 'SKU1', titulo: 'Produto Teste', imagemUrl: null, preco: 100 },
+      historicoPorSku,
+      custoPorSku,
+      aliquotaImposto: 0,
+      margemMinimaPct: 14,
+      contexto: { empresaId: 2, contaId: 1, promotionId: 'P-8', promotionType: 'DEAL', promotionLabel: 'Teste' },
+    });
+    assert.equal(linha.precoReferenciaAtual, 100); // caiu pro preço normal do catálogo
+    assert.equal(linha.classificacaoCodigo, 'oportunidade');
   });
 });

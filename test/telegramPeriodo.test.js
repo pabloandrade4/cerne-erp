@@ -1,8 +1,10 @@
-// Testes de lib/ia/telegramPeriodo.js — função pura, sem banco/rede, pode
-// rodar neste sandbox (mesmo padrão de test/telegram.test.js).
+// Testes de lib/periodo.js#resolverPeriodoDoTexto — função pura, sem
+// banco/rede, pode rodar neste sandbox (mesmo padrão de test/telegram.test.js).
+// (Essa função mora dentro de lib/periodo.js, não num arquivo separado — ver
+// comentário em lib/periodo.js e 04-alteracoes.md, 21/09/2026.)
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { resolverPeriodoDoTexto } = require('../lib/ia/telegramPeriodo');
+const { resolverPeriodoDoTexto } = require('../lib/periodo');
 
 // "Agora" fixo pra testes determinísticos: 21/09/2026, 10h BRT.
 const AGORA_FIXO = new Date('2026-09-21T13:00:00.000Z');
