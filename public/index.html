@@ -1116,6 +1116,67 @@
   @media (max-width:1180px){ .ia-insights-panel{ width:260px; } }
   @media (max-width:980px){ .ia-page{ flex-wrap:wrap; } .ia-insights-panel{ width:100%; order:3; max-height:340px; } .ia-shell{ min-width:280px; } }
   @media (max-width:680px){ .ia-msg{ max-width:96%; } .ia-page{ flex-direction:column; height:auto; } .ia-convos{ width:100%; max-height:220px; } .ia-shell{ height:calc(100vh - 420px); min-height:360px; } .ia-insights-panel{ order:3; max-height:280px; } }
+
+  /* ================= Agente "Promoções" — layout novo (21/09/2026) =================
+     Pedido explícito do usuário: refazer só a APARÊNCIA da tela de
+     Promoções pra ficar igual a um mockup HTML que ele mesmo desenhou e
+     mandou ("não é pra mudar nada além do lyaut de promoções"). Nenhuma
+     rota, endpoint ou regra de negócio muda — só a apresentação visual,
+     reaproveitando os mesmos tokens de cor (--surface/--border/--copper/
+     --success/--warning/--danger/--purple etc.) pra continuar funcionando
+     nos dois temas (claro/escuro), já que o mockup em si era só um preview
+     estático de tema escuro fixo. */
+  .promoc-workspace{ display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; margin-top:14px; }
+  @media (max-width:1180px){ .promoc-workspace{ grid-template-columns:1fr; } }
+  .promoc-approvals{ display:flex; flex-direction:column; gap:12px; }
+  .promoc-card{ background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; box-shadow:var(--shadow-sm); }
+  .promoc-card-top{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; padding:15px 16px; border-bottom:1px solid var(--border); align-items:start; }
+  .promoc-updated{ font-size:11px; color:var(--text-faint); }
+  .promoc-title{ font-size:14.5px; font-weight:800; margin-top:6px; line-height:1.3; }
+  .promoc-meta{ font-size:11.5px; color:var(--text-faint); margin-top:4px; }
+  .promoc-decision{ align-self:start; border-radius:12px; padding:10px 13px; font-size:12px; font-weight:800; min-width:170px; text-align:center; white-space:normal; line-height:1.35; }
+  .promoc-decision.pos{ background:var(--success-soft); color:var(--success); border:1px solid var(--success-soft); }
+  .promoc-decision.neg{ background:var(--danger-soft); color:var(--danger); border:1px solid var(--danger-soft); }
+  .promoc-decision.warn{ background:var(--warning-soft); color:var(--warning); border:1px solid var(--warning-soft); }
+  .promoc-decision small{ display:block; font-weight:600; margin-top:3px; opacity:.85; }
+  .promoc-reason-grid{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border-bottom:1px solid var(--border); }
+  @media (max-width:900px){ .promoc-reason-grid{ grid-template-columns:1fr 1fr; } }
+  .promoc-info{ padding:12px 14px; border-right:1px solid var(--border); min-height:92px; }
+  .promoc-info:last-child{ border-right:0; }
+  .promoc-info strong{ font-size:10.5px; color:var(--copper); display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:.04em; }
+  .promoc-info p{ margin:0; color:var(--text-muted); font-size:12px; line-height:1.5; }
+  .promoc-compare-actions{ display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:12px; padding:13px 14px; }
+  @media (max-width:900px){ .promoc-compare-actions{ grid-template-columns:1fr; } }
+  .promoc-compare{ display:grid; grid-template-columns:1fr 30px 1fr; gap:9px; align-items:center; }
+  .promoc-metricbox{ border:1px solid var(--border); border-radius:11px; padding:10px; background:var(--surface-2); }
+  .promoc-metricbox small{ color:var(--text-faint); font-size:10.5px; }
+  .promoc-metricbox b{ display:block; font-size:15px; margin:3px 0; font-family:"Archivo",sans-serif; }
+  .promoc-metricbox span{ font-size:10px; color:var(--text-faint); }
+  .promoc-arrow{ text-align:center; color:var(--text-faint); font-size:18px; }
+  .promoc-actions{ display:flex; flex-direction:column; gap:7px; justify-content:center; }
+  .promoc-btn{ display:flex; align-items:center; justify-content:center; gap:7px; border:1px solid var(--border); padding:10px 10px; border-radius:10px; background:var(--surface-2); color:var(--text); font-weight:800; font-size:12px; cursor:pointer; }
+  .promoc-btn svg{ width:14px; height:14px; }
+  .promoc-btn:hover{ filter:brightness(.97); }
+  .promoc-btn.approve{ background:var(--success-soft); border-color:var(--success-soft); color:var(--success); }
+  .promoc-btn.reject{ background:var(--danger-soft); border-color:var(--danger-soft); color:var(--danger); }
+  .promoc-side{ display:flex; flex-direction:column; gap:14px; }
+  .promoc-side-card{ background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px; box-shadow:var(--shadow-sm); }
+  .promoc-side-card h3{ margin:0; font-size:14px; font-family:"Archivo",sans-serif; }
+  .promoc-side-card .promoc-muted{ color:var(--text-faint); font-size:11.5px; margin-top:4px; }
+  .promoc-timeline{ margin-top:14px; position:relative; }
+  .promoc-timeline::before{ content:''; position:absolute; left:6px; top:6px; bottom:6px; width:2px; background:var(--border-strong); }
+  .promoc-event{ position:relative; padding-left:22px; margin:0 0 14px; }
+  .promoc-event:last-child{ margin-bottom:0; }
+  .promoc-event::before{ content:''; position:absolute; left:0; top:3px; width:12px; height:12px; border-radius:50%; background:var(--copper); box-shadow:0 0 0 3px var(--copper-soft); }
+  .promoc-event b{ font-size:11.5px; }
+  .promoc-event p{ margin:2px 0 0; color:var(--text-muted); font-size:11px; line-height:1.4; }
+  .promoc-summary-grid{ display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:12px; }
+  .promoc-summary-box{ border:1px solid var(--border); border-radius:11px; padding:10px; background:var(--surface-2); }
+  .promoc-summary-box small{ color:var(--text-faint); font-size:10.5px; }
+  .promoc-summary-box b{ display:block; font-size:17px; margin-top:3px; font-family:"Archivo",sans-serif; }
+  .promoc-summary-box b.g{ color:var(--success); }
+  .promoc-summary-box b.r{ color:var(--danger); }
+  .promoc-note{ margin-top:12px; border:1px solid var(--border); background:var(--surface-2); border-radius:11px; padding:10px 11px; color:var(--text-muted); font-size:11px; line-height:1.5; }
 </style>
 </head>
 <body>
@@ -11111,29 +11172,367 @@
       },
     });
 
-    // ---- Agente "Promoções" ----
-    window.AgentePromocoes = criarModuloAgenteDecisoes({
-      codigoAgente: 'promocoes',
-      pageId: 'agentePromocoes',
-      rootElId: 'agentePromocoesRoot',
-      iconeFallback: 'sparkle',
-      nomeFallback: 'Promoções',
-      descricaoFallback: 'Analisa promoções do Mercado Livre e recomenda entrar, não entrar, sair ou revisar o preço promocional, sempre pela margem real.',
-      endpointDecisoes: '/api/promocoes/decisoes',
-      endpointDecidir: (id)=> '/api/promocoes/decisoes/'+id,
-      endpointGerarAgora: '/api/promocoes/analisar',
-      colunaReferenciaLabel: 'Anúncio / Promoção',
-      referenciaHTML: (d)=>{
+    // ---- Agente "Promoções" — layout dedicado (21/09/2026) ----
+    // Pedido explícito do usuário: um mockup HTML pronto que ele mesmo
+    // desenhou, pra deixar a tela de Promoções com essa cara — "não é pra
+    // mudar nada além do lyaut de promoções". Por isso, diferente do Ads e
+    // Performance (que continua em cima de criarModuloAgenteDecisoes, ZERO
+    // linha tocada nela ou no Ads), este agente ganhou um módulo próprio:
+    // mesmos endpoints de sempre (/api/promocoes/decisoes,
+    // /api/promocoes/decisoes/:id, /api/promocoes/analisar,
+    // /api/promocoes/config), mesmas funções auxiliares já definidas acima
+    // neste arquivo (escapeHtml/money/pctFmt/fmtDataHora/toast/
+    // STATUS_LABEL/STATUS_COR/TIPO_ACAO_LABEL/sugestaoResumoHTML/
+    // decisaoResumoHTML/executadoHTML/podeAlterarNumerico/
+    // campoAlteracaoChave/campoAlteracaoLabel/valorInicialAlteracao) — só a
+    // apresentação visual é nova. Nenhum número é inventado: tudo vem de
+    // campos reais já devolvidos por routes/promocoes.js
+    // (snapshot.precoNormal/precoPromo/descontoPct/margemRealPct/
+    // coberturaDiasEstoque/estoqueAlto) — onde o mockup mostrava algo sem
+    // equivalente real (ex.: "conversão estimada", uma fila fixa de
+    // "próximas ações", um "resultado em R$" que a IA nunca calculou), esse
+    // pedaço foi adaptado pra mostrar só o que é real, ou omitido.
+    window.AgentePromocoes = (function(){
+      const state = { agente:null, aba:'pendentes', itens:[], todos:[], config:null, loading:false, error:null, editandoId:null, gerando:false };
+
+      async function apiAgente(){
+        const res = await fetch('/api/ia-agentes');
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) return null;
+        return ((body && body.agentes) || []).find((a)=> a.codigo === 'promocoes') || null;
+      }
+      async function apiDecisoes(empresaId, status){
+        const params = new URLSearchParams({ empresaId, status: status || 'todas' });
+        const res = await fetch('/api/promocoes/decisoes?' + params.toString());
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar as decisões.');
+        return (body && body.decisoes) || [];
+      }
+      async function apiDecidir(id, statusDecisao, valorDecididoUsuario){
+        const res = await fetch('/api/promocoes/decisoes/'+id, {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ statusDecisao, valorDecididoUsuario, decididoPor: 'Pablo' }),
+        });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível registrar a decisão.');
+        return body;
+      }
+      async function apiGerarAgora(empresaId){
+        const res = await fetch('/api/promocoes/analisar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }) });
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Falha ao gerar sugestões agora.');
+        return body;
+      }
+      async function apiConfig(empresaId){
+        try{ const res = await fetch('/api/promocoes/config?empresaId='+empresaId); return res.ok ? await res.json() : null; }
+        catch(e){ return null; }
+      }
+
+      async function carregarDecisoes(){
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId){ state.itens = []; state.loading = false; render(); return; }
+        state.loading = true; state.error = null; render();
+        try{ state.itens = await apiDecisoes(filtro.empresaId, state.aba === 'pendentes' ? 'pendente' : 'decidida'); }
+        catch(e){ state.error = e.message; state.itens = []; }
+        state.loading = false; render();
+      }
+
+      // Carrega TODAS as decisões (sem filtro de status) só pros números
+      // reais dos cards de resumo no topo — independente de qual aba está
+      // aberta, pra "Aguardando aprovação"/"Aprovadas"/"Recusadas" nunca
+      // ficarem incoerentes com a aba ativa. Mesmo endpoint de sempre, só
+      // uma segunda chamada com status=todas.
+      async function carregarResumo(){
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId){ state.todos = []; return; }
+        try{ state.todos = await apiDecisoes(filtro.empresaId, 'todas'); }
+        catch(e){ state.todos = []; }
+      }
+
+      async function gerarAgora(){
+        const filtro = window.CerneFiltro.state;
+        if(!filtro.empresaId) return;
+        state.gerando = true; render();
+        try{
+          await apiGerarAgora(filtro.empresaId);
+          toast('Sugestões atualizadas.');
+          await Promise.all([carregarDecisoes(), carregarResumo()]);
+        }catch(e){ toast(e.message || 'Falha ao gerar sugestões agora.', 'error'); }
+        finally{ state.gerando = false; render(); }
+      }
+
+      async function decidir(id, statusDecisao, valorDecididoUsuario){
+        try{
+          await apiDecidir(id, statusDecisao, valorDecididoUsuario);
+          toast(statusDecisao === 'recusada' ? 'Sugestão recusada.' : 'Decisão registrada.');
+          state.editandoId = null;
+          await Promise.all([carregarDecisoes(), carregarResumo()]);
+        }catch(e){ toast(e.message || 'Falha ao registrar decisão.', 'error'); }
+      }
+
+      async function load(){
+        if(!state.agente) state.agente = await apiAgente();
+        const filtro = window.CerneFiltro.state;
+        if(filtro.empresaId) state.config = await apiConfig(filtro.empresaId);
+        await Promise.all([carregarDecisoes(), carregarResumo()]);
+      }
+
+      window.CerneFiltro.onChange(()=>{
+        const page = document.getElementById('page-agentePromocoes');
+        if(page && page.classList.contains('active')){ carregarDecisoes(); carregarResumo(); }
+        else render();
+      });
+
+      // ---- Números reais dos cards de resumo (nunca calculados a partir de nada inventado) ----
+      function resumoReal(){
+        const todos = state.todos || [];
+        const pendentes = todos.filter((d)=> d.statusDecisao === 'pendente').length;
+        const hojeStr = new Date().toDateString();
+        const decididasHoje = todos.filter((d)=> d.decididoEm && new Date(d.decididoEm).toDateString() === hojeStr).length;
+        const aprovadas = todos.filter((d)=> d.statusDecisao === 'aprovada' || d.statusDecisao === 'alterada').length;
+        const recusadas = todos.filter((d)=> d.statusDecisao === 'recusada').length;
+        const avaliadas = todos.filter((d)=> d.resultadoAvaliadoEm && d.resultadoSnapshot && d.resultadoSnapshot.margemRealPct !== null && d.resultadoSnapshot.margemRealPct !== undefined);
+        const margemMedia = avaliadas.length ? (avaliadas.reduce((s,d)=> s + Number(d.resultadoSnapshot.margemRealPct), 0) / avaliadas.length) : null;
+        return { pendentes, decididasHoje, aprovadas, recusadas, avaliadasCount: avaliadas.length, margemMedia };
+      }
+
+      function kpiCardHTML(tintVar, icone, label, valorHtml, notaTxt){
+        return '<div class="kpi-hero" style="--tint:var('+tintVar+');--tint-soft:var('+tintVar+'-soft);">'
+          + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(icone)+'</div></div>'
+          + '<div class="kpi-hero-label">'+escapeHtml(label)+'</div>'
+          + '<div class="kpi-hero-value">'+valorHtml+'</div>'
+          + (notaTxt ? '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(notaTxt)+'</span></div>' : '')
+        + '</div>';
+      }
+
+      function kpisHTML(r){
+        return '<div class="kpi-hero-grid">'
+          + kpiCardHTML('--warning', 'clock', 'Aguardando aprovação', String(r.pendentes), r.pendentes ? 'decisões pendentes' : 'nada pendente agora')
+          + kpiCardHTML('--success', 'checkCircle', 'Aprovadas', String(r.aprovadas), 'no histórico (inclui alteradas)')
+          + kpiCardHTML('--danger', 'x', 'Recusadas', String(r.recusadas), 'no histórico')
+          + kpiCardHTML('--purple', 'percent', 'Margem média avaliada', r.avaliadasCount ? pctFmt(r.margemMedia) : '<span class="dash">—</span>', r.avaliadasCount ? r.avaliadasCount + ' decisão(ões) já reavaliada(s) pela IA' : 'a IA reavalia alguns dias depois de decidir')
+        + '</div>';
+      }
+
+      // ---- Card de aprovação (troca a tabela antiga por um card por item, no layout pedido pelo usuário) ----
+      function decisionBadgeHTML(d){
+        const positivos = ['entrar_promocao'];
+        const negativos = ['nao_entrar_promocao','sair_promocao'];
+        const classe = positivos.includes(d.tipoAcao) ? 'pos' : negativos.includes(d.tipoAcao) ? 'neg' : 'warn';
+        const label = TIPO_ACAO_LABEL[d.tipoAcao] || d.tipoAcao;
+        return '<div class="promoc-decision '+classe+'">'+escapeHtml(label)+'<small>Sugestão da IA</small></div>';
+      }
+
+      function problemaEncontradoHTML(d){
+        const s = d.snapshot || {};
+        if(s.descontoPct !== null && s.descontoPct !== undefined && s.margemRealPct !== null && s.margemRealPct !== undefined){
+          const margemMin = state.config && state.config.margemMinimaPct !== undefined ? state.config.margemMinimaPct : null;
+          let comparativo = '';
+          if(margemMin !== null) comparativo = s.margemRealPct < margemMin ? ' (abaixo da margem mínima configurada de '+pctFmt(margemMin)+')' : ' (dentro da margem mínima configurada de '+pctFmt(margemMin)+')';
+          return escapeHtml('Desconto de '+pctFmt(s.descontoPct)+' deixaria a margem real em '+pctFmt(s.margemRealPct)+comparativo+'.');
+        }
+        if(s.estoqueAlto) return escapeHtml('Estoque acima do normal pro ritmo de vendas recente'+(s.coberturaDiasEstoque!=null?' (cobertura de '+Math.round(s.coberturaDiasEstoque)+' dias).':'.'));
+        return escapeHtml(d.motivo || 'Sem detalhe adicional.');
+      }
+
+      function estoqueInfoHTML(d){
+        const s = d.snapshot || {};
+        if(s.coberturaDiasEstoque === null || s.coberturaDiasEstoque === undefined) return 'Sem dado de estoque suficiente.';
+        const dias = Math.round(s.coberturaDiasEstoque);
+        return escapeHtml('Cobertura de estoque: '+dias+' dia'+(dias===1?'':'s')+(s.estoqueAlto ? ' — considerado alto pro ritmo de vendas recente.' : '.'));
+      }
+
+      function reasonGridHTML(d){
+        return '<div class="promoc-reason-grid">'
+          + '<div class="promoc-info"><strong>O que a IA encontrou</strong><p>'+problemaEncontradoHTML(d)+'</p></div>'
+          + '<div class="promoc-info"><strong>Ação sugerida pela IA</strong><p><b>'+escapeHtml(TIPO_ACAO_LABEL[d.tipoAcao] || d.tipoAcao)+'</b></p></div>'
+          + '<div class="promoc-info"><strong>Motivo</strong><p>'+escapeHtml(d.motivo || '—')+'</p></div>'
+          + '<div class="promoc-info"><strong>Estoque</strong><p>'+estoqueInfoHTML(d)+'</p></div>'
+        + '</div>';
+      }
+
+      function compareHTML(d){
+        const s = d.snapshot || {};
+        return '<div class="promoc-compare">'
+          + '<div class="promoc-metricbox"><small>Preço normal (sem promoção)</small><b>'+money(s.precoNormal)+'</b></div>'
+          + '<div class="promoc-arrow">→</div>'
+          + '<div class="promoc-metricbox"><small>Preço promocional</small><b>'+money(s.precoPromo)+'</b><span>Margem real: '+pctFmt(s.margemRealPct)+' · Desconto: '+pctFmt(s.descontoPct)+'</span></div>'
+        + '</div>';
+      }
+
+      function approvalCardHTML(d){
+        let acoesBtns = '<button class="promoc-btn approve" data-acao="aprovada" data-id="'+d.id+'" type="button">'+svg('check')+'<span>Aprovar</span></button>';
+        if(podeAlterarNumerico(d)) acoesBtns += '<button class="promoc-btn" data-acao="alterar-toggle" data-id="'+d.id+'" type="button">'+svg('edit')+'<span>Alterar</span></button>';
+        acoesBtns += '<button class="promoc-btn reject" data-acao="recusada" data-id="'+d.id+'" type="button">'+svg('x')+'<span>Recusar</span></button>';
+
+        let html = '<article class="promoc-card">'
+          + '<div class="promoc-card-top">'
+            + '<div><div class="promoc-updated">Atualizado em '+fmtDataHora(d.atualizadoEm)+'</div>'
+              + '<div class="promoc-title" title="'+escapeHtml(d.titulo||'—')+'">'+escapeHtml(d.titulo || '(sem título)')+'</div>'
+              + '<div class="promoc-meta">SKU: '+escapeHtml(d.sku || 'sem SKU')+(d.promotionLabel ? ' &nbsp;|&nbsp; '+escapeHtml(d.promotionLabel) : '')+(d.loja ? ' &nbsp;|&nbsp; '+escapeHtml(d.loja) : '')+'</div>'
+            + '</div>'
+            + decisionBadgeHTML(d)
+          + '</div>'
+          + reasonGridHTML(d)
+          + '<div class="promoc-compare-actions">'
+            + compareHTML(d)
+            + '<div class="promoc-actions">'+acoesBtns+'</div>'
+          + '</div>';
+
+        if(state.editandoId === d.id){
+          html += '<div style="padding:0 14px 14px;">'
+            + '<div class="inline-form" style="margin:0;align-items:flex-end;">'
+              + '<div class="field narrow"><label>'+campoAlteracaoLabel(d)+'</label><input type="number" step="0.01" min="0" id="valorAlterado-'+d.id+'" value="'+escapeHtml(String(valorInicialAlteracao(d)))+'"></div>'
+              + '<button class="primary-btn enabled" data-acao="confirmar-alterar" data-id="'+d.id+'" type="button">'+svg('check')+'<span>Confirmar alteração</span></button>'
+              + '<button class="ghost-btn" data-acao="cancelar-alterar" data-id="'+d.id+'" type="button" style="cursor:pointer;opacity:1;"><span>Cancelar</span></button>'
+            + '</div>'
+          + '</div>';
+        }
+        return html + '</article>';
+      }
+
+      // ---- Painel lateral: linha do tempo real do 1º item da aba atual + resumo real do agente ----
+      function timelineHTML(){
+        const itemRef = state.itens[0];
+        if(!itemRef) return '<div class="promoc-muted">Nenhum item pra mostrar a linha do tempo agora.</div><div class="promoc-timeline"></div>';
+        const eventos = [];
+        eventos.push({ titulo:'Identificado pela IA', data: itemRef.criadoEm, desc:'A IA coletou preço, desconto, margem e estoque reais do Mercado Livre pra este item.' });
+        if(itemRef.atualizadoEm && itemRef.atualizadoEm !== itemRef.criadoEm) eventos.push({ titulo:'Última atualização', data: itemRef.atualizadoEm, desc:'Os números foram recalculados no ciclo automático mais recente.' });
+        if(itemRef.decididoEm) eventos.push({ titulo:'Sua decisão registrada', data: itemRef.decididoEm, desc:(STATUS_LABEL[itemRef.statusDecisao]||itemRef.statusDecisao)+(itemRef.decididoPor? ' por '+itemRef.decididoPor : '') });
+        if(itemRef.resultadoAvaliadoEm) eventos.push({ titulo:'Resultado reavaliado pela IA', data: itemRef.resultadoAvaliadoEm, desc:'Margem real depois da decisão: '+pctFmt(itemRef.resultadoSnapshot && itemRef.resultadoSnapshot.margemRealPct) });
+        else if(itemRef.decididoEm) eventos.push({ titulo:'Aguardando reavaliação', data:null, desc:'A IA reavalia o resultado automaticamente alguns dias depois da decisão.' });
+
+        return '<div class="promoc-muted" title="'+escapeHtml(itemRef.titulo||'')+'">'+escapeHtml(itemRef.titulo || '(sem título)')+'</div>'
+          + '<div class="promoc-timeline">'
+            + eventos.map((e)=> '<div class="promoc-event"><b>'+(e.data ? fmtDataHora(e.data)+' — ' : '')+escapeHtml(e.titulo)+'</b><p>'+escapeHtml(e.desc)+'</p></div>').join('')
+          + '</div>';
+      }
+
+      function resumoLateralHTML(r){
+        return '<div class="promoc-muted">Números reais de todas as decisões já registradas por este agente.</div>'
+          + '<div class="promoc-summary-grid">'
+            + '<div class="promoc-summary-box"><small>Aprovadas</small><b class="g">'+r.aprovadas+'</b></div>'
+            + '<div class="promoc-summary-box"><small>Recusadas</small><b class="r">'+r.recusadas+'</b></div>'
+            + '<div class="promoc-summary-box"><small>Decididas hoje</small><b>'+r.decididasHoje+'</b></div>'
+            + '<div class="promoc-summary-box"><small>Já reavaliadas</small><b>'+r.avaliadasCount+'</b></div>'
+          + '</div>'
+          + '<div class="promoc-note">'+(r.avaliadasCount
+              ? '💡 Margem média real nas '+r.avaliadasCount+' decisão(ões) já reavaliada(s) pela IA: '+pctFmt(r.margemMedia)+'.'
+              : '💡 A IA reavalia o resultado real de cada decisão automaticamente alguns dias depois — ainda não há nenhuma reavaliação concluída.')+'</div>';
+      }
+
+      // ---- Histórico continua em tabela (mesmo formato de sempre) — só os cards de resumo acima mudaram ----
+      function referenciaPromocaoHTML(d){
         return '<div class="cell-stack"><span class="prod-title" title="'+escapeHtml(d.titulo||'—')+'">'+escapeHtml(d.titulo || '(sem título)')+'</span>'
           + '<span class="cell-stack-sub mono">'+escapeHtml(d.sku || 'sem SKU')+'</span>'
           + '<span class="cell-stack-sub">'+escapeHtml(d.promotionLabel || d.promotionType || '')+'</span></div>';
-      },
-      resultadoHTML: (d)=>{
+      }
+      function resultadoPromocaoHTML(d){
         const r = d.resultadoSnapshot || {};
         return '<div class="mono" style="'+(r.margemRealPct!==null && r.margemRealPct!==undefined ? (r.margemRealPct>=0?'color:var(--success);':'color:var(--danger);') : '')+'">Margem real: '+pctFmt(r.margemRealPct)+'</div>'
           + '<div class="cell-stack-sub">'+fmtDataHora(d.resultadoAvaliadoEm)+'</div>';
-      },
-    });
+      }
+      function tabelaHistoricoPromocoesHTML(itens){
+        return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Anúncio / Promoção</th><th>Sugestão da IA (situação e motivo)</th><th>Minha decisão</th><th>Ação executada</th><th>Resultado posterior</th>'
+          + '</tr></thead><tbody>'
+          + itens.map((d)=> '<tr>'
+            + '<td>'+referenciaPromocaoHTML(d)+'</td>'
+            + '<td style="max-width:380px;">'+sugestaoResumoHTML(d)+'</td>'
+            + '<td>'+decisaoResumoHTML(d)+'</td>'
+            + '<td>'+executadoHTML(d, null)+'</td>'
+            + '<td>'+(d.resultadoAvaliadoEm ? resultadoPromocaoHTML(d) : '<span style="color:var(--text-faint);font-style:italic;" title="A IA reavalia automaticamente alguns dias após a decisão.">Ainda não avaliado</span>')+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      function render(){
+        const root = document.getElementById('agentePromocoesRoot');
+        if(!root) return;
+        const filtro = window.CerneFiltro.state;
+
+        if(!filtro.loadingEmpresas && !filtro.empresas.length){
+          root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+            + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para usar este agente.</p></div>';
+          return;
+        }
+
+        const r = resumoReal();
+        const a = state.agente;
+        let html = '<div class="table-card" style="padding:20px;margin-bottom:14px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">'
+          + '<div class="kpi-hero-icon" style="flex-shrink:0;">'+svg((a && a.icone) || 'sparkle')+'</div>'
+          + '<div style="min-width:0;flex:1;">'
+            + '<div class="panel-title" style="margin:0 0 4px;">'+escapeHtml((a && a.nome) || 'Promoções')+'</div>'
+            + '<div class="field-hint" style="max-width:760px;">'+escapeHtml((a && a.descricao) || 'Analisa promoções do Mercado Livre e recomenda entrar, não entrar, sair ou revisar o preço promocional, sempre pela margem real.')+'</div>'
+            + '<div class="field-hint" style="margin-top:8px;color:var(--text-faint);">Fase 1: a IA só analisa e recomenda — nenhuma ação é executada automaticamente no Mercado Livre. Toda decisão sua fica registrada no histórico.</div>'
+          + '</div>'
+        + '</div>';
+
+        html += kpisHTML(r);
+
+        html += '<div class="toolbar" style="margin-top:14px;">'
+          + '<div class="seg" id="agentePromocoesTabs">'
+            + '<button type="button" data-aba="pendentes" class="'+(state.aba==='pendentes'?'active':'')+'">Pendentes'+(r.pendentes ? ' ('+r.pendentes+')' : '')+'</button>'
+            + '<button type="button" data-aba="historico" class="'+(state.aba==='historico'?'active':'')+'">Histórico</button>'
+          + '</div>'
+          + '<button class="ghost-btn" id="agentePromocoesGerarAgora" type="button" style="cursor:pointer;opacity:1;" '+(state.gerando?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.gerando?'Gerando…':'Gerar sugestões agora')+'</span></button>'
+        + '</div>';
+
+        if(state.loading){
+          html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+        } else if(state.error){
+          html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+            + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+        } else if(!state.itens.length){
+          html += '<div class="empty-panel"><div class="empty-icon">'+svg('checkCircle')+'</div>'
+            + '<h2>'+(state.aba==='pendentes' ? 'Nenhuma sugestão pendente' : 'Nenhuma decisão no histórico ainda')+'</h2>'
+            + '<p class="lead">'+(state.aba==='pendentes'
+                ? 'Quando a IA identificar uma promoção pra analisar, ela aparece aqui para você aprovar, alterar ou recusar.'
+                : 'Decisões que você aprovar, alterar ou recusar aparecem aqui, junto do resultado real assim que a IA reavaliar.')+'</p></div>';
+        } else if(state.aba === 'pendentes'){
+          html += '<div class="promoc-workspace">'
+            + '<div class="promoc-approvals">'+state.itens.map(approvalCardHTML).join('')+'</div>'
+            + '<aside class="promoc-side">'
+              + '<section class="promoc-side-card"><h3>Linha do tempo</h3>'+timelineHTML()+'</section>'
+              + '<section class="promoc-side-card"><h3>Resumo do agente</h3>'+resumoLateralHTML(r)+'</section>'
+            + '</aside>'
+          + '</div>';
+        } else {
+          html += tabelaHistoricoPromocoesHTML(state.itens);
+        }
+
+        root.innerHTML = html;
+
+        const tabsEl = document.getElementById('agentePromocoesTabs');
+        if(tabsEl) tabsEl.querySelectorAll('button').forEach((b)=> b.addEventListener('click', ()=>{ state.aba = b.dataset.aba; state.editandoId = null; carregarDecisoes(); }));
+        const btnGerar = document.getElementById('agentePromocoesGerarAgora');
+        if(btnGerar) btnGerar.addEventListener('click', gerarAgora);
+
+        root.querySelectorAll('[data-acao]').forEach((btn)=> btn.addEventListener('click', ()=>{
+          const id = Number(btn.dataset.id);
+          const acao = btn.dataset.acao;
+          if(acao === 'alterar-toggle'){ state.editandoId = state.editandoId === id ? null : id; render(); return; }
+          if(acao === 'cancelar-alterar'){ state.editandoId = null; render(); return; }
+          if(acao === 'confirmar-alterar'){
+            const input = document.getElementById('valorAlterado-'+id);
+            const valor = Number(input.value);
+            if(!Number.isFinite(valor) || valor < 0){ toast('Informe um valor válido.', 'error'); return; }
+            const d = state.itens.find((x)=> x.id === id);
+            if(!d) return;
+            decidir(id, 'alterada', { [campoAlteracaoChave(d)]: valor });
+            return;
+          }
+          if(acao === 'aprovada'){
+            const d = state.itens.find((x)=> x.id === id);
+            decidir(id, 'aprovada', d ? d.valorSugeridoIa : null);
+            return;
+          }
+          if(acao === 'recusada'){ decidir(id, 'recusada', null); return; }
+        }));
+      }
+
+      return { load };
+    })();
   })();
 
   /* ================= AGENTES DE SAC — Mercado Livre / Shopee (14/09/2026) =================

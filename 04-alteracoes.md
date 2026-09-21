@@ -2,6 +2,65 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-21 (58) — Novo layout da tela do agente "Promoções" (só aparência, nenhum dado/rota/regra mudou)
+- **Pedido explícito do usuário:** mandou um arquivo HTML (mockup próprio,
+  "painel_agentes_pf_1.html") com um layout novo — cards de resumo no topo,
+  cartão por sugestão (em vez de linha de tabela), com comparação
+  antes/depois e linha do tempo — pedindo pra aplicar EXATAMENTE esse visual
+  na tela real de Promoções do sistema, e reforçou: **"não é pra mudar nada
+  além do lyaut de promoções"**.
+- **Decisão de arquitetura:** a tela de Promoções (`window.AgentePromocoes`)
+  usava a mesma fábrica genérica `criarModuloAgenteDecisoes()` que também
+  monta a tela de Ads e Performance (`window.AgenteAds`) — mudar o layout
+  dentro da fábrica mudaria as duas telas. Pra cumprir literalmente "só
+  Promoções, nada além disso", `window.AgentePromocoes` virou um módulo
+  próprio, independente da fábrica — `criarModuloAgenteDecisoes` e
+  `window.AgenteAds` continuam exatamente como estavam, nenhuma linha
+  tocada. Nenhum endpoint novo, nenhuma rota nova, nenhuma tabela do banco
+  tocada: os mesmos 4 endpoints de sempre (`GET/PUT /api/promocoes/decisoes`,
+  `POST /api/promocoes/analisar`, `GET /api/promocoes/config`) continuam
+  sendo os únicos usados.
+- **Honestidade dos números (regra permanente deste projeto — nunca
+  inventar dado):** o mockup do usuário mostrava alguns números que não têm
+  equivalente real no sistema hoje — "conversão estimada", uma fila fixa de
+  "próximas ações" e um "resultado em R$" que a IA nunca calculou. Em vez de
+  inventar esses campos, a tela nova só usa números que a API já devolve de
+  verdade: `snapshot.precoNormal/precoPromo/descontoPct/margemRealPct/
+  coberturaDiasEstoque/estoqueAlto` (campos que já existiam na resposta de
+  `/api/promocoes/decisoes` mas não eram exibidos em lugar nenhum até
+  agora). Os 4 cards de resumo no topo (Aguardando aprovação / Aprovadas /
+  Recusadas / Margem média avaliada) são contagens reais sobre as decisões
+  já registradas — quando ainda não há nenhuma decisão reavaliada pela IA
+  (o que só acontece `IA_DECISOES_DIAS_AVALIACAO` dias depois, ver
+  `lib/ia/promocoesDecisoesStore.js`), o card mostra "—" em vez de 0 ou um
+  número inventado.
+- **O que mudou de verdade na tela:** a aba "Pendentes" trocou a tabela por
+  um cartão por sugestão (título, SKU, loja, selo colorido com a ação
+  sugerida, 4 caixas de contexto — o que a IA encontrou / ação sugerida /
+  motivo / estoque —, comparação de preço antes→depois com margem e
+  desconto reais, e os botões Aprovar/Alterar/Recusar de sempre — mesmíssima
+  função `decidir()`/mesma rota `PUT .../decisoes/:id`). Um painel lateral
+  novo mostra a linha do tempo real do primeiro item da lista (datas reais:
+  identificado pela IA → última atualização → decisão → reavaliação) e um
+  resumo com as contagens reais. A aba "Histórico" continua sendo a mesma
+  tabela de sempre (só o card de resumo acima dela mudou).
+- **Cores nos dois temas:** o mockup era um preview de tema escuro fixo; a
+  tela real do sistema já suporta claro (padrão) e escuro (alternável). Por
+  isso o layout novo usa os mesmos tokens de cor que o resto do sistema já
+  usa (`var(--surface)`, `var(--border)`, `var(--success)`, `var(--danger)`,
+  `var(--warning)`, `var(--purple)` etc.) em vez dos hexadecimais fixos do
+  mockup — continua funcionando certo nos dois temas, sem precisar de CSS
+  novo pra isso.
+- **Verificação:** sintaxe do JavaScript inteiro do arquivo (`node --check`
+  no `<script>` extraído) sem erro; balanceamento de chaves do CSS
+  conferido; `diff` contra o zip anterior (ml99) confirmando que SÓ
+  `public/index.html` mudou, e dentro dele só o bloco de
+  `window.AgentePromocoes` foi substituído (a fábrica e o Ads continuam
+  intactos); as funções novas de formatação (badge de decisão, texto do
+  problema encontrado, comparação de preço, resumo agregado) foram testadas
+  isoladamente com dados no formato real da API (3 tipos de sugestão
+  diferentes) — todas produziram o texto esperado, nenhum erro lançado.
+
 ## 2026-09-21 (57) — Telegram como alternativa ao WhatsApp pros avisos automáticos
 - **Contexto:** o WhatsApp via Twilio segue exigindo um "Content Template"
   aprovado pela Meta pra funcionar fora da janela de 24h (ver comentário em
