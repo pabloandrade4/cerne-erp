@@ -157,4 +157,4 @@ function periodoParaDatasBRT({ desde, ate }) {
   return { desde: diaBRT(desde), ate: diaBRT(new Date(ate.getTime() - 1)) };
 }
 
-module.exports = { PERIODOS, calcularPeriodo, diaBRT, horaBRT, dataCalendarioISO, inicioDoDiaBRTDeString, periodoParaDatasBRT };
+module.exports = { PERIODOS, calcularPeriodo, diaBRT, horaBRT, dataCalendarioISO, inicioDoDiaBRTDeString, periodoParaDatasBRT, inicioDoMesBRT };

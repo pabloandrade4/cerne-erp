@@ -117,4 +117,32 @@ async function listarChatsRecentes(opts = {}) {
   }
 }
 
-module.exports = { telegramConfigurado, enviarMensagemTelegram, listarChatsRecentes };
+// Registra (POST setWebhook) a URL deste servidor no Telegram, pra ele
+// começar a AVISAR o servidor toda vez que alguém mandar mensagem pro bot —
+// sem isso o bot só consegue mandar avisos (nunca "ouve" nada). Chamado só
+// por routes/telegram.js#GET /ativar-conversa (o usuário abre esse link uma
+// vez depois do deploy). Mesmo contrato { ok, motivo?, detalhe? } das outras
+// funções deste arquivo — nunca lança pra quem chama.
+async function registrarWebhook(url, opts = {}) {
+  const fetchFn = opts.fetchFn || fetchComTimeout;
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return { ok: false, motivo: 'nao_configurado' };
+  try {
+    const res = await fetchFn(`${TELEGRAM_API_BASE}/bot${token}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    let dataBody = null;
+    try { dataBody = await res.json(); } catch (e) { /* segue com null */ }
+    if (!res.ok || !(dataBody && dataBody.ok)) {
+      const mensagemErro = (dataBody && dataBody.description) || `HTTP ${res.status}`;
+      return { ok: false, motivo: 'erro_api', detalhe: mensagemErro };
+    }
+    return { ok: true, urlConfigurada: url, descricao: dataBody.description };
+  } catch (err) {
+    return { ok: false, motivo: err && err.status === 504 ? 'tempo_esgotado' : 'erro_rede', detalhe: err && err.message };
+  }
+}
+
+module.exports = { telegramConfigurado, enviarMensagemTelegram, listarChatsRecentes, registrarWebhook };
