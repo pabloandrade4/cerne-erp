@@ -3,6 +3,60 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-23 (60) — Remoção de Concorrente/Promoções do menu + Agente de Envio Full
+- **Pedido do usuário (literal):** "quero fazer algumas mudanças nos
+  sistema / retirar analise de concorrentes e radar de concorrente /
+  retirar promoçoes / retirar ia de promoçao // quero colocar 2 novas
+  coisas a / 1-um agente de compras igual ja tinha solicitado
+  anteriormente, para me auxiliar e fazer meticas de quanto vendeu, quanto
+  tem que comprar, / 2-agente de envio full- quando enviar ro full, quado
+  ta acabando, quando segurar, quanto gastei de envios full no mes / tem
+  como puxar via api oque esta em trasferencia para o ful??"
+- **Remoção (só do menu, mesmo padrão de 19/09/2026 — SAC):** "Análise de
+  Concorrente", "Radar de Concorrentes", "IA de Promoções" e "Promoções"
+  saíram do menu lateral (`GROUPS` em `public/index.html`). O backend de
+  cada um (`routes/promocoes.js`, `lib/concorrente.js`,
+  `lib/radarConcorrentes.js`, `routes/concorrente.js`,
+  `routes/radarConcorrentes.js`, tabelas no banco, schedulers em
+  `server.js`) **continua existindo e rodando** — nada foi apagado. O
+  usuário confirmou explicitamente essa opção (só tirar do menu) em vez de
+  remover de verdade.
+- **Agente de Compras:** o usuário pediu um agente pra "fazer métricas de
+  quanto vendeu, quanto tem que comprar" — isso já existe, é a tela
+  "Compras com IA" (decisão 58/22-23/09/2026). O usuário confirmou
+  explicitamente manter como está, sem nenhuma mudança.
+- **Agente de Envio Full (novo):** reaproveita a MESMA régua de decisão já
+  usada e aprovada em Compras com IA (`lib/ia/comprasMotor.js` — dias de
+  cobertura, projeção de venda diária ponderada com mais peso pros dias
+  recentes quando acelera/desacelera, ponto de recompra) — o usuário
+  confirmou explicitamente essa reutilização em vez de uma lógica nova do
+  zero. Diferença: decide quando TRANSFERIR estoque do Galpão pro Full
+  (não quando comprar do fornecedor), e a cobertura analisada é só a do
+  Full (o Galpão é fonte do envio, não "estoque disponível pro cliente").
+  A quantidade sugerida nunca passa do que existe no Galpão — quando falta
+  estoque de sobra, o agente sinaliza `semEstoqueGalpaoSuficiente` em vez
+  de recomendar um envio impossível de cumprir. Ver
+  `lib/ia/envioFullMotor.js`, `lib/ia/envioFullCiclo.js`,
+  `routes/envioFull.js`.
+- **Custo mensal de envio ao Full:** lançamento MANUAL (empresa + ano +
+  mês + valor + observação, upsert por mês) — nunca inventado. Motivo:
+  pesquisamos a API de Relatórios de Cobrança do Mercado Livre (`/billing
+  /integration/...`) e a documentação pública não confirma o nome exato de
+  uma cobrança separada para envio/armazenagem no Full (só documenta
+  "Cargo por Mercado Envíos", que é o frete normal ao cliente, uma coisa
+  diferente). Ver `05-problemas-conhecidos.md` para o detalhe completo
+  dessa investigação e o que falta pra automatizar.
+- **Pergunta do usuário sobre puxar "o que está em transferência pro Full"
+  via API:** pesquisado (`GET /inventories/{id}/stock/fulfillment` tem um
+  status `transfer` dentro de `not_available_detail`, mas com semântica
+  ambígua — não é claro se é "indo pro Full" ou "saindo do Full"; e `GET
+  /stock/fulfillment/operations/search` tem um tipo `inbound_reception`
+  que é o estoque JÁ recebido, não o que ainda está em trânsito). Não há
+  um endpoint documentado, dedicado e sem ambiguidade, pra "quantidade a
+  caminho do Full, ainda não recebida" — por isso o Agente de Envio Full
+  não tenta mostrar esse número por enquanto (nunca inventar um dado que a
+  API não confirma com clareza).
+
 ## 2026-09-22 (59) — Calculadora de Vendas (Venda de Balcão): 3º canal de faturamento, junto de Mercado Livre e Shopee
 - **Pedido do usuário (literal):** "quero colocar agora uma calculadora de
   vendas pra eu vende[r] para o cliente final que vem até a minha empresa

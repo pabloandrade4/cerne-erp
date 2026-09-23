@@ -1554,8 +1554,19 @@
         bullets:['Uma linha por anúncio/variação','Quantidade somente leitura (ajuste é feito no Mercado Livre)','Sincronização automática a cada 1 minuto','SKU, loja, ID do anúncio, status e última sincronização'] },
       { id:'stockFull', title:'Estoque Full', icon:'layers', action:'Sincronizar agora', desc:'Quantidade armazenada no Full do Mercado Livre — separada do estoque fora do Full, somente leitura.',
         bullets:['Uma linha por anúncio/variação com logística Full','Quantidade somente leitura','Sincronização automática a cada 1 minuto','Nunca somado com o estoque fora do Full'] },
-      { id:'purchases', title:'Compras', icon:'cart', action:'Novo pedido de compra', desc:'Pedidos de compra e reposição junto a fornecedores.',
-        bullets:['Sugestão de reposição por cobertura','Pedidos de compra e aprovação','Recebimento e conferência','Histórico de preços por fornecedor'] },
+      { id:'purchases', title:'Compras com IA', icon:'cart', action:'Gerar recomendações agora', desc:'Central inteligente de reposição de estoque — a IA analisa cada modelo físico e recomenda quanto comprar; você aprova.',
+        bullets:['Análise por modelo físico, não por SKU','Recomendação com quantidade e valor estimado','Aprovação sempre humana antes do pedido','Histórico de pedidos e desempenho da IA'] },
+      // 22/09/2026, pedido explícito do usuário: "quero colocar agora uma
+      // calculadora de vendas pra eu vende[r] para o cliente final que vem
+      // até a minha empresa... porque todas as vendas que eu faço pro fora
+      // eu nao coloco no faturamento sei que isso é errado mas quero
+      // arrumar" — venda de balcão (presencial, sempre à vista) que agora
+      // conta em TODO o sistema (Visão Geral/DRE/Relatórios/Faturamento),
+      // baixa o estoque automaticamente e só permite produto já cadastrado
+      // (ver lib/vendaBalcao.js e o novo canal 'balcao' em
+      // lib/relatorioVendas.js).
+      { id:'vendaBalcao', title:'Calculadora de Vendas', icon:'store', action:'Nova venda', desc:'Registre uma venda feita presencialmente na sua empresa, pro cliente final — sempre à vista. Ela passa a contar em TODO o sistema (Visão Geral, DRE, Relatórios e Faturamento) e baixa o estoque automaticamente.',
+        bullets:['Só produtos já cadastrados em Produtos, pra sempre ter custo real por trás','Baixa o estoque "fora do Full" automaticamente','Sempre pago na hora (dinheiro, PIX, débito, crédito ou outro)','Cancelamento nunca apaga — fica registrado como cancelada'] },
     ]},
     { id:'financeiro', label:'Financeiro', open:false, items:[
       { id:'finance', title:'Financeiro', icon:'wallet', action:'Novo lançamento', desc:'Visão consolidada do caixa e das movimentações financeiras do grupo.',
@@ -1586,8 +1597,12 @@
         bullets:['Conversão = pedidos ÷ visitas × 100','Ranking de mais/menos visitados e melhor/pior conversão','Gráficos de visitas x vendas e conversão no tempo','Nunca inventa número de visita'] },
       { id:'margemAnuncio', title:'Margem por Anúncio', icon:'wallet', desc:'Margem de contribuição real de cada anúncio, antes e depois do Ads — mesma fórmula de Pedidos, Financeiro e Relatórios.',
         bullets:['Faturamento, custo, imposto, tarifas e frete por anúncio','Resultado após Ads (margem − investimento)','Rankings de maior resultado, prejuízo e margem %','Sinaliza margem incompleta quando falta custo do SKU'] },
-      { id:'promocoesIa', title:'IA de Promoções', icon:'sparkle', desc:'A IA analisa seus anúncios do Mercado Livre e recomenda entrar ou sair de promoções, sempre calculando a margem real — nunca só pelo percentual de desconto.',
-        bullets:['Status da integração: leitura ou leitura e escrita','Margem mínima configurável por empresa','Recomendação explicada anúncio por anúncio (próxima etapa)','Nunca aplica nada sem permissão de escrita e sua confirmação'] },
+      // 23/09/2026, pedido explícito do usuário: remover "IA de Promoções"
+      // do menu (junto de Promoções, Análise de Concorrente e Radar de
+      // Concorrentes, abaixo). Nada foi apagado por baixo — mesmo padrão já
+      // usado em 19/09/2026 pra SAC: o backend (routes/promocoes.js,
+      // lib/ia/promocoesCiclo.js etc.) continua existindo e rodando, só a
+      // aba some do menu.
       { id:'reports', title:'Relatórios', icon:'lineChart', action:'Novo relatório', desc:'Relatórios operacionais e financeiros configuráveis.',
         bullets:['Relatórios pré-configurados','Exportação em Excel e PDF','Filtros por empresa, canal e período','Relatórios agendados'] },
     ]},
@@ -1616,25 +1631,22 @@
         bullets:['Cruza achados de agentes diferentes pro mesmo SKU (ex.: anúncio caiu + Ads pausado)','Cada conclusão cita o dado real que a embasa — nunca um texto solto','Acompanha estoque zerado, promoção com margem comprometida e concorrente cadastrado','Roda automaticamente todo dia — "Analisar agora" pra rodar na hora'] },
       { id:'agenteAds', title:'Ads e Performance', icon:'megaphone', desc:'O agente de IA analisa suas campanhas e anúncios e sugere ações de orçamento, ACOS e pausa/escala — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
         bullets:['Sugestões com base nos dados reais de cada campanha/anúncio','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
-      { id:'agentePromocoes', title:'Promoções', icon:'sparkle', desc:'O agente de IA identifica oportunidades de promoção, calcula a margem real e sugere entrar, não entrar ou alterar o preço — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
-        bullets:['Sugestões com base na margem real, nunca só no desconto','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
-      // 19/09/2026, pedido explícito do usuário: "quero que pesquise os
-      // modelos de produtos que eu vendo e me entregue um relatório de
-      // preços mas só quero daqueles concorrentes que estão vendendo" — tela
-      // nova pra buscar concorrentes de um produto (ver lib/concorrente.js).
-      { id:'concorrente', title:'Análise de Concorrente', icon:'search', desc:'Escolha um produto seu e a IA busca, no Mercado Livre, quem mais está vendendo o mesmo produto agora — com preço, estoque e o nível de confiança de cada achado.',
-        bullets:['Busca pelo anúncio real que já vendeu o SKU, nunca um termo inventado','Prioriza o catálogo do Mercado Livre (mesmo produto garantido)','Sem catálogo, mostra candidatos por título — você confirma','Só entram concorrentes realmente vendendo agora (ativo + com estoque)'] },
-      // 21/09/2026, pedido explícito do usuário (com mockup de referência
-      // visual, pf_radar_concorrentes_v2.html): cadastrar UM anúncio
-      // específico de um concorrente (nome, link, SKU, marketplace) e o
-      // sistema passa a monitorar sozinho preço, promoção, foto de capa,
-      // título e frete, guardando histórico e gerando alertas — diferente
-      // da Análise de Concorrente acima (que busca/descobre concorrentes
-      // automaticamente; aqui é o usuário que já escolheu o anúncio). Ver
-      // comentário grande em db/schema.sql (tabela radar_concorrentes) e em
-      // lib/radarConcorrentes.js.
-      { id:'radarConcorrentes', title:'Radar de Concorrentes', icon:'eye', desc:'Cadastre o link de um anúncio concorrente específico e o sistema monitora sozinho preço, promoção, foto de capa, título e frete — guardando histórico e avisando quando algo muda.',
-        bullets:['Monitoramento automático real para Mercado Livre (relê o anúncio de tempos em tempos)','Shopee/TikTok Shop podem ser cadastrados, mas sem leitura automática nesta versão','Histórico de preço e alertas de mudança por concorrente','Nunca inventa dado: quando a leitura falha, mostra o motivo real'] },
+      // 23/09/2026, pedido explícito do usuário: "agente de envio full -
+      // quando enviar ro full, quado ta acabando, quando segurar, quanto
+      // gastei de envios full no mes". Mesma régua de decisão já usada e
+      // aprovada em Compras com IA (lib/ia/comprasMotor.js), adaptada pra
+      // decidir quando transferir estoque do Galpão pro Full — nunca envia
+      // nada sozinho, toda recomendação passa por aprovação aqui.
+      { id:'envioFull', title:'Agente de Envio Full', icon:'truck', desc:'A IA acompanha o estoque no Full e no Galpão de cada modelo físico e recomenda quando enviar, quando o Full está acabando e quando segurar — além de guardar quanto foi gasto com envio ao Full a cada mês.',
+        bullets:['Quando enviar ao Full: cobertura de estoque, projeção de venda e prazo de envio, mesma régua de Compras com IA','Quando está acabando: alerta antes do Full zerar','Quando segurar: Full abastecido, ou Galpão sem estoque de sobra pra enviar','Custo mensal de envio ao Full lançado manualmente — automação via API do Mercado Livre ainda não confirmada (ver 05-problemas-conhecidos.md)'] },
+      // 23/09/2026, pedido explícito do usuário: "retirar analise de
+      // concorrentes e radar de concorrente / retirar promoçoes / retirar
+      // ia de promoçao". Removidas do menu 'Promoções' (agentePromocoes),
+      // 'Análise de Concorrente' (concorrente) e 'Radar de Concorrentes'
+      // (radarConcorrentes) — mesmo padrão de 19/09/2026 (SAC): nada
+      // apagado por baixo, o backend (routes/promocoes.js, lib/concorrente.js,
+      // lib/radarConcorrentes.js etc.) continua existindo e rodando, só a
+      // aba some do menu.
     ]},
   ];
 
@@ -1709,7 +1721,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','planoAcaoDia','agenteAds','agentePromocoes','concorrente','sacMercadoLivre','sacShopee','salaAgentes','radarConcorrentes'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','vendaBalcao','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','planoAcaoDia','agenteAds','envioFull','agentePromocoes','concorrente','sacMercadoLivre','sacShopee','salaAgentes','radarConcorrentes'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1726,7 +1738,11 @@
     } else if(id === 'stockFull'){
       inner += '<button class="primary-btn enabled" id="btnSincronizarEstoqueFull" type="button">'+svg('refreshCw')+'<span>Sincronizar agora</span></button>';
     } else if(id === 'purchases'){
-      inner += '<button class="primary-btn enabled" id="btnNewCompra" type="button">'+svg('plus')+'<span>Nova compra</span></button>';
+      inner += '<button class="ghost-btn" id="btnGerarComprasIa" type="button" style="cursor:pointer;opacity:1;">'+svg('refreshCw')+'<span>Gerar recomendações agora</span></button>';
+    } else if(id === 'envioFull'){
+      inner += '<button class="ghost-btn" id="btnGerarEnvioFull" type="button" style="cursor:pointer;opacity:1;">'+svg('refreshCw')+'<span>Gerar recomendações agora</span></button>';
+    } else if(id === 'vendaBalcao'){
+      inner += '<button class="primary-btn enabled" id="btnNovaVendaBalcao" type="button">'+svg('plus')+'<span>Nova venda</span></button>';
     } else if(id === 'payable'){
       inner += '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">'
         + '<button class="ghost-btn" id="btnImportContasPagar" type="button" style="cursor:pointer;opacity:1;">'+svg('download')+'<span>Importar planilha</span></button>'
@@ -1763,6 +1779,7 @@
     else if(id === 'stock'){ inner += '<div id="estoqueRoot"></div>'; }
     else if(id === 'stockFull'){ inner += '<div id="estoqueFullRoot"></div>'; }
     else if(id === 'purchases'){ inner += '<div id="comprasRoot"></div>'; }
+    else if(id === 'vendaBalcao'){ inner += '<div id="vendaBalcaoRoot"></div>'; }
     else if(id === 'payable'){ inner += '<div id="contasPagarRoot"></div>'; }
     else if(id === 'receivable'){ inner += '<div id="contasReceberRoot"></div>'; }
     else if(id === 'settlements'){ inner += '<div id="recebimentosRoot"></div>'; }
@@ -1781,6 +1798,7 @@
     else if(id === 'agentesIaHub'){ inner += '<div id="agentesIaHubRoot"></div>'; }
     else if(id === 'planoAcaoDia'){ inner += '<div id="planoAcaoDiaRoot"></div>'; }
     else if(id === 'agenteAds'){ inner += '<div id="agenteAdsRoot"></div>'; }
+    else if(id === 'envioFull'){ inner += '<div id="envioFullRoot"></div>'; }
     else if(id === 'agentePromocoes'){ inner += '<div id="agentePromocoesRoot"></div>'; }
     else if(id === 'concorrente'){ inner += '<div id="concorrenteRoot"></div>'; }
     else if(id === 'sacMercadoLivre'){ inner += '<div id="sacMercadoLivreRoot"></div>'; }
@@ -1821,6 +1839,7 @@
     if(id === 'stock' && window.Estoque) window.Estoque.load();
     if(id === 'stockFull' && window.EstoqueFull) window.EstoqueFull.load();
     if(id === 'purchases' && window.Compras) window.Compras.load();
+    if(id === 'vendaBalcao' && window.VendaBalcao) window.VendaBalcao.load();
     if(id === 'payable' && window.ContasPagar) window.ContasPagar.load();
     if(id === 'receivable' && window.ContasReceber) window.ContasReceber.load();
     if(id === 'settlements' && window.Recebimentos) window.Recebimentos.load();
@@ -1839,6 +1858,7 @@
     if(id === 'agentesIaHub' && window.AgentesIaHub) window.AgentesIaHub.load();
     if(id === 'planoAcaoDia' && window.PlanoAcaoDia) window.PlanoAcaoDia.load();
     if(id === 'agenteAds' && window.AgenteAds) window.AgenteAds.load();
+    if(id === 'envioFull' && window.EnvioFull) window.EnvioFull.load();
     if(id === 'agentePromocoes' && window.AgentePromocoes) window.AgentePromocoes.load();
     if(id === 'concorrente' && window.AgenteConcorrente) window.AgenteConcorrente.load();
     if(id === 'radarConcorrentes' && window.RadarConcorrentes) window.RadarConcorrentes.load();
@@ -3333,7 +3353,7 @@
         html += '<div class="toolbar" style="margin-bottom:14px;">'
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="ov2LojaSelect">'
             + '<option value="">Todas as lojas</option>'
-            + state.lojas.map(l=>'<option value="'+escapeHtml(l.chave)+'" '+(l.chave===state.contaId?'selected':'')+'>'+escapeHtml((l.marketplace==='shopee'?'[Shopee] ':'[ML] ')+(l.nickname||l.chave))+'</option>').join('')
+            + state.lojas.map(l=>'<option value="'+escapeHtml(l.chave)+'" '+(l.chave===state.contaId?'selected':'')+'>'+escapeHtml((l.marketplace==='shopee'?'[Shopee] ':l.marketplace==='balcao'?'[Balcão] ':'[ML] ')+(l.nickname||l.chave))+'</option>').join('')
           + '</select></div>'
         + '</div>';
       }
@@ -4119,7 +4139,7 @@
               : '')
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedLojaSelect">'
             + '<option value="">Todas as lojas</option>'
-            + state.filtrosDisponiveis.lojas.map(l=>'<option value="'+escapeHtml(l.chave)+'" '+(l.chave===state.contaId?'selected':'')+'>'+escapeHtml((l.marketplace==='shopee'?'[Shopee] ':'[ML] ')+(l.nickname||l.chave))+'</option>').join('')
+            + state.filtrosDisponiveis.lojas.map(l=>'<option value="'+escapeHtml(l.chave)+'" '+(l.chave===state.contaId?'selected':'')+'>'+escapeHtml((l.marketplace==='shopee'?'[Shopee] ':l.marketplace==='balcao'?'[Balcão] ':'[ML] ')+(l.nickname||l.chave))+'</option>').join('')
           + '</select></div>'
           + '<div class="empresa-picker" style="margin-bottom:0;"><select id="pedStatusSelect">'
             + '<option value="">Todos os status</option>'
@@ -4164,7 +4184,7 @@
           + '</tr></thead><tbody>'
           + state.items.map(p => '<tr data-row-detail="'+escapeHtml(p.detailKey)+'" style="cursor:pointer;'+(p.cancelado?'opacity:.6;':'')+'">'
             + '<td class="tab-nums">'+fmtDataCell(p.dataCriacao)+'</td>'
-            + '<td><span class="badge-status '+(p.marketplace==='shopee'?'off':'on')+'" style="display:inline-flex;" title="'+(p.marketplace==='shopee'?'Shopee':'Mercado Livre')+'"><span class="dot"></span>'+(p.marketplace==='shopee'?'Shopee':'ML')+'</span></td>'
+            + '<td><span class="badge-status '+(p.marketplace==='shopee'?'off':p.marketplace==='balcao'?'warn':'on')+'" style="display:inline-flex;" title="'+(p.marketplace==='shopee'?'Shopee':p.marketplace==='balcao'?'Venda no balcão':'Mercado Livre')+'"><span class="dot"></span>'+(p.marketplace==='shopee'?'Shopee':p.marketplace==='balcao'?'Balcão':'ML')+'</span></td>'
             + '<td class="mono">'+escapeHtml(p.mlOrderId)+'</td>'
             + '<td class="produto-cell">'
               + '<div class="cell-stack"><span class="prod-title" title="'+escapeHtml(p.produtoResumo||'—')+'">'+escapeHtml(p.produtoResumo||'—')+(p.qtdItens>3?' +'+(p.qtdItens-3):'')+'</span>'
@@ -4286,13 +4306,15 @@
 
       const { pedido, itens, resultadoFinanceiro: rf } = data;
       const moeda = pedido.moeda;
-      // Shopee (14/09/2026): mesmo painel de sempre, só trocando os campos
-      // que são específicos de cada marketplace (ID de pagamento/envio do
-      // Mercado Livre não existem na Shopee, e vice-versa — nunca mostrar
-      // um rótulo "Mercado Livre" pra um pedido da Shopee nem inventar um
-      // ID que a Shopee não manda).
+      // Shopee (14/09/2026) e Balcão (22/09/2026): mesmo painel de sempre,
+      // só trocando os campos que são específicos de cada canal (ID de
+      // pagamento/envio do Mercado Livre não existem na Shopee nem no
+      // Balcão, e vice-versa — nunca mostrar um rótulo "Mercado Livre" pra
+      // um pedido de outro canal nem inventar um ID que ele não manda).
       const isShopee = pedido.marketplace === 'shopee';
-      const canalLabel = isShopee ? 'Shopee' : 'Mercado Livre';
+      const isBalcao = pedido.marketplace === 'balcao';
+      const canalLabel = isShopee ? 'Shopee' : isBalcao ? 'Venda no balcão' : 'Mercado Livre';
+      const FORMA_PAGAMENTO_LABEL = { dinheiro:'Dinheiro', pix:'Pix', debito:'Débito', credito:'Crédito', outro:'Outro' };
       const bdLine = (label, valor, negative) => '<div class="bd-row'+(negative?' neg':'')+'">'
         + '<span class="bd-label">'+label+'</span>'
         + '<span class="bd-value">'+(valor===null ? '<span style="color:var(--text-faint); font-style:italic; font-family:\'Public Sans\',sans-serif; font-weight:500;">indisponível</span>' : (negative?'− ':'')+money(Math.abs(valor),moeda))+'</span>'
@@ -4311,9 +4333,13 @@
           + '<div class="dg-item"><div class="dg-label">Comprador</div><div class="dg-value">'+escapeHtml(pedido.compradorNickname||'—')+'</div></div>'
           + (isShopee
               ? '<div class="dg-item"><div class="dg-label">Forma de pagamento</div><div class="dg-value'+(pedido.metodoPagamento?'':' muted')+'">'+(escapeHtml(pedido.metodoPagamento)||'indisponível')+'</div></div>'
+              : isBalcao
+              ? '<div class="dg-item"><div class="dg-label">Forma de pagamento</div><div class="dg-value">'+(FORMA_PAGAMENTO_LABEL[pedido.formaPagamento]||escapeHtml(pedido.formaPagamento)||'—')+'</div></div>'
               : '<div class="dg-item"><div class="dg-label">ID do pagamento</div><div class="dg-value'+(pedido.mlPaymentId?'':' muted')+'">'+(pedido.mlPaymentId||'indisponível')+'</div></div>'
                 + '<div class="dg-item"><div class="dg-label">ID do envio (shipment)</div><div class="dg-value'+(pedido.mlShippingId?'':' muted')+'">'+(pedido.mlShippingId||'sem envio')+'</div></div>')
-          + '<div class="dg-item"><div class="dg-label">'+(isShopee?'Transportadora':'Modalidade de logística')+'</div><div class="dg-value'+(pedido.envioLogisticType?'':' muted')+'">'+(escapeHtml(pedido.envioLogisticType||pedido.envioLogisticMode)||'indisponível')+'</div></div>'
+          + (isBalcao
+              ? '<div class="dg-item"><div class="dg-label">Entrega</div><div class="dg-value">Retirada no local (venda de balcão)</div></div>'
+              : '<div class="dg-item"><div class="dg-label">'+(isShopee?'Transportadora':'Modalidade de logística')+'</div><div class="dg-value'+(pedido.envioLogisticType?'':' muted')+'">'+(escapeHtml(pedido.envioLogisticType||pedido.envioLogisticMode)||'indisponível')+'</div></div>')
         + '</div>'
 
         + '<div class="detail-section-title">Itens</div>'
@@ -4334,11 +4360,12 @@
         + (rf.margemPercentual!==null ? '<div class="bd-row"><span class="bd-label">% sobre o valor da venda</span><span class="bd-value '+(rf.margemPercentual>=0?'positive':'negative')+'">'+(rf.margemPercentual<0?'− ':'')+Math.abs(rf.margemPercentual).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%</span></div>' : '')
         + (rf.pendencias.length ? '<div class="bd-note">'+svg('alertCircle')+'<span>'+rf.pendencias.map(escapeHtml).join('<br>')+'</span></div>' : '')
 
-        + '<div class="detail-section-title">Frete pago pelo comprador (informativo)</div>'
-        + bdLine(isShopee ? 'Frete comprador' : 'Frete comprador (receiver.cost)', rf.freteComprador, false)
-        + '<div class="bd-side-note">'+(isShopee
-            ? 'A Shopee ainda não separa esse valor nos dados já sincronizados nesta etapa da integração.'
-            : 'Não entra no cálculo do resultado acima — é o valor pago pelo comprador, separado do custo de frete do vendedor.')+'</div>'
+        + (isBalcao ? '' :
+          '<div class="detail-section-title">Frete pago pelo comprador (informativo)</div>'
+          + bdLine(isShopee ? 'Frete comprador' : 'Frete comprador (receiver.cost)', rf.freteComprador, false)
+          + '<div class="bd-side-note">'+(isShopee
+              ? 'A Shopee ainda não separa esse valor nos dados já sincronizados nesta etapa da integração.'
+              : 'Não entra no cálculo do resultado acima — é o valor pago pelo comprador, separado do custo de frete do vendedor.')+'</div>')
 
         + '</div>';
 
@@ -6151,20 +6178,39 @@
     visaoFisica: true,
   });
 
-  /* ================= COMPRAS — primeira versão simples =================
-     Criar, listar, editar, pesquisar e mudar status de pedidos de compra a
-     um fornecedor. Sem IA de compras e sem automatizar entrada de estoque
-     ao marcar "Recebido" nesta etapa (pedido explícito do usuário). */
+  /* ================= COMPRAS COM IA — Central Inteligente de Reposição de
+     Estoque (22/09/2026, pedido explícito do usuário: substituir a aba
+     "Compras" simples por uma tela que analisa cada MODELO FÍSICO
+     (produtos_base) e recomenda quanto comprar). A IA NUNCA compra sozinha —
+     cada recomendação só vira pedido depois de aprovação humana aqui (PUT
+     /api/compras-ia/decisoes/:id — ver routes/comprasIa.js). O módulo antigo
+     de compras (CRUD simples, routes/compras.js, tabelas compras/
+     compra_itens) continua funcionando por baixo sem nenhuma alteração — só
+     perdeu a tela própria; o estoque "a caminho" calculado aqui soma os
+     pedidos dos dois sistemas (ver lib/ia/comprasCiclo.js), pra nunca
+     recomendar de novo algo que o usuário já comprou por lá. */
   (function(){
-    const STATUS_OPCOES = [
-      ['em_aberto','Em aberto'],
-      ['pedido_realizado','Pedido realizado'],
+    const STATUS_PEDIDO_OPCOES = [
+      ['aprovado','Aprovado'],
+      ['pedido_enviado','Pedido enviado'],
+      ['em_producao','Em produção'],
+      ['a_caminho','A caminho'],
       ['recebido','Recebido'],
       ['cancelado','Cancelado'],
     ];
-    const STATUS_LABEL = Object.fromEntries(STATUS_OPCOES);
-    const state = { empresas:[], empresaId:null, loadingEmpresas:false, items:[], loading:false, error:null, status:'todos', search:'' };
+    const STATUS_TINT = { saudavel:'success', atencao:'warning', programar:'copper', comprar_agora:'danger', ruptura:'danger', a_caminho:'muted' };
+    const STATUS_ORDEM = { ruptura:0, comprar_agora:1, programar:2, atencao:3, saudavel:4, a_caminho:5 };
 
+    const state = {
+      empresas:[], empresaId:null, loadingEmpresas:false,
+      aba: 'recomendacoes', busca:'',
+      linhas:[], resumo:null, loading:false, error:null, gerando:false,
+      pedidos:[], pedidosLoading:false, pedidosError:null,
+      desempenho:null, historicoCarregado:false,
+    };
+
+    // ---- helpers locais (mesmo padrão repetido em cada módulo desta tela —
+    // ver, por exemplo, o antigo window.Compras ou window.AgenteAds) ----
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
       const el = document.createElement('div');
@@ -6174,38 +6220,102 @@
       setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
     }
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-    function money(v){ return 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function round2(n){ return Math.round(n*100)/100; }
+    function money(v){ if(v===null||v===undefined) return '—'; return 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function intFmt(v){ return (v===null||v===undefined) ? '—' : Math.round(Number(v)).toLocaleString('pt-BR'); }
+    function numFmt(v){ return (v===null||v===undefined) ? '—' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:2}); }
     function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+    function tintStyle(tint){ return tint==='muted' ? 'color:var(--text-muted);background:var(--surface-2);' : 'color:var(--'+tint+');background:var(--'+tint+'-soft);'; }
 
+    // ---- chamadas de API ----
     async function apiEmpresasAtivas(){
       const res = await fetch('/api/empresas?status=ativas');
-      return ((await res.json()).empresas) || [];
-    }
-    async function api(path, opts){
-      const res = await fetch('/api/compras'+path, { headers:{'Content-Type':'application/json'}, ...opts });
-      let body = null; try{ body = await res.json(); }catch(e){}
-      if(!res.ok){ const err = new Error((body&&body.error)||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
-      return body;
+      const body = await res.json().catch(()=>null);
+      return (body && body.empresas) || [];
     }
     async function apiFornecedoresAtivos(empresaId){
       const res = await fetch('/api/fornecedores?empresaId='+empresaId+'&status=ativos');
-      return ((await res.json()).fornecedores) || [];
+      const body = await res.json().catch(()=>null);
+      return (body && body.fornecedores) || [];
     }
-    async function apiProdutosAtivos(empresaId){
-      const res = await fetch('/api/produtos?empresaId='+empresaId+'&status=ativos');
-      return ((await res.json()).produtos) || [];
+    async function apiLinhas(empresaId){
+      const res = await fetch('/api/compras-ia/linhas?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar as recomendações.');
+      return (body && body.linhas) || [];
+    }
+    async function apiResumo(empresaId){
+      const res = await fetch('/api/compras-ia/resumo?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o resumo.');
+      return body;
+    }
+    async function apiDetalhe(empresaId, produtoBaseId){
+      const res = await fetch('/api/compras-ia/detalhe/'+produtoBaseId+'?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os detalhes deste modelo.');
+      return body;
+    }
+    async function apiGerarAgora(empresaId){
+      const res = await fetch('/api/compras-ia/gerar-agora', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Falha ao gerar recomendações agora.');
+      return body;
+    }
+    async function apiDecidir(id, payload){
+      const res = await fetch('/api/compras-ia/decisoes/'+id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok){ const err = new Error((body && body.error) || 'Não foi possível registrar a decisão.'); err.errors = body && body.errors; throw err; }
+      return body;
+    }
+    async function apiPedidos(empresaId, status){
+      const params = new URLSearchParams({ empresaId });
+      if(status) params.set('status', status);
+      const res = await fetch('/api/compras-ia/pedidos?'+params.toString());
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o histórico.');
+      return (body && body.pedidos) || [];
+    }
+    async function apiPedidoPorId(empresaId, pedidoId){
+      const lista = await apiPedidos(empresaId, null);
+      return lista.find((p)=> p.id === pedidoId) || null;
+    }
+    async function apiPatchPedidoStatus(id, status){
+      const res = await fetch('/api/compras-ia/pedidos/'+id+'/status', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status }) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível atualizar o status do pedido.');
+      return body;
+    }
+    async function apiDesempenho(empresaId){
+      const res = await fetch('/api/compras-ia/desempenho?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o desempenho da IA.');
+      return body;
+    }
+    async function apiConfigProdutoBase(produtoBaseId, payload){
+      const res = await fetch('/api/compras-ia/produtos-base/'+produtoBaseId+'/config', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok){ const err = new Error((body && body.error) || 'Não foi possível salvar a configuração.'); err.errors = body && body.errors; throw err; }
+      return body;
     }
 
-    async function loadItens(){
+    // ---- carregamento ----
+    async function carregarRecomendacoes(){
       state.loading = true; state.error = null; render();
       try{
-        const params = new URLSearchParams({ empresaId: state.empresaId });
-        if(state.status !== 'todos') params.set('status', state.status);
-        if(state.search.trim()) params.set('search', state.search.trim());
-        const data = await api('?'+params.toString(), { method:'GET' });
-        state.items = data.compras;
-      }catch(err){ state.error = err.message || 'Não foi possível carregar as compras.'; }
+        const [linhas, resumo] = await Promise.all([apiLinhas(state.empresaId), apiResumo(state.empresaId)]);
+        state.linhas = linhas; state.resumo = resumo;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar as recomendações.'; }
       finally{ state.loading = false; render(); }
+    }
+    async function carregarHistorico(){
+      state.pedidosLoading = true; state.pedidosError = null; render();
+      try{
+        const [pedidos, desempenho] = await Promise.all([apiPedidos(state.empresaId, null), apiDesempenho(state.empresaId)]);
+        state.pedidos = pedidos; state.desempenho = desempenho; state.historicoCarregado = true;
+      }catch(err){ state.pedidosError = err.message || 'Não foi possível carregar o histórico.'; }
+      finally{ state.pedidosLoading = false; render(); }
     }
 
     async function load(){
@@ -6217,9 +6327,480 @@
         }
       }catch(e){ state.empresas = []; }
       state.loadingEmpresas = false;
-      if(state.empresaId) await loadItens(); else render();
+      if(!state.empresaId){ render(); return; }
+      await carregarRecomendacoes();
+      if(state.aba === 'historico') await carregarHistorico();
     }
 
+    async function gerarAgora(){
+      if(!state.empresaId){ toast('Selecione uma empresa.', 'error'); return; }
+      state.gerando = true;
+      const btn = document.getElementById('btnGerarComprasIa');
+      if(btn){ btn.disabled = true; const sp = btn.querySelector('span'); if(sp) sp.textContent = 'Gerando…'; }
+      try{
+        const resultado = await apiGerarAgora(state.empresaId);
+        const n = (resultado && typeof resultado.recomendacoesGeradas === 'number') ? resultado.recomendacoesGeradas : null;
+        toast('Recomendações atualizadas.' + (n !== null ? ' '+n+' recomendação(ões) pendente(s) agora.' : ''));
+        await carregarRecomendacoes();
+        if(state.aba === 'historico') await carregarHistorico();
+      }catch(err){ toast(err.message || 'Falha ao gerar recomendações agora.', 'error'); }
+      finally{
+        state.gerando = false;
+        const btn2 = document.getElementById('btnGerarComprasIa');
+        if(btn2){ btn2.disabled = false; const sp = btn2.querySelector('span'); if(sp) sp.textContent = 'Gerar recomendações agora'; }
+      }
+    }
+
+    // ---- cards do topo ----
+    function cardHTML(k){
+      return '<div class="kpi-hero" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
+        + '<div class="kpi-hero-label">'+escapeHtml(k.label)+'</div>'
+        + '<div class="kpi-hero-value">'+k.valueHtml+'</div>'
+        + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
+      + '</div>';
+    }
+    function cardsHTML(){
+      const r = state.resumo || {};
+      const temUrgentes = (r.comprasUrgentes||0) > 0;
+      const temProgramar = (r.comprarEstaSemana||0) > 0;
+      const items = [
+        { label:'Recomendado comprar hoje', icon:'wallet', tint: temUrgentes?'danger':'copper',
+          valueHtml: r.recomendadoComprarHoje===undefined?'—':money(r.recomendadoComprarHoje),
+          note: r.recomendadoValorParcial ? 'Parcial — há modelo(s) sem custo cadastrado' : 'Soma do valor estimado de todas as recomendações' },
+        { label:'Compras urgentes', icon:'alertCircle', tint: temUrgentes?'danger':'muted',
+          valueHtml: r.comprasUrgentes===undefined?'—':String(r.comprasUrgentes), note:'🔴 Comprar agora + 🚨 Ruptura provável' },
+        { label:'Comprar esta semana', icon:'clock', tint: temProgramar?'copper':'muted',
+          valueHtml: r.comprarEstaSemana===undefined?'—':String(r.comprarEstaSemana), note:'🟠 Programar compra' },
+        { label:'Estoque saudável', icon:'checkCircle', tint:'success',
+          valueHtml: r.estoqueSaudavel===undefined?'—':String(r.estoqueSaudavel), note:'🟢 Saudável + 🔵 A caminho' },
+        { label:'Mercadoria a caminho', icon:'truck', tint:'muted',
+          valueHtml: r.mercadoriaACaminhoQuantidade===undefined?'—':intFmt(r.mercadoriaACaminhoQuantidade)+' un.',
+          note: r.mercadoriaACaminhoValor ? money(r.mercadoriaACaminhoValor)+' em compras aprovadas' : 'Compras aprovadas ainda não recebidas' },
+      ];
+      return '<div class="kpi-hero-grid">' + items.map(cardHTML).join('') + '</div>';
+    }
+
+    // ---- tabela principal ----
+    function statusChipHTML(status, emoji, label){
+      const tint = STATUS_TINT[status] || 'muted';
+      return '<span class="status-chip" style="'+tintStyle(tint)+'">'+(emoji||'')+' '+escapeHtml(label||status||'—')+'</span>';
+    }
+    function linhasOrdenadas(){
+      return state.linhas.slice().sort((a,b)=>{
+        const oa = STATUS_ORDEM[a.status]===undefined?9:STATUS_ORDEM[a.status];
+        const ob = STATUS_ORDEM[b.status]===undefined?9:STATUS_ORDEM[b.status];
+        if(oa !== ob) return oa - ob;
+        const da = a.diasCobertura===null||a.diasCobertura===undefined ? Infinity : a.diasCobertura;
+        const db = b.diasCobertura===null||b.diasCobertura===undefined ? Infinity : b.diasCobertura;
+        return da - db;
+      });
+    }
+    function linhasFiltradas(){
+      const termo = (state.busca||'').trim().toLowerCase();
+      let linhas = linhasOrdenadas();
+      if(termo) linhas = linhas.filter((l)=> (l.codigo||'').toLowerCase().includes(termo) || (l.nome||'').toLowerCase().includes(termo));
+      return linhas;
+    }
+    function linhaRowHTML(l){
+      const mediaCell = l.semHistoricoDeVendas
+        ? '<span style="color:var(--text-faint);font-style:italic;">sem vendas</span>'
+        : (numFmt(l.mediaDiariaProjetada) + (l.acelerando ? ' <span title="Vendas acelerando" style="color:var(--danger);">▲</span>' : (l.desacelerando ? ' <span title="Vendas desacelerando" style="color:var(--text-faint);">▼</span>' : '')));
+      const projCell = l.semHistoricoDeVendas ? '—' : intFmt(round2((l.mediaDiariaProjetada||0)*30));
+      const coberturaCell = (l.diasCobertura===null || l.diasCobertura===undefined) ? '—' : numFmt(l.diasCobertura)+'d';
+      const rupturaCell = (l.semHistoricoDeVendas || !l.dataRupturaPrevista) ? '—' : fmtDate(l.dataRupturaPrevista);
+      const prazoCell = l.prazoFornecedorIndisponivel
+        ? '<span style="color:var(--warning);">sem cadastro</span>'
+        : (l.prazoFornecedorDias===null||l.prazoFornecedorDias===undefined ? '—' : l.prazoFornecedorDias+'d');
+      const compraCell = (l.quantidadeRecomendada>0) ? '<strong>'+intFmt(l.quantidadeRecomendada)+'</strong>' : '<span style="color:var(--text-faint);">—</span>';
+      const valorCell = (l.quantidadeRecomendada>0)
+        ? (l.valorEstimado===null ? '<span style="color:var(--text-faint);font-style:italic;">sem custo cadastrado</span>' : money(l.valorEstimado))
+        : '<span style="color:var(--text-faint);">—</span>';
+      return '<tr>'
+        + '<td class="produto-cell"><div class="cell-stack"><span class="prod-title">'+escapeHtml(l.codigo)+'</span>'+(l.nome?'<span class="cell-stack-sub">'+escapeHtml(l.nome)+'</span>':'')+'</div></td>'
+        + '<td class="tab-nums">'+intFmt(l.estoqueGalpao)+'</td>'
+        + '<td class="tab-nums">'+intFmt(l.estoqueFull)+'</td>'
+        + '<td class="tab-nums">'+intFmt(l.estoqueTotal)+'</td>'
+        + '<td class="tab-nums">'+(l.estoqueACaminho>0 ? intFmt(l.estoqueACaminho) : '<span style="color:var(--text-faint);">—</span>')+'</td>'
+        + '<td class="tab-nums">'+intFmt(l.venda7d)+'</td>'
+        + '<td class="tab-nums">'+mediaCell+'</td>'
+        + '<td class="tab-nums">'+projCell+'</td>'
+        + '<td class="tab-nums">'+coberturaCell+'</td>'
+        + '<td class="tab-nums">'+rupturaCell+'</td>'
+        + '<td class="tab-nums">'+prazoCell+'</td>'
+        + '<td class="tab-nums">'+compraCell+'</td>'
+        + '<td class="mono">'+valorCell+'</td>'
+        + '<td>'+statusChipHTML(l.status, l.statusEmoji, l.statusLabel)+'</td>'
+        + '<td><div class="row-actions"><button class="row-ic-btn" data-ver-detalhe="'+l.produtoBaseId+'" title="Ver detalhes e recomendação" type="button">'+svg('eye')+'</button></div></td>'
+      + '</tr>';
+    }
+    function abaRecomendacoesHTML(){
+      let html = cardsHTML();
+      if(state.loading && !state.linhas.length){
+        html += '<div class="table-card" style="margin-top:16px;"><div class="table-skel"><span class="spin"></span><span>Calculando recomendações…</span></div></div>';
+        return html;
+      }
+      if(state.error){
+        html += '<div class="empty-panel" style="margin-top:16px;"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="ciaRetryRecomendacoes" style="cursor:pointer;opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+        return html;
+      }
+      if(!state.linhas.length){
+        html += '<div class="empty-panel" style="margin-top:16px;"><div class="empty-icon">'+svg('cart')+'</div>'
+          + '<h2>Nenhum modelo físico cadastrado</h2>'
+          + '<p class="lead">Cadastre produtos com um modelo físico vinculado (SKU → modelo) em <strong>Cadastros → Produtos</strong> para a IA começar a analisar a reposição de estoque.</p></div>';
+        return html;
+      }
+      const linhas = linhasFiltradas();
+      if(!linhas.length){
+        html += '<div class="empty-panel" style="margin-top:16px;"><div class="empty-icon">'+svg('search')+'</div><h2>Nenhum modelo encontrado</h2><p class="lead">Nenhum modelo corresponde à busca atual.</p></div>';
+        return html;
+      }
+      html += '<div class="table-card" style="margin-top:16px;"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Modelo</th><th>Galpão</th><th>Full</th><th>Total</th><th>A caminho</th><th>Venda 7d</th><th>Média/dia</th><th>Projeção 30d</th><th>Cobertura</th><th>Ruptura prevista</th><th>Prazo fornecedor</th><th>Compra recomendada</th><th>Valor estimado</th><th>Status</th><th></th>'
+        + '</tr></thead><tbody>' + linhas.map(linhaRowHTML).join('') + '</tbody></table></div></div>';
+      return html;
+    }
+
+    // ---- aba Histórico ----
+    function origemLabel(origem){ return origem === 'compra_manual' ? 'Compra manual' : 'Recomendação IA'; }
+    function pedidoRowHTML(p){
+      return '<tr>'
+        + '<td class="mono">'+escapeHtml(p.numeroPedido)+'</td>'
+        + '<td>'+escapeHtml(p.fornecedorNome||'—')+'</td>'
+        + '<td class="tab-nums">'+fmtDate(p.criadoEm)+'</td>'
+        + '<td class="produto-cell"><div class="cell-stack"><span class="prod-title">'+escapeHtml(p.produtoBaseCodigo)+'</span>'+(p.produtoBaseNome?'<span class="cell-stack-sub">'+escapeHtml(p.produtoBaseNome)+'</span>':'')+'</div></td>'
+        + '<td class="tab-nums">'+intFmt(p.quantidade)+'</td>'
+        + '<td class="mono">'+money(p.valorTotal)+'</td>'
+        + '<td>'+escapeHtml(origemLabel(p.origem))+'</td>'
+        + '<td><select class="mono" data-pedido-status="'+p.id+'" style="font-size:11.5px; padding:4px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">'
+          + STATUS_PEDIDO_OPCOES.map((par)=> '<option value="'+par[0]+'" '+(p.status===par[0]?'selected':'')+'>'+par[1]+'</option>').join('')
+        + '</select></td>'
+        + '<td class="tab-nums">'+(p.previsaoChegada?fmtDate(p.previsaoChegada):'—')+'</td>'
+        + '<td class="tab-nums">'+(p.recebidoEm?fmtDate(p.recebidoEm):'—')+'</td>'
+      + '</tr>';
+    }
+    function desempenhoHTML(){
+      const d = state.desempenho;
+      if(!d) return '';
+      const itens = [
+        { label:'Recomendadas pela IA', valor: intFmt(d.comprasRecomendadas), tint:'text' },
+        { label:'Aprovadas', valor: intFmt(d.aprovadas), tint:'success' },
+        { label:'Ignoradas', valor: intFmt(d.ignoradas), tint:'warning' },
+        { label:'Rupturas evitadas (estimativa)', valor: intFmt(d.rupturasEvitadas), tint:'success' },
+        { label:'Comprado via recomendação da IA', valor: money(d.valorTotalComprasViaIa), tint:'copper' },
+      ];
+      return '<div class="table-card" style="padding:18px;margin-top:16px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px;"><h3 style="margin:0;font-size:14px;">Desempenho da IA</h3><span class="panel-note">Contagem real do que já aconteceu — não é um modelo de aprendizado automático</span></div>'
+        + '<div class="ads2-impact-grid">' + itens.map((it)=> '<div class="ads2-impact"><div class="ads2-label">'+escapeHtml(it.label)+'</div><div class="ads2-value" style="'+(it.tint==='text'?'':'color:var(--'+it.tint+');')+'">'+it.valor+'</div></div>').join('') + '</div>'
+      + '</div>';
+    }
+    function abaHistoricoHTML(){
+      let html = '';
+      if(state.pedidosLoading && !state.pedidos.length){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando histórico…</span></div></div>';
+        return html;
+      }
+      if(state.pedidosError){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.pedidosError)+'</p>'
+          + '<button class="ghost-btn" id="ciaRetryHistorico" style="cursor:pointer;opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+        return html;
+      }
+      if(!state.pedidos.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('inbox')+'</div><h2>Nenhum pedido gerado ainda</h2>'
+          + '<p class="lead">Quando você aprovar uma recomendação da IA na aba Recomendações, o pedido de compra gerado aparece aqui.</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Pedido</th><th>Fornecedor</th><th>Data</th><th>Produto</th><th>Quantidade</th><th>Valor</th><th>Origem</th><th>Status</th><th>Previsão</th><th>Recebido em</th>'
+          + '</tr></thead><tbody>' + state.pedidos.map(pedidoRowHTML).join('') + '</tbody></table></div></div>';
+      }
+      html += desempenhoHTML();
+      return html;
+    }
+
+    // ---- relatório da IA no modal de detalhe (mesmo conversor Markdown
+    // simples usado no modal "Ver diagnóstico completo" do Agente de Ads —
+    // ver window.AgenteAds, acima: só parágrafo/tabela/lista, nunca uma
+    // biblioteca nova) ----
+    function mdSimplesParaHtml(texto){
+      const linhasTexto = String(texto||'').split('\n');
+      let html = '';
+      let i = 0;
+      while(i < linhasTexto.length){
+        const linha = linhasTexto[i];
+        if(/^\s*\|.*\|\s*$/.test(linha)){
+          const linhasTabela = [];
+          while(i < linhasTexto.length && /^\s*\|.*\|\s*$/.test(linhasTexto[i])){ linhasTabela.push(linhasTexto[i]); i++; }
+          const celulas = (l)=> l.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>c.trim());
+          const cabecalho = celulas(linhasTabela[0]);
+          const corpo = linhasTabela.slice(1).filter(l=> !/^[\s|:-]+$/.test(l)).map(celulas);
+          html += '<div class="table-wrap" style="margin:10px 0;"><table class="data-table"><thead><tr>'
+            + cabecalho.map(c=>'<th>'+escapeHtml(c)+'</th>').join('') + '</tr></thead><tbody>'
+            + corpo.map(cols=>'<tr>'+cols.map(c=>'<td>'+escapeHtml(c)+'</td>').join('')+'</tr>').join('')
+            + '</tbody></table></div>';
+          continue;
+        }
+        if(/^\s*-\s+/.test(linha)){
+          const itens = [];
+          while(i < linhasTexto.length && /^\s*-\s+/.test(linhasTexto[i])){ itens.push(linhasTexto[i].replace(/^\s*-\s+/,'')); i++; }
+          html += '<ul style="margin:8px 0;padding-left:20px;">' + itens.map(it=>'<li style="margin-bottom:4px;">'+escapeHtml(it)+'</li>').join('') + '</ul>';
+          continue;
+        }
+        if(!linha.trim()){ i++; continue; }
+        html += '<p style="margin:0 0 10px;line-height:1.55;">'+escapeHtml(linha)+'</p>';
+        i++;
+      }
+      return html;
+    }
+
+    // ---- modal de detalhe + aprovação ----
+    function camposFornecedorCustoHTML(l, prefixo){
+      return '<div class="field"><label>Fornecedor'+(!l.fornecedorPadraoId?' <span class="opt">(obrigatório — sem fornecedor padrão cadastrado)</span>':'')+'</label><select id="'+prefixo+'Fornecedor"><option value="">Carregando…</option></select>'
+          + '<div class="field-error" id="'+prefixo+'ErroFornecedor" style="display:none;"></div></div>'
+        + '<div class="inline-form" style="margin-top:0;">'
+          + '<div class="field narrow"><label>Custo unitário'+(l.custoUnitario===null?' <span class="opt">(obrigatório — sem custo cadastrado)</span>':' <span class="opt">(opcional)</span>')+'</label><input type="text" inputmode="decimal" id="'+prefixo+'Custo" value="'+(l.custoUnitario===null||l.custoUnitario===undefined?'':String(l.custoUnitario).replace('.',','))+'"></div>'
+          + '<div class="field narrow"><label>Previsão de chegada <span class="opt">(opcional)</span></label><input type="date" id="'+prefixo+'Previsao"></div>'
+        + '</div>';
+    }
+    function carregarFornecedorSelect(selectId, empresaId, fornecedorPadraoId){
+      (async ()=>{
+        try{
+          const fornecedores = await apiFornecedoresAtivos(empresaId);
+          const sel = document.getElementById(selectId);
+          if(!sel) return;
+          sel.innerHTML = fornecedores.length
+            ? fornecedores.map((f)=> '<option value="'+f.id+'" '+(fornecedorPadraoId===f.id?'selected':'')+'>'+escapeHtml(f.razaoSocial)+'</option>').join('')
+            : '<option value="">Nenhum fornecedor ativo cadastrado</option>';
+        }catch(e){ toast('Não foi possível carregar fornecedores.', 'error'); }
+      })();
+    }
+
+    async function confirmarDecisao(data, modo){
+      const l = data.linha;
+      const fornecedorSel = document.getElementById('fmFornecedor');
+      const custoInput = document.getElementById('fmCusto');
+      const previsaoInput = document.getElementById('fmPrevisao');
+      const qtdInput = document.getElementById('fmQuantidade');
+
+      const payload = { statusDecisao: modo, decididoPor: 'Pablo' };
+      if(fornecedorSel && fornecedorSel.value) payload.fornecedorId = Number(fornecedorSel.value);
+      if(custoInput && custoInput.value.trim() !== '') payload.custoUnitario = Number(custoInput.value.replace(',','.'));
+      if(previsaoInput && previsaoInput.value) payload.previsaoChegada = previsaoInput.value;
+      if(modo === 'alterada'){
+        const qtd = qtdInput ? Number(qtdInput.value) : NaN;
+        if(!Number.isFinite(qtd) || qtd <= 0){ toast('Informe uma quantidade válida, maior que zero.', 'error'); return; }
+        payload.quantidadeDecidida = qtd;
+      }
+
+      const btn = document.getElementById('fmConfirmar');
+      if(btn) btn.disabled = true;
+      try{
+        const resultado = await apiDecidir(data.recomendacaoId, payload);
+        document.getElementById('modalRoot').innerHTML = '';
+        toast('Compra aprovada — pedido de compra gerado.');
+        if(resultado && resultado.pedido){
+          const pedidoCompleto = await apiPedidoPorId(state.empresaId, resultado.pedido.id).catch(()=>null);
+          abrirModalPedidoGerado(pedidoCompleto || resultado.pedido);
+        }
+        await carregarRecomendacoes();
+        state.historicoCarregado = false;
+        if(state.aba === 'historico') await carregarHistorico();
+      }catch(err){
+        if(btn) btn.disabled = false;
+        const msg = (err.errors && Object.values(err.errors).join(' ')) || err.message || 'Não foi possível registrar a decisão.';
+        toast(msg, 'error');
+      }
+    }
+
+    function mostrarFormDecisao(data, modo){
+      const l = data.linha;
+      const box = document.getElementById('detalheFormExtra');
+      if(!box) return;
+      box.innerHTML = '<div class="table-card" style="padding:14px;margin-top:10px;">'
+        + '<div class="section-label"><span>'+(modo==='alterada'?'Ajustar quantidade e aprovar':'Confirmar aprovação da compra')+'</span></div>'
+        + (modo==='alterada' ? '<div class="field narrow"><label>Quantidade a comprar</label><input type="text" inputmode="numeric" id="fmQuantidade" value="'+l.quantidadeRecomendada+'"></div>' : '')
+        + camposFornecedorCustoHTML(l, 'fm')
+        + '<div class="modal-actions" style="padding:0;border:0;">'
+          + '<button type="button" class="btn-secondary" id="fmCancelar">Cancelar</button>'
+          + '<button type="button" class="btn-primary" id="fmConfirmar">'+svg('check')+'<span>Confirmar</span></button>'
+        + '</div>'
+      + '</div>';
+      carregarFornecedorSelect('fmFornecedor', state.empresaId, l.fornecedorPadraoId);
+      document.getElementById('fmCancelar').addEventListener('click', ()=>{ box.innerHTML=''; });
+      document.getElementById('fmConfirmar').addEventListener('click', ()=> confirmarDecisao(data, modo));
+    }
+
+    async function ignorarRecomendacao(data){
+      try{
+        await apiDecidir(data.recomendacaoId, { statusDecisao:'ignorada', decididoPor:'Pablo' });
+        document.getElementById('modalRoot').innerHTML = '';
+        toast('Recomendação ignorada por enquanto — a IA volta a avaliar este modelo no próximo ciclo.');
+        await carregarRecomendacoes();
+      }catch(err){ toast(err.message || 'Não foi possível ignorar esta recomendação.', 'error'); }
+    }
+
+    function abrirFormConfig(l){
+      const box = document.getElementById('detalheConfigBox');
+      if(!box) return;
+      if(box.dataset.aberto === '1'){ box.innerHTML=''; box.dataset.aberto=''; return; }
+      box.dataset.aberto = '1';
+      box.innerHTML = '<div class="field"><label>Fornecedor padrão deste modelo</label><select id="cfgFornecedor"><option value="">Carregando…</option></select></div>'
+        + '<div class="inline-form" style="margin-top:0;">'
+          + '<div class="field narrow"><label>Prazo de entrega do fornecedor (dias)</label><input type="text" inputmode="numeric" id="cfgPrazo" value="'+(l.prazoFornecedorDias===null||l.prazoFornecedorDias===undefined?'':l.prazoFornecedorDias)+'"></div>'
+          + '<div class="field narrow"><label>Estoque de segurança (dias)</label><input type="text" inputmode="numeric" id="cfgSeguranca" value="'+(l.estoqueSegurancaDias===null||l.estoqueSegurancaDias===undefined?'':l.estoqueSegurancaDias)+'"></div>'
+        + '</div>'
+        + '<div class="field-hint" style="margin-bottom:10px;">O prazo de entrega é salvo no cadastro do fornecedor selecionado acima — escolha (ou confirme) o fornecedor antes de salvar o prazo.</div>'
+        + '<button type="button" class="ghost-btn" id="cfgSalvar" style="cursor:pointer;opacity:1;">'+svg('check')+'<span>Salvar configuração</span></button>';
+      carregarFornecedorSelect('cfgFornecedor', state.empresaId, l.fornecedorPadraoId);
+      document.getElementById('cfgSalvar').addEventListener('click', async ()=>{
+        const fornecedorSel = document.getElementById('cfgFornecedor');
+        const prazoInput = document.getElementById('cfgPrazo');
+        const segurancaInput = document.getElementById('cfgSeguranca');
+        const payload = {
+          fornecedorPadraoId: (fornecedorSel && fornecedorSel.value) ? Number(fornecedorSel.value) : null,
+          estoqueSegurancaDias: (segurancaInput && segurancaInput.value.trim() !== '') ? Number(segurancaInput.value) : null,
+          prazoEntregaDiasFornecedor: (prazoInput && prazoInput.value.trim() !== '') ? Number(prazoInput.value) : null,
+        };
+        const btn = document.getElementById('cfgSalvar');
+        if(btn) btn.disabled = true;
+        try{
+          await apiConfigProdutoBase(l.produtoBaseId, payload);
+          toast('Configuração salva.');
+          document.getElementById('modalRoot').innerHTML = '';
+          await carregarRecomendacoes();
+        }catch(err){
+          if(btn) btn.disabled = false;
+          const msg = (err.errors && Object.values(err.errors).join(' ')) || err.message || 'Não foi possível salvar a configuração.';
+          toast(msg, 'error');
+        }
+      });
+    }
+
+    function renderModalDetalhe(data){
+      const modalRoot = document.getElementById('modalRoot');
+      const l = data.linha;
+      const usandoIa = !!data.relatorioIa;
+      const corpoTexto = data.relatorioIa || data.relatorioTexto || '';
+      const temRecomendacaoPendente = !!data.recomendacaoId;
+
+      let acoesHtml;
+      if(temRecomendacaoPendente){
+        acoesHtml = '<div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap;padding-top:14px;">'
+          + '<button type="button" class="btn-primary" id="detAprovar">'+svg('check')+'<span>Aprovar compra</span></button>'
+          + '<button type="button" class="btn-secondary" id="detAjustar">'+svg('edit')+'<span>Ajustar quantidade</span></button>'
+          + '<button type="button" class="btn-secondary" id="detIgnorar">'+svg('x')+'<span>Ignorar por enquanto</span></button>'
+        + '</div>'
+        + '<div id="detalheFormExtra"></div>';
+      } else {
+        acoesHtml = '<div class="field-hint" style="margin-top:10px;">'+(l.quantidadeRecomendada>0
+            ? 'Este modelo tem uma quantidade recomendada, mas ainda não há uma recomendação pendente registrada — clique em "Gerar recomendações agora" no topo da tela para atualizar.'
+            : 'Nenhuma compra recomendada agora para este modelo.')+'</div>';
+      }
+
+      modalRoot.innerHTML = '<div class="modal-overlay" id="detalheModalOverlay"><div class="modal-card" style="max-width:680px;max-height:88vh;overflow:auto;">'
+        + '<div class="modal-head"><h3 class="modal-title">'+escapeHtml(l.codigo)+(l.nome?' — '+escapeHtml(l.nome):'')+'</h3>'
+          + '<button class="row-ic-btn" id="detalheModalClose" type="button">'+svg('x')+'</button></div>'
+        + '<div class="modal-sub">'+statusChipHTML(l.status, l.statusEmoji, l.statusLabel)+'</div>'
+        + '<div class="field-hint" style="margin:12px 0;">'+(usandoIa
+            ? 'Texto reescrito pela IA a partir dos números reais abaixo — nenhum número foi alterado pela IA.'
+            : 'Relatório calculado diretamente a partir dos números reais (a reescrita pela IA não está disponível agora).')
+          + '</div>'
+        + mdSimplesParaHtml(corpoTexto)
+        + (!l.fornecedorNome ? '<div class="field-error" style="display:block;margin-top:2px;">Este modelo não tem fornecedor padrão cadastrado — informe um fornecedor para poder aprovar a compra.</div>' : '')
+        + acoesHtml
+        + '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">'
+          + '<button type="button" class="ghost-btn" id="detalheToggleConfig" style="cursor:pointer;opacity:1;">'+svg('edit')+'<span>Configurar fornecedor padrão / prazo / estoque de segurança</span></button>'
+          + '<div id="detalheConfigBox" style="margin-top:10px;"></div>'
+        + '</div>'
+      + '</div></div>';
+
+      const overlay = document.getElementById('detalheModalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('detalheModalClose').addEventListener('click', close);
+
+      const btnAprovar = document.getElementById('detAprovar');
+      if(btnAprovar) btnAprovar.addEventListener('click', ()=> mostrarFormDecisao(data, 'aprovada'));
+      const btnAjustar = document.getElementById('detAjustar');
+      if(btnAjustar) btnAjustar.addEventListener('click', ()=> mostrarFormDecisao(data, 'alterada'));
+      const btnIgnorar = document.getElementById('detIgnorar');
+      if(btnIgnorar) btnIgnorar.addEventListener('click', ()=> ignorarRecomendacao(data));
+      const btnCfg = document.getElementById('detalheToggleConfig');
+      if(btnCfg) btnCfg.addEventListener('click', ()=> abrirFormConfig(l));
+    }
+
+    async function abrirDetalhe(produtoBaseId){
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = '<div class="modal-overlay" id="detalheModalOverlay"><div class="modal-card" style="max-width:680px;"><div class="table-skel"><span class="spin"></span><span>Carregando detalhes…</span></div></div></div>';
+      let data;
+      try{
+        data = await apiDetalhe(state.empresaId, produtoBaseId);
+      }catch(err){
+        modalRoot.innerHTML = '';
+        toast(err.message || 'Não foi possível carregar os detalhes.', 'error');
+        return;
+      }
+      renderModalDetalhe(data);
+    }
+
+    // ---- modal "pedido gerado" (após aprovação) ----
+    function textoPedido(pedido){
+      const linhas = [];
+      linhas.push('PEDIDO DE COMPRA');
+      linhas.push('Fornecedor: ' + (pedido.fornecedorNome || '—'));
+      linhas.push('Pedido nº: ' + pedido.numeroPedido);
+      linhas.push('Data: ' + fmtDate(pedido.criadoEm));
+      linhas.push('');
+      linhas.push(pedido.produtoBaseNome ? (pedido.produtoBaseCodigo+' — '+pedido.produtoBaseNome) : pedido.produtoBaseCodigo);
+      linhas.push('Quantidade: ' + intFmt(pedido.quantidade) + ' caixas/unidades');
+      linhas.push('Preço unitário: ' + money(pedido.custoUnitario));
+      linhas.push('Total: ' + money(pedido.valorTotal));
+      linhas.push('Entrega prevista: ' + (pedido.previsaoChegada ? fmtDate(pedido.previsaoChegada) : 'a combinar com o fornecedor'));
+      if(pedido.observacao) linhas.push('Observações: ' + pedido.observacao);
+      return linhas.join('\n');
+    }
+    function abrirModalPedidoGerado(pedido){
+      const modalRoot = document.getElementById('modalRoot');
+      const texto = textoPedido(pedido);
+      const temTelefone = !!pedido.fornecedorTelefone;
+      const temEmail = !!pedido.fornecedorEmail;
+      modalRoot.innerHTML = '<div class="modal-overlay" id="pedidoModalOverlay"><div class="modal-card" style="max-width:540px;">'
+        + '<div class="modal-head"><h3 class="modal-title">Pedido '+escapeHtml(pedido.numeroPedido)+' gerado</h3>'
+          + '<button class="row-ic-btn" id="pedidoModalClose" type="button">'+svg('x')+'</button></div>'
+        + '<div class="modal-sub">Compra aprovada — revise e envie ao fornecedor quando quiser. Nada é enviado automaticamente.</div>'
+        + '<pre style="white-space:pre-wrap;font-family:inherit;font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px;line-height:1.6;margin:12px 0;">'+escapeHtml(texto)+'</pre>'
+        + '<div class="modal-actions" style="flex-wrap:wrap;justify-content:flex-start;gap:8px;border:0;padding:0;">'
+          + '<button type="button" class="ghost-btn" id="pedidoGerarPdf" style="cursor:pointer;opacity:1;">'+svg('download')+'<span>Gerar PDF</span></button>'
+          + '<button type="button" class="ghost-btn" id="pedidoCopiar" style="cursor:pointer;opacity:1;">'+svg('fileText')+'<span>Copiar pedido</span></button>'
+          + (temTelefone ? '<a class="ghost-btn" style="text-decoration:none;cursor:pointer;opacity:1;" target="_blank" rel="noopener" href="https://wa.me/'+encodeURIComponent(String(pedido.fornecedorTelefone).replace(/\D/g,''))+'?text='+encodeURIComponent(texto)+'">'+svg('send')+'<span>Enviar por WhatsApp</span></a>' : '')
+          + (temEmail ? '<a class="ghost-btn" style="text-decoration:none;cursor:pointer;opacity:1;" target="_blank" rel="noopener" href="mailto:'+escapeHtml(pedido.fornecedorEmail)+'?subject='+encodeURIComponent('Pedido de compra '+pedido.numeroPedido)+'&body='+encodeURIComponent(texto)+'">'+svg('send')+'<span>Enviar por e-mail</span></a>' : '')
+        + '</div>'
+        + (!temTelefone && !temEmail ? '<div class="field-hint" style="margin-top:10px;">Cadastre telefone ou e-mail deste fornecedor em Cadastros → Fornecedores para habilitar o envio direto.</div>' : '')
+        + '<div class="modal-actions"><button type="button" class="btn-secondary" id="pedidoFechar">Fechar</button></div>'
+      + '</div></div>';
+
+      const overlay = document.getElementById('pedidoModalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('pedidoModalClose').addEventListener('click', close);
+      document.getElementById('pedidoFechar').addEventListener('click', close);
+      document.getElementById('pedidoCopiar').addEventListener('click', async ()=>{
+        try{ await navigator.clipboard.writeText(texto); toast('Pedido copiado para a área de transferência.'); }
+        catch(e){ toast('Não foi possível copiar automaticamente — selecione o texto acima manualmente.', 'error'); }
+      });
+      document.getElementById('pedidoGerarPdf').addEventListener('click', ()=>{
+        const win = window.open('', '_blank');
+        if(!win){ toast('Permita pop-ups para gerar o PDF.', 'error'); return; }
+        win.document.write('<html><head><title>'+escapeHtml(pedido.numeroPedido)+'</title><style>body{font-family:Arial,sans-serif;padding:32px;white-space:pre-wrap;font-size:13px;line-height:1.7;}</style></head><body>'+escapeHtml(texto)+'</body></html>');
+        win.document.close();
+        win.focus();
+        win.print();
+      });
+    }
+
+    // ---- render geral ----
     function render(){
       const root = document.getElementById('comprasRoot');
       if(!root) return;
@@ -6227,268 +6808,876 @@
       if(!state.loadingEmpresas && !state.empresas.length){
         root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
           + '<h2>Nenhuma empresa ativa</h2>'
-          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de registrar compras.</p></div>';
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de usar a Central de Compras com IA.</p></div>';
         return;
       }
 
+      const buscaAtiva = document.activeElement && document.activeElement.id === 'ciaSearch';
+      const buscaCursor = buscaAtiva ? document.activeElement.selectionStart : null;
+
       let html = '<div class="toolbar">'
-        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="cmpEmpresaSelect">'
-          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="ciaEmpresaSelect">'
+          + state.empresas.map((e)=> '<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
         + '</select></div>'
-        + '<div class="seg" id="cmpSeg">'
-          + [['todos','Todos']].concat(STATUS_OPCOES).map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
+        + '<div class="seg" id="ciaAbas">'
+          + '<button type="button" data-aba="recomendacoes" class="'+(state.aba==='recomendacoes'?'active':'')+'">Recomendações'+((state.resumo && state.resumo.comprasUrgentes) ? (' · '+state.resumo.comprasUrgentes) : '')+'</button>'
+          + '<button type="button" data-aba="historico" class="'+(state.aba==='historico'?'active':'')+'">Histórico</button>'
         + '</div>'
-        + '<div class="search-box">'+svg('search')+'<input type="text" id="cmpSearch" placeholder="Buscar por fornecedor" value="'+state.search.replace(/"/g,'&quot;')+'"></div>'
+        + (state.aba==='recomendacoes' ? '<div class="search-box">'+svg('search')+'<input type="text" id="ciaSearch" placeholder="Buscar modelo" value="'+state.busca.replace(/"/g,'&quot;')+'"></div>' : '<span></span>')
       + '</div>';
 
-      if(state.loading){
-        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando compras…</span></div></div>';
+      html += state.aba === 'recomendacoes' ? abaRecomendacoesHTML() : abaHistoricoHTML();
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('ciaEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{
+        state.empresaId = Number(sel.value);
+        state.pedidos = []; state.desempenho = null; state.historicoCarregado = false;
+        carregarRecomendacoes();
+        if(state.aba === 'historico') carregarHistorico();
+      });
+
+      const abas = document.getElementById('ciaAbas');
+      if(abas) abas.querySelectorAll('button').forEach((b)=> b.addEventListener('click', ()=>{
+        state.aba = b.dataset.aba;
+        if(state.aba === 'historico' && !state.historicoCarregado && !state.pedidosLoading) carregarHistorico();
+        else render();
+      }));
+
+      const search = document.getElementById('ciaSearch');
+      if(search){
+        search.addEventListener('input', ()=>{ state.busca = search.value; render(); });
+        if(buscaAtiva){ search.focus(); try{ search.setSelectionRange(buscaCursor, buscaCursor); }catch(e){} }
+      }
+
+      const retryRec = document.getElementById('ciaRetryRecomendacoes');
+      if(retryRec) retryRec.addEventListener('click', carregarRecomendacoes);
+      const retryHist = document.getElementById('ciaRetryHistorico');
+      if(retryHist) retryHist.addEventListener('click', carregarHistorico);
+
+      root.querySelectorAll('[data-ver-detalhe]').forEach((btn)=> btn.addEventListener('click', ()=> abrirDetalhe(Number(btn.dataset.verDetalhe))));
+
+      root.querySelectorAll('[data-pedido-status]').forEach((selEl)=> selEl.addEventListener('change', async ()=>{
+        const id = Number(selEl.dataset.pedidoStatus);
+        selEl.disabled = true;
+        try{
+          await apiPatchPedidoStatus(id, selEl.value);
+          toast('Status do pedido atualizado.');
+          await carregarHistorico();
+        }catch(err){ toast(err.message || 'Não foi possível atualizar o status.', 'error'); selEl.disabled = false; }
+      }));
+    }
+
+    const btnGerar = document.getElementById('btnGerarComprasIa');
+    if(btnGerar) btnGerar.addEventListener('click', gerarAgora);
+
+    window.Compras = { load };
+  })();
+
+  /* ================= AGENTE DE ENVIO FULL =================
+     23/09/2026, pedido explícito do usuário: "agente de envio full -
+     quando enviar ro full, quado ta acabando, quando segurar, quanto
+     gastei de envios full no mes". Mesmo padrão visual/estrutural de
+     window.Compras (acima), simplificado: aqui não existe fornecedor —
+     a decisão é só ENVIAR (do Galpão) ou SEGURAR, e a quantidade sugerida
+     já é limitada ao que existe no Galpão (ver lib/ia/envioFullMotor.js).
+     Nunca envia nada sozinho — toda recomendação passa por aprovação aqui
+     antes de virar um registro de envio (PUT /decisoes/:id). */
+  (function(){
+    const STATUS_PEDIDO_OPCOES = [
+      ['aprovado','Aprovado'],
+      ['enviado','Enviado'],
+      ['recebido_no_full','Recebido no Full'],
+      ['cancelado','Cancelado'],
+    ];
+    const STATUS_TINT = { saudavel:'success', atencao:'warning', programar_envio:'copper', enviar_agora:'danger', ruptura:'danger' };
+    const STATUS_ORDEM = { ruptura:0, enviar_agora:1, programar_envio:2, atencao:3, saudavel:4 };
+
+    const MESES_LABEL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+    const state = {
+      empresas:[], empresaId:null, loadingEmpresas:false,
+      aba: 'recomendacoes', busca:'',
+      linhas:[], resumo:null, loading:false, error:null, gerando:false,
+      pedidos:[], pedidosLoading:false, pedidosError:null,
+      custoAno: new Date().getFullYear(), custoMes: new Date().getMonth()+1,
+      custoAtual:null, custoHistorico:[], custoLoading:false, custoSalvando:false,
+    };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ if(v===null||v===undefined) return '—'; return 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function intFmt(v){ return (v===null||v===undefined) ? '—' : Math.round(Number(v)).toLocaleString('pt-BR'); }
+    function numFmt(v){ return (v===null||v===undefined) ? '—' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+    function tintStyle(tint){ return tint==='muted' ? 'color:var(--text-muted);background:var(--surface-2);' : 'color:var(--'+tint+');background:var(--'+tint+'-soft);'; }
+
+    // ---- chamadas de API ----
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      const body = await res.json().catch(()=>null);
+      return (body && body.empresas) || [];
+    }
+    async function apiLinhas(empresaId){
+      const res = await fetch('/api/envio-full/linhas?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar as recomendações.');
+      return (body && body.linhas) || [];
+    }
+    async function apiResumo(empresaId){
+      const res = await fetch('/api/envio-full/resumo?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o resumo.');
+      return body;
+    }
+    async function apiGerarAgora(empresaId){
+      const res = await fetch('/api/envio-full/gerar-agora', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Falha ao gerar recomendações agora.');
+      return body;
+    }
+    async function apiDecisoes(empresaId, status){
+      const params = new URLSearchParams({ empresaId });
+      if(status) params.set('status', status);
+      const res = await fetch('/api/envio-full/decisoes?'+params.toString());
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar as recomendações pendentes.');
+      return (body && body.decisoes) || [];
+    }
+    async function apiDecidir(id, payload){
+      const res = await fetch('/api/envio-full/decisoes/'+id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok){ const err = new Error((body && body.error) || 'Não foi possível registrar a decisão.'); err.errors = body && body.errors; throw err; }
+      return body;
+    }
+    async function apiPedidos(empresaId){
+      const res = await fetch('/api/envio-full/pedidos?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o histórico.');
+      return (body && body.pedidos) || [];
+    }
+    async function apiPatchPedidoStatus(id, status){
+      const res = await fetch('/api/envio-full/pedidos/'+id+'/status', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status }) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível atualizar o status do envio.');
+      return body;
+    }
+    async function apiCustoAtual(empresaId, ano, mes){
+      const res = await fetch('/api/envio-full/custos?empresaId='+empresaId+'&ano='+ano+'&mes='+mes);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o custo do mês.');
+      return body;
+    }
+    async function apiCustoHistorico(empresaId){
+      const res = await fetch('/api/envio-full/custos/historico?empresaId='+empresaId+'&limite=12');
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o histórico de custos.');
+      return (body && body.historico) || [];
+    }
+    async function apiSalvarCusto(payload){
+      const res = await fetch('/api/envio-full/custos', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok){ const err = new Error((body && body.error) || 'Não foi possível salvar o custo.'); err.errors = body && body.errors; throw err; }
+      return body;
+    }
+
+    // ---- carregamento ----
+    async function carregarRecomendacoes(){
+      state.loading = true; state.error = null; render();
+      try{
+        const [linhas, resumo] = await Promise.all([apiLinhas(state.empresaId), apiResumo(state.empresaId)]);
+        state.linhas = linhas; state.resumo = resumo;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar as recomendações.'; }
+      finally{ state.loading = false; render(); }
+    }
+    async function carregarHistorico(){
+      state.pedidosLoading = true; state.pedidosError = null; render();
+      try{ state.pedidos = await apiPedidos(state.empresaId); }
+      catch(err){ state.pedidosError = err.message || 'Não foi possível carregar o histórico.'; }
+      finally{ state.pedidosLoading = false; render(); }
+    }
+    async function carregarCustos(){
+      state.custoLoading = true; render();
+      try{
+        const [atual, historico] = await Promise.all([
+          apiCustoAtual(state.empresaId, state.custoAno, state.custoMes),
+          apiCustoHistorico(state.empresaId),
+        ]);
+        state.custoAtual = atual; state.custoHistorico = historico;
+      }catch(err){ toast(err.message || 'Não foi possível carregar os custos de Full.', 'error'); }
+      finally{ state.custoLoading = false; render(); }
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(!state.empresaId){ render(); return; }
+      await carregarRecomendacoes();
+      if(state.aba === 'historico') await carregarHistorico();
+      if(state.aba === 'custos') await carregarCustos();
+    }
+
+    async function gerarAgora(){
+      if(!state.empresaId){ toast('Selecione uma empresa.', 'error'); return; }
+      state.gerando = true;
+      const btn = document.getElementById('btnGerarEnvioFull');
+      if(btn){ btn.disabled = true; const sp = btn.querySelector('span'); if(sp) sp.textContent = 'Gerando…'; }
+      try{
+        const resultado = await apiGerarAgora(state.empresaId);
+        const n = (resultado && typeof resultado.recomendacoesGeradas === 'number') ? resultado.recomendacoesGeradas : null;
+        toast('Recomendações de Full atualizadas.' + (n !== null ? ' '+n+' recomendação(ões) pendente(s) agora.' : ''));
+        await carregarRecomendacoes();
+        if(state.aba === 'historico') await carregarHistorico();
+      }catch(err){ toast(err.message || 'Falha ao gerar recomendações agora.', 'error'); }
+      finally{
+        state.gerando = false;
+        const btn2 = document.getElementById('btnGerarEnvioFull');
+        if(btn2){ btn2.disabled = false; const sp = btn2.querySelector('span'); if(sp) sp.textContent = 'Gerar recomendações agora'; }
+      }
+    }
+
+    // ---- cards do topo ----
+    function cardHTML(k){
+      return '<div class="kpi-hero" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
+        + '<div class="kpi-hero-label">'+escapeHtml(k.label)+'</div>'
+        + '<div class="kpi-hero-value">'+k.valueHtml+'</div>'
+        + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
+      + '</div>';
+    }
+    function cardsHTML(){
+      const r = state.resumo || {};
+      const temUrgente = (r.enviarAgora||0) > 0;
+      const temProgramar = (r.programar||0) > 0;
+      const temSemGalpao = (r.semEstoqueGalpao||0) > 0;
+      const mesLabel = MESES_LABEL[(state.custoMes||1)-1];
+      const items = [
+        { label:'Enviar agora ao Full', icon:'truck', tint: temUrgente?'danger':'muted',
+          valueHtml: r.enviarAgora===undefined?'—':String(r.enviarAgora), note:'🔴 Enviar agora + 🚨 Full acabando' },
+        { label:'Programar envio', icon:'clock', tint: temProgramar?'copper':'muted',
+          valueHtml: r.programar===undefined?'—':String(r.programar), note:'🟠 Programar envio' },
+        { label:'Segurar (Full abastecido)', icon:'checkCircle', tint:'success',
+          valueHtml: r.segurar===undefined?'—':String(r.segurar), note:'🟢 Saudável / 🟡 Atenção — sem necessidade agora' },
+        { label:'Sem estoque no Galpão', icon:'alertCircle', tint: temSemGalpao?'danger':'muted',
+          valueHtml: r.semEstoqueGalpao===undefined?'—':String(r.semEstoqueGalpao), note:'Precisaria enviar, mas o Galpão não tem o suficiente' },
+        { label:'Gasto com envio Full — '+mesLabel, icon:'wallet', tint:'copper',
+          valueHtml: (state.custoAtual && state.custoAtual.valor!==null && state.custoAtual.valor!==undefined) ? money(state.custoAtual.valor) : '—',
+          note: (state.custoAtual && state.custoAtual.valor!==null) ? 'Lançado manualmente' : 'Ainda não lançado este mês' },
+      ];
+      return '<div class="kpi-hero-grid">' + items.map(cardHTML).join('') + '</div>';
+    }
+
+    // ---- tabela principal ----
+    function statusChipHTML(status, emoji, label){
+      const tint = STATUS_TINT[status] || 'muted';
+      return '<span class="status-chip" style="'+tintStyle(tint)+'">'+(emoji||'')+' '+escapeHtml(label||status||'—')+'</span>';
+    }
+    function linhasOrdenadas(){
+      return state.linhas.slice().sort((a,b)=>{
+        const oa = STATUS_ORDEM[a.status]===undefined?9:STATUS_ORDEM[a.status];
+        const ob = STATUS_ORDEM[b.status]===undefined?9:STATUS_ORDEM[b.status];
+        if(oa !== ob) return oa - ob;
+        const da = a.diasCoberturaFull===null||a.diasCoberturaFull===undefined ? Infinity : a.diasCoberturaFull;
+        const db = b.diasCoberturaFull===null||b.diasCoberturaFull===undefined ? Infinity : b.diasCoberturaFull;
+        return da - db;
+      });
+    }
+    function linhasFiltradas(){
+      const termo = (state.busca||'').trim().toLowerCase();
+      let linhas = linhasOrdenadas();
+      if(termo) linhas = linhas.filter((l)=> (l.codigo||'').toLowerCase().includes(termo) || (l.nome||'').toLowerCase().includes(termo));
+      return linhas;
+    }
+    function linhaRowHTML(l){
+      const mediaCell = l.semHistoricoDeVendas
+        ? '<span style="color:var(--text-faint);font-style:italic;">sem vendas</span>'
+        : (numFmt(l.mediaDiariaProjetada) + (l.acelerando ? ' <span title="Vendas acelerando" style="color:var(--danger);">▲</span>' : (l.desacelerando ? ' <span title="Vendas desacelerando" style="color:var(--text-faint);">▼</span>' : '')));
+      const coberturaCell = (l.diasCoberturaFull===null || l.diasCoberturaFull===undefined) ? '—' : numFmt(l.diasCoberturaFull)+'d';
+      const rupturaCell = (l.semHistoricoDeVendas || !l.dataRupturaFullPrevista) ? '—' : fmtDate(l.dataRupturaFullPrevista);
+      const envioCell = (l.quantidadeSugeridaEnvio>0)
+        ? ('<strong>'+intFmt(l.quantidadeSugeridaEnvio)+'</strong>' + (l.semEstoqueGalpaoSuficiente ? ' <span title="Galpão não tem o suficiente" style="color:var(--danger);">⚠</span>' : ''))
+        : '<span style="color:var(--text-faint);">—</span>';
+      const podeAgir = l.quantidadeSugeridaEnvio > 0 && !l.semEstoqueGalpaoSuficiente;
+      const acoesHtml = podeAgir
+        ? '<div class="row-actions"><button class="row-ic-btn" data-aprovar-envio="'+l.produtoBaseId+'" title="Aprovar envio ao Full" type="button">'+svg('check')+'</button><button class="row-ic-btn" data-ignorar-envio="'+l.produtoBaseId+'" title="Ignorar por enquanto" type="button">'+svg('x')+'</button></div>'
+        : (l.semEstoqueGalpaoSuficiente ? '<span style="color:var(--text-faint);font-size:11.5px;">segurar — sem estoque</span>' : '');
+      return '<tr>'
+        + '<td class="produto-cell"><div class="cell-stack"><span class="prod-title">'+escapeHtml(l.codigo)+'</span>'+(l.nome?'<span class="cell-stack-sub">'+escapeHtml(l.nome)+'</span>':'')+'</div></td>'
+        + '<td class="tab-nums">'+intFmt(l.estoqueGalpao)+'</td>'
+        + '<td class="tab-nums">'+intFmt(l.estoqueFull)+'</td>'
+        + '<td class="tab-nums">'+intFmt(l.venda7d)+'</td>'
+        + '<td class="tab-nums">'+mediaCell+'</td>'
+        + '<td class="tab-nums">'+coberturaCell+'</td>'
+        + '<td class="tab-nums">'+rupturaCell+'</td>'
+        + '<td class="tab-nums">'+(l.prazoEnvioFullDias===null||l.prazoEnvioFullDias===undefined?'—':l.prazoEnvioFullDias+'d')+'</td>'
+        + '<td class="tab-nums">'+envioCell+'</td>'
+        + '<td>'+statusChipHTML(l.status, l.statusEmoji, l.statusLabel)+'</td>'
+        + '<td>'+acoesHtml+'</td>'
+      + '</tr>';
+    }
+    function abaRecomendacoesHTML(){
+      let html = cardsHTML();
+      if(state.loading && !state.linhas.length){
+        html += '<div class="table-card" style="margin-top:16px;"><div class="table-skel"><span class="spin"></span><span>Calculando recomendações…</span></div></div>';
+        return html;
+      }
+      if(state.error){
+        html += '<div class="empty-panel" style="margin-top:16px;"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="efRetryRecomendacoes" style="cursor:pointer;opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+        return html;
+      }
+      if(!state.linhas.length){
+        html += '<div class="empty-panel" style="margin-top:16px;"><div class="empty-icon">'+svg('truck')+'</div>'
+          + '<h2>Nenhum modelo físico cadastrado</h2>'
+          + '<p class="lead">Cadastre produtos com um modelo físico vinculado (SKU → modelo) em <strong>Cadastros → Produtos</strong> para o agente começar a analisar o envio ao Full.</p></div>';
+        return html;
+      }
+      const linhas = linhasFiltradas();
+      if(!linhas.length){
+        html += '<div class="empty-panel" style="margin-top:16px;"><div class="empty-icon">'+svg('search')+'</div><h2>Nenhum modelo encontrado</h2><p class="lead">Nenhum modelo corresponde à busca atual.</p></div>';
+        return html;
+      }
+      html += '<div class="table-card" style="margin-top:16px;"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Modelo</th><th>Galpão</th><th>Full</th><th>Venda 7d</th><th>Média/dia</th><th>Cobertura Full</th><th>Full acaba em</th><th>Prazo envio</th><th>Enviar sugerido</th><th>Status</th><th>Ações</th>'
+        + '</tr></thead><tbody>' + linhas.map(linhaRowHTML).join('') + '</tbody></table></div></div>';
+      return html;
+    }
+
+    async function decidirEnvio(produtoBaseId, statusDecisao){
+      const linha = state.linhas.find((l)=> l.produtoBaseId === produtoBaseId);
+      const decisoesPendentes = await apiDecisoes(state.empresaId, 'pendente').catch(()=>[]);
+      const decisao = decisoesPendentes.find((d)=> d.produtoBaseId === produtoBaseId);
+      if(!decisao){ toast('Recomendação não encontrada — pode já ter sido decidida. Atualizando a lista…', 'error'); await carregarRecomendacoes(); return; }
+      try{
+        await apiDecidir(decisao.id, { statusDecisao, decididoPor:'Pablo' });
+        toast(statusDecisao === 'aprovada' ? 'Envio aprovado — registrado em Histórico.' : 'Recomendação ignorada por enquanto.');
+        await carregarRecomendacoes();
+        state.pedidos = [];
+        if(state.aba === 'historico') await carregarHistorico();
+      }catch(err){ toast(err.message || 'Não foi possível registrar a decisão.', 'error'); }
+    }
+
+    // ---- aba Histórico ----
+    function origemLabel(origem){ return origem === 'manual' ? 'Manual' : 'Recomendação do agente'; }
+    function pedidoRowHTML(p){
+      return '<tr>'
+        + '<td class="mono">'+escapeHtml(p.numeroEnvio)+'</td>'
+        + '<td class="produto-cell"><div class="cell-stack"><span class="prod-title">'+escapeHtml(p.produtoBaseCodigo)+'</span>'+(p.produtoBaseNome?'<span class="cell-stack-sub">'+escapeHtml(p.produtoBaseNome)+'</span>':'')+'</div></td>'
+        + '<td class="tab-nums">'+fmtDate(p.criadoEm)+'</td>'
+        + '<td class="tab-nums">'+intFmt(p.quantidade)+'</td>'
+        + '<td>'+escapeHtml(origemLabel(p.origem))+'</td>'
+        + '<td><select class="mono" data-pedido-status="'+p.id+'" style="font-size:11.5px; padding:4px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">'
+          + STATUS_PEDIDO_OPCOES.map((par)=> '<option value="'+par[0]+'" '+(p.status===par[0]?'selected':'')+'>'+par[1]+'</option>').join('')
+        + '</select></td>'
+        + '<td class="tab-nums">'+(p.previsaoChegada?fmtDate(p.previsaoChegada):'—')+'</td>'
+        + '<td class="tab-nums">'+(p.recebidoEm?fmtDate(p.recebidoEm):'—')+'</td>'
+      + '</tr>';
+    }
+    function abaHistoricoHTML(){
+      if(state.pedidosLoading && !state.pedidos.length){
+        return '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando histórico…</span></div></div>';
+      }
+      if(state.pedidosError){
+        return '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.pedidosError)+'</p>'
+          + '<button class="ghost-btn" id="efRetryHistorico" style="cursor:pointer;opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      }
+      if(!state.pedidos.length){
+        return '<div class="empty-panel"><div class="empty-icon">'+svg('inbox')+'</div><h2>Nenhum envio registrado ainda</h2>'
+          + '<p class="lead">Quando você aprovar uma recomendação na aba Recomendações, o envio aparece aqui.</p></div>';
+      }
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Envio</th><th>Produto</th><th>Data</th><th>Quantidade</th><th>Origem</th><th>Status</th><th>Previsão</th><th>Recebido em</th>'
+        + '</tr></thead><tbody>' + state.pedidos.map(pedidoRowHTML).join('') + '</tbody></table></div></div>';
+    }
+
+    // ---- aba Custo Full ----
+    function custoHistoricoRowHTML(h){
+      return '<tr><td>'+MESES_LABEL[h.mes-1]+'/'+h.ano+'</td><td class="mono">'+money(h.valor)+'</td><td>'+escapeHtml(h.observacao||'—')+'</td></tr>';
+    }
+    function abaCustosHTML(){
+      const atual = state.custoAtual;
+      let html = '<div class="table-card" style="padding:18px;">'
+        + '<div class="section-label"><span>Lançar custo de envio ao Full do mês</span></div>'
+        + '<div class="field-hint" style="margin-bottom:12px;">Lançamento manual — o Mercado Livre não confirma, na documentação pública da API de Cobranças, um nome exato de cobrança separada para envio ao Full. Enquanto isso não é confirmado (testando direto na conta real, ou com um exemplo de fatura), o valor é digitado aqui todo mês.</div>'
+        + '<div class="inline-form" style="margin-top:0;">'
+          + '<div class="field narrow"><label>Mês</label><select id="efCustoMes">'
+            + MESES_LABEL.map((m,i)=> '<option value="'+(i+1)+'" '+((i+1)===state.custoMes?'selected':'')+'>'+m+'</option>').join('')
+          + '</select></div>'
+          + '<div class="field narrow"><label>Ano</label><input type="text" inputmode="numeric" id="efCustoAno" value="'+state.custoAno+'"></div>'
+          + '<div class="field narrow"><label>Valor gasto (R$)</label><input type="text" inputmode="decimal" id="efCustoValor" value="'+(atual && atual.valor!==null && atual.valor!==undefined ? String(atual.valor).replace('.',',') : '')+'"></div>'
+        + '</div>'
+        + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="efCustoObs" value="'+escapeHtml((atual && atual.observacao) || '')+'"></div>'
+        + '<button type="button" class="ghost-btn" id="efCustoSalvar" style="cursor:pointer;opacity:1;" '+(state.custoSalvando?'disabled':'')+'>'+svg('check')+'<span>'+(state.custoSalvando?'Salvando…':'Salvar valor do mês')+'</span></button>'
+      + '</div>';
+
+      html += '<div class="table-card" style="margin-top:16px;"><div class="table-wrap"><table class="data-table"><thead><tr><th>Mês</th><th>Valor</th><th>Observação</th></tr></thead><tbody>'
+        + (state.custoHistorico.length ? state.custoHistorico.map(custoHistoricoRowHTML).join('') : '<tr><td colspan="3" style="color:var(--text-faint);">Nenhum mês lançado ainda.</td></tr>')
+        + '</tbody></table></div></div>';
+      return html;
+    }
+
+    async function salvarCustoMes(){
+      const mesSel = document.getElementById('efCustoMes');
+      const anoInput = document.getElementById('efCustoAno');
+      const valorInput = document.getElementById('efCustoValor');
+      const obsInput = document.getElementById('efCustoObs');
+      const valor = valorInput ? Number(valorInput.value.replace(',','.')) : NaN;
+      if(!Number.isFinite(valor) || valor < 0){ toast('Informe um valor válido, maior ou igual a zero.', 'error'); return; }
+      state.custoSalvando = true; render();
+      try{
+        await apiSalvarCusto({
+          empresaId: state.empresaId,
+          ano: Number(anoInput.value), mes: Number(mesSel.value),
+          valor, observacao: obsInput.value || null, lancadoPor: 'Pablo',
+        });
+        state.custoAno = Number(anoInput.value); state.custoMes = Number(mesSel.value);
+        toast('Custo de envio Full salvo.');
+        await carregarCustos();
+      }catch(err){
+        const msg = (err.errors && Object.values(err.errors).join(' ')) || err.message || 'Não foi possível salvar o custo.';
+        toast(msg, 'error');
+      }finally{ state.custoSalvando = false; render(); }
+    }
+
+    // ---- render geral ----
+    function render(){
+      const root = document.getElementById('envioFullRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de usar o Agente de Envio Full.</p></div>';
+        return;
+      }
+
+      const buscaAtiva = document.activeElement && document.activeElement.id === 'efSearch';
+      const buscaCursor = buscaAtiva ? document.activeElement.selectionStart : null;
+
+      let html = '<div class="toolbar">'
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="efEmpresaSelect">'
+          + state.empresas.map((e)=> '<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>'
+        + '<div class="seg" id="efAbas">'
+          + '<button type="button" data-aba="recomendacoes" class="'+(state.aba==='recomendacoes'?'active':'')+'">Recomendações'+((state.resumo && state.resumo.enviarAgora) ? (' · '+state.resumo.enviarAgora) : '')+'</button>'
+          + '<button type="button" data-aba="historico" class="'+(state.aba==='historico'?'active':'')+'">Histórico</button>'
+          + '<button type="button" data-aba="custos" class="'+(state.aba==='custos'?'active':'')+'">Custo Full</button>'
+        + '</div>'
+        + (state.aba==='recomendacoes' ? '<div class="search-box">'+svg('search')+'<input type="text" id="efSearch" placeholder="Buscar modelo" value="'+state.busca.replace(/"/g,'&quot;')+'"></div>' : '<span></span>')
+      + '</div>';
+
+      if(state.aba === 'recomendacoes') html += abaRecomendacoesHTML();
+      else if(state.aba === 'historico') html += abaHistoricoHTML();
+      else html += abaCustosHTML();
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('efEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{
+        state.empresaId = Number(sel.value);
+        state.pedidos = []; state.custoAtual = null; state.custoHistorico = [];
+        carregarRecomendacoes();
+        if(state.aba === 'historico') carregarHistorico();
+        if(state.aba === 'custos') carregarCustos();
+      });
+
+      const abas = document.getElementById('efAbas');
+      if(abas) abas.querySelectorAll('button').forEach((b)=> b.addEventListener('click', ()=>{
+        state.aba = b.dataset.aba;
+        if(state.aba === 'historico' && !state.pedidos.length && !state.pedidosLoading) carregarHistorico();
+        else if(state.aba === 'custos' && !state.custoAtual) carregarCustos();
+        else render();
+      }));
+
+      const search = document.getElementById('efSearch');
+      if(search){
+        search.addEventListener('input', ()=>{ state.busca = search.value; render(); });
+        if(buscaAtiva){ search.focus(); try{ search.setSelectionRange(buscaCursor, buscaCursor); }catch(e){} }
+      }
+
+      const retryRec = document.getElementById('efRetryRecomendacoes');
+      if(retryRec) retryRec.addEventListener('click', carregarRecomendacoes);
+      const retryHist = document.getElementById('efRetryHistorico');
+      if(retryHist) retryHist.addEventListener('click', carregarHistorico);
+
+      root.querySelectorAll('[data-aprovar-envio]').forEach((btn)=> btn.addEventListener('click', ()=> decidirEnvio(Number(btn.dataset.aprovarEnvio), 'aprovada')));
+      root.querySelectorAll('[data-ignorar-envio]').forEach((btn)=> btn.addEventListener('click', ()=> decidirEnvio(Number(btn.dataset.ignorarEnvio), 'ignorada')));
+
+      root.querySelectorAll('[data-pedido-status]').forEach((selEl)=> selEl.addEventListener('change', async ()=>{
+        const id = Number(selEl.dataset.pedidoStatus);
+        selEl.disabled = true;
+        try{
+          await apiPatchPedidoStatus(id, selEl.value);
+          toast('Status do envio atualizado.');
+          await carregarHistorico();
+        }catch(err){ toast(err.message || 'Não foi possível atualizar o status.', 'error'); selEl.disabled = false; }
+      }));
+
+      const btnSalvarCusto = document.getElementById('efCustoSalvar');
+      if(btnSalvarCusto) btnSalvarCusto.addEventListener('click', salvarCustoMes);
+    }
+
+    const btnGerar = document.getElementById('btnGerarEnvioFull');
+    if(btnGerar) btnGerar.addEventListener('click', gerarAgora);
+
+    window.EnvioFull = { load };
+  })();
+
+  /* ================= CALCULADORA DE VENDAS (Venda de Balcão) =================
+     Ativado em 22/09/2026 — pedido explícito do usuário: "quero colocar
+     agora uma calculadora de vendas pra eu vende[r] para o cliente final
+     que vem até a minha empresa... porque todas as vendas que eu faço pro
+     fora eu nao coloco no faturamento sei que isso é errado mas quero
+     arrumar". Uma venda presencial (sempre à vista), sempre de produto já
+     cadastrado (nunca digitado solto — reaproveita GET /api/produtos), que
+     passa a contar em TODO o sistema (Visão Geral/DRE/Relatórios/
+     Faturamento — ver o novo canal 'balcao' em lib/relatorioVendas.js) e
+     baixa o estoque "fora do Full" automaticamente (ver
+     lib/estoqueFisico.js). Usa o filtro do HEADER (window.CerneFiltro) pra
+     empresa e período do histórico, igual Faturamento/Notas Fiscais/Pedidos
+     — o carrinho de uma venda nova sempre usa a empresa selecionada ali. */
+  (function(){
+    const FORMA_PAGAMENTO_OPCOES = [
+      ['dinheiro','Dinheiro'], ['pix','Pix'], ['debito','Débito'], ['credito','Crédito'], ['outro','Outro'],
+    ];
+    const FORMA_PAGAMENTO_LABEL = Object.fromEntries(FORMA_PAGAMENTO_OPCOES);
+    const state = { loading:false, error:null, vendas:[], search:'' };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function round2(n){ return Math.round(n*100)/100; }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtDateTime(iso){ if(!iso) return '—'; try{ const d=new Date(iso); return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return '—'; } }
+
+    async function api(path, opts){
+      const res = await fetch('/api/vendas-balcao'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
+      return body;
+    }
+    async function apiProdutosAtivos(empresaId){
+      const res = await fetch('/api/produtos?'+new URLSearchParams({ empresaId, status:'ativos' }).toString());
+      const body = await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar os produtos.');
+      return body.produtos || [];
+    }
+
+    async function loadVendas(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.vendas=[]; state.loading=false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const params = new URLSearchParams({ empresaId: filtro.empresaId, periodo: filtro.periodo });
+        if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
+        if(state.search.trim()) params.set('search', state.search.trim());
+        const data = await api('?'+params.toString(), { method:'GET' });
+        state.vendas = data.vendas;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar as vendas de balcão.'; }
+      finally{ state.loading = false; render(); }
+    }
+
+    function load(){ loadVendas(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-vendaBalcao');
+      if(page && page.classList.contains('active')) loadVendas();
+      else render();
+    });
+
+    // ---- cards de resumo do período (soma simples do que já veio na
+    // listagem — nunca um cálculo novo/paralelo ao de lib/relatorioVendas.js,
+    // só uma soma de exibição das próprias vendas de balcão) ----
+    function cardsHTML(){
+      const validas = state.vendas.filter(v=>!v.cancelado);
+      const totalVendido = validas.reduce((acc,v)=> round2(acc+v.valorTotal), 0);
+      const totalCusto = validas.reduce((acc,v)=> v.custoProdutoTotal===null ? acc : round2(acc+v.custoProdutoTotal), 0);
+      const temCustoIncompleto = validas.some(v=>v.custoProdutoTotal===null);
+      const margem = temCustoIncompleto ? null : round2(totalVendido - validas.reduce((acc,v)=>round2(acc+v.desconto),0) - totalCusto);
+      const items = [
+        { label:'Vendido no período', icon:'wallet', tint:'success', valueHtml: money(totalVendido), note: validas.length+' venda(s) válida(s)' },
+        { label:'Margem estimada', icon:'checkCircle', tint: margem===null ? 'muted' : (margem>=0?'success':'danger'),
+          valueHtml: margem===null ? '—' : money(margem), note: temCustoIncompleto ? 'Parcial — há item sem custo cadastrado' : 'Vendido − desconto − custo do produto' },
+        { label:'Cancelada(s)', icon:'x', tint:'muted', valueHtml: String(state.vendas.length - validas.length), note:'Nunca apagada — fica registrada como cancelada' },
+      ];
+      return '<div class="kpi-hero-grid">' + items.map(k=>
+        '<div class="kpi-hero" style="'+(k.tint==='muted'?'--tint:var(--text-muted);--tint-soft:var(--surface-2);':'--tint:var(--'+k.tint+');--tint-soft:var(--'+k.tint+'-soft);')+'">'
+        + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
+        + '<div class="kpi-hero-label">'+escapeHtml(k.label)+'</div>'
+        + '<div class="kpi-hero-value">'+k.valueHtml+'</div>'
+        + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
+      + '</div>').join('') + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('vendaBalcaoRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de registrar uma venda de balcão.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:820px;">Venda feita presencialmente, na sua empresa, pro cliente final — sempre à vista. Depois de registrada, ela conta como faturamento de verdade: aparece na Visão Geral, no DRE, nos Relatórios e no Faturamento, e o estoque "fora do Full" já sai descontado.</div>';
+
+      html += '<div class="toolbar"><span></span><div class="search-box">'+svg('search')+'<input type="text" id="vbSearch" placeholder="Buscar por cliente ou número da venda" value="'+state.search.replace(/"/g,'&quot;')+'"></div></div>';
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando vendas…</span></div></div>';
       } else if(state.error){
         html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
-          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
-          + '<button class="ghost-btn" id="cmpRetry" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
-      } else if(!state.items.length){
-        const filtrado = !!(state.search || state.status!=='todos');
-        html += '<div class="empty-panel"><div class="empty-icon">'+svg('cart')+'</div>'
-          + '<h2>Nenhuma compra encontrada</h2>'
-          + '<p class="lead">'+(filtrado ? 'Nenhuma compra corresponde ao filtro atual.' : 'Crie o primeiro pedido de compra desta empresa.')+'</p>'
-          + (filtrado ? '' : '<button class="primary-btn enabled" id="cmpEmptyNew" type="button">'+svg('plus')+'<span>Nova compra</span></button>')
-        + '</div>';
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(!state.vendas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma venda de balcão neste período</h2>'
+          + '<p class="lead">Clique em "Nova venda" para registrar a primeira venda presencial.</p></div>';
       } else {
+        html += cardsHTML();
         html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Data</th><th>Fornecedor</th><th>Itens</th><th>Valor total</th><th>Previsão de chegada</th><th>Status</th><th></th>'
+          + '<th>Data</th><th>Venda</th><th>Cliente</th><th>Itens</th><th>Pagamento</th><th>Desconto</th><th>Total</th><th>Status</th><th></th>'
           + '</tr></thead><tbody>'
-          + state.items.map(c => '<tr>'
-            + '<td class="tab-nums">'+fmtDate(c.dataCompra)+'</td>'
-            + '<td>'+escapeHtml(c.fornecedorNome||'—')+'</td>'
-            + '<td class="tab-nums">'+(c.qtdItens!==undefined?c.qtdItens:'—')+'</td>'
-            + '<td class="mono">'+money(c.valorTotal)+'</td>'
-            + '<td class="tab-nums">'+fmtDate(c.previsaoChegada)+'</td>'
-            + '<td><select class="mono" data-status-select="'+c.id+'" style="font-size:11.5px; padding:4px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">'
-              + STATUS_OPCOES.map(function(par){ return '<option value="'+par[0]+'" '+(c.status===par[0]?'selected':'')+'>'+par[1]+'</option>'; }).join('')
-            + '</select></td>'
-            + '<td><div class="row-actions">'
-              + '<button class="row-ic-btn" data-edit="'+c.id+'" title="Editar" type="button">'+svg('edit')+'</button>'
-            + '</div></td>'
+          + state.vendas.map(v => '<tr'+(v.cancelado?' style="opacity:.6;"':'')+'>'
+            + '<td class="tab-nums">'+fmtDateTime(v.dataVenda)+'</td>'
+            + '<td class="mono">VB-'+String(v.numeroVenda).padStart(6,'0')+'</td>'
+            + '<td>'+escapeHtml(v.clienteNome||'—')+'</td>'
+            + '<td class="cell-stack-sub">'+v.itens.map(it=>escapeHtml(it.titulo)+' ×'+it.quantidade).join(', ')+'</td>'
+            + '<td>'+(FORMA_PAGAMENTO_LABEL[v.formaPagamento]||escapeHtml(v.formaPagamento))+'</td>'
+            + '<td class="mono">'+(v.desconto?money(v.desconto):'—')+'</td>'
+            + '<td class="mono">'+money(v.valorTotal)+'</td>'
+            + '<td>'+(v.cancelado ? '<span class="badge-status off"><span class="dot"></span>Cancelada</span>' : '<span class="badge-status on"><span class="dot"></span>Concluída</span>')+'</td>'
+            + '<td><div class="row-actions">'+(v.cancelado?'':'<button class="row-ic-btn danger" data-cancelar="'+v.id+'" title="Cancelar venda" type="button">'+svg('x')+'</button>')+'</div></td>'
           + '</tr>').join('')
           + '</tbody></table></div></div>';
       }
 
       root.innerHTML = html;
 
-      const sel = document.getElementById('cmpEmpresaSelect');
-      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadItens(); });
-      const seg = document.getElementById('cmpSeg');
-      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadItens(); }));
-      const search = document.getElementById('cmpSearch');
+      const search = document.getElementById('vbSearch');
       if(search) search.addEventListener('input', ()=>{
         state.search = search.value;
         clearTimeout(search._t);
-        search._t = setTimeout(loadItens, 300);
+        search._t = setTimeout(loadVendas, 300);
       });
-      const retry = document.getElementById('cmpRetry');
-      if(retry) retry.addEventListener('click', loadItens);
-      const emptyNew = document.getElementById('cmpEmptyNew');
-      if(emptyNew) emptyNew.addEventListener('click', ()=> openModal());
-      root.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', async ()=>{
-        try{
-          const data = await api('/'+b.dataset.edit, { method:'GET' });
-          openModal(data.compra);
-        }catch(err){ toast(err.message, 'error'); }
-      }));
-      root.querySelectorAll('[data-status-select]').forEach(sel=> sel.addEventListener('change', async ()=>{
-        const id = sel.dataset.statusSelect;
-        sel.disabled = true;
-        try{
-          await api('/'+id+'/status', { method:'PATCH', body: JSON.stringify({ status: sel.value }) });
-          toast('Status da compra atualizado.');
-          loadItens();
-        }catch(err){ toast(err.message, 'error'); sel.disabled = false; }
-      }));
+      root.querySelectorAll('[data-cancelar]').forEach(b=> b.addEventListener('click', ()=> cancelarVenda(Number(b.dataset.cancelar))));
     }
 
-    function openModal(compra){
-      const isEdit = !!compra;
-      let itens = isEdit && compra.itens && compra.itens.length
-        ? compra.itens.map(function(it){ return { produtoId:it.produtoId, quantidade:it.quantidade, custoUnitario:it.custoUnitario, nome:it.produtoNome, sku:it.produtoSku }; })
-        : [{ produtoId:null, quantidade:1, custoUnitario:0 }];
-      let rowSeq = 0;
-      itens.forEach(function(it){ it._rowId = 'r'+(rowSeq++); });
+    async function cancelarVenda(id){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId) return;
+      if(!window.confirm('Cancelar esta venda de balcão? Ela nunca é apagada — fica registrada como cancelada e sai do faturamento.')) return;
+      try{
+        await api('/'+id+'/cancelar', { method:'PATCH', body: JSON.stringify({ empresaId: filtro.empresaId }) });
+        toast('Venda cancelada.');
+        loadVendas();
+      }catch(err){ toast(err.message, 'error'); }
+    }
 
+    // ---- modal "Nova venda": carrinho de itens do catálogo já cadastrado
+    // (nunca produto digitado solto), com total/margem calculados ao vivo
+    // no navegador — só pra conferência visual; o valor que É gravado
+    // sempre vem recalculado no servidor (lib/vendaBalcao.js), nunca do
+    // que o navegador mandar pronto. ----
+    let carrinho = [];
+    let produtosCatalogo = [];
+
+    function carrinhoTotais(){
+      const bruto = carrinho.reduce((acc,it)=> round2(acc + round2(it.quantidade*it.precoUnitarioVenda)), 0);
+      const custoTotal = carrinho.reduce((acc,it)=> it.custo===null ? acc : round2(acc + round2(it.quantidade*it.custo)), 0);
+      const temSemCusto = carrinho.some(it=>it.custo===null);
+      return { bruto, custoTotal, temSemCusto };
+    }
+
+    function modalRenderCarrinho(){
+      const tbody = document.getElementById('vbCarrinhoBody');
+      const totais = document.getElementById('vbTotais');
+      if(!tbody || !totais) return;
+      if(!carrinho.length){
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:18px 0;">Nenhum produto adicionado ainda.</td></tr>';
+      } else {
+        tbody.innerHTML = carrinho.map((it,idx)=> '<tr>'
+          + '<td>'+escapeHtml(it.nome)+'<div class="cell-stack-sub mono">SKU '+escapeHtml(it.sku)+'</div></td>'
+          + '<td style="width:90px;"><input type="number" min="0.001" step="0.001" class="vb-qtd" data-idx="'+idx+'" value="'+it.quantidade+'" style="width:80px;"></td>'
+          + '<td style="width:130px;"><input type="text" inputmode="decimal" class="vb-preco" data-idx="'+idx+'" value="'+String(it.precoUnitarioVenda).replace('.',',')+'" style="width:110px;"></td>'
+          + '<td class="mono">'+money(round2(it.quantidade*it.precoUnitarioVenda))+'</td>'
+          + '<td><button type="button" class="row-ic-btn danger" data-remover-item="'+idx+'">'+svg('trash')+'</button></td>'
+        + '</tr>').join('');
+      }
+      const t = carrinhoTotais();
+      const descontoInput = document.getElementById('vbDesconto');
+      const desconto = descontoInput ? (Number((descontoInput.value||'0').replace(',','.')) || 0) : 0;
+      const liquido = round2(t.bruto - desconto);
+      const margem = t.temSemCusto ? null : round2(liquido - t.custoTotal);
+      totais.innerHTML = '<div class="bd-row"><span class="bd-label">Subtotal dos itens</span><span class="bd-value">'+money(t.bruto)+'</span></div>'
+        + '<div class="bd-row neg"><span class="bd-label">(−) Desconto</span><span class="bd-value">− '+money(desconto)+'</span></div>'
+        + '<div class="bd-row total"><span class="bd-label">= Total da venda</span><span class="bd-value">'+money(liquido)+'</span></div>'
+        + '<div class="bd-row total"><span class="bd-label">Margem estimada</span><span class="bd-value '+(margem===null?'':(margem>=0?'positive':'negative'))+'">'+(margem===null?'Parcial — item sem custo cadastrado':money(margem))+'</span></div>';
+    }
+
+    function abrirModalNovaVenda(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ toast('Selecione uma empresa no filtro do topo antes de registrar uma venda.', 'error'); return; }
+      carrinho = [];
       const modalRoot = document.getElementById('modalRoot');
-      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay">'
-        + '<div class="modal-card" style="max-width:640px;">'
-          + '<div class="modal-head"><div class="modal-title">'+(isEdit?'Editar compra':'Nova compra')+'</div>'
-            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
-          + '<div class="modal-sub">'+(isEdit?'Atualize os dados do pedido de compra.':'Preencha os dados para registrar um novo pedido de compra.')+'</div>'
-          + '<form id="cmpForm">'
-            + '<div class="field"><label>Fornecedor</label><select id="fFornecedor"><option value="">Carregando…</option></select>'
-              + '<div class="field-error" id="eFornecedor" style="display:none;"></div></div>'
-            + '<div class="inline-form" style="margin-top:0;">'
-              + '<div class="field narrow"><label>Data da compra</label><input type="date" id="fData" value="'+(isEdit&&compra.dataCompra?String(compra.dataCompra).slice(0,10):new Date().toISOString().slice(0,10))+'"></div>'
-              + '<div class="field narrow"><label>Previsão de chegada <span class="opt">(opcional)</span></label><input type="date" id="fPrevisao" value="'+(isEdit&&compra.previsaoChegada?String(compra.previsaoChegada).slice(0,10):'')+'"></div>'
-            + '</div>'
-            + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="fObservacao" placeholder="Observações gerais da compra" value="'+(isEdit?escapeHtml(compra.observacao||''):'')+'"></div>'
-            + '<div class="section-label"><span>Itens da compra</span></div>'
-            + '<div id="cmpItensList"></div>'
-            + '<div class="field-error" id="eItens" style="display:none; margin-bottom:10px;"></div>'
-            + '<button type="button" class="ghost-btn" id="cmpAddItem" style="cursor:pointer; opacity:1; margin-bottom:14px;">'+svg('plus')+'<span>Adicionar item</span></button>'
-            + '<div class="bd-row total" style="margin-bottom:14px;"><span class="bd-label">Valor total da compra</span><span class="bd-value" id="cmpTotalGeral">R$ 0,00</span></div>'
-            + '<div class="modal-actions">'
-              + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
-              + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>'+(isEdit?'Salvar alterações':'Criar compra')+'</span></button>'
-            + '</div>'
-          + '</form>'
-        + '</div>'
-      + '</div>';
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card wide"><div class="table-skel"><span class="spin"></span><span>Carregando produtos…</span></div></div></div>';
+      const overlayEarly = document.getElementById('modalOverlay');
+      overlayEarly.addEventListener('click', (e)=>{ if(e.target===overlayEarly) modalRoot.innerHTML=''; });
+
+      apiProdutosAtivos(filtro.empresaId).then((produtos)=>{
+        produtosCatalogo = produtos;
+        if(!produtos.length){
+          modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card"><div class="empty-panel"><div class="empty-icon">'+svg('box')+'</div><h2>Nenhum produto ativo cadastrado</h2><p class="lead">Cadastre pelo menos um produto em <strong>Cadastros → Produtos</strong> antes de registrar uma venda de balcão.</p></div><div class="modal-actions"><button type="button" class="btn-secondary" id="modalCancel">Fechar</button></div></div></div>';
+          document.getElementById('modalCancel').addEventListener('click', ()=> modalRoot.innerHTML='');
+          document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='modalOverlay') modalRoot.innerHTML=''; });
+          return;
+        }
+        renderModalNovaVenda();
+      }).catch((err)=>{ toast(err.message, 'error'); modalRoot.innerHTML=''; });
+    }
+
+    function renderModalNovaVenda(){
+      const modalRoot = document.getElementById('modalRoot');
+      const html = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card wide">'
+        + '<div class="modal-head"><div class="modal-title">Nova venda de balcão</div><button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+        + '<div class="modal-sub">Sempre à vista — pago na hora.</div>'
+        + '<form id="vbForm">'
+          + '<div class="inline-form" style="margin-top:0;">'
+            + '<div class="field"><label>Adicionar produto do catálogo</label><select id="vbProdutoSelect">'
+              + '<option value="">Selecione um produto…</option>'
+              + produtosCatalogo.map(p=> '<option value="'+p.id+'">'+escapeHtml(p.nome)+' — SKU '+escapeHtml(p.sku)+'</option>').join('')
+            + '</select></div>'
+            + '<div class="field narrow" style="max-width:120px;"><label>Qtd.</label><input type="number" min="0.001" step="0.001" id="vbProdutoQtd" value="1"></div>'
+            + '<div class="field narrow" style="max-width:60px;align-self:flex-end;"><button type="button" class="ghost-btn" id="vbAdicionarItem" style="cursor:pointer;opacity:1;">'+svg('plus')+'</button></div>'
+          + '</div>'
+
+          + '<div class="table-wrap" style="margin-top:6px;"><table class="data-table"><thead><tr>'
+            + '<th>Produto</th><th>Qtd.</th><th>Preço unit.</th><th>Total</th><th></th>'
+          + '</tr></thead><tbody id="vbCarrinhoBody"></tbody></table></div>'
+
+          + '<div class="inline-form">'
+            + '<div class="field narrow"><label>Desconto <span class="opt">(opcional, R$)</span></label><input type="text" inputmode="decimal" id="vbDesconto" value="0"></div>'
+            + '<div class="field narrow"><label>Forma de pagamento</label><select id="vbFormaPagamento">'
+              + FORMA_PAGAMENTO_OPCOES.map(function(par){ return '<option value="'+par[0]+'">'+par[1]+'</option>'; }).join('')
+            + '</select></div>'
+            + '<div class="field narrow"><label>Cliente <span class="opt">(opcional)</span></label><input type="text" id="vbCliente" maxlength="200"></div>'
+          + '</div>'
+          + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="vbObservacao"></div>'
+
+          + '<div id="vbTotais" style="margin:10px 0;"></div>'
+          + '<div class="field-error" id="vbErro" style="display:none;"></div>'
+          + '<div class="modal-actions">'
+            + '<button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>'
+            + '<button type="submit" class="btn-primary" id="modalSave">'+svg('check')+'<span>Finalizar venda</span></button>'
+          + '</div>'
+        + '</form>'
+      + '</div></div>';
+
+      modalRoot.innerHTML = html;
+      modalRenderCarrinho();
 
       const overlay = document.getElementById('modalOverlay');
-      const close = ()=> modalRoot.innerHTML = '';
-      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      const close = ()=> modalRoot.innerHTML='';
+      overlay.addEventListener('click', (e)=>{ if(e.target===overlay) close(); });
       document.getElementById('modalClose').addEventListener('click', close);
       document.getElementById('modalCancel').addEventListener('click', close);
 
-      let produtosAtivos = [];
-
-      function calcularTotal(){
-        return itens.reduce(function(acc, it){ return acc + (Number(it.quantidade)||0) * (Number(it.custoUnitario)||0); }, 0);
-      }
-
-      function renderItens(){
-        const list = document.getElementById('cmpItensList');
-        if(!list) return;
-        list.innerHTML = itens.map(function(it, idx){
-          const totalItem = (Number(it.quantidade)||0) * (Number(it.custoUnitario)||0);
-          const produtoAindaAtivo = it.produtoId && produtosAtivos.some(function(p){ return p.id === Number(it.produtoId); });
-          const opcaoInativa = (it.produtoId && !produtoAindaAtivo)
-            ? '<option value="'+it.produtoId+'" selected>'+escapeHtml(it.nome||('Produto #'+it.produtoId))+(it.sku?' ('+escapeHtml(it.sku)+')':'')+' — inativo</option>'
-            : '';
-          const opcoesProduto = '<option value="">Selecione…</option>' + opcaoInativa + produtosAtivos.map(function(p){
-            return '<option value="'+p.id+'" '+(Number(it.produtoId)===p.id?'selected':'')+'>'+escapeHtml(p.nome)+' ('+escapeHtml(p.sku)+')</option>';
-          }).join('');
-          return '<div class="inline-form" data-item-row="'+it._rowId+'" style="align-items:flex-end; margin-bottom:8px;">'
-            + '<div class="field" style="min-width:200px; margin-bottom:0;"><label>Produto</label><select data-item-produto="'+it._rowId+'">'+opcoesProduto+'</select></div>'
-            + '<div class="field narrow" style="margin-bottom:0;"><label>Quantidade</label><input type="text" inputmode="numeric" data-item-qtd="'+it._rowId+'" value="'+it.quantidade+'"></div>'
-            + '<div class="field narrow" style="margin-bottom:0;"><label>Custo unitário</label><input type="text" inputmode="decimal" data-item-custo="'+it._rowId+'" value="'+String(it.custoUnitario).replace('.',',')+'"></div>'
-            + '<div class="field narrow" style="margin-bottom:0;"><label>Total do item</label><input type="text" value="'+money(totalItem)+'" disabled></div>'
-            + (itens.length > 1 ? '<button type="button" class="row-ic-btn danger" data-item-remove="'+it._rowId+'" title="Remover item" style="margin-bottom:2px;">'+svg('x')+'</button>' : '<span style="width:36px;"></span>')
-          + '</div>';
-        }).join('');
-
-        list.querySelectorAll('[data-item-produto]').forEach(function(sel){
-          sel.addEventListener('change', function(){
-            const row = itens.find(function(it){ return it._rowId === sel.dataset.itemProduto; });
-            if(row) row.produtoId = sel.value ? Number(sel.value) : null;
-          });
-        });
-        list.querySelectorAll('[data-item-qtd]').forEach(function(input){
-          input.addEventListener('input', function(){
-            const row = itens.find(function(it){ return it._rowId === input.dataset.itemQtd; });
-            if(row){ row.quantidade = input.value; renderItens(); atualizarTotalGeral(); posicionarFoco(input.dataset.itemQtd,'qtd'); }
-          });
-        });
-        list.querySelectorAll('[data-item-custo]').forEach(function(input){
-          input.addEventListener('input', function(){
-            const row = itens.find(function(it){ return it._rowId === input.dataset.itemCusto; });
-            if(row){ row.custoUnitario = input.value.replace(',','.'); renderItens(); atualizarTotalGeral(); posicionarFoco(input.dataset.itemCusto,'custo'); }
-          });
-        });
-        list.querySelectorAll('[data-item-remove]').forEach(function(btn){
-          btn.addEventListener('click', function(){
-            itens = itens.filter(function(it){ return it._rowId !== btn.dataset.itemRemove; });
-            renderItens();
-            atualizarTotalGeral();
-          });
-        });
-      }
-
-      // Reposiciona o cursor no campo que estava sendo editado depois de um
-      // re-render (evita perder o foco a cada tecla digitada).
-      let focoPendente = null;
-      function posicionarFoco(rowId, campo){
-        focoPendente = { rowId, campo };
-        requestAnimationFrame(function(){
-          if(!focoPendente) return;
-          const seletor = focoPendente.campo === 'qtd' ? '[data-item-qtd="'+focoPendente.rowId+'"]' : '[data-item-custo="'+focoPendente.rowId+'"]';
-          const el = document.querySelector(seletor);
-          if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
-          focoPendente = null;
-        });
-      }
-
-      function atualizarTotalGeral(){
-        const el = document.getElementById('cmpTotalGeral');
-        if(el) el.textContent = money(calcularTotal());
-      }
-
-      document.getElementById('cmpAddItem').addEventListener('click', function(){
-        itens.push({ produtoId:null, quantidade:1, custoUnitario:0, _rowId:'r'+(rowSeq++) });
-        renderItens();
-        atualizarTotalGeral();
+      document.getElementById('vbAdicionarItem').addEventListener('click', ()=>{
+        const sel = document.getElementById('vbProdutoSelect');
+        const qtdEl = document.getElementById('vbProdutoQtd');
+        const produtoId = Number(sel.value);
+        if(!produtoId){ toast('Selecione um produto.', 'error'); return; }
+        const produto = produtosCatalogo.find(p=>p.id===produtoId);
+        const quantidade = Number(qtdEl.value);
+        if(!Number.isFinite(quantidade) || quantidade<=0){ toast('Informe uma quantidade válida.', 'error'); return; }
+        const existente = carrinho.find(it=>it.sku===produto.sku);
+        if(existente){ existente.quantidade = round2(existente.quantidade + quantidade); }
+        else { carrinho.push({ sku:produto.sku, nome:produto.nome, custo:produto.custo, quantidade, precoUnitarioVenda:0 }); }
+        sel.value=''; qtdEl.value='1';
+        modalRenderCarrinho();
       });
 
-      (async function carregarPickers(){
-        try{
-          const [fornecedores, produtos] = await Promise.all([
-            apiFornecedoresAtivos(state.empresaId),
-            apiProdutosAtivos(state.empresaId),
-          ]);
-          produtosAtivos = produtos;
-          const fSel = document.getElementById('fFornecedor');
-          if(fSel){
-            fSel.innerHTML = fornecedores.length
-              ? fornecedores.map(function(f){ return '<option value="'+f.id+'" '+(isEdit&&compra.fornecedorId===f.id?'selected':'')+'>'+escapeHtml(f.razaoSocial)+'</option>'; }).join('')
-              : '<option value="">Nenhum fornecedor ativo cadastrado</option>';
-          }
-          renderItens();
-          atualizarTotalGeral();
-        }catch(e){
-          toast('Não foi possível carregar fornecedores/produtos.', 'error');
+      document.getElementById('vbCarrinhoBody').addEventListener('input', (e)=>{
+        const idx = Number(e.target.dataset.idx);
+        if(Number.isNaN(idx)) return;
+        if(e.target.classList.contains('vb-qtd')){
+          const v = Number(e.target.value);
+          if(Number.isFinite(v) && v>0) carrinho[idx].quantidade = v;
+        } else if(e.target.classList.contains('vb-preco')){
+          const v = Number(String(e.target.value).replace(',','.'));
+          carrinho[idx].precoUnitarioVenda = Number.isFinite(v) ? v : 0;
         }
-      })();
+        modalRenderCarrinho();
+      });
+      document.getElementById('vbCarrinhoBody').addEventListener('click', (e)=>{
+        const btn = e.target.closest('[data-remover-item]');
+        if(!btn) return;
+        carrinho.splice(Number(btn.dataset.removerItem), 1);
+        modalRenderCarrinho();
+      });
+      document.getElementById('vbDesconto').addEventListener('input', modalRenderCarrinho);
 
-      document.getElementById('cmpForm').addEventListener('submit', async (e)=>{
+      document.getElementById('vbForm').addEventListener('submit', async (e)=>{
         e.preventDefault();
-        ['eFornecedor','eItens'].forEach(id=>{ const el=document.getElementById(id); el.style.display='none'; el.textContent=''; });
+        const erroEl = document.getElementById('vbErro');
+        erroEl.style.display='none'; erroEl.textContent='';
 
+        if(!carrinho.length){ erroEl.textContent='Adicione ao menos um produto à venda.'; erroEl.style.display='block'; return; }
+        if(carrinho.some(it=>!(it.precoUnitarioVenda>0))){ erroEl.textContent='Informe o preço de venda de cada produto (maior que zero).'; erroEl.style.display='block'; return; }
+
+        const descontoRaw = document.getElementById('vbDesconto').value;
         const payload = {
-          empresaId: state.empresaId,
-          fornecedorId: Number(document.getElementById('fFornecedor').value),
-          dataCompra: document.getElementById('fData').value,
-          previsaoChegada: document.getElementById('fPrevisao').value,
-          observacao: document.getElementById('fObservacao').value,
-          itens: itens.map(function(it){ return { produtoId: it.produtoId, quantidade: Number(it.quantidade), custoUnitario: Number(it.custoUnitario) }; }),
+          empresaId: window.CerneFiltro.state.empresaId,
+          formaPagamento: document.getElementById('vbFormaPagamento').value,
+          clienteNome: document.getElementById('vbCliente').value,
+          observacao: document.getElementById('vbObservacao').value,
+          desconto: descontoRaw ? Number(String(descontoRaw).replace(',','.')) : 0,
+          itens: carrinho.map(it=>({ sku:it.sku, quantidade:it.quantidade, precoUnitarioVenda:it.precoUnitarioVenda })),
         };
-
-        if(!payload.fornecedorId){
-          const el = document.getElementById('eFornecedor'); el.textContent = 'Selecione o fornecedor.'; el.style.display = 'block';
-          return;
-        }
 
         const saveBtn = document.getElementById('modalSave');
         saveBtn.disabled = true;
         try{
-          if(isEdit) await api('/'+compra.id, { method:'PUT', body: JSON.stringify(payload) });
-          else await api('', { method:'POST', body: JSON.stringify(payload) });
+          await api('', { method:'POST', body: JSON.stringify(payload) });
           close();
-          toast(isEdit ? 'Compra atualizada.' : 'Compra criada.');
-          loadItens();
+          toast('Venda registrada — já entrou no faturamento e o estoque foi baixado.');
+          loadVendas();
         }catch(err){
           saveBtn.disabled = false;
-          if(err.errors){
-            if(err.errors.fornecedorId){ const el=document.getElementById('eFornecedor'); el.textContent=err.errors.fornecedorId; el.style.display='block'; }
-            if(err.errors.itens){ const el=document.getElementById('eItens'); el.textContent=err.errors.itens; el.style.display='block'; }
-            if(!err.errors.fornecedorId && !err.errors.itens) toast(err.message, 'error');
-          } else {
-            toast(err.message, 'error');
-          }
+          erroEl.textContent = err.message || 'Não foi possível registrar a venda.';
+          erroEl.style.display='block';
         }
       });
     }
 
-    document.getElementById('btnNewCompra').addEventListener('click', ()=> openModal());
+    const btnNovaVenda = document.getElementById('btnNovaVendaBalcao');
+    if(btnNovaVenda) btnNovaVenda.addEventListener('click', abrirModalNovaVenda);
 
-    window.Compras = { load };
+    window.VendaBalcao = { load };
   })();
 
   /* ================= CONTAS A PAGAR — lançamento manual, por empresa =================
@@ -8782,7 +9971,11 @@
         if(state.search.trim()) params.set('search', state.search.trim());
         const data = await api('?'+params.toString(), { method:'GET' });
         state.itens = data.itens;
-        state.selecionados = new Set([...state.selecionados].filter(id => state.itens.some(i=>i.pedidoId===id)));
+        // CORREÇÃO (22/09/2026, "Venda de Balcão"): a chave de seleção agora
+        // é `detailKey` ("marketplace:id" — nunca mais o pedidoId sozinho),
+        // porque o mesmo id numérico pode existir em Mercado Livre, Shopee e
+        // Balcão ao mesmo tempo (ver lib/faturamento.js).
+        state.selecionados = new Set([...state.selecionados].filter(k => state.itens.some(i=>i.detailKey===k)));
       }catch(err){ state.error = err.message || 'Não foi possível carregar o faturamento.'; }
       finally{ state.loading = false; render(); }
     }
@@ -8796,19 +9989,19 @@
     });
 
     async function aplicarStatusLote(status){
-      const ids = [...state.selecionados];
-      if(!ids.length) return;
+      const keys = [...state.selecionados];
+      if(!keys.length) return;
       try{
-        const result = await api('/lote', { method:'PATCH', body: JSON.stringify({ pedidoIds: ids, status }) });
+        const result = await api('/lote', { method:'PATCH', body: JSON.stringify({ detailKeys: keys, status }) });
         toast(result.atualizados.length+' pedido(s) atualizado(s) para "'+STATUS_LABEL[status]+'".'+(result.falharam.length?(' '+result.falharam.length+' falharam.'):''));
         state.selecionados = new Set();
         loadItens();
       }catch(err){ toast(err.message, 'error'); }
     }
 
-    async function aplicarStatusUnico(pedidoId, status){
+    async function aplicarStatusUnico(detailKey, status){
       try{
-        await api('/'+pedidoId+'/situacao', { method:'PATCH', body: JSON.stringify({ status }) });
+        await api('/'+encodeURIComponent(detailKey)+'/situacao', { method:'PATCH', body: JSON.stringify({ status }) });
         toast('Situação atualizada para "'+STATUS_LABEL[status]+'".');
         loadItens();
       }catch(err){ toast(err.message, 'error'); }
@@ -8853,13 +10046,13 @@
           + '<h2>Nenhum pedido encontrado</h2>'
           + '<p class="lead">Nenhum pedido corresponde ao filtro atual no período selecionado.</p></div>';
       } else {
-        const todosSelecionados = state.itens.length>0 && state.itens.every(i=>state.selecionados.has(i.pedidoId));
+        const todosSelecionados = state.itens.length>0 && state.itens.every(i=>state.selecionados.has(i.detailKey));
         html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
           + '<th><input type="checkbox" id="fatSelectAll" '+(todosSelecionados?'checked':'')+'></th>'
           + '<th>Data</th><th>Pedido</th><th>Marketplace</th><th>Loja</th><th>Cliente</th><th>Valor</th><th>Status do pedido</th><th>Faturamento</th><th></th>'
           + '</tr></thead><tbody>'
           + state.itens.map(i => '<tr'+(i.pedidoCancelado?' style="opacity:.6;"':'')+'>'
-            + '<td><input type="checkbox" data-sel="'+i.pedidoId+'" '+(state.selecionados.has(i.pedidoId)?'checked':'')+'></td>'
+            + '<td><input type="checkbox" data-sel="'+escapeHtml(i.detailKey)+'" '+(state.selecionados.has(i.detailKey)?'checked':'')+'></td>'
             + '<td class="tab-nums">'+fmtDate(i.data)+'</td>'
             + '<td class="mono">'+escapeHtml(i.mlOrderId)+'</td>'
             + '<td>'+escapeHtml(i.marketplace)+'</td>'
@@ -8868,7 +10061,7 @@
             + '<td class="mono">'+money(i.valor)+'</td>'
             + '<td>'+escapeHtml(i.statusPedido||'—')+'</td>'
             + '<td><span class="status-chip" style="'+statusChipStyle(i.situacaoFaturamento)+'">'+STATUS_LABEL[i.situacaoFaturamento]+'</span></td>'
-            + '<td><select data-change="'+i.pedidoId+'" style="font-size:12px;padding:4px 6px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);">'
+            + '<td><select data-change="'+escapeHtml(i.detailKey)+'" style="font-size:12px;padding:4px 6px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);">'
               + STATUS_OPCOES.map(function(par){ return '<option value="'+par[0]+'" '+(i.situacaoFaturamento===par[0]?'selected':'')+'>'+par[1]+'</option>'; }).join('')
             + '</select></td>'
           + '</tr>').join('')
@@ -8886,16 +10079,16 @@
         search._t = setTimeout(loadItens, 300);
       });
       root.querySelectorAll('[data-lote]').forEach(b=> b.addEventListener('click', ()=> aplicarStatusLote(b.dataset.lote)));
-      root.querySelectorAll('[data-change]').forEach(sel=> sel.addEventListener('change', ()=> aplicarStatusUnico(Number(sel.dataset.change), sel.value)));
+      root.querySelectorAll('[data-change]').forEach(sel=> sel.addEventListener('change', ()=> aplicarStatusUnico(sel.dataset.change, sel.value)));
       const selectAll = document.getElementById('fatSelectAll');
       if(selectAll) selectAll.addEventListener('change', ()=>{
-        if(selectAll.checked) state.itens.forEach(i=> state.selecionados.add(i.pedidoId));
-        else state.itens.forEach(i=> state.selecionados.delete(i.pedidoId));
+        if(selectAll.checked) state.itens.forEach(i=> state.selecionados.add(i.detailKey));
+        else state.itens.forEach(i=> state.selecionados.delete(i.detailKey));
         render();
       });
       root.querySelectorAll('[data-sel]').forEach(cb=> cb.addEventListener('change', ()=>{
-        const id = Number(cb.dataset.sel);
-        if(cb.checked) state.selecionados.add(id); else state.selecionados.delete(id);
+        const key = cb.dataset.sel;
+        if(cb.checked) state.selecionados.add(key); else state.selecionados.delete(key);
         render();
       }));
     }
@@ -8942,8 +10135,8 @@
       if(!res.ok){ const err = new Error((body&&(body.error||(body.errors&&body.errors.geral)))||'Falha na requisição.'); err.errors = body&&body.errors; throw err; }
       return body;
     }
-    async function apiPedido(id){
-      const res = await fetch('/api/pedidos/'+id);
+    async function apiPedido(detailKey){
+      const res = await fetch('/api/pedidos/'+encodeURIComponent(detailKey));
       let body = null; try{ body = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o pedido.');
       return body;
@@ -9004,18 +10197,19 @@
           + '<p class="lead">Nenhum pedido corresponde ao filtro atual no período selecionado.</p></div>';
       } else {
         html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-          + '<th>Número</th><th>Série</th><th>Pedido</th><th>Cliente</th><th>Valor</th><th>Emissão</th><th>Chave de acesso</th><th>Status</th><th></th>'
+          + '<th>Número</th><th>Série</th><th>Pedido</th><th>Marketplace</th><th>Cliente</th><th>Valor</th><th>Emissão</th><th>Chave de acesso</th><th>Status</th><th></th>'
           + '</tr></thead><tbody>'
           + state.itens.map(i => '<tr>'
             + '<td class="mono">'+(i.numero?escapeHtml(i.numero):'—')+'</td>'
             + '<td class="mono">'+(i.serie?escapeHtml(i.serie):'—')+'</td>'
             + '<td class="mono">'+escapeHtml(i.mlOrderId)+'</td>'
+            + '<td>'+escapeHtml(i.marketplace||'—')+'</td>'
             + '<td>'+escapeHtml(i.cliente||'—')+'</td>'
             + '<td class="mono">'+(i.valor!==null?money(i.valor):'<span class="dash">—</span>')+'</td>'
             + '<td class="tab-nums">'+(i.dataEmissao?fmtDate(i.dataEmissao):'—')+'</td>'
             + '<td class="mono" style="font-size:11px;">'+(i.chaveAcesso?escapeHtml(i.chaveAcesso):'<span class="dash">—</span>')+'</td>'
             + '<td><span class="status-chip" style="'+statusChipStyle(i.status)+'">'+STATUS_LABEL[i.status]+'</span></td>'
-            + '<td><div class="row-actions"><button class="row-ic-btn" data-abrir="'+i.pedidoId+'" title="Abrir" type="button">'+svg('eye')+'</button></div></td>'
+            + '<td><div class="row-actions"><button class="row-ic-btn" data-abrir="'+escapeHtml(i.detailKey)+'" title="Abrir" type="button">'+svg('eye')+'</button></div></td>'
           + '</tr>').join('')
           + '</tbody></table></div></div>';
       }
@@ -9030,20 +10224,23 @@
         clearTimeout(search._t);
         search._t = setTimeout(loadItens, 300);
       });
-      root.querySelectorAll('[data-abrir]').forEach(b=> b.addEventListener('click', ()=> openModal(Number(b.dataset.abrir))));
+      root.querySelectorAll('[data-abrir]').forEach(b=> b.addEventListener('click', ()=> openModal(b.dataset.abrir)));
     }
 
-    async function openModal(pedidoId){
+    // CORREÇÃO (22/09/2026, "Venda de Balcão"): recebe o `detailKey`
+    // composto ("marketplace:id"), não mais o pedidoId numérico sozinho —
+    // mesmo motivo de lib/faturamento.js (id pode colidir entre canais).
+    async function openModal(detailKey){
       const modalRoot = document.getElementById('modalRoot');
       modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card wide"><div class="table-skel"><span class="spin"></span><span>Carregando pedido…</span></div></div></div>';
       const closeEarly = ()=> modalRoot.innerHTML='';
       document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='modalOverlay') closeEarly(); });
 
       let pedidoData;
-      try{ pedidoData = await apiPedido(pedidoId); }
+      try{ pedidoData = await apiPedido(detailKey); }
       catch(err){ toast(err.message, 'error'); closeEarly(); return; }
 
-      const nota = state.itens.find(i => i.pedidoId === pedidoId) || {};
+      const nota = state.itens.find(i => i.detailKey === detailKey) || {};
       const pedido = pedidoData.pedido;
       const moeda = pedido.moeda || 'BRL';
       const moneyM = v => v===null||v===undefined ? '—' : (moeda==='BRL'?'R$ ':moeda+' ') + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
@@ -9112,7 +10309,7 @@
         const saveBtn = document.getElementById('modalSave');
         saveBtn.disabled = true;
         try{
-          await api('/pedido/'+pedidoId, { method:'PUT', body: JSON.stringify(payload) });
+          await api('/pedido/'+encodeURIComponent(detailKey), { method:'PUT', body: JSON.stringify(payload) });
           close();
           toast('Nota fiscal salva.');
           loadItens();
@@ -9332,7 +10529,7 @@
      Ads" (todas as vendas reais daquele SKU, que podem incluir venda
      orgânica, menos o investimento em Ads). */
   (function(){
-    const state = { loading:false, error:null, data:null, contaId:'', sort:'faturamento', sincronizando:false, salvandoMargemMinima:false };
+    const state = { loading:false, error:null, data:null, contaId:'', sort:'faturamento', sincronizando:false, salvandoMargemMinima:false, campanhasExpandidas:{} };
 
     function toast(message, type){
       const wrap = document.getElementById('toastWrap');
@@ -9583,25 +10780,69 @@
     // ---- Resumo por Campanha — pedido explícito do usuário ("identificar
     // campanhas boas e ruins"): soma (nunca recalcula) os mesmos números
     // reais de cada anúncio, agrupado por campanha (lib/ia/adsMotor.js). ----
-    function tabelaCampanhasHTML(campanhas){
+    // Cada linha de campanha abre/fecha (pedido do usuário, 21/09/2026:
+    // "uma aba só com as campanhas com os anúncios, igual no Mercado
+    // Livre, com todas as métricas de cada campanha") mostrando os
+    // anúncios daquela campanha por baixo — mesmas linhas de sempre
+    // (state.data.linhas), só filtradas por campanha aqui no front, com as
+    // mesmas colunas atribuídas pelo Mercado Livre (investimento, cliques,
+    // impressões, CPC, vendas atribuídas, receita atribuída, ROAS, ACOS)
+    // já usadas na tabela "Performance atribuída Mercado Ads" logo abaixo
+    // — nenhum dado novo, nenhuma chamada nova à API.
+    function chaveCampanha(c){ return (c.contaMlId!==undefined && c.contaMlId!==null ? c.contaMlId : '')+'::'+(c.campanha||''); }
+    function tabelaAnunciosDaCampanhaHTML(anuncios){
+      if(!anuncios.length){
+        return '<div class="field-hint" style="margin:2px 0 4px;">Nenhum anúncio encontrado para esta campanha no período.</div>';
+      }
+      return '<div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Investimento</th><th>Cliques</th><th>Impressões</th><th>CPC</th>'
+        + '<th>Vendas atrib. (qtd)</th><th>Receita atribuída</th><th>ROAS</th><th>ACOS</th><th>Classificação da IA</th>'
+        + '</tr></thead><tbody>'
+        + anuncios.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td class="mono">'+moneyOrPend(l.investimento)+'</td>'
+          + '<td class="mono">'+intFmt(l.cliques)+'</td>'
+          + '<td class="mono">'+intFmt(l.impressoes)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.cpc)+'</td>'
+          + '<td class="mono">'+intFmt(l.qtdVendasAtribuidas)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.faturamentoAtribuido)+'</td>'
+          + '<td class="mono">'+roasFmt(l.roas)+'</td>'
+          + '<td class="mono">'+pctFmt(l.acos)+'</td>'
+          + '<td>'+classificacaoBadgeHTML(l)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div>';
+    }
+    function tabelaCampanhasHTML(campanhas, linhas){
       if(!campanhas || !campanhas.length){
         return '<div class="field-hint" style="margin-bottom:8px;">Nenhum anúncio com campanha de Ads identificada neste período (vendas 100% orgânicas não entram neste resumo).</div>';
       }
       return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
-        + '<th>Campanha</th><th>Loja</th><th>Qtd. anúncios</th><th>Investimento</th><th>Faturamento real</th>'
+        + '<th></th><th>Campanha</th><th>Loja</th><th>Qtd. anúncios</th><th>Investimento</th><th>Faturamento real</th>'
         + '<th>ROAS</th><th>TACOS</th><th>Margem após Ads (%)</th><th>Classificação da IA</th>'
         + '</tr></thead><tbody>'
-        + campanhas.map(c => '<tr>'
-          + '<td>'+escapeHtml(c.campanha||'—')+'</td>'
-          + '<td>'+escapeHtml(c.loja||'—')+'</td>'
-          + '<td class="mono">'+intFmt(c.qtdAnuncios)+'</td>'
-          + '<td class="mono">'+moneyOrPend(c.investimento)+'</td>'
-          + '<td class="mono">'+moneyOrPend(c.faturamentoReal)+'</td>'
-          + '<td class="mono">'+roasFmt(c.roas)+'</td>'
-          + '<td class="mono">'+pctFmt(c.tacos)+'</td>'
-          + '<td class="mono" style="'+(c.margemDepoisDoAdsPct!==null && c.margemDepoisDoAdsPct!==undefined?(c.margemDepoisDoAdsPct>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+pctFmt(c.margemDepoisDoAdsPct)+'</td>'
-          + '<td>'+classificacaoBadgeHTML(c)+'</td>'
-        + '</tr>').join('')
+        + campanhas.map(c => {
+          const chave = chaveCampanha(c);
+          const aberta = !!state.campanhasExpandidas[chave];
+          let linha = '<tr class="campanhaExpandToggle" data-chave="'+escapeHtml(chave)+'" style="cursor:pointer;">'
+            + '<td style="width:28px;">'+svg('chevDown', 'style="width:16px;height:16px;transition:transform .15s;transform:rotate('+(aberta?'0':'-90')+'deg);"')+'</td>'
+            + '<td>'+escapeHtml(c.campanha||'—')+'</td>'
+            + '<td>'+escapeHtml(c.loja||'—')+'</td>'
+            + '<td class="mono">'+intFmt(c.qtdAnuncios)+'</td>'
+            + '<td class="mono">'+moneyOrPend(c.investimento)+'</td>'
+            + '<td class="mono">'+moneyOrPend(c.faturamentoReal)+'</td>'
+            + '<td class="mono">'+roasFmt(c.roas)+'</td>'
+            + '<td class="mono">'+pctFmt(c.tacos)+'</td>'
+            + '<td class="mono" style="'+(c.margemDepoisDoAdsPct!==null && c.margemDepoisDoAdsPct!==undefined?(c.margemDepoisDoAdsPct>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+pctFmt(c.margemDepoisDoAdsPct)+'</td>'
+            + '<td>'+classificacaoBadgeHTML(c)+'</td>'
+          + '</tr>';
+          if(aberta){
+            const anunciosDaCampanha = (linhas||[]).filter(l => chaveCampanha(l) === chave);
+            linha += '<tr><td colspan="10" style="background:var(--surface-2);padding:10px 10px 10px 34px;">'
+              + tabelaAnunciosDaCampanhaHTML(anunciosDaCampanha)
+            + '</td></tr>';
+          }
+          return linha;
+        }).join('')
         + '</tbody></table></div></div>';
     }
 
@@ -9690,8 +10931,8 @@
       } else if(state.data){
         const linhasOrdenadas = state.data.linhas.slice().sort(comparadorDe(state.sort));
         html += '<div class="panel-title" style="margin:18px 0 8px;"><span class="panel-title-ic">'+svg('barChart')+'</span>Resumo por Campanha (IA de Ads e Performance)</div>'
-          + '<div class="field-hint" style="margin-bottom:8px;">Soma dos números reais de cada anúncio (nunca recalculados) agrupados por campanha, pra identificar rapidamente campanhas boas e ruins. 🔴 PAUSAR = resultado negativo após Ads · 🟠 AJUSTAR = positivo mas abaixo da margem mínima configurada acima · 🟡 MANTER = margem saudável · 🟢 ESCALAR = margem folgada, dá pra investir mais · ⚠️ DADOS INSUFICIENTES = falta custo do produto ou métrica de Ads. Anúncios sem campanha (venda orgânica) não entram aqui.</div>'
-          + tabelaCampanhasHTML(state.data.campanhas)
+          + '<div class="field-hint" style="margin-bottom:8px;">Soma dos números reais de cada anúncio (nunca recalculados) agrupados por campanha, pra identificar rapidamente campanhas boas e ruins. Clique em qualquer campanha pra ver os anúncios dela por baixo, igual no Mercado Livre. 🔴 PAUSAR = resultado negativo após Ads · 🟠 AJUSTAR = positivo mas abaixo da margem mínima configurada acima · 🟡 MANTER = margem saudável · 🟢 ESCALAR = margem folgada, dá pra investir mais · ⚠️ DADOS INSUFICIENTES = falta custo do produto ou métrica de Ads. Anúncios sem campanha (venda orgânica) não entram aqui.</div>'
+          + tabelaCampanhasHTML(state.data.campanhas, linhasOrdenadas)
           + '<div class="panel-title" style="margin:22px 0 8px;"><span class="panel-title-ic">'+svg('megaphone')+'</span>Performance atribuída Mercado Ads</div>'
           + '<div class="field-hint" style="margin-bottom:8px;">Investimento, vendas e receita que o Mercado Livre atribui diretamente à publicidade — dado real da API, nunca estimado.</div>'
           + tabelaAtribuidaHTML(linhasOrdenadas)
@@ -9712,6 +10953,13 @@
       const btnMargemMinima = document.getElementById('adsSalvarMargemMinima');
       const inputMargemMinima = document.getElementById('adsMargemMinimaInput');
       if(btnMargemMinima && inputMargemMinima) btnMargemMinima.addEventListener('click', ()=> salvarMargemMinima(inputMargemMinima.value));
+      root.querySelectorAll('.campanhaExpandToggle').forEach(tr=>{
+        tr.addEventListener('click', ()=>{
+          const chave = tr.dataset.chave;
+          state.campanhasExpandidas[chave] = !state.campanhasExpandidas[chave];
+          render();
+        });
+      });
     }
 
     window.Ads = { load };
@@ -12094,6 +13342,11 @@
         const urg = URGENCIA_TIPO_ACAO[d.tipoAcao] || { texto:'ATENÇÃO', tint:'warning' };
         let acoes = '<button class="promoc-btn approve" data-acao="aprovada" data-id="'+d.id+'" type="button">'+svg('check')+'<span>Aprovar</span></button>';
         if(podeAlterarNumerico(d)) acoes += '<button class="promoc-btn" data-acao="alterar-toggle" data-id="'+d.id+'" type="button">'+svg('edit')+'<span>Editar valor</span></button>';
+        // Relatório completo (21/09/2026, pedido explícito do usuário —
+        // ver lib/ia/adsDiagnostico.js): só aparece quando o backend
+        // gerou um relatório pra esta decisão (sempre que tipoAcao é
+        // 'pausar_anuncio' — o único caso implementado até agora).
+        if(d.relatorioDiagnosticoTexto || d.relatorioDiagnosticoIa) acoes += '<button class="promoc-btn" data-acao="ver-diagnostico" data-id="'+d.id+'" type="button">'+svg('fileText')+'<span>Ver diagnóstico completo</span></button>';
         acoes += '<button class="promoc-btn reject" data-acao="recusada" data-id="'+d.id+'" type="button">'+svg('x')+'<span>Rejeitar</span></button>';
         let html = '<div class="ads2-approval">'
           + '<div class="ads2-task-top"><div><h4>'+escapeHtml((TIPO_ACAO_LABEL[d.tipoAcao]||d.tipoAcao))+' — '+escapeHtml(referenciaDecisao(d))+'</h4><p>'+escapeHtml(d.motivo||'')+'</p></div>'+pillHTML(urg.texto, urg.tint)+'</div>'
@@ -12189,7 +13442,72 @@
             return;
           }
           if(acao === 'recusada'){ decidir(id, 'recusada', null); return; }
+          if(acao === 'ver-diagnostico'){
+            const d = state.decisoesTodas.find((x)=> x.id === id);
+            if(d) abrirModalDiagnostico(d);
+            return;
+          }
         }));
+      }
+
+      // ---- Modal "Ver diagnóstico completo" (21/09/2026, pedido explícito
+      // do usuário) — renderiza o relatório vindo do backend (texto com
+      // parágrafos, uma tabela "| Métrica | Resultado | Leitura |" em
+      // Markdown e uma lista de faixas do teste de monitoramento).
+      // Conversor de Markdown propositalmente pequeno e local (só parágrafo/
+      // tabela/lista — o único formato que lib/ia/adsDiagnostico.js produz),
+      // nunca uma biblioteca nova (projeto sem acesso ao npm registry neste
+      // ambiente de desenvolvimento, ver docs/05-problemas-conhecidos.md).
+      function mdSimplesParaHtml(texto){
+        const linhasTexto = String(texto||'').split('\n');
+        let html = '';
+        let i = 0;
+        while(i < linhasTexto.length){
+          const linha = linhasTexto[i];
+          if(/^\s*\|.*\|\s*$/.test(linha)){
+            const linhasTabela = [];
+            while(i < linhasTexto.length && /^\s*\|.*\|\s*$/.test(linhasTexto[i])){ linhasTabela.push(linhasTexto[i]); i++; }
+            const celulas = (l)=> l.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>c.trim());
+            const cabecalho = celulas(linhasTabela[0]);
+            const corpo = linhasTabela.slice(1).filter(l=> !/^[\s|:-]+$/.test(l)).map(celulas);
+            html += '<div class="table-wrap" style="margin:10px 0;"><table class="data-table"><thead><tr>'
+              + cabecalho.map(c=>'<th>'+escapeHtml(c)+'</th>').join('') + '</tr></thead><tbody>'
+              + corpo.map(cols=>'<tr>'+cols.map(c=>'<td>'+escapeHtml(c)+'</td>').join('')+'</tr>').join('')
+              + '</tbody></table></div>';
+            continue;
+          }
+          if(/^\s*-\s+/.test(linha)){
+            const itens = [];
+            while(i < linhasTexto.length && /^\s*-\s+/.test(linhasTexto[i])){ itens.push(linhasTexto[i].replace(/^\s*-\s+/,'')); i++; }
+            html += '<ul style="margin:8px 0;padding-left:20px;">' + itens.map(it=>'<li style="margin-bottom:4px;">'+escapeHtml(it)+'</li>').join('') + '</ul>';
+            continue;
+          }
+          if(!linha.trim()){ i++; continue; }
+          html += '<p style="margin:0 0 10px;line-height:1.55;">'+escapeHtml(linha)+'</p>';
+          i++;
+        }
+        return html;
+      }
+      function abrirModalDiagnostico(d){
+        const modalRoot = document.getElementById('modalRoot');
+        if(!modalRoot) return;
+        const usandoIa = !!d.relatorioDiagnosticoIa;
+        const corpoTexto = d.relatorioDiagnosticoIa || d.relatorioDiagnosticoTexto || '';
+        modalRoot.innerHTML = '<div class="modal-overlay" id="diagnosticoModalOverlay"><div class="modal-card" style="max-width:680px;max-height:85vh;overflow:auto;">'
+          + '<div class="modal-head"><h3 class="modal-title">Diagnóstico completo — '+escapeHtml(referenciaDecisao(d))+'</h3>'
+          + '<button class="row-ic-btn" id="diagnosticoModalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="field-hint" style="margin-bottom:12px;">'+(usandoIa
+              ? 'Texto reescrito pela IA a partir dos números reais abaixo — nenhum número foi alterado pela IA (ver lib/ia/adsDiagnostico.js).'
+              : 'Relatório calculado diretamente a partir dos números reais (a reescrita pela IA não está disponível agora — ver aviso no servidor).')
+            + '</div>'
+          + mdSimplesParaHtml(corpoTexto)
+          + '<div class="modal-actions"><button type="button" class="btn-secondary" id="diagnosticoModalFechar">Fechar</button></div>'
+        + '</div></div>';
+        const overlay = document.getElementById('diagnosticoModalOverlay');
+        const close = ()=> modalRoot.innerHTML = '';
+        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+        document.getElementById('diagnosticoModalClose').addEventListener('click', close);
+        document.getElementById('diagnosticoModalFechar').addEventListener('click', close);
       }
 
       window.AgenteAds = { load };
@@ -13489,7 +14807,7 @@
     function statusChipHTML(c){
       if(!c.monitoramentoAutomatico) return '<span class="status-chip" style="opacity:.8;">'+svg('clock')+'Sem leitura automática</span>';
       if(!c.ultimaLeitura) return '<span class="status-chip">'+svg('clock')+'Aguardando 1ª leitura</span>';
-      if(!c.ultimaLeitura.ok) return '<span class="status-chip" style="color:var(--danger);">'+svg('alertCircle')+'Falha na última leitura</span>';
+      if(!c.ultimaLeitura.ok) return '<span class="status-chip" style="color:var(--danger);" title="'+escapeHtml(c.ultimaLeitura.erro||'')+'">'+svg('alertCircle')+'Falha na última leitura</span>';
       return '<span class="status-chip" style="color:var(--success);">'+svg('checkCircle')+'Monitorando</span>';
     }
 
@@ -13547,7 +14865,7 @@
             + '<td><span style="font-weight:800;background:var(--copper-soft);color:var(--copper);border-radius:7px;padding:4px 7px;display:inline-block;font-size:11px;">'+escapeHtml(c.sku)+'</span></td>'
             + '<td><a href="'+escapeHtml(c.linkAnuncio)+'" target="_blank" rel="noopener" style="color:var(--copper);font-weight:700;">'+escapeHtml(linkTexto)+' ↗</a></td>'
             + '<td>'+escapeHtml(c.marketplaceLabel)+'</td>'
-            + '<td>'+statusChipHTML(c)+'</td>'
+            + '<td>'+statusChipHTML(c)+(c.ultimaLeitura && !c.ultimaLeitura.ok && c.ultimaLeitura.erro ? '<div class="field-hint" style="margin-top:4px;color:var(--danger);max-width:230px;">'+escapeHtml(c.ultimaLeitura.erro)+'</div>' : '')+'</td>'
             + '<td>'+(c.ultimaLeitura ? fmtRelativo(c.ultimaLeitura.lidoEm) : '—')+'</td>'
             + '<td style="white-space:nowrap;">'
               + (c.monitoramentoAutomatico ? '<button class="ghost-btn radarRelerBtn" type="button" data-id="'+c.id+'" style="cursor:pointer;opacity:1;padding:6px 9px;" title="Ler agora">'+svg('refreshCw')+'</button>' : '')

@@ -14,6 +14,7 @@ const { iniciarDailyAutomatico } = require('./lib/ia/dailyScheduler');
 const { iniciarConcorrenteIA } = require('./lib/ia/concorrenteScheduler');
 const { iniciarRadarConcorrentesScheduler } = require('./lib/ia/radarConcorrentesScheduler');
 const { iniciarComprasIaAutomatico } = require('./lib/comprasIaScheduler');
+const { iniciarEnvioFullAutomatico } = require('./lib/envioFullScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
@@ -56,6 +57,7 @@ const concorrenteRouter = require('./routes/concorrente');
 const radarConcorrentesRouter = require('./routes/radarConcorrentes');
 const comprasIaRouter = require('./routes/comprasIa');
 const vendaBalcaoRouter = require('./routes/vendaBalcao');
+const envioFullRouter = require('./routes/envioFull');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -78,6 +80,7 @@ app.use('/api/estoque', estoqueRouter);
 app.use('/api/estoque-full', estoqueFullRouter);
 app.use('/api/compras', comprasRouter);
 app.use('/api/compras-ia', comprasIaRouter);
+app.use('/api/envio-full', envioFullRouter);
 app.use('/api/vendas-balcao', vendaBalcaoRouter);
 app.use('/api/produtos-base', produtosBaseRouter);
 app.use('/api/estoque-produto-base', estoqueProdutoBaseRouter);
@@ -193,6 +196,13 @@ async function start() {
     // lib/comprasIaScheduler.js). Nunca compra sozinha — só gera
     // recomendação pendente de aprovação humana.
     iniciarComprasIaAutomatico();
+    // Agente de Envio Full — 23/09/2026, pedido explícito do usuário:
+    // recomendar quando enviar estoque ao Full, quando está acabando e
+    // quando segurar, mesma régua de Compras com IA adaptada pro Full,
+    // sempre no servidor, nunca dependendo de alguém abrir a tela (ver
+    // lib/envioFullScheduler.js). Nunca envia nada sozinho — só gera
+    // recomendação pendente de aprovação humana.
+    iniciarEnvioFullAutomatico();
   });
 }
 

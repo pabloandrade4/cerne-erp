@@ -2,6 +2,48 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-23 (73) — Remoção de Concorrente/Promoções do menu + Agente de Envio Full
+- **Removido do menu** (backend intacto, mesmo padrão de 19/09/2026): Análise
+  de Concorrente, Radar de Concorrentes, IA de Promoções, Promoções. Editado
+  só `public/index.html` (`GROUPS`).
+- **Agente de Compras:** confirmado que "Compras com IA" já atende o pedido
+  — nenhuma mudança feita nela.
+- **Agente de Envio Full (novo)** — justificativa completa em
+  `02-decisoes.md` (60):
+  - `lib/ia/envioFullMotor.js` — motor de cálculo determinístico (reaproveita
+    `calcularMediaDiariaProjetada` de `lib/ia/comprasMotor.js`, sem
+    duplicar). Status: `saudavel` / `atencao` / `programar_envio` /
+    `enviar_agora` / `ruptura`, mais a flag `semEstoqueGalpaoSuficiente`.
+  - `lib/ia/envioFullCiclo.js` — orquestrador (reaproveita
+    `buscarProdutosBaseAtivos`/`buscarVendasPorJanelas` de
+    `lib/ia/comprasCiclo.js` e `calcularEstoqueFisico` de
+    `lib/estoqueFisico.js`). Mesmo padrão "no máximo 1 recomendação
+    pendente por produto, nunca apaga — expira" de Compras com IA.
+  - `lib/envioFullScheduler.js` — ciclo automático no servidor (1h,
+    configurável via `ENVIO_FULL_SYNC_INTERVALO_MS`), montado em
+    `server.js` junto dos demais schedulers.
+  - `routes/envioFull.js` — `GET /linhas`, `GET /resumo`, `GET/PUT
+    /decisoes(/:id)`, `POST /gerar-agora`, `GET/PATCH /pedidos(/:id/status)`,
+    `PATCH /produtos-base/:id/config`, `GET/PUT /custos`, `GET
+    /custos/historico`. Monta em `/api/envio-full` em `server.js`.
+  - `db/schema.sql` — `produtos_base.prazo_envio_full_dias` (novo, opcional),
+    `ia_decisoes_envio_full`, `envio_full_pedidos` (+
+    `envio_full_pedido_numero_seq`), `envio_full_custos_mensais` (custo
+    mensal lançado à mão, upsert por empresa/ano/mês).
+  - `public/index.html` — novo módulo `window.EnvioFull` (nav "Agente de
+    Envio Full" no grupo "Agentes IA", abas Recomendações/Histórico/Custo
+    Full), mesmo padrão visual de `window.Compras`.
+  - `test/envioFullMotor.test.js` — 6 testes novos do motor (mesmo padrão de
+    `test/comprasMotor.test.js`), todos passando.
+- **Custo de envio ao Full:** lançamento manual por enquanto — não há
+  confirmação pública de que a API de Cobrança do Mercado Livre exponha uma
+  cobrança separada e identificável pra isso. Ver `05-problemas-conhecidos.md`.
+- Testado contra Postgres real neste ambiente (schema aplicado, motor com 4
+  cenários, ciclo automático ponta a ponta, todos os caminhos de escrita —
+  recomendação, índice único de pendência, registro de envio, upsert de
+  custo mensal). Suíte completa (`node --test`) rodada antes e depois — sem
+  regressão nova introduzida por esta etapa.
+
 ## 2026-09-22 (72) — Calculadora de Vendas (Venda de Balcão): novo canal de faturamento, 3º junto de Mercado Livre e Shopee
 - **Pedido do usuário (resumo):** uma calculadora pra registrar vendas
   presenciais (balcão) que hoje não entram em nenhum número do sistema.

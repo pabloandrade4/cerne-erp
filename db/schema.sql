@@ -2305,3 +2305,106 @@ ALTER TABLE notas_fiscais DROP CONSTRAINT IF EXISTS notas_fiscais_pedido_id_key;
 ALTER TABLE notas_fiscais DROP CONSTRAINT IF EXISTS notas_fiscais_pedido_id_fkey;
 ALTER TABLE notas_fiscais DROP CONSTRAINT IF EXISTS uq_notas_fiscais_pedido_marketplace;
 ALTER TABLE notas_fiscais ADD CONSTRAINT uq_notas_fiscais_pedido_marketplace UNIQUE (pedido_id, marketplace);
+
+-- ============================================================
+-- Etapa: "Agente de Envio Full" (23/09/2026)
+-- ============================================================
+-- Pedido explícito do usuário: "agente de envio full - quando enviar ro
+-- full, quado ta acabando, quando segurar, quanto gastei de envios full no
+-- mes". Mesma régua de decisão já usada em "Compras com IA"
+-- (lib/ia/comprasMotor.js: dias de cobertura, projeção de venda ponderada,
+-- ponto de recompra) — aqui adaptada pra decidir quando TRANSFERIR estoque
+-- do Galpão pro Full, em vez de quando comprar do fornecedor. Reaproveita
+-- ao vivo, sem duplicar: estoque físico (lib/estoqueFisico.js), vendas por
+-- janela e cadastro de produtos base ativos (ambos já expostos por
+-- lib/ia/comprasCiclo.js). Mesmo padrão "nunca apaga" (expira, não some) e
+-- "no máximo 1 recomendação pendente por produto base" de ia_decisoes_compras.
+--
+-- `prazo_envio_full_dias`: quantos dias, em média, uma remessa enviada ao
+-- Full leva até ficar disponível pra venda (o "prazo de fornecedor" desta
+-- régua, só que é o próprio Mercado Livre recebendo/processando, não um
+-- fornecedor). Fica em produtos_base porque pode variar por produto
+-- (tamanho/peso mudam o tempo de logística) — NULL usa o padrão global
+-- (ver PRAZO_ENVIO_FULL_DIAS_PADRAO em lib/ia/envioFullMotor.js), mesmo
+-- espírito de estoque_seguranca_dias.
+ALTER TABLE produtos_base ADD COLUMN IF NOT EXISTS prazo_envio_full_dias INTEGER;
+
+CREATE TABLE IF NOT EXISTS ia_decisoes_envio_full (
+  id                                SERIAL PRIMARY KEY,
+  empresa_id                        INTEGER NOT NULL REFERENCES empresas(id),
+  produto_base_id                   INTEGER NOT NULL REFERENCES produtos_base(id),
+  produto_base_codigo               VARCHAR(100) NOT NULL,
+  tipo_acao                         VARCHAR(30) NOT NULL DEFAULT 'enviar_full',
+  status_urgencia                   VARCHAR(20) NOT NULL, -- saudavel|atencao|programar_envio|enviar_agora|ruptura
+  sem_estoque_galpao_suficiente     BOOLEAN NOT NULL DEFAULT FALSE, -- "segurar": precisaria enviar, mas não há estoque de sobra no galpão
+  motivo                            TEXT NOT NULL,
+  snapshot_estoque_galpao           NUMERIC(14,2),
+  snapshot_estoque_full             NUMERIC(14,2),
+  snapshot_venda_7d                 NUMERIC(14,2),
+  snapshot_venda_14d                NUMERIC(14,2),
+  snapshot_venda_30d                NUMERIC(14,2),
+  snapshot_media_dia_projetada      NUMERIC(14,4),
+  snapshot_acelerando               BOOLEAN,
+  snapshot_dias_cobertura_full      NUMERIC(8,2),
+  snapshot_data_ruptura_full_prevista DATE,
+  snapshot_prazo_envio_full_dias    INTEGER,
+  snapshot_estoque_seguranca_dias   INTEGER,
+  quantidade_sugerida_envio         NUMERIC(14,2) NOT NULL,
+  quantidade_decidida               NUMERIC(14,2),
+  status_decisao                    VARCHAR(20) NOT NULL DEFAULT 'pendente', -- pendente|aprovada|alterada|ignorada|expirada
+  decidido_em                       TIMESTAMPTZ,
+  decidido_por                      VARCHAR(180),
+  relatorio_diagnostico_texto       TEXT,
+  criado_em                         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em                     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_decisoes_envio_full_empresa ON ia_decisoes_envio_full (empresa_id, status_decisao);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_decisoes_envio_full_pendente
+  ON ia_decisoes_envio_full (empresa_id, produto_base_id, tipo_acao)
+  WHERE status_decisao = 'pendente';
+
+-- Registro do envio em si (aprovado a partir de uma recomendação, ou
+-- lançado manualmente — mesmo espírito de compras_ia_pedidos). Status em
+-- português simples, vocabulário da tela: separado de compras_ia_pedidos
+-- porque é um fluxo diferente (Galpão -> Full, não Fornecedor -> Galpão).
+CREATE SEQUENCE IF NOT EXISTS envio_full_pedido_numero_seq START 1;
+
+CREATE TABLE IF NOT EXISTS envio_full_pedidos (
+  id                   SERIAL PRIMARY KEY,
+  empresa_id           INTEGER NOT NULL REFERENCES empresas(id),
+  numero_envio         VARCHAR(20) NOT NULL UNIQUE,
+  produto_base_id      INTEGER NOT NULL REFERENCES produtos_base(id),
+  recomendacao_id      INTEGER REFERENCES ia_decisoes_envio_full(id),
+  origem               VARCHAR(20) NOT NULL DEFAULT 'recomendacao_ia', -- recomendacao_ia|manual
+  quantidade           NUMERIC(14,2) NOT NULL,
+  status               VARCHAR(20) NOT NULL DEFAULT 'aprovado', -- aprovado|enviado|recebido_no_full|cancelado
+  previsao_chegada     DATE,
+  recebido_em          TIMESTAMPTZ,
+  observacao           TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_envio_full_pedidos_empresa ON envio_full_pedidos (empresa_id, status);
+CREATE INDEX IF NOT EXISTS idx_envio_full_pedidos_produto_base ON envio_full_pedidos (produto_base_id, status);
+
+-- Custo mensal de envio pro Full, LANÇADO À MÃO pelo usuário (mesmo
+-- espírito de fluxo_caixa_saldo_inicial: nunca inventado nem lido de uma
+-- integração que não existe). Motivo documentado em 05-problemas-conhecidos.md
+-- 23/09/2026: pesquisamos a API de Relatórios de Cobrança do Mercado Livre
+-- e não há confirmação pública do nome exato da cobrança de envio ao Full
+-- — puxar isso automaticamente fica como melhoria futura, condicionada a
+-- testar direto na conta real ou receber um exemplo de fatura do usuário.
+-- Uma linha por (empresa, ano, mês) — upsert, mesmo padrão de despesas
+-- recorrentes lançadas manualmente.
+CREATE TABLE IF NOT EXISTS envio_full_custos_mensais (
+  id           SERIAL PRIMARY KEY,
+  empresa_id   INTEGER NOT NULL REFERENCES empresas(id),
+  ano          INTEGER NOT NULL,
+  mes          INTEGER NOT NULL CHECK (mes BETWEEN 1 AND 12),
+  valor        NUMERIC(12,2) NOT NULL,
+  observacao   TEXT,
+  lancado_por  VARCHAR(180),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, ano, mes)
+);

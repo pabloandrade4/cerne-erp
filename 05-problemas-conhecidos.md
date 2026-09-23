@@ -3,6 +3,46 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Agente de Envio Full: custo mensal é manual — API de Cobrança do Mercado Livre não confirma o nome da cobrança (23/09/2026)
+- **Pergunta do usuário:** "tem como puxar via api oque esta em
+  trasferencia para o ful?? / consegue puxar via api direto do mercado
+  livre?" (sobre quanto se gasta com envio ao Full por mês).
+- **O que foi pesquisado:** a API de Relatórios de Cobrança do Mercado
+  Livre (`/billing/integration/periods`,
+  `/periods/{EXPIRATION_DATE}/documents`, `/summary`,
+  `/group/{ML|MP}/details`, `/reports`) existe e devolve as cobranças reais
+  da conta. Só que a documentação pública que consegui acessar confirma
+  apenas UM tipo de cobrança relacionado a frete: "Cargo por Mercado
+  Envíos" — que é o frete normal ao COMPRADOR, não uma cobrança de
+  envio/armazenagem para o Full. Duas tentativas adicionais de
+  aprofundar (`billing-data`, `best-practices-for-consuming-billing-
+  reports-apis`) retornaram erro 403 antes de eu conseguir confirmar o
+  nome exato de uma cobrança de Full, se ela existir separada.
+- **Por que não foi automatizado agora:** o projeto nunca inventa nem
+  chuta um número — sem confirmar o nome exato da cobrança, filtrar a
+  Billing API "por parecer" arriscaria mostrar um valor errado (ou
+  filtrar o campo errado) como se fosse real. Faltam uma de duas coisas
+  pra fechar isso: (1) testar direto contra a conta real conectada no
+  Mercado Livre (não disponível neste ambiente de desenvolvimento), ou
+  (2) o usuário mandar um exemplo real de fatura/relatório de cobrança de
+  um mês em que houve envio ao Full, pra eu localizar o nome exato da
+  cobrança e programar a busca automática.
+- **Solução atual:** lançamento manual do valor gasto no mês
+  (`PUT /api/envio-full/custos`, tabela `envio_full_custos_mensais`) — o
+  usuário digita o valor todo mês, igual já funciona em Despesas Fixas.
+  Fácil de trocar por automático depois, sem o usuário perder nada (é só
+  passar a preencher a mesma tabela via ciclo automático em vez de manual).
+- **"O que está em transferência pro Full" (estoque em trânsito, ainda não
+  recebido):** também pesquisado, também sem confirmação clara. O que
+  existe: `GET /inventories/{id}/stock/fulfillment` tem um status
+  `transfer` dentro de `not_available_detail` (mas a documentação não deixa
+  claro se é "indo pro Full" ou "saindo do Full" — ambíguo); e `GET
+  /stock/fulfillment/operations/search` tem um tipo de operação
+  `inbound_reception` que é o estoque JÁ recebido no Full (não o que ainda
+  está a caminho). Nenhum dos dois é uma resposta direta e sem ambiguidade
+  pra "quanto está a caminho agora" — por isso o Agente de Envio Full não
+  mostra esse número (fica de fora até haver uma fonte confiável).
+
 ## Venda de Balcão: baixa de estoque é cumulativa e permanente, sem reconciliação com correção manual no Mercado Livre (22/09/2026)
 - **O que acontece:** quando o usuário registra uma venda de balcão, o
   sistema desconta a quantidade vendida (convertida pra unidade física)
