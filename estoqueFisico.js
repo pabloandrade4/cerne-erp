@@ -51,6 +51,107 @@ const { round2 } = require('./resultadoVenda');
 // coluna/tabela de Full da Shopee) — valor estrutural, nunca inventado.
 const MARKETPLACE_FULL = 'Mercado Livre';
 
+// ============================================================
+// Baixa de estoque por Venda de Balcão (22/09/2026 — ver lib/vendaBalcao.js)
+// ============================================================
+// O usuário pediu explicitamente que uma venda de balcão "baixe o estoque
+// exibido" automaticamente. Como o estoque físico só existe hoje como
+// espelho do Mercado Livre (`ml_estoque_itens`, sincronizado a cada 1
+// minuto — ver cabeçalho do arquivo), NUNCA escrevemos nessa tabela: em vez
+// disso, subtraímos a quantidade vendida no balcão (convertida pra unidade
+// física pela MESMA regra de produtos_base já usada em todo o resto —
+// resolverProdutosBasePorSku) SÓ do bloco "fora do Full" (produto guardado
+// na própria empresa — nunca do Full, que fisicamente fica no centro de
+// distribuição do Mercado Livre e nunca é vendido no balcão).
+//
+// LIMITAÇÃO CONHECIDA (documentada de propósito, não escondida): esta baixa
+// é cumulativa e permanente (soma TODAS as vendas de balcão não canceladas
+// desde sempre) — se o usuário também corrigir manualmente o anúncio no
+// Mercado Livre por causa da mesma venda (ex.: reduzir a quantidade lá por
+// fora), o sistema vai descontar duas vezes (uma vez pela correção manual
+// no ML, que já reflete na sincronização, e de novo aqui). Não existe hoje
+// nenhum mecanismo de "zerar"/reconciliar essa baixa — foi uma escolha
+// consciente por causa do tempo disponível nesta etapa, e fica registrada
+// em docs/05-problemas-conhecidos.md. Quando a venda de balcão aponta pra
+// um produto base que não tem NENHUM item físico "fora do Full" hoje (ex.:
+// o usuário nunca cadastrou esse produto como anúncio próprio), a baixa não
+// tem de onde ser descontada — nesse caso ela aparece à parte, em
+// `foraDoFull.vendasBalcaoSemEstoqueParaBaixar`, nunca escondida nem
+// descontada de outro produto por engano.
+async function buscarVendaBalcaoPorProdutoBase(empresaId, resolucoes) {
+  const { rows } = await pool.query(
+    `SELECT vbi.sku, SUM(vbi.quantidade) AS quantidade_vendida
+     FROM vendas_balcao_itens vbi
+     JOIN vendas_balcao vb ON vb.id = vbi.venda_id
+     WHERE vb.empresa_id = $1 AND vb.status = 'concluida'
+     GROUP BY vbi.sku`,
+    [empresaId]
+  );
+  if (!rows.length) return { porProdutoBase: new Map(), semResolucao: [] };
+
+  const porProdutoBase = new Map();
+  const semResolucao = [];
+  rows.forEach((r) => {
+    const resolucao = resolucoes[r.sku];
+    const quantidadeVendida = Number(r.quantidade_vendida);
+    if (!resolucao) { semResolucao.push({ sku: r.sku, quantidadeVendida }); return; }
+    const fisica = quantidadeVendida * resolucao.multiplicador;
+    porProdutoBase.set(resolucao.codigoBase, round2((porProdutoBase.get(resolucao.codigoBase) || 0) + fisica));
+  });
+  return { porProdutoBase, semResolucao };
+}
+
+// Aplica a baixa (já calculada por produto base, em unidade física) só no
+// bloco "fora do Full" — nunca toca em `full`. Nunca deixa a quantidade
+// negativa (trava em 0); o que não coube em nenhum produto físico existente
+// entra em `vendasBalcaoSemEstoqueParaBaixar`, à parte, pra nunca sumir do
+// relatório nem descontar do produto errado.
+function aplicarBaixaVendaBalcao(bloco, vendaBalcao) {
+  const { porProdutoBase, semResolucao } = vendaBalcao;
+  if (!porProdutoBase.size && !semResolucao.length) return bloco;
+
+  const naoAplicadas = semResolucao.map((s) => ({ ...s, motivo: 'sku_sem_produto_base_identificado' }));
+  const pendentes = new Map(porProdutoBase);
+
+  const produtosBase = bloco.produtosBase.map((p) => {
+    const vendida = pendentes.get(p.produtoBase);
+    if (!vendida) return p;
+    pendentes.delete(p.produtoBase);
+    const baixaAplicada = Math.min(p.quantidadeFisica, vendida);
+    const restanteNaoAplicado = round2(vendida - baixaAplicada);
+    const novaQuantidade = round2(p.quantidadeFisica - baixaAplicada);
+    const novoValor = p.custoUnitario !== null ? round2(novaQuantidade * p.custoUnitario) : null;
+    if (restanteNaoAplicado > 0) {
+      naoAplicadas.push({ produtoBase: p.produtoBase, quantidadeVendida: restanteNaoAplicado, motivo: 'estoque_fora_do_full_insuficiente' });
+    }
+    return { ...p, quantidadeFisica: novaQuantidade, valorEmEstoque: novoValor, baixaVendaBalcao: baixaAplicada };
+  });
+
+  // Produto base vendido no balcão mas sem NENHUM item "fora do Full" hoje
+  // — nada pra descontar, entra só na lista de transparência.
+  pendentes.forEach((quantidadeVendida, produtoBase) => {
+    naoAplicadas.push({ produtoBase, quantidadeVendida, motivo: 'sem_item_fora_do_full' });
+  });
+
+  const unidadesFisicas = produtosBase.reduce((acc, p) => acc + p.quantidadeFisica, 0);
+  const unidadesFisicasSemCustoCadastrado = produtosBase
+    .filter((p) => p.custoUnitario === null)
+    .reduce((acc, p) => acc + p.quantidadeFisica, 0);
+  const comCusto = produtosBase.filter((p) => p.custoUnitario !== null);
+  const valorTotalACusto = comCusto.length
+    ? round2(comCusto.reduce((acc, p) => acc + (p.valorEmEstoque || 0), 0))
+    : null;
+
+  return {
+    ...bloco,
+    produtosBase: produtosBase.sort((a, b) => (b.valorEmEstoque || 0) - (a.valorEmEstoque || 0)),
+    unidadesFisicas,
+    unidadesFisicasSemCustoCadastrado,
+    valorTotalACusto,
+    vendasBalcaoSemEstoqueParaBaixar: naoAplicadas,
+  };
+}
+
 function montarBlocoVazio() {
   return {
     valorTotalACusto: null,
@@ -60,6 +161,10 @@ function montarBlocoVazio() {
     unidadesFisicasSemCustoCadastrado: 0,
     unidadesSemProdutoBaseIdentificado: 0,
     itensPendentesDeSincronizacao: 0,
+    // Presente em todo bloco (full e fora do Full) mesmo quando vazio, pra
+    // nunca faltar o campo pro front — só é preenchido de verdade dentro de
+    // aplicarBaixaVendaBalcao, e só no bloco "fora do Full".
+    vendasBalcaoSemEstoqueParaBaixar: [],
   };
 }
 
@@ -81,7 +186,21 @@ async function calcularEstoqueFisico(empresaId) {
   }
 
   const skusValidos = rows.filter((r) => r.sku && !r.pendente && r.quantidade !== null).map((r) => r.sku);
-  const resolucoes = await resolverProdutosBasePorSku(empresaId, skusValidos);
+
+  // SKUs de vendas de balcão (concluídas) entram na MESMA resolução de SKU
+  // -> produto base que o estoque do Mercado Livre já usa (uma única
+  // chamada, evita resolver o mesmo SKU duas vezes quando ele também
+  // aparece em ml_estoque_itens).
+  const { rows: skusBalcaoRows } = await pool.query(
+    `SELECT DISTINCT vbi.sku
+     FROM vendas_balcao_itens vbi
+     JOIN vendas_balcao vb ON vb.id = vbi.venda_id
+     WHERE vb.empresa_id = $1 AND vb.status = 'concluida'`,
+    [empresaId]
+  );
+  const skusParaResolver = [...new Set([...skusValidos, ...skusBalcaoRows.map((r) => r.sku)])];
+  const resolucoes = await resolverProdutosBasePorSku(empresaId, skusParaResolver);
+  const vendaBalcao = await buscarVendaBalcaoPorProdutoBase(empresaId, resolucoes);
 
   const codigosBase = [...new Set(Object.values(resolucoes).filter(Boolean).map((r) => r.codigoBase))];
   let custos = {};
@@ -179,7 +298,9 @@ async function calcularEstoqueFisico(empresaId) {
   }
 
   const full = processarTipo('full');
-  const foraDoFull = processarTipo('proprio');
+  // Baixa de venda de balcão SÓ no "fora do Full" — nunca no Full (ver
+  // comentário grande acima de aplicarBaixaVendaBalcao).
+  const foraDoFull = aplicarBaixaVendaBalcao(processarTipo('proprio'), vendaBalcao);
 
   const valorTotalGeral = (full.valorTotalACusto !== null || foraDoFull.valorTotalACusto !== null)
     ? round2((full.valorTotalACusto || 0) + (foraDoFull.valorTotalACusto || 0))

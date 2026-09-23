@@ -58,6 +58,12 @@ const pool = require('../db/pool');
 const { calcularResultadoVenda, round2 } = require('./resultadoVenda');
 const { diaBRT } = require('./periodo');
 
+// Venda de Balcão (22/09/2026, pedido explícito do usuário — ver comentário
+// grande em db/schema.sql/lib/vendaBalcao.js sobre a feature inteira): 3º
+// canal unido nesta MESMA fonte única, seguindo o precedente já aberto pela
+// Shopee em 14/09/2026 (SQL_UNIAO_PEDIDOS abaixo passa a unir 3 SELECTs em
+// vez de 2). Vocabulário de status próprio deste ERP (não vem de nenhuma
+// API externa) — ver STATUS_CANCELADO_BALCAO logo abaixo.
 const STATUS_CANCELADO = 'cancelled';
 // Vocabulário de status da Shopee Open Platform v2 (order_status): CANCELLED
 // é o valor documentado para pedido cancelado (mesma grafia em todas as
@@ -67,6 +73,9 @@ const STATUS_CANCELADO = 'cancelled';
 // Shopee aparecer contado como venda de verdade, este é o primeiro lugar a
 // conferir.
 const STATUS_CANCELADO_SHOPEE = 'CANCELLED';
+// vendas_balcao.status (db/schema.sql) usa 'concluida'/'cancelada' — vocabulário
+// próprio deste ERP, nunca confundido com o das APIs externas acima.
+const STATUS_CANCELADO_BALCAO = 'cancelada';
 
 // Bug 4 da reconciliação PF ERP x Mercado Turbo (24/08/2026, ver
 // docs/04-alteracoes.md): todo filtro/ordenação de PERÍODO usava só
@@ -184,8 +193,10 @@ function serializarPedido(row, aliquotaImposto) {
   // Frete do vendedor: 0 sempre na Shopee (confirmado pelo usuário em
   // 14/09/2026 — o vendedor nunca paga frete na Shopee, só comissão/taxas;
   // `frete_real` da Shopee NÃO é um custo do vendedor, ver comentário no
-  // topo do arquivo). No Mercado Livre continua vindo do campo real.
-  const freteVendedor = row.marketplace === 'shopee' ? 0 : toNum(row.frete_vendedor);
+  // topo do arquivo) e 0 sempre na Venda de Balcão (22/09/2026 — cliente
+  // retira no local, não existe frete nenhum, fato real e não dado
+  // faltando). No Mercado Livre continua vindo do campo real.
+  const freteVendedor = (row.marketplace === 'shopee' || row.marketplace === 'balcao') ? 0 : toNum(row.frete_vendedor);
 
   const calc = calcularResultadoVenda({
     valorVenda,
@@ -242,7 +253,16 @@ function serializarPedido(row, aliquotaImposto) {
     dataCriacao: row.data_criacao,
     dataEfetiva: row.data_efetiva,
     status: row.status,
-    cancelado: row.marketplace === 'shopee' ? row.status === STATUS_CANCELADO_SHOPEE : row.status === STATUS_CANCELADO,
+    // 22/09/2026 — branch explícita pros 3 canais (NUNCA cair no else do
+    // Mercado Livre por engano): um vocabulário de status errado aqui faz
+    // uma venda cancelada contar como venda de verdade no faturamento, ou
+    // vice-versa — ver comentário grande no topo do arquivo e em
+    // db/schema.sql sobre esse mesmo risco já corrigido pra Shopee.
+    cancelado: row.marketplace === 'shopee'
+      ? row.status === STATUS_CANCELADO_SHOPEE
+      : row.marketplace === 'balcao'
+        ? row.status === STATUS_CANCELADO_BALCAO
+        : row.status === STATUS_CANCELADO,
     // Adicionado em 24/08/2026 (tela Recebimentos — ver
     // lib/recebimentosMl.js e docs/04-alteracoes.md): status do primeiro
     // pagamento do pedido (payments[0].status, já salvo desde sempre em
@@ -385,7 +405,54 @@ const SQL_SHOPEE_PEDIDOS_UNIFICADOS = `
   WHERE c.empresa_id = $1
 `;
 
-const SQL_UNIAO_PEDIDOS = `${SQL_ML_PEDIDOS_UNIFICADOS} UNION ALL ${SQL_SHOPEE_PEDIDOS_UNIFICADOS}`;
+// Consulta base da Venda de Balcão (22/09/2026) — mesma estrutura de
+// colunas das duas consultas acima (union-compatível). Diferente do
+// Mercado Livre/Shopee, aqui NADA vem de uma API externa cujo dado pode
+// faltar: taxa/tarifas/frete são 0 de verdade (fato do modelo, nunca dado
+// pendente — mesmo espírito do frete zero da Shopee), e o custo do produto
+// já vem CONGELADO em vendas_balcao.custo_produto_total (calculado uma
+// única vez no momento da venda, em lib/vendaBalcao.js#criarVenda — nunca
+// recalculado aqui, pra nunca mudar o resultado de uma venda já feita só
+// porque o custo do SKU mudou depois em Produtos).
+const SQL_BALCAO_PEDIDOS_UNIFICADOS = `
+  SELECT
+    'balcao'::text AS marketplace,
+    vb.id,
+    vb.empresa_id,
+    -- Venda de balcão não tem "conta"/loja externa nenhuma — usa o próprio
+    -- empresa_id como pseudo-conta (único por empresa, nunca colide com
+    -- ml_contas.id/shopee_contas.id porque contaKey sempre carrega o
+    -- prefixo do marketplace — ver serializarPedido).
+    vb.empresa_id AS conta_id,
+    'Venda no balcão'::text AS conta_nickname,
+    'VB-' || lpad(vb.numero_venda::text, 6, '0') AS pedido_ref,
+    vb.data_venda AS data_criacao,
+    vb.data_venda AS data_efetiva,
+    vb.status,
+    NULL::varchar(30) AS pagamento_status,
+    vb.cliente_nome AS comprador_nickname,
+    vb.valor_total,
+    'BRL'::varchar(5) AS moeda,
+    NULL::numeric(12,2) AS frete_comprador,
+    0::numeric(12,2) AS frete_vendedor,
+    NULL::varchar(30) AS envio_logistic_type,
+    0::numeric(12,2) AS taxa_venda_total,
+    0::numeric(12,2) AS pagamento_taxas,
+    0::numeric(12,2) AS pagamento_taxa_marketplace,
+    (SELECT string_agg(titulo, ' + ' ORDER BY id) FROM (
+       SELECT titulo, id FROM vendas_balcao_itens WHERE venda_id = vb.id ORDER BY id LIMIT 3
+     ) t) AS item_resumo,
+    (SELECT string_agg(DISTINCT sku, ', ') FROM vendas_balcao_itens WHERE venda_id = vb.id) AS sku_resumo,
+    (SELECT count(*) FROM vendas_balcao_itens WHERE venda_id = vb.id) AS qtd_itens,
+    (SELECT COALESCE(SUM(quantidade), 0) FROM vendas_balcao_itens WHERE venda_id = vb.id) AS qtd_unidades,
+    vb.custo_produto_total AS custo_produto_total,
+    vb.desconto AS desconto_cupom,
+    NULL::json AS shopee_itens_valores
+  FROM vendas_balcao vb
+  WHERE vb.empresa_id = $1
+`;
+
+const SQL_UNIAO_PEDIDOS = `${SQL_ML_PEDIDOS_UNIFICADOS} UNION ALL ${SQL_SHOPEE_PEDIDOS_UNIFICADOS} UNION ALL ${SQL_BALCAO_PEDIDOS_UNIFICADOS}`;
 
 // Busca os pedidos de uma empresa dentro do período [desde, ate), já com o
 // resultado financeiro calculado (mesma fórmula do detalhe do pedido) —
@@ -448,7 +515,13 @@ async function buscarLojasDaEmpresa(empresaId) {
   ]);
   const lojasMl = ml.rows.map((r) => ({ chave: `mercado_livre:${r.id}`, marketplace: 'mercado_livre', nickname: r.nickname }));
   const lojasShopee = shopee.rows.map((r) => ({ chave: `shopee:${r.id}`, marketplace: 'shopee', nickname: r.shop_name || `Loja Shopee #${r.id}` }));
-  return [...lojasMl, ...lojasShopee];
+  // Venda de Balcão (22/09/2026) — não é uma "conta" conectada por OAuth
+  // como as duas acima, mas ainda é uma origem filtrável nas telas que usam
+  // este seletor (Pedidos/Visão Geral) — sempre disponível pra empresa
+  // (nunca depende de já existir alguma venda registrada; mesma chave
+  // `balcao:<empresaId>` usada em serializarPedido).
+  const lojaBalcao = [{ chave: `balcao:${empresaId}`, marketplace: 'balcao', nickname: 'Venda no balcão' }];
+  return [...lojasMl, ...lojasShopee, ...lojaBalcao];
 }
 
 function somarComPendencia(pedidos, campo) {
@@ -689,95 +762,185 @@ async function buscarItensDoPeriodoTodosCanais({ empresaId, desde, ate }) {
   ]);
 
   const pedidosShopee = pedidos.filter((p) => !p.cancelado && p.marketplace === 'shopee');
-  if (!pedidosShopee.length) return { itens: itensMl };
+  // 22/09/2026: isto ERA um `if (!pedidosShopee.length) return { itens: itensMl };`
+  // — um retorno antecipado que, com o 3º canal (Venda de Balcão) entrando
+  // logo abaixo, pularia o bloco de balcão inteiro sempre que a empresa não
+  // tivesse NENHUMA venda Shopee no período (o caso comum de quem só usa
+  // Mercado Livre + Balcão). Trocado por `if (pedidosShopee.length) {...}`
+  // envolvendo só o trabalho específico da Shopee — cada canal aditivo
+  // (Shopee, Balcão) agora roda de forma independente, nenhum bloqueia o
+  // outro.
+  let itensShopee = [];
+  if (pedidosShopee.length) {
+    const { rows: configRows } = await pool.query(
+      'SELECT aliquota_imposto FROM config_financeiro WHERE empresa_id = $1',
+      [empresaId]
+    );
+    const aliquotaImposto = configRows.length ? Number(configRows[0].aliquota_imposto) : 0;
 
-  const { rows: configRows } = await pool.query(
-    'SELECT aliquota_imposto FROM config_financeiro WHERE empresa_id = $1',
-    [empresaId]
-  );
-  const aliquotaImposto = configRows.length ? Number(configRows[0].aliquota_imposto) : 0;
+    const pedidoIds = pedidosShopee.map((p) => p.id);
+    const { rows } = await pool.query(
+      `SELECT pi.pedido_id, pi.item_id, pi.sku, pi.nome AS titulo, pi.quantidade, pi.valor_total_item,
+              pr.custo AS produto_custo
+       FROM shopee_pedido_itens pi
+       LEFT JOIN produtos pr ON pr.empresa_id = $1 AND pr.sku = pi.sku
+       WHERE pi.pedido_id = ANY($2::int[])
+       ORDER BY pi.pedido_id, pi.id`,
+      [empresaId, pedidoIds]
+    );
 
-  const pedidoIds = pedidosShopee.map((p) => p.id);
-  const { rows } = await pool.query(
-    `SELECT pi.pedido_id, pi.item_id, pi.sku, pi.nome AS titulo, pi.quantidade, pi.valor_total_item,
-            pr.custo AS produto_custo
-     FROM shopee_pedido_itens pi
-     LEFT JOIN produtos pr ON pr.empresa_id = $1 AND pr.sku = pi.sku
-     WHERE pi.pedido_id = ANY($2::int[])
-     ORDER BY pi.pedido_id, pi.id`,
-    [empresaId, pedidoIds]
-  );
-
-  const pedidosPorId = new Map(pedidosShopee.map((p) => [p.id, p]));
-  const linhasPorPedido = new Map();
-  rows.forEach((r) => {
-    if (!linhasPorPedido.has(r.pedido_id)) linhasPorPedido.set(r.pedido_id, []);
-    linhasPorPedido.get(r.pedido_id).push(r);
-  });
-
-  const itensShopee = [];
-  for (const [pedidoId, linhas] of linhasPorPedido) {
-    const pedido = pedidosPorId.get(pedidoId);
-    if (!pedido) continue;
-
-    linhas.forEach((linha) => {
-      const valorItem = toNum(linha.valor_total_item);
-      const ratio = pedido.valorTotal && valorItem !== null ? valorItem / pedido.valorTotal : null;
-
-      const custoUnitario = toNum(linha.produto_custo);
-      const custoProdutoItem = custoUnitario !== null ? round2(custoUnitario * (Number(linha.quantidade) || 0)) : null;
-
-      // pedido.tarifasMl já é o total combinado (comissão + taxas de
-      // pagamento + taxa de serviço) calculado no nível do pedido — passa
-      // tudo como `taxaVenda` sozinho (os outros dois null) só pra
-      // calcularResultadoVenda somar o mesmo total, sem duplicar.
-      const tarifasItem = (ratio !== null && pedido.tarifasMl !== null) ? round2(pedido.tarifasMl * ratio) : null;
-      const freteVendedorItem = (ratio !== null && pedido.freteVendedor !== null) ? round2(pedido.freteVendedor * ratio) : null;
-      const descontoItem = (ratio !== null) ? round2((pedido.desconto || 0) * ratio) : 0;
-
-      const calc = calcularResultadoVenda({
-        valorVenda: valorItem,
-        taxaVenda: tarifasItem,
-        pagamentoTaxas: null,
-        pagamentoTaxaMarketplace: null,
-        freteVendedor: freteVendedorItem,
-        custoProduto: custoProdutoItem,
-        aliquotaImposto,
-        desconto: descontoItem,
-      });
-
-      itensShopee.push({
-        pedidoId,
-        marketplace: 'shopee',
-        mlOrderId: pedido.mlOrderId, // valor já genérico (order_sn) — ver serializarPedido
-        dataEfetiva: pedido.dataEfetiva,
-        contaMlId: null,
-        contaShopeeId: pedido.contaShopeeId,
-        contaKey: pedido.contaKey,
-        loja: pedido.loja,
-        mlItemId: null,
-        itemId: linha.item_id ? String(linha.item_id) : null,
-        titulo: linha.titulo,
-        sku: linha.sku,
-        quantidade: Number(linha.quantidade) || 0,
-        valorTotalItem: valorItem,
-        rateado: true, // sempre — ver comentário acima da função
-        tarifas: calc.tarifasTotal,
-        freteVendedor: freteVendedorItem,
-        desconto: calc.desconto,
-        imposto: calc.imposto,
-        custoProduto: custoProdutoItem,
-        margemContribuicao: calc.resultado,
-        calculoCompleto: calc.calculoCompleto,
-        // 14/09/2026 — herdado do pedido (rateado igual ao resto): true
-        // quando `tarifas` acima veio de TABELA_COMISSAO_SHOPEE_ESTIMADA,
-        // não do repasse real. Ver serializarPedido/comissaoEstimada.
-        comissaoEstimada: !!pedido.comissaoEstimada,
-      });
+    const pedidosPorId = new Map(pedidosShopee.map((p) => [p.id, p]));
+    const linhasPorPedido = new Map();
+    rows.forEach((r) => {
+      if (!linhasPorPedido.has(r.pedido_id)) linhasPorPedido.set(r.pedido_id, []);
+      linhasPorPedido.get(r.pedido_id).push(r);
     });
+
+    for (const [pedidoId, linhas] of linhasPorPedido) {
+      const pedido = pedidosPorId.get(pedidoId);
+      if (!pedido) continue;
+
+      linhas.forEach((linha) => {
+        const valorItem = toNum(linha.valor_total_item);
+        const ratio = pedido.valorTotal && valorItem !== null ? valorItem / pedido.valorTotal : null;
+
+        const custoUnitario = toNum(linha.produto_custo);
+        const custoProdutoItem = custoUnitario !== null ? round2(custoUnitario * (Number(linha.quantidade) || 0)) : null;
+
+        // pedido.tarifasMl já é o total combinado (comissão + taxas de
+        // pagamento + taxa de serviço) calculado no nível do pedido — passa
+        // tudo como `taxaVenda` sozinho (os outros dois null) só pra
+        // calcularResultadoVenda somar o mesmo total, sem duplicar.
+        const tarifasItem = (ratio !== null && pedido.tarifasMl !== null) ? round2(pedido.tarifasMl * ratio) : null;
+        const freteVendedorItem = (ratio !== null && pedido.freteVendedor !== null) ? round2(pedido.freteVendedor * ratio) : null;
+        const descontoItem = (ratio !== null) ? round2((pedido.desconto || 0) * ratio) : 0;
+
+        const calc = calcularResultadoVenda({
+          valorVenda: valorItem,
+          taxaVenda: tarifasItem,
+          pagamentoTaxas: null,
+          pagamentoTaxaMarketplace: null,
+          freteVendedor: freteVendedorItem,
+          custoProduto: custoProdutoItem,
+          aliquotaImposto,
+          desconto: descontoItem,
+        });
+
+        itensShopee.push({
+          pedidoId,
+          marketplace: 'shopee',
+          mlOrderId: pedido.mlOrderId, // valor já genérico (order_sn) — ver serializarPedido
+          dataEfetiva: pedido.dataEfetiva,
+          contaMlId: null,
+          contaShopeeId: pedido.contaShopeeId,
+          contaKey: pedido.contaKey,
+          loja: pedido.loja,
+          mlItemId: null,
+          itemId: linha.item_id ? String(linha.item_id) : null,
+          titulo: linha.titulo,
+          sku: linha.sku,
+          quantidade: Number(linha.quantidade) || 0,
+          valorTotalItem: valorItem,
+          rateado: true, // sempre — ver comentário acima da função
+          tarifas: calc.tarifasTotal,
+          freteVendedor: freteVendedorItem,
+          desconto: calc.desconto,
+          imposto: calc.imposto,
+          custoProduto: custoProdutoItem,
+          margemContribuicao: calc.resultado,
+          calculoCompleto: calc.calculoCompleto,
+          // 14/09/2026 — herdado do pedido (rateado igual ao resto): true
+          // quando `tarifas` acima veio de TABELA_COMISSAO_SHOPEE_ESTIMADA,
+          // não do repasse real. Ver serializarPedido/comissaoEstimada.
+          comissaoEstimada: !!pedido.comissaoEstimada,
+        });
+      });
+    }
   }
 
-  return { itens: [...itensMl, ...itensShopee] };
+  // Venda de Balcão (22/09/2026) — diferente do Mercado Livre/Shopee, aqui
+  // TUDO é exato por item, sem rateio nenhum: preço, quantidade e custo
+  // unitário já são digitados/gravados por linha (vendas_balcao_itens,
+  // congelado no momento da venda — ver lib/vendaBalcao.js), e
+  // tarifas/frete são sempre 0 (fato do modelo, não dado faltando — ver
+  // SQL_BALCAO_PEDIDOS_UNIFICADOS). Só o desconto (quando o usuário
+  // registrou algum) é rateado proporcionalmente ao valor do item, mesma
+  // regra já usada pro Mercado Livre/Shopee.
+  const pedidosBalcao = pedidos.filter((p) => !p.cancelado && p.marketplace === 'balcao');
+  let itensBalcao = [];
+  if (pedidosBalcao.length) {
+    const { rows: configRowsBalcao } = await pool.query(
+      'SELECT aliquota_imposto FROM config_financeiro WHERE empresa_id = $1',
+      [empresaId]
+    );
+    const aliquotaImpostoBalcao = configRowsBalcao.length ? Number(configRowsBalcao[0].aliquota_imposto) : 0;
+
+    const vendaIds = pedidosBalcao.map((p) => p.id);
+    const { rows: linhasBalcao } = await pool.query(
+      'SELECT venda_id, sku, titulo, quantidade, preco_unitario_venda, custo_unitario, valor_total_item FROM vendas_balcao_itens WHERE venda_id = ANY($1::int[]) ORDER BY venda_id, id',
+      [vendaIds]
+    );
+
+    const pedidosBalcaoPorId = new Map(pedidosBalcao.map((p) => [p.id, p]));
+    const linhasPorVenda = new Map();
+    linhasBalcao.forEach((r) => {
+      if (!linhasPorVenda.has(r.venda_id)) linhasPorVenda.set(r.venda_id, []);
+      linhasPorVenda.get(r.venda_id).push(r);
+    });
+
+    for (const [vendaId, linhas] of linhasPorVenda) {
+      const pedido = pedidosBalcaoPorId.get(vendaId);
+      if (!pedido) continue;
+      const multiItem = linhas.length > 1;
+
+      linhas.forEach((linha) => {
+        const valorItem = toNum(linha.valor_total_item);
+        const ratio = (!multiItem) ? 1 : (pedido.valorTotal && valorItem !== null ? valorItem / pedido.valorTotal : null);
+        const descontoItem = (ratio !== null) ? round2((pedido.desconto || 0) * ratio) : 0;
+        const custoUnitario = toNum(linha.custo_unitario);
+        const custoProdutoItem = custoUnitario !== null ? round2(custoUnitario * (Number(linha.quantidade) || 0)) : null;
+
+        const calc = calcularResultadoVenda({
+          valorVenda: valorItem,
+          taxaVenda: 0,
+          pagamentoTaxas: 0,
+          pagamentoTaxaMarketplace: 0,
+          freteVendedor: 0,
+          custoProduto: custoProdutoItem,
+          aliquotaImposto: aliquotaImpostoBalcao,
+          desconto: descontoItem,
+        });
+
+        itensBalcao.push({
+          pedidoId: vendaId,
+          marketplace: 'balcao',
+          mlOrderId: pedido.mlOrderId,
+          dataEfetiva: pedido.dataEfetiva,
+          contaMlId: null,
+          contaShopeeId: null,
+          contaKey: pedido.contaKey,
+          loja: pedido.loja,
+          mlItemId: null,
+          itemId: null,
+          titulo: linha.titulo,
+          sku: linha.sku,
+          quantidade: Number(linha.quantidade) || 0,
+          valorTotalItem: valorItem,
+          rateado: multiItem,
+          tarifas: calc.tarifasTotal,
+          freteVendedor: 0,
+          desconto: calc.desconto,
+          imposto: calc.imposto,
+          custoProduto: custoProdutoItem,
+          margemContribuicao: calc.resultado,
+          calculoCompleto: calc.calculoCompleto,
+          comissaoEstimada: false,
+        });
+      });
+    }
+  }
+
+  return { itens: [...itensMl, ...itensShopee, ...itensBalcao] };
 }
 
 module.exports = {
