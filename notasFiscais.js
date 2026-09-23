@@ -14,13 +14,43 @@ const pool = require('../db/pool');
 const { buscarPedidosDoPeriodo } = require('./relatorioVendas');
 
 const STATUS_VALIDOS = ['pendente', 'emitida', 'cancelada', 'rejeitada'];
+const MARKETPLACE_LABEL = { mercado_livre: 'Mercado Livre', shopee: 'Shopee', balcao: 'Venda no balcão' };
 
-async function empresaDoPedido(pedidoId) {
+// CORREÇÃO (22/09/2026, feature "Venda de Balcão" — ver db/schema.sql e o
+// mesmo ajuste em lib/faturamento.js): consultava só ml_pedidos por id —
+// bug pré-existente pra Shopee, que ia se repetir pra Balcão (id pode
+// colidir entre as 3 tabelas, cada uma com sua própria sequência SERIAL).
+// Agora recebe o marketplace (vindo do detailKey composto) e consulta a
+// tabela certa, sempre sem ambiguidade.
+async function empresaDoPedido(pedidoId, marketplace) {
+  if (marketplace === 'shopee') {
+    const { rows } = await pool.query(
+      `SELECT c.empresa_id FROM shopee_pedidos p JOIN shopee_contas c ON c.id = p.conta_shopee_id WHERE p.id = $1`,
+      [pedidoId]
+    );
+    return rows.length ? rows[0].empresa_id : null;
+  }
+  if (marketplace === 'balcao') {
+    const { rows } = await pool.query(`SELECT empresa_id FROM vendas_balcao WHERE id = $1`, [pedidoId]);
+    return rows.length ? rows[0].empresa_id : null;
+  }
   const { rows } = await pool.query(
     `SELECT c.empresa_id FROM ml_pedidos p JOIN ml_contas c ON c.id = p.conta_ml_id WHERE p.id = $1`,
     [pedidoId]
   );
   return rows.length ? rows[0].empresa_id : null;
+}
+
+// Separa um `detailKey` ("mercado_livre:123"/"shopee:57"/"balcao:9") em
+// marketplace + id bruto — mesma função de lib/faturamento.js (duplicada
+// aqui de propósito, os dois módulos já eram independentes um do outro
+// antes desta mudança e não vale a pena criar um módulo compartilhado só
+// por isso).
+function separarDetailKey(detailKey) {
+  const chave = String(detailKey || '');
+  const pos = chave.indexOf(':');
+  if (pos === -1) return { marketplace: 'mercado_livre', pedidoId: chave };
+  return { marketplace: chave.slice(0, pos), pedidoId: chave.slice(pos + 1) };
 }
 
 function round2(n) { return Math.round(n * 100) / 100; }
@@ -31,6 +61,8 @@ function round2(n) { return Math.round(n * 100) / 100; }
 async function listarNotasFiscais({ empresaId, desde, ate, status, search }) {
   const { pedidos, totalNoPeriodo } = await buscarPedidosDoPeriodo({ empresaId, desde, ate });
 
+  // Mesma correção de chave composta aplicada em lib/faturamento.js —
+  // pedido_id sozinho pode colidir entre os 3 canais.
   const ids = pedidos.map((p) => p.id);
   let notasPorPedido = {};
   if (ids.length) {
@@ -38,15 +70,17 @@ async function listarNotasFiscais({ empresaId, desde, ate, status, search }) {
       'SELECT * FROM notas_fiscais WHERE pedido_id = ANY($1::int[])',
       [ids]
     );
-    notasPorPedido = Object.fromEntries(rows.map((r) => [r.pedido_id, r]));
+    notasPorPedido = Object.fromEntries(rows.map((r) => [`${r.marketplace}:${r.pedido_id}`, r]));
   }
 
   let itens = pedidos.map((p) => {
-    const nota = notasPorPedido[p.id];
+    const nota = notasPorPedido[p.detailKey];
     return {
       notaId: nota ? nota.id : null,
       pedidoId: p.id,
+      detailKey: p.detailKey,
       mlOrderId: p.mlOrderId,
+      marketplace: MARKETPLACE_LABEL[p.marketplace] || p.marketplace,
       loja: p.loja,
       cliente: p.compradorNickname,
       valorPedido: p.valorTotal,
@@ -123,35 +157,41 @@ function validatePayload(body) {
   return { errors, data: out };
 }
 
-// Cria ou atualiza (upsert por pedido_id) a nota fiscal de um pedido.
-async function registrarNota(pedidoId, body) {
+// Cria ou atualiza (upsert por pedido_id + marketplace) a nota fiscal de
+// um pedido. Recebe o `detailKey` composto ("marketplace:id"), não mais o
+// id numérico sozinho — mesmo motivo do ajuste em lib/faturamento.js.
+async function registrarNota(detailKey, body) {
   const { errors, data } = validatePayload(body);
   if (Object.keys(errors).length) return { errors };
 
-  const empresaId = await empresaDoPedido(pedidoId);
+  const { marketplace, pedidoId } = separarDetailKey(detailKey);
+  const empresaId = await empresaDoPedido(pedidoId, marketplace);
   if (empresaId === null) return { notFound: true };
 
   const { rows } = await pool.query(
-    `INSERT INTO notas_fiscais (pedido_id, empresa_id, numero, serie, chave_acesso, valor, data_emissao, status, observacao)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-     ON CONFLICT (pedido_id) DO UPDATE SET
-       numero = $3, serie = $4, chave_acesso = $5, valor = $6, data_emissao = $7, status = $8, observacao = $9, updated_at = now()
+    `INSERT INTO notas_fiscais (pedido_id, empresa_id, marketplace, numero, serie, chave_acesso, valor, data_emissao, status, observacao)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     ON CONFLICT (pedido_id, marketplace) DO UPDATE SET
+       numero = $4, serie = $5, chave_acesso = $6, valor = $7, data_emissao = $8, status = $9, observacao = $10, updated_at = now()
      RETURNING *`,
-    [pedidoId, empresaId, data.numero || null, data.serie || null, data.chaveAcesso || null, data.valor ?? null, data.dataEmissao || null, data.status, data.observacao || null]
+    [pedidoId, empresaId, marketplace, data.numero || null, data.serie || null, data.chaveAcesso || null, data.valor ?? null, data.dataEmissao || null, data.status, data.observacao || null]
   );
   return { nota: rows[0] };
 }
 
-async function buscarPorPedido(pedidoId) {
-  const { rows } = await pool.query('SELECT * FROM notas_fiscais WHERE pedido_id = $1', [pedidoId]);
+async function buscarPorPedido(detailKey) {
+  const { marketplace, pedidoId } = separarDetailKey(detailKey);
+  const { rows } = await pool.query('SELECT * FROM notas_fiscais WHERE pedido_id = $1 AND marketplace = $2', [pedidoId, marketplace]);
   return rows[0] || null;
 }
 
 module.exports = {
   STATUS_VALIDOS,
+  MARKETPLACE_LABEL,
   listarNotasFiscais,
   registrarNota,
   buscarPorPedido,
   empresaDoPedido,
+  separarDetailKey,
   validatePayload,
 };
