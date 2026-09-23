@@ -3,6 +3,207 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-22 (59) — Calculadora de Vendas (Venda de Balcão): 3º canal de faturamento, junto de Mercado Livre e Shopee
+- **Pedido do usuário (literal):** "quero colocar agora uma calculadora de
+  vendas pra eu vende[r] para o cliente final que vem até a minha empresa
+  para colocar isso no faturamento porque todas as vendas que eu faço pro
+  fora eu nao coloco no faturamento sei que isso é errado mas quero
+  arrumar". Ou seja: vendas presenciais, feitas direto na empresa pro
+  cliente final, hoje não entram em NENHUM número do sistema — o usuário
+  sabe disso e quer corrigir.
+- **4 perguntas de escopo respondidas pelo usuário (todas com a opção
+  recomendada):**
+  1. Onde essa venda deve contar: em TODO o sistema (Visão Geral, DRE,
+     Relatórios e Faturamento), não só numa tela isolada.
+  2. Deve baixar o estoque exibido automaticamente: sim.
+  3. Produto: sempre escolhido do catálogo já cadastrado (Produtos), nunca
+     digitado solto na hora da venda.
+  4. Pagamento: sempre à vista (nunca fiado/contas a receber).
+- **Por que virou um 3º canal dentro da MESMA fonte única de vendas, em vez
+  de uma tela/cálculo paralelo:** o projeto já tinha, desde a integração da
+  Shopee (14/09/2026), o padrão de "canal" dentro de
+  `lib/relatorioVendas.js` — um `UNION ALL` de CTEs com o mesmo contrato de
+  colunas, mais `serializarPedido` com um branch por canal. Balcão virou o
+  3º canal (`'balcao'`) seguindo exatamente esse padrão. Consequência
+  direta: Visão Geral, DRE, Relatórios, Recebimentos e Faturamento passam a
+  enxergar a venda de balcão automaticamente, sem nenhum cálculo duplicado
+  — o mesmo motivo pelo qual a integração da Shopee não duplicou nada.
+- **Tabelas novas, sempre "nunca apaga":** `vendas_balcao` (cabeçalho —
+  cliente opcional, forma de pagamento, desconto, valor total BRUTO, custo
+  do produto total, status) e `vendas_balcao_itens` (SKU como texto solto,
+  igual `ml_pedido_itens`/`shopee_pedido_itens` — não uma FK pra
+  `produtos`, pra nunca perder o histórico de uma venda antiga se o produto
+  for editado ou desativado depois). Cancelamento é sempre um soft-cancel
+  (`status='cancelada'`, nunca um DELETE) — mesma regra do resto do
+  sistema.
+- **Correção de dado que evita dobrar o desconto:** `valor_total` é gravado
+  sempre BRUTO (soma dos itens, antes do desconto) — porque
+  `lib/resultadoVenda.js#calcularResultadoVenda` já subtrai o desconto por
+  conta própria; gravar já descontado subtrairia duas vezes, reduzindo a
+  margem artificialmente. Mesma convenção que Mercado Livre e Shopee já
+  usam.
+- **Bug de colisão de id encontrado e corrigido nesta etapa (retroativo,
+  também corrige a Shopee):** `faturamento_pedidos` e `notas_fiscais`
+  guardavam só `pedido_id` (um número), com `UNIQUE`/FK direto pra
+  `ml_pedidos`. Como Mercado Livre, Shopee e agora Balcão têm cada um sua
+  própria sequência numérica independente, o MESMO número de pedido podia
+  existir nos três ao mesmo tempo — na prática, marcar a situação de
+  faturamento de um pedido Shopee ou Balcão podia, na pior hipótese, mexer
+  silenciosamente na linha de um pedido do Mercado Livre com o mesmo id.
+  Corrigido adicionando uma coluna `marketplace` nas duas tabelas e trocando
+  a chave única para `(pedido_id, marketplace)` — e todo o código que lê/
+  grava essas tabelas passou a usar o `detailKey` composto
+  ("mercado_livre:123"/"shopee:57"/"balcao:9", já usado por
+  `relatorioVendas.js#serializarPedido`) em vez do id sozinho.
+- **Baixa de estoque: decisão consciente de onde ela entra e onde ela NÃO
+  entra.** O estoque físico do sistema (`lib/estoqueFisico.js`) só existe
+  hoje como espelho de leitura do Mercado Livre (`ml_estoque_itens`,
+  sincronizado a cada 1 minuto) — nunca escrevemos nessa tabela. A baixa da
+  venda de balcão (convertida pra unidade física pela mesma regra de
+  produto base já usada em todo o sistema) é aplicada só no bloco "fora do
+  Full" (produto que fica fisicamente na empresa) e nunca no Full (que fica
+  no centro de distribuição do Mercado Livre — não faz sentido baixar de lá
+  por uma venda presencial). A baixa nunca deixa a quantidade negativa
+  (trava em zero) e o que não coube em nenhum item físico existente aparece
+  à parte, com transparência, em vez de ser descontado do produto errado ou
+  simplesmente ignorado.
+- **Limitação conhecida, aceita conscientemente por causa do tempo desta
+  etapa (documentada, nunca escondida):** a baixa por venda de balcão é
+  cumulativa e permanente, e não existe hoje nenhum mecanismo de "zerar"/
+  reconciliar. Se o usuário também corrigir manualmente o mesmo estoque lá
+  no anúncio do Mercado Livre por causa da mesma venda, o sistema vai
+  descontar duas vezes (uma pela sincronização do ML, outra por esta baixa).
+  Ver `05-problemas-conhecidos.md`.
+- **Pagamento sempre à vista, nunca fiado:** por isso a venda de balcão
+  nunca aparece em Contas a Receber nem nos "recebimentos previstos" do
+  Fluxo de Caixa — `lib/recebimentosMl.js` já filtra por
+  `pagamentoStatus === 'approved'`, e a venda de balcão nasce com
+  `pagamentoStatus: null` (igual Shopee), então já fica de fora dessa
+  projeção sem precisar de nenhum código novo.
+
+## 2026-09-22 (58) — Compras com IA: substitui a aba Compras por uma Central Inteligente de Reposição de Estoque
+- **Pedido do usuário:** substituir completamente a aba "Compras" (CRUD
+  simples de pedido a fornecedor) por uma tela nova, "Compras com IA", que
+  analisa cada MODELO FÍSICO (não cada SKU/variação) e recomenda quanto
+  comprar, quando e por quê — com aprovação humana obrigatória antes de
+  qualquer pedido ser montado. Pedido explícito: "A IA NÃO pode comprar
+  automaticamente", "não altere, quebre nem remova nada que já funciona",
+  "apenas substitua a experiência da aba Compras".
+- **Por que "modelo físico" já existia no sistema — nenhuma estrutura
+  nova de agrupamento foi criada:** o projeto já tinha `produtos_base` +
+  `produto_base_skus` (com multiplicador) desde a unificação de
+  Produtos/Custo & Margem (decisão 14) — a mesma estrutura que converte
+  `25CX-19X12X12`, `50CX-19X12X12` etc. no modelo físico `CX-19X12X12`.
+  Reaproveitada diretamente, em vez de criar uma segunda forma de
+  agrupar SKUs (evita dois lugares divergentes calculando a mesma coisa).
+- **Nenhum cálculo novo de estoque ou vendas — só reaproveitamento do que
+  já existia e já era testado:** estoque físico (Full e fora do Full, já
+  a custo) vem de `lib/estoqueFisico.js#calcularEstoqueFisico` — a MESMA
+  fonte das telas Estoque e Estoque Full. Vendas físicas por janela de
+  dias vêm de `lib/relatoriosAgregados.js#relatorioProdutosPorCaixa` — a
+  MESMA fonte do Relatório de Produtos por Caixa. Isso garante que a tela
+  nunca mostra um número de estoque/venda diferente do resto do sistema.
+- **Motor de cálculo 100% determinístico, documentado, testado** —
+  `lib/ia/comprasMotor.js`: projeção de venda diária ponderada (pesos
+  base 40%/35%/25% para 7/14/30 dias, pedido explícito do usuário como
+  "exemplo inicial"), com detecção de aceleração — E, por simetria
+  (extensão própria, não pedida explicitamente, documentada no código),
+  desaceleração — trocando para pesos 60%/25%/15% quando a média dos
+  últimos 7 dias diverge ≥20% da média dos últimos 30. A partir daí:
+  estoque disponível real (Galpão+Full-reservado), estoque futuro
+  (+a caminho), dias de cobertura, data provável de ruptura, ponto de
+  recompra (prazo do fornecedor + estoque de segurança) e quantidade
+  recomendada = estoque desejado (30 dias de cobertura) − estoque atual
+  − mercadoria já a caminho — nunca sugere de novo uma quantidade já
+  comprada e ainda não recebida. 6 status com emoji (🟢🟡🟠🔴🚨🔵) exatos
+  como pedido pelo usuário. Testes em `test/comprasMotor.test.js`.
+- **"A caminho" soma os dois sistemas de compra, sem tocar no antigo:**
+  `buscarACaminhoPorProdutoBase` (`lib/ia/comprasCiclo.js`) soma pedidos
+  novos (`compras_ia_pedidos`, ainda não recebidos/cancelados) MAIS os
+  itens ainda em aberto do módulo antigo de Compras
+  (`compras`/`compra_itens`, ligado a SKU), convertidos para unidade
+  física com `lib/produtoBaseConversao.js#converterItens` — a mesma
+  função já usada em outros lugares do sistema para essa conversão. O
+  módulo antigo (`routes/compras.js`, tabelas `compras`/`compra_itens`)
+  continua existindo e funcionando exatamente igual, só perdeu a tela
+  própria no menu — garantia de "não quebrar integrações, banco de dados
+  ou funções que já estão funcionando".
+- **Relatório de diagnóstico por modelo, mesma arquitetura híbrida já
+  usada em Ads (decisão 57):** todo número vem do motor determinístico;
+  a IA generativa (mesmo provedor, `lib/ia/providers/anthropic.js`) só
+  reescreve o texto pronto em prosa mais natural, proibida de mudar
+  qualquer número ou recomendação — funciona 100% sem IA configurada.
+  Gerado só quando uma recomendação pendente é criada PELA PRIMEIRA VEZ
+  (nunca a cada ciclo horário para a mesma situação já pendente) —
+  mesmo controle de custo da IA já usado em Ads.
+- **Uma recomendação pendente por modelo, nunca duplicada:** índice único
+  parcial em `ia_decisoes_compras` (`empresa_id, produto_base_id,
+  tipo_acao` onde `status_decisao='pendente'`) — se a mesma situação
+  persistir de um ciclo pro outro, só atualiza os números da recomendação
+  já existente; recomendações que deixam de fazer sentido (estoque
+  resolvido, por exemplo) são marcadas "expiradas", nunca apagadas.
+  Ciclo automático a cada 1 hora (`lib/comprasIaScheduler.js`, mesmo
+  padrão de `adsScheduler.js`) + botão "Gerar recomendações agora".
+- **Aprovação sempre humana, pedido feito vira registro imediato:** só
+  status ruptura/comprar agora/programar geram uma recomendação pendente
+  (saudável/atenção/a caminho aparecem só como linha informativa na
+  tabela). O usuário aprova, ajusta a quantidade ou ignora
+  (`PUT /api/compras-ia/decisoes/:id`) — nunca um envio automático ao
+  fornecedor. Aprovar/ajustar cria um pedido (`compras_ia_pedidos`, numeração
+  sequencial `PC-000NNN`) dentro da mesma transação — a partir daí a
+  quantidade conta como "a caminho" e a IA nunca mais recomenda comprá-la
+  de novo. "Gerar PDF" usa impressão nativa do navegador (`window.print()`);
+  "Enviar ao fornecedor" gera um link `mailto:`/`wa.me` pronto — o usuário
+  ainda precisa clicar em enviar, nunca é automático.
+- **"Desempenho da IA" é contagem real, não aprendizado de máquina de
+  verdade:** decisão consciente, documentada na tela e aqui, de mostrar só
+  estatísticas honestas (quantas recomendações, quantas aprovadas,
+  quantas ignoradas, quantas rupturas evitadas por aproximação, quanto foi
+  comprado via recomendação da IA) — em vez de fingir um sistema de
+  aprendizado que este projeto não tem, mesma filosofia "nunca caixa
+  preta" já usada em Ads e Promoções.
+- **Testes:** suíte completa (430/430) passando após todo o backend novo,
+  sem nenhuma regressão nas telas existentes.
+
+## 2026-09-21 (57) — Relatório de diagnóstico de Ads: conta sempre feita por código, a IA só reescreve o texto
+- **Pedido do usuário:** a IA de Ads hoje só diz "pausar" ou "ajustar" com
+  um motivo de uma linha. O usuário quer um relatório completo por
+  anúncio, no estilo de um exemplo que ele mesmo escreveu à mão (tabela de
+  métricas com leitura de cada uma, comparação do orçamento diário
+  configurado com o gasto real, um teste de 7 dias com 3 faixas de
+  resultado pra decidir se reativa o Ads ou não, e os dois gargalos do
+  funil — impressão→clique e clique→compra — analisados separados).
+- **Decisão de arquitetura: nenhum número passa pela IA.** Todo o cálculo
+  (CTR, conversão, CPA, ACOS, comparação com orçamento, as 3 faixas do
+  teste de 7 dias, os dois gargalos) é feito por código determinístico em
+  `lib/ia/adsDiagnostico.js`, com os limites documentados como constantes
+  no topo do arquivo (ex.: CTR fraco < 0,3%, conversão fraca < 1%). A IA
+  (mesmo provedor Anthropic já usado no SAC, `lib/ia/providers/anthropic.js`)
+  entra só no final, pra reescrever esse texto já pronto de um jeito mais
+  natural — proibida explicitamente (no prompt) de mudar qualquer número
+  ou a recomendação. Isso segue o mesmo princípio que já valia pra
+  `adsDecisor.js` ("nunca caixa preta"): o relatório funciona 100% mesmo
+  se a IA estiver fora do ar, sem chave configurada, ou der erro — nesses
+  casos mostra o texto determinístico puro, sem quebrar a tela.
+- **Validação:** os cálculos foram conferidos batendo exatamente com as
+  contas que o próprio usuário fez à mão no exemplo que ele mandou (CTR
+  0,16%, conversão 0,58%, CPA R$40,44, 124 vendas fora do Ads, baseline de
+  4,13 vendas/dia) — testes em `test/adsDiagnostico.test.js`.
+- **Quando o relatório é gerado (controle de custo da IA):** só na hora em
+  que uma decisão "pausar anúncio" é criada PELA PRIMEIRA VEZ (INSERT em
+  `ia_decisoes_ads`) — não a cada ciclo de sincronização (a cada 15 min)
+  enquanto a mesma situação continuar pendente. Ou seja: gera 1 relatório
+  por problema novo detectado, não 1 a cada 15 minutos pro mesmo anúncio.
+  Decisões "pausar anúncio" que já estavam pendentes ANTES desse deploy
+  não ganham relatório retroativo — só as novas, detectadas depois.
+- **Onde aparece:** botão "Ver diagnóstico completo" ao lado de qualquer
+  anúncio recomendado pra pausar, dentro de Agentes IA → Ads e Performance
+  → Aprovações pendentes. Abre num modal (reaproveitando o mesmo padrão
+  já usado no modal de detalhe de anúncio).
+- **Nível do relatório (por anúncio, não por campanha):** confirmado com
+  o usuário — cada anúncio recomendado pra pausar tem seu próprio
+  relatório individual, não um relatório agregado da campanha inteira.
+
 ## 2026-09-21 (56) — Radar de Concorrentes: escopo real de monitoramento automático e adaptações do mockup
 - **Por que só Mercado Livre tem leitura automática de verdade:** antes
   de escrever qualquer código novo, foi reaproveitada uma investigação já

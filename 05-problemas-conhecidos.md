@@ -3,6 +3,40 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Venda de Balcão: baixa de estoque é cumulativa e permanente, sem reconciliação com correção manual no Mercado Livre (22/09/2026)
+- **O que acontece:** quando o usuário registra uma venda de balcão, o
+  sistema desconta a quantidade vendida (convertida pra unidade física)
+  do estoque "fora do Full" exibido — mas nunca escreve de verdade na
+  sincronização do Mercado Livre (`ml_estoque_itens`), que continua um
+  espelho de só leitura. Essa baixa é somada pra sempre (todas as vendas
+  de balcão não canceladas, desde o início).
+- **Onde isso pode gerar número duplicado:** se o usuário TAMBÉM corrigir
+  manualmente a quantidade do mesmo produto lá no anúncio do Mercado
+  Livre por causa da mesma venda (prática comum: "vendi uma caixa aqui no
+  balcão, vou tirar do estoque do anúncio também"), o sistema vai
+  descontar duas vezes — uma pela sincronização normal do ML (que já
+  reflete a correção manual do usuário) e outra pela baixa desta
+  funcionalidade.
+- **Por que não foi resolvido agora:** consertar isso direito precisaria
+  de um jeito de "zerar"/reconciliar a baixa acumulada (ex.: um botão
+  "recalcular a partir de agora" ou comparar com o valor real do Mercado
+  Livre a cada sincronização) — não coube no tempo desta etapa. Decisão
+  consciente, registrada em `02-decisoes.md` (59): documentar o limite
+  com clareza em vez de fingir que não existe.
+- **Onde ver a baixa aplicada:** cada produto base no bloco "fora do
+  Full" de `lib/estoqueFisico.js` (usado por Estoque Full e Compras com
+  IA) ganhou o campo `baixaVendaBalcao`, mostrando quanto foi descontado
+  por vendas de balcão. Quando uma venda de balcão não tem de onde
+  descontar (produto sem nenhum item "fora do Full" cadastrado, ou
+  estoque insuficiente ali), a sobra aparece à parte em
+  `foraDoFull.vendasBalcaoSemEstoqueParaBaixar`, nunca escondida nem
+  descontada do produto errado.
+- **Próximo passo, se o usuário sentir o problema na prática:** avisar
+  pra decidirmos juntos o mecanismo de reconciliação (provavelmente um
+  botão manual de "recalcular baixa" é o mais simples e honesto, já que
+  o sistema nunca tem acesso à quantidade "verdadeira" fora do que o
+  Mercado Livre sincroniza).
+
 ## [RESOLVIDO 21/09/2026] Cadastro manual de Concorrente por SKU: "Erro interno do servidor" continua acontecendo em produção — o arquivo `lib/concorrente.js` nunca chegou a subir certo pro GitHub, mesmo depois de várias tentativas (21/09/2026)
 - **RESOLVIDO.** A causa real (achada depois de mais algumas tentativas
   de upload) era mais específica do que "algum arquivo cai do upload em

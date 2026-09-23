@@ -29,11 +29,14 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT /api/notas-fiscais/pedido/:pedidoId  { numero, serie, chaveAcesso, valor, dataEmissao, status, observacao }
+// PUT /api/notas-fiscais/pedido/:detailKey  { numero, serie, chaveAcesso, valor, dataEmissao, status, observacao }
 // Upsert por pedido — cria a nota se ainda não existir, atualiza se já existir.
-router.put('/pedido/:pedidoId', async (req, res, next) => {
+// `detailKey` é "marketplace:id" (ver lib/faturamento.js — mesmo padrão),
+// sempre codificado com encodeURIComponent pelo front por causa do ":".
+router.put('/pedido/:detailKey', async (req, res, next) => {
   try {
-    const result = await notasFiscais.registrarNota(req.params.pedidoId, req.body || {});
+    const detailKey = decodeURIComponent(req.params.detailKey);
+    const result = await notasFiscais.registrarNota(detailKey, req.body || {});
     if (result.notFound) return res.status(404).json({ error: 'Pedido não encontrado.' });
     if (result.errors) return res.status(400).json({ errors: result.errors });
     res.json({ nota: result.nota });

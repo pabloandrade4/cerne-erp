@@ -108,6 +108,11 @@ async function buscarNomeLoja(contaKey) {
       const { rows } = await pool.query('SELECT shop_name FROM shopee_contas WHERE id = $1', [id]);
       return rows.length ? rows[0].shop_name : null;
     }
+    // Venda de Balcão (22/09/2026) — não é uma conta de verdade (nunca tem
+    // linha em ml_contas/shopee_contas), sempre o mesmo nome fixo. `id`
+    // aqui é o próprio empresa_id (ver contaKey em
+    // lib/relatorioVendas.js#buscarLojasDaEmpresa) — não precisa de query.
+    if (marketplace === 'balcao') return 'Venda no balcão';
     const { rows } = await pool.query('SELECT nickname FROM ml_contas WHERE id = $1', [id]);
     return rows.length ? rows[0].nickname : null;
   } catch (e) {
@@ -216,7 +221,7 @@ const COLUNAS_RELATORIO = [
 function linhaDoPedido(p) {
   return {
     data: fmtDataBR(p.dataCriacao),
-    marketplace: p.marketplace === 'shopee' ? 'Shopee' : 'Mercado Livre',
+    marketplace: p.marketplace === 'shopee' ? 'Shopee' : p.marketplace === 'balcao' ? 'Venda no balcão' : 'Mercado Livre',
     pedido: p.mlOrderId,
     loja: p.loja || '',
     produto: p.produtoResumo || '',
@@ -734,13 +739,119 @@ async function detalharPedidoShopee(id, res) {
   });
 }
 
+// GET /api/pedidos/balcao:ID — detalhe de uma Venda de Balcão (22/09/2026,
+// mesmo espírito dos dois detalhes acima). Diferente do Mercado Livre/
+// Shopee, aqui não existe NENHUMA pendência possível de tarifa/frete (são
+// sempre 0, fato do modelo) — a única pendência real seria custo do
+// produto faltando, e isso nem chega a acontecer porque criarVenda
+// (lib/vendaBalcao.js) já exige que o SKU esteja cadastrado em Produtos
+// antes de aceitar a venda.
+async function detalharPedidoBalcao(id, res) {
+  const { rows } = await pool.query(
+    `SELECT vb.*, e.id AS empresa_id_real
+     FROM vendas_balcao vb
+     JOIN empresas e ON e.id = vb.empresa_id
+     WHERE vb.id = $1`,
+    [id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Venda não encontrada.' });
+  const venda = rows[0];
+  const empresaId = venda.empresa_id_real;
+
+  const { rows: itens } = await pool.query(
+    'SELECT * FROM vendas_balcao_itens WHERE venda_id = $1 ORDER BY id',
+    [venda.id]
+  );
+
+  const { rows: configRows } = await pool.query(
+    'SELECT aliquota_imposto FROM config_financeiro WHERE empresa_id = $1',
+    [empresaId]
+  );
+  const aliquotaImposto = configRows.length ? Number(configRows[0].aliquota_imposto) : 0;
+
+  const pendencias = [];
+  const itensDetalhados = itens.map((it) => {
+    const custoUnitario = toNum(it.custo_unitario);
+    if (custoUnitario === null) pendencias.push(`Item "${it.titulo}" (SKU ${it.sku}) estava sem custo cadastrado no momento da venda.`);
+    return {
+      id: it.id,
+      titulo: it.titulo,
+      sku: it.sku,
+      quantidade: Number(it.quantidade),
+      precoUnitario: toNum(it.preco_unitario_venda),
+      valorTotalItem: toNum(it.valor_total_item),
+      custoUnitario,
+      custoTotal: custoUnitario !== null ? round2(custoUnitario * Number(it.quantidade)) : null,
+    };
+  });
+
+  const valorVenda = toNum(venda.valor_total);
+  const desconto = toNum(venda.desconto) || 0;
+  const custoProdutoFinal = toNum(venda.custo_produto_total);
+
+  const { tarifasComponentes, tarifasTotal, imposto, resultado, calculoCompleto } = calcularResultadoVenda({
+    valorVenda,
+    taxaVenda: 0,
+    pagamentoTaxas: 0,
+    pagamentoTaxaMarketplace: 0,
+    freteVendedor: 0,
+    custoProduto: custoProdutoFinal,
+    aliquotaImposto,
+    desconto,
+  });
+  const margemPercentual = resultado !== null && valorVenda ? round2((resultado / valorVenda) * 100) : null;
+
+  res.json({
+    pedido: {
+      id: venda.id,
+      marketplace: 'balcao',
+      detailKey: `balcao:${venda.id}`,
+      empresaId,
+      loja: 'Venda no balcão',
+      mlOrderId: 'VB-' + String(venda.numero_venda).padStart(6, '0'),
+      packId: null,
+      dataCriacao: venda.data_venda,
+      dataFechamento: null,
+      status: venda.status,
+      statusDetail: null,
+      compradorId: null,
+      compradorNickname: venda.cliente_nome,
+      moeda: 'BRL',
+      formaPagamento: venda.forma_pagamento,
+      mlPaymentId: null,
+      mlShippingId: null,
+      envioStatus: null,
+      envioLogisticMode: null,
+      envioLogisticType: null,
+      observacao: venda.observacao,
+    },
+    itens: itensDetalhados,
+    resultadoFinanceiro: {
+      valorVenda,
+      desconto,
+      tarifasMl: { total: tarifasTotal, componentes: tarifasComponentes },
+      freteVendedor: 0,
+      freteComprador: null,
+      imposto: { aliquota: aliquotaImposto, valor: imposto },
+      custoProduto: custoProdutoFinal,
+      resultado,
+      margemPercentual,
+      calculoCompleto,
+      comissaoEstimada: false,
+      pendencias,
+    },
+    auditoria: { rawPedidoDisponivel: false, rawEnvioDisponivel: false, rawCustosEnvioDisponivel: false },
+  });
+}
+
 // GET /api/pedidos/:id — detalhe completo + resultado financeiro. `:id` é a
 // `detailKey` composta vinda de buscarPedidosDoPeriodo
-// ("mercado_livre:123"/"shopee:57" — ver relatorioVendas.js#serializarPedido
-// e o comentário no topo deste arquivo sobre por que um id sozinho não é
-// seguro entre as duas lojas). Um valor sem ":" é tratado como Mercado
-// Livre puro, pra nunca quebrar um link/favorito salvo antes desta mudança
-// (14/09/2026), quando `id` sozinho só existia pro Mercado Livre.
+// ("mercado_livre:123"/"shopee:57"/"balcao:9" — ver
+// relatorioVendas.js#serializarPedido e o comentário no topo deste arquivo
+// sobre por que um id sozinho não é seguro entre as origens). Um valor sem
+// ":" é tratado como Mercado Livre puro, pra nunca quebrar um link/favorito
+// salvo antes desta mudança (14/09/2026), quando `id` sozinho só existia
+// pro Mercado Livre.
 router.get('/:id', async (req, res, next) => {
   try {
     const chave = String(req.params.id || '');
@@ -749,6 +860,8 @@ router.get('/:id', async (req, res, next) => {
     const idBruto = posDoisPontos === -1 ? chave : chave.slice(posDoisPontos + 1);
     if (marketplace === 'shopee') {
       await detalharPedidoShopee(idBruto, res);
+    } else if (marketplace === 'balcao') {
+      await detalharPedidoBalcao(idBruto, res);
     } else {
       await detalharPedidoMercadoLivre(idBruto, res);
     }

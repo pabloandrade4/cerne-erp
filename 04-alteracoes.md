@@ -2,6 +2,234 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-22 (72) — Calculadora de Vendas (Venda de Balcão): novo canal de faturamento, 3º junto de Mercado Livre e Shopee
+- **Pedido do usuário (resumo):** uma calculadora pra registrar vendas
+  presenciais (balcão) que hoje não entram em nenhum número do sistema.
+  Sempre à vista, sempre produto do catálogo já cadastrado, conta em TODO o
+  sistema e baixa o estoque. Justificativa completa da arquitetura em
+  `02-decisoes.md` (59).
+- **O que mudou:**
+  - `db/schema.sql`: tabelas novas `vendas_balcao` (cabeçalho) e
+    `vendas_balcao_itens` (itens, SKU como texto solto — mesmo padrão de
+    `ml_pedido_itens`/`shopee_pedido_itens`); `vendas_balcao_numero_seq`
+    pra numeração sequencial (`VB-000001`, `VB-000002`...). Correção
+    retroativa (também beneficia a Shopee): `faturamento_pedidos` e
+    `notas_fiscais` ganharam a coluna `marketplace` e a chave única virou
+    `(pedido_id, marketplace)` — antes era só `pedido_id`, o que permitia
+    colisão entre pedidos de canais diferentes com o mesmo número (ver
+    `02-decisoes.md`, 59).
+  - Novo `lib/vendaBalcao.js`: CRUD da venda em si — `criarVenda` (valida
+    payload, rejeita a venda inteira se algum SKU não estiver cadastrado no
+    catálogo da empresa, congela o custo de cada item a partir de
+    `produtos.custo` no momento da venda, grava `valor_total` sempre BRUTO
+    — nunca pré-descontado, pra não subtrair o desconto duas vezes),
+    `listarVendas`, `buscarVendaPorId`, `cancelarVenda` (soft-cancel, nunca
+    apaga).
+  - Novo `routes/vendaBalcao.js`, montado em `/api/vendas-balcao`
+    (`GET /`, `POST /`, `PATCH /:id/cancelar`).
+  - `lib/relatorioVendas.js`: novo canal `'balcao'` no mesmo `UNION ALL`
+    que já une Mercado Livre + Shopee (`SQL_UNIAO_PEDIDOS`), com o mesmo
+    contrato de colunas; `serializarPedido` ganhou um 3º branch em
+    `cancelado` (vocabulário de status próprio da tabela `vendas_balcao`:
+    `'cancelada'`) e em `freteVendedor` (sempre 0, igual Shopee);
+    `buscarLojasDaEmpresa` passou a incluir sempre uma loja fixa "Venda no
+    balcão"; corrigido um bug de short-circuit em
+    `buscarItensDoPeriodoTodosCanais` que fazia os itens de balcão
+    desaparecerem sempre que não havia nenhum pedido Shopee no período
+    (achado e corrigido via teste ao vivo, antes de ir pro ar).
+  - `routes/pedidos.js`: detalhe de um pedido de balcão
+    (`detalharPedidoBalcao`, no `GET /:id`, dispatcher já existente por
+    `detailKey`), rótulo "Venda no balcão" no nome da loja e na coluna
+    Marketplace da listagem.
+  - `lib/visaoGeralPainel.js`: `identificarCanal` passou a reconhecer o
+    canal `'balcao'` ("Venda no balcão").
+  - `lib/faturamento.js` e `lib/notasFiscais.js`: reescritos pra usar o
+    `detailKey` composto ("marketplace:id") em vez do `pedido_id` sozinho,
+    corrigindo a colisão entre canais descrita acima —
+    `empresaDoPedido(pedidoId, marketplace)` agora consulta a tabela certa
+    por canal; upsert em `faturamento_pedidos`/`notas_fiscais` passou a
+    usar `ON CONFLICT (pedido_id, marketplace)`; as listagens expõem
+    `detailKey` e o rótulo real do marketplace por item (antes,
+    `lib/faturamento.js` mostrava sempre "Mercado Livre" fixo pra
+    qualquer pedido, inclusive Shopee).
+  - `routes/faturamento.js` e `routes/notasFiscais.js`: rotas que recebiam
+    `:pedidoId` passaram a receber `:detailKey` (`PATCH
+    /:detailKey/situacao`, `PATCH /lote` com `detailKeys`, `PUT
+    /pedido/:detailKey`).
+  - `lib/estoqueFisico.js`: baixa automática de estoque por venda de
+    balcão — soma cumulativa das vendas não canceladas por SKU, convertida
+    pra unidade física pela mesma regra de produto base já usada em todo o
+    sistema (`resolverProdutosBasePorSku`), subtraída só do bloco "fora do
+    Full" (nunca do Full). Nunca deixa a quantidade negativa; o que não
+    coube em nenhum item físico existente aparece à parte, em
+    `foraDoFull.vendasBalcaoSemEstoqueParaBaixar`, com o motivo
+    (`sku_sem_produto_base_identificado`, `estoque_fora_do_full_insuficiente`
+    ou `sem_item_fora_do_full`). Cada produto base ganhou o campo
+    `baixaVendaBalcao` mostrando quanto foi descontado. Como Compras com IA
+    (`lib/ia/comprasCiclo.js`) e a tela Estoque Full
+    (`routes/estoqueFull.js`) já leem esse mesmo bloco, os dois passaram a
+    refletir a baixa automaticamente, sem nenhuma mudança neles.
+  - `server.js`: montado `app.use('/api/vendas-balcao', ...)`.
+  - `public/index.html`: nova página "Calculadora de Vendas" (grupo
+    Operação, ao lado de Compras com IA) — carrinho de itens do catálogo
+    (nunca produto digitado solto) com total e margem estimada calculados
+    ao vivo no navegador (só conferência visual; o valor gravado de
+    verdade sempre vem recalculado no servidor), forma de pagamento,
+    desconto, cliente e observação opcionais, histórico de vendas do
+    período com cancelamento. As telas Pedidos, Faturamento e Notas
+    Fiscais foram ajustadas pra mostrar o canal "Venda no balcão" (badge,
+    seletor de loja, painel de detalhe com forma de pagamento em vez de
+    ID de pagamento/envio do Mercado Livre) e pra usar `detailKey` em vez
+    de `pedidoId` nas ações de Faturamento/Notas Fiscais.
+- **Teste:** sem fixture de produção pra este canal ainda (é novo), então
+  validado por testes ao vivo manuais contra um Postgres real neste
+  ambiente — criação de venda, listagem/atualização de situação de
+  faturamento e nota fiscal (inclusive o cenário de colisão de id entre
+  canais), e a baixa de estoque (incluindo o caso de vender mais do que o
+  estoque "fora do Full" tinha disponível, confirmando que trava em zero e
+  registra a sobra). Suíte de testes automatizados completa (`node --test
+  test/*.test.js`) rodada de novo depois de todas as mudanças: 856 testes,
+  mesmo total de antes; toda diferença em relação à contagem anterior
+  (618 pass/84 fail/154 cancelled → 614 pass/66 fail/176 cancelled) foi
+  conferida caso a caso e rastreada à mesma lacuna já conhecida e aceita
+  (ambiente sem os pedidos históricos de Mercado Livre usados como fixture
+  por ~12 arquivos de teste) — nenhuma regressão nova encontrada.
+
+## 2026-09-22 (71) — Compras com IA: nova Central Inteligente de Reposição de Estoque substitui a aba Compras
+- **Pedido do usuário (resumo):** substituir a aba "Compras" (CRUD simples
+  de pedido a fornecedor) por uma tela que analisa cada MODELO FÍSICO e
+  recomenda quanto comprar — nunca compra sozinha, sempre depende de
+  aprovação do usuário, que então monta o pedido pronto pra enviar ao
+  fornecedor. Justificativa completa da arquitetura em `02-decisoes.md`
+  (58).
+- **O que mudou:**
+  - `db/schema.sql`: colunas novas `fornecedores.prazo_entrega_dias`,
+    `produtos_base.fornecedor_padrao_id`, `produtos_base.estoque_seguranca_dias`;
+    tabelas novas `ia_decisoes_compras` (recomendações, com índice único
+    parcial pra nunca duplicar uma recomendação pendente do mesmo modelo)
+    e `compras_ia_pedidos` (pedidos gerados após aprovação, numeração
+    sequencial `PC-000NNN`). O módulo antigo (`compras`/`compra_itens`,
+    `routes/compras.js`) não foi alterado nem removido.
+  - Novo `lib/ia/comprasMotor.js`: cálculo 100% determinístico (projeção
+    de venda ponderada com detecção de aceleração/desaceleração, dias de
+    cobertura, data de ruptura, ponto de recompra, quantidade recomendada,
+    6 status com emoji). Testado em `test/comprasMotor.test.js` (12
+    testes).
+  - Novo `lib/ia/comprasDiagnostico.js`: relatório por modelo, mesma
+    arquitetura híbrida (números do motor + reescrita opcional pela IA
+    generativa) já usada em Ads. Testado em `test/comprasDiagnostico.test.js`
+    (5 testes).
+  - Novo `lib/ia/comprasCiclo.js`: monta as linhas da tabela (todos os
+    modelos ativos) e persiste recomendações pendentes só para status
+    urgentes, reaproveitando `lib/estoqueFisico.js` e
+    `lib/relatoriosAgregados.js` — nunca um cálculo de estoque/venda
+    paralelo aos já existentes nas telas Estoque/Estoque Full/Relatórios.
+  - Novo `lib/comprasIaScheduler.js`: ciclo automático a cada 1 hora,
+    mesmo padrão de `lib/adsScheduler.js`.
+  - Novo `routes/comprasIa.js`, montado em `/api/compras-ia`: linhas da
+    tabela, resumo (cards), detalhe por modelo, decisões (aprovar/ajustar/
+    ignorar — cria o pedido dentro da mesma transação), pedidos
+    (histórico + mudança de status), desempenho da IA, e configuração
+    inline de fornecedor padrão/prazo/estoque de segurança por modelo.
+  - `server.js`: rota nova montada e `iniciarComprasIaAutomatico()`
+    chamado na inicialização.
+  - `public/index.html`: módulo `window.Compras` reescrito por completo —
+    cards do topo (recomendado comprar hoje, urgentes, comprar esta
+    semana, estoque saudável, a caminho), abas Recomendações/Histórico,
+    tabela principal com as 15 colunas pedidas e status coloridos, modal
+    de detalhe (relatório da IA + motivos + aprovar/ajustar/ignorar +
+    configuração do modelo), modal do pedido gerado (gerar PDF via
+    impressão do navegador, copiar pedido, link pronto de WhatsApp/e-mail
+    pro fornecedor — nunca envio automático), e bloco "Desempenho da IA"
+    com contagens reais.
+- **Limitação conhecida/documentada:** "Desempenho da IA" é estatística
+  honesta (contagens reais do que já aconteceu), não um sistema de
+  aprendizado de máquina de verdade — mesma decisão já tomada em Ads e
+  Promoções, ver `02-decisoes.md` (58).
+- **Suíte completa: 430/430 passando**, sem regressão em nenhuma tela
+  existente.
+
+## 2026-09-21 (70) — Ads: relatório de diagnóstico completo por anúncio (não só "pausar")
+- **Pedido do usuário (verbatim):** "sobre as campanhas de ads quero que a
+  ia me dê relatórios como esse que vou te enviar, diagnosticando 100%
+  daquele anúncio de ads e não só pedindo pra pausar" — seguido de um
+  exemplo completo escrito à mão pelo usuário (tabela de métricas com
+  leitura de cada uma, comparação do orçamento diário com o gasto real,
+  recomendação de pausar o patrocínio por 7 dias, um teste de
+  monitoramento com 3 faixas de resultado, e os dois gargalos do funil
+  analisados separadamente). Confirmado com o usuário antes de mexer: (1)
+  relatório por anúncio individual, não por campanha inteira; (2) gerado
+  automaticamente pra todo anúncio com problema, não só quando alguém
+  clica.
+- **O que mudou:**
+  - Novo `lib/ia/adsDiagnostico.js`: monta o relatório inteiro (métricas,
+    leituras, comparação com orçamento, teste de 7 dias com 3 faixas, os
+    dois gargalos do funil) por código determinístico — nenhum número
+    passa pela IA. A IA (mesmo provedor já usado no SAC) só reescreve esse
+    texto pronto em prosa mais natural, proibida de mudar números ou a
+    recomendação. Se a IA estiver indisponível, o relatório aparece do
+    mesmo jeito, só que no texto determinístico direto. Ver justificativa
+    completa em `02-decisoes.md` (57).
+  - `db/schema.sql`: 3 colunas novas em `ia_decisoes_ads`
+    (`relatorio_diagnostico_texto`, `relatorio_diagnostico_ia`,
+    `relatorio_diagnostico_gerado_em`).
+  - `lib/ia/adsDecisoesCiclo.js`: quando o ciclo automático (a cada 15 min)
+    detecta uma recomendação de "pausar anúncio" **nova** (que ainda não
+    existia como pendente), gera o relatório e salva junto com a decisão.
+    Se a mesma situação já estava pendente, não gera de novo — evita gastar
+    créditos de IA repetidamente pro mesmo problema a cada ciclo.
+  - `routes/ads.js`: a API de decisões de Ads passou a devolver os 3 campos
+    novos do relatório.
+  - `public/index.html` (módulo `window.AgenteAds`): botão "Ver
+    diagnóstico completo" ao lado de qualquer anúncio recomendado pra
+    pausar (em Agentes IA → Ads e Performance → Aprovações pendentes),
+    abrindo o relatório completo num modal.
+- **Limitação conhecida:** decisões de "pausar anúncio" que já estavam
+  pendentes ANTES deste deploy não ganham relatório retroativo — só
+  situações novas, detectadas depois deste deploy, geram relatório.
+- **Suíte completa: 413/413 passando** (12 testes novos em
+  `test/adsDiagnostico.test.js`, validados contra as contas que o próprio
+  usuário fez à mão no exemplo que mandou).
+
+## 2026-09-21 (69) — Ads: campanhas ficam expansíveis, mostrando os anúncios de cada uma por baixo (igual no Mercado Livre)
+- **Pedido do usuário (verbatim):** "quero mudar é sobre a campanha de ads,
+  quero uma aba só com as campanhas com os anúncios igual no mercado
+  livre com todas métricas de cada campanha". Confirmado com o usuário
+  antes de mexer: (1) fica **dentro** da aba "Ads" que já existe, não vira
+  um item novo no menu; (2) as duas tabelas por anúncio que já existiam
+  ("Performance atribuída Mercado Ads" e "Resultado real do SKU após
+  Ads") continuam exatamente como estavam, sem nenhuma mudança.
+- **O que mudou (só `public/index.html`, função `tabelaCampanhasHTML` e
+  arredores, dentro do módulo `window.Ads`):** a tabela "Resumo por
+  Campanha" (que já existia) agora tem uma seta em cada linha — clicando
+  numa campanha, abre embaixo dela a lista dos anúncios que pertencem a
+  essa campanha, com as mesmas métricas reais que o Mercado Livre atribui
+  a cada anúncio (investimento, cliques, impressões, CPC, vendas
+  atribuídas, receita atribuída, ROAS, ACOS) e a classificação da IA
+  (🔴🟠🟡🟢⚠️). Nenhum dado novo: são as mesmas linhas que a tela já
+  carregava (`state.data.linhas`), só filtradas por campanha no front na
+  hora de abrir — nenhuma chamada nova à API, nenhum campo inventado.
+- **Suíte completa: 400/400 passando** (mudança só de tela, backend não
+  foi tocado — `/api/ads` continua devolvendo exatamente o mesmo formato
+  de sempre).
+
+## 2026-09-21 (68) — Radar de Concorrentes: mostra o motivo real quando uma leitura falha
+- **Contexto:** depois do Radar de Concorrentes (67) ir pro ar, o primeiro
+  teste real do usuário (cadastro de um anúncio do Mercado Livre) resultou
+  em "Falha na última leitura" — a tela já indicava a falha, mas não
+  mostrava o motivo. O backend (`lib/radarConcorrentes.js`) já salva a
+  mensagem de erro real (`radar_concorrentes_leituras.erro`) e já devolve
+  esse campo na API (`ultimaLeitura.erro`) — só faltava exibir na tela.
+- **O que mudou (só `public/index.html`, só a tela do Radar de
+  Concorrentes):** quando a última leitura falhou, o selo "Falha na última
+  leitura" agora tem um tooltip (passar o mouse) com a mensagem de erro
+  real, e a linha da tabela também mostra esse texto embaixo do selo (pra
+  quem está no celular e não tem como passar o mouse). Nenhum dado novo é
+  inventado — é só exibir um campo que a API já devolvia.
+- **Suíte completa: 400/400 passando** (rodada com o pacote `pg` stubado
+  só neste sandbox de testes, ver nota de sempre sobre isso — não muda a
+  lógica de backend, então nenhum teste novo foi necessário).
+
 ## 2026-09-21 (67) — Radar de Concorrentes (nova tela): cadastra um anúncio concorrente específico e monitora sozinho preço, promoção, foto, título e frete
 - **Pedido do usuário (verbatim), com mockup de referência visual
   (`pf_radar_concorrentes_v2.html`):** "Quero adicionar ao sistema a nova

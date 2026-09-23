@@ -213,6 +213,14 @@ function linhaDecisaoAdsParaApi(row) {
       acosAlvoAtual: row.snapshot_acos_alvo_atual === null ? null : Number(row.snapshot_acos_alvo_atual),
     },
     valorSugeridoIa: row.valor_sugerido_ia,
+    // Relatório completo (21/09/2026, pedido explícito do usuário — ver
+    // lib/ia/adsDiagnostico.js): relatorioDiagnosticoTexto é 100%
+    // determinístico e sempre existe quando a decisão é 'pausar_anuncio';
+    // relatorioDiagnosticoIa é a mesma informação reescrita pelo provedor
+    // de IA generativa, null quando a IA não gerou (nunca bloqueia a tela).
+    relatorioDiagnosticoTexto: row.relatorio_diagnostico_texto || null,
+    relatorioDiagnosticoIa: row.relatorio_diagnostico_ia || null,
+    relatorioDiagnosticoGeradoEm: row.relatorio_diagnostico_gerado_em || null,
     valorDecididoUsuario: row.valor_decidido_usuario,
     statusDecisao: row.status_decisao,
     decididoEm: row.decidido_em,

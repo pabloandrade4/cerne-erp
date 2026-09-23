@@ -13,6 +13,7 @@ const { iniciarSacScheduler } = require('./lib/ia/sacScheduler');
 const { iniciarDailyAutomatico } = require('./lib/ia/dailyScheduler');
 const { iniciarConcorrenteIA } = require('./lib/ia/concorrenteScheduler');
 const { iniciarRadarConcorrentesScheduler } = require('./lib/ia/radarConcorrentesScheduler');
+const { iniciarComprasIaAutomatico } = require('./lib/comprasIaScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
@@ -53,6 +54,8 @@ const sacRouter = require('./routes/sac');
 const agentes3dRouter = require('./routes/agentes3d');
 const concorrenteRouter = require('./routes/concorrente');
 const radarConcorrentesRouter = require('./routes/radarConcorrentes');
+const comprasIaRouter = require('./routes/comprasIa');
+const vendaBalcaoRouter = require('./routes/vendaBalcao');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -74,6 +77,8 @@ app.use('/api/anuncios', anunciosRouter);
 app.use('/api/estoque', estoqueRouter);
 app.use('/api/estoque-full', estoqueFullRouter);
 app.use('/api/compras', comprasRouter);
+app.use('/api/compras-ia', comprasIaRouter);
+app.use('/api/vendas-balcao', vendaBalcaoRouter);
 app.use('/api/produtos-base', produtosBaseRouter);
 app.use('/api/estoque-produto-base', estoqueProdutoBaseRouter);
 app.use('/api/contas-pagar', contasPagarRouter);
@@ -181,6 +186,13 @@ async function start() {
     // independente da Análise de Concorrente acima (ver comentário grande
     // em db/schema.sql, tabela radar_concorrentes, sobre a diferença).
     iniciarRadarConcorrentesScheduler();
+    // Compras com IA — 22/09/2026, pedido explícito do usuário: substitui a
+    // aba Compras por uma central de reposição de estoque, recalculando a
+    // recomendação de cada modelo físico automaticamente, sempre no
+    // servidor, nunca dependendo de alguém abrir a tela (ver
+    // lib/comprasIaScheduler.js). Nunca compra sozinha — só gera
+    // recomendação pendente de aprovação humana.
+    iniciarComprasIaAutomatico();
   });
 }
 

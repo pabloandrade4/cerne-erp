@@ -2064,3 +2064,244 @@ CREATE TABLE IF NOT EXISTS radar_concorrentes_alertas (
   criado_em              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_radar_concorrentes_alertas_empresa ON radar_concorrentes_alertas (radar_concorrente_id, criado_em DESC);
+
+-- Diagnóstico completo por anúncio — Agente IA "Ads e Performance",
+-- 21/09/2026, pedido explícito do usuário: "quero que a IA me dê relatórios
+-- como esse... diagnosticando 100% daquele anúncio de ads e não só pedindo
+-- pra pausar". Ver lib/ia/adsDiagnostico.js: `relatorio_diagnostico_texto`
+-- é o relatório 100% determinístico (tabela de métricas + interpretações +
+-- teste de monitoramento, todos calculados em cima de números reais já
+-- usados pela tela de Ads); `relatorio_diagnostico_ia` é a MESMA informação
+-- reescrita em prosa mais natural pelo provedor de IA generativa configurado
+-- (pode ficar NULL quando a IA não está configurada/falhou — o texto
+-- determinístico acima nunca fica nulo nesse caso, o recurso não depende da
+-- IA generativa pra existir). Gerado só na CRIAÇÃO de uma decisão nova (não
+-- a cada ciclo de sincronização, pra não gastar crédito de IA repetindo o
+-- mesmo relatório enquanto a mesma situação continuar pendente).
+ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS relatorio_diagnostico_texto TEXT;
+ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS relatorio_diagnostico_ia TEXT;
+ALTER TABLE ia_decisoes_ads ADD COLUMN IF NOT EXISTS relatorio_diagnostico_gerado_em TIMESTAMPTZ;
+
+-- ============================================================================
+-- Compras com IA — 22/09/2026, pedido explícito do usuário: substituir a
+-- aba "Compras" (CRUD simples, `compras`/`compra_itens`, ligado a
+-- `produtos` — CONTINUA existindo e funcionando exatamente como hoje, só
+-- perde a tela própria no menu, já que nenhuma rota nem tabela antiga foi
+-- tocada) por uma "Central Inteligente de Reposição de Estoque": a IA
+-- analisa cada MODELO FÍSICO (produto_base — reaproveita a estrutura já
+-- existente de `produtos_base`/`produto_base_skus`, nunca uma segunda forma
+-- de agrupar SKUs), sugere quanto comprar e de quem, o usuário aprova (ou
+-- ajusta, ou ignora) e só então vira um pedido de compra pronto pra enviar.
+--
+-- Decisão importante: como o pedido de compra aqui é por PRODUTO BASE
+-- (físico) e o `compras`/`compra_itens` antigo é por `produtos` (SKU/kit
+-- simples, sem ligação nenhuma com produto_base), criar um pedido novo por
+-- aprovação de recomendação usa tabelas PRÓPRIAS (`compras_ia_pedidos`),
+-- em vez de tentar encaixar no modelo antigo — evita gambiarra de
+-- conversão e, principalmente, evita qualquer risco de quebrar o `compras`
+-- antigo (ainda usado por lib/compras.js#resumoComprasPorFornecedor, hoje
+-- consumido pela IA Gestora). Ver docs/02-decisoes.md.
+
+-- Dado novo em fornecedores: prazo médio de entrega, em dias corridos —
+-- opcional (fica NULL até o usuário informar); sem esse número a IA não
+-- calcula ponto de recompra nem quantidade recomendada pra produtos ligados
+-- a esse fornecedor (nunca inventa um prazo).
+ALTER TABLE fornecedores ADD COLUMN IF NOT EXISTS prazo_entrega_dias INTEGER;
+
+-- Dados novos em produtos_base: qual fornecedor abastece esse modelo por
+-- padrão (pra já vir sugerido ao montar o pedido) e quantos dias de venda
+-- projetada o usuário quer manter como estoque de segurança pra ESTE
+-- modelo específico (NULL = usa o padrão global do motor, ver
+-- lib/ia/comprasMotor.js#ESTOQUE_SEGURANCA_DIAS_PADRAO).
+ALTER TABLE produtos_base ADD COLUMN IF NOT EXISTS fornecedor_padrao_id INTEGER REFERENCES fornecedores(id);
+ALTER TABLE produtos_base ADD COLUMN IF NOT EXISTS estoque_seguranca_dias INTEGER;
+
+-- Uma recomendação de compra por produto base, gerada pelo ciclo automático
+-- (lib/ia/comprasCiclo.js) — mesmo padrão de `ia_decisoes_ads`/
+-- `ia_decisoes_promocoes`: todo número em `snapshot_*` é o dado REAL que
+-- gerou a recomendação (nunca só o resultado final sem explicação), e o
+-- índice único abaixo garante no máximo 1 recomendação PENDENTE por produto
+-- base (uma nova leitura do ciclo atualiza a mesma linha pendente em vez de
+-- duplicar — ver upsertDecisaoCompra).
+CREATE TABLE IF NOT EXISTS ia_decisoes_compras (
+  id                                SERIAL PRIMARY KEY,
+  empresa_id                        INTEGER NOT NULL REFERENCES empresas(id),
+  produto_base_id                   INTEGER NOT NULL REFERENCES produtos_base(id),
+  produto_base_codigo               VARCHAR(100) NOT NULL,
+  tipo_acao                         VARCHAR(30) NOT NULL DEFAULT 'comprar_estoque',
+  status_urgencia                   VARCHAR(20) NOT NULL, -- saudavel|atencao|programar|comprar_agora|ruptura|a_caminho
+  motivo                            TEXT NOT NULL,
+  snapshot_estoque_galpao           NUMERIC(14,2),
+  snapshot_estoque_full             NUMERIC(14,2),
+  snapshot_estoque_a_caminho        NUMERIC(14,2),
+  snapshot_venda_7d                 NUMERIC(14,2),
+  snapshot_venda_14d                NUMERIC(14,2),
+  snapshot_venda_30d                NUMERIC(14,2),
+  snapshot_media_dia_projetada      NUMERIC(14,4),
+  snapshot_acelerando               BOOLEAN,
+  snapshot_dias_cobertura           NUMERIC(8,2),
+  snapshot_data_ruptura_prevista    DATE,
+  snapshot_prazo_fornecedor_dias    INTEGER,
+  snapshot_estoque_seguranca_dias   INTEGER,
+  snapshot_custo_unitario           NUMERIC(12,2),
+  quantidade_sugerida_ia            NUMERIC(14,2) NOT NULL,
+  valor_estimado_ia                 NUMERIC(14,2),
+  fornecedor_sugerido_id            INTEGER REFERENCES fornecedores(id),
+  quantidade_decidida               NUMERIC(14,2),
+  status_decisao                    VARCHAR(20) NOT NULL DEFAULT 'pendente', -- pendente|aprovada|alterada|ignorada|expirada
+  decidido_em                       TIMESTAMPTZ,
+  decidido_por                      VARCHAR(180),
+  relatorio_diagnostico_texto       TEXT,
+  relatorio_diagnostico_ia          TEXT,
+  relatorio_diagnostico_gerado_em   TIMESTAMPTZ,
+  criado_em                         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  atualizado_em                     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ia_decisoes_compras_empresa ON ia_decisoes_compras (empresa_id, status_decisao);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ia_decisoes_compras_pendente
+  ON ia_decisoes_compras (empresa_id, produto_base_id, tipo_acao)
+  WHERE status_decisao = 'pendente';
+
+-- Numeração sequencial dos pedidos gerados por esta tela (formato PC-000245,
+-- ver lib/ia/comprasCiclo.js#gerarNumeroPedido) — sequência própria, nunca
+-- reaproveita o id de `compras` (tabela antiga, numeração diferente).
+CREATE SEQUENCE IF NOT EXISTS compras_ia_pedido_numero_seq START 1;
+
+-- Pedido de compra gerado a partir de uma recomendação aprovada (ou criado
+-- manualmente, `origem='manual'`, pra cobrir o caso de o usuário querer
+-- registrar uma compra que a IA não recomendou). "quantidade"/"custo_unitario"
+-- podem ter sido AJUSTADOS pelo usuário na aprovação — sempre o valor real
+-- do pedido, nunca reconsultado de `ia_decisoes_compras` depois de criado
+-- (mesmo espírito de `compras.valor_total`: sempre recalculado no servidor
+-- a partir do que foi realmente decidido, nunca um número solto do
+-- front-end). Status usa o vocabulário pedido pelo usuário.
+CREATE TABLE IF NOT EXISTS compras_ia_pedidos (
+  id                   SERIAL PRIMARY KEY,
+  empresa_id           INTEGER NOT NULL REFERENCES empresas(id),
+  numero_pedido        VARCHAR(20) NOT NULL UNIQUE,
+  fornecedor_id        INTEGER NOT NULL REFERENCES fornecedores(id),
+  produto_base_id      INTEGER NOT NULL REFERENCES produtos_base(id),
+  recomendacao_id      INTEGER REFERENCES ia_decisoes_compras(id),
+  origem               VARCHAR(20) NOT NULL DEFAULT 'recomendacao_ia', -- recomendacao_ia|manual
+  quantidade           NUMERIC(14,2) NOT NULL,
+  custo_unitario       NUMERIC(12,2) NOT NULL,
+  valor_total          NUMERIC(14,2) NOT NULL,
+  status               VARCHAR(20) NOT NULL DEFAULT 'aprovado', -- aprovado|pedido_enviado|em_producao|a_caminho|recebido|cancelado
+  previsao_chegada     DATE,
+  recebido_em          TIMESTAMPTZ,
+  observacao           TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_compras_ia_pedidos_empresa ON compras_ia_pedidos (empresa_id, status);
+CREATE INDEX IF NOT EXISTS idx_compras_ia_pedidos_produto_base ON compras_ia_pedidos (produto_base_id, status);
+
+-- ============================================================
+-- Etapa: Venda de Balcão / "Calculadora de Vendas" (22/09/2026)
+-- ============================================================
+-- Pedido explícito do usuário: "quero colocar agora uma calculadora de
+-- vendas pra eu vende[r] para o cliente final que vem até a minha
+-- empresa... porque todas as vendas que eu faço pro fora eu nao coloco no
+-- faturamento sei que isso é errado mas quero arrumar" — vendas
+-- presenciais/balcão, pagas na hora (dinheiro/pix/cartão), feitas fora do
+-- Mercado Livre/Shopee, que até aqui não entravam em NENHUM número do
+-- sistema. Respostas do usuário às perguntas de escopo (todas a opção
+-- recomendada): 1) contam em TODO o sistema — Visão Geral/DRE/Relatórios/
+-- Faturamento, não só uma tela isolada; 2) baixam do estoque mostrado
+-- (ver lib/estoqueFisico.js); 3) produto sempre escolhido do catálogo já
+-- cadastrado (produtos.sku), pra aproveitar o mesmo custo já usado nas
+-- vendas do Mercado Livre/Shopee; 4) sempre pago na hora (sem fiado/contas
+-- a receber).
+--
+-- 'balcao' vira o 3º canal em lib/relatorioVendas.js — MESMO padrão já
+-- usado pra unir a Shopee ao Mercado Livre em 14/09/2026 (SQL_UNIAO_PEDIDOS
+-- vira uma união de 3, não 2) — por isso as colunas abaixo já nascem
+-- pensadas pra alimentar aquele UNION ALL sem gambiarra nenhuma: preço e
+-- quantidade por item são DIGITADOS pelo usuário na hora da venda (não
+-- existe "preço de venda" cadastrado em produtos — só custo, ver
+-- comentário na tabela `produtos` acima), e o custo unitário é CONGELADO
+-- no momento da venda (mesma regra já usada pros itens de pedido do
+-- Mercado Livre/Shopee: o custo pode mudar depois em Produtos sem
+-- reescrever o resultado de uma venda já feita).
+--
+-- Nunca é apagada de verdade (mesmo padrão "expira/cancela, nunca apaga"
+-- já usado no resto do sistema) — uma venda cancelada vira status
+-- 'cancelada' e some do faturamento/margem (mesma regra de pedido
+-- cancelado do Mercado Livre/Shopee), mas a linha continua no banco.
+CREATE SEQUENCE IF NOT EXISTS vendas_balcao_numero_seq START 1;
+
+CREATE TABLE IF NOT EXISTS vendas_balcao (
+  id                    SERIAL PRIMARY KEY,
+  empresa_id            INTEGER NOT NULL REFERENCES empresas(id),
+  numero_venda          INTEGER NOT NULL,
+  cliente_nome          VARCHAR(200),
+  forma_pagamento       VARCHAR(20) NOT NULL, -- dinheiro | pix | debito | credito | outro
+  desconto              NUMERIC(12,2) NOT NULL DEFAULT 0,
+  valor_total           NUMERIC(12,2) NOT NULL,
+  -- Regra "nunca inventar" de sempre: NULL só quando algum item da venda
+  -- não tinha custo cadastrado no momento (produtos.custo é NOT NULL, então
+  -- isso só aconteceria se o produto fosse excluído do catálogo entre o
+  -- momento de escolher e o de salvar — condição de corrida rara, mas
+  -- tratada, nunca um custo 0 fingido).
+  custo_produto_total   NUMERIC(12,2),
+  observacao            TEXT,
+  status                VARCHAR(20) NOT NULL DEFAULT 'concluida', -- concluida | cancelada
+  data_venda            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  cancelado_em          TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, numero_venda)
+);
+CREATE INDEX IF NOT EXISTS idx_vendas_balcao_empresa_data ON vendas_balcao (empresa_id, data_venda);
+
+-- Itens da venda — mesmo espírito de ml_pedido_itens/shopee_pedido_itens:
+-- guarda o SKU como TEXTO (não uma FK pra produtos), pra manter o
+-- histórico de uma venda já feita mesmo que o cadastro do produto mude ou
+-- seja desativado depois — nunca uma segunda regra de vínculo.
+CREATE TABLE IF NOT EXISTS vendas_balcao_itens (
+  id                     SERIAL PRIMARY KEY,
+  venda_id               INTEGER NOT NULL REFERENCES vendas_balcao(id) ON DELETE CASCADE,
+  sku                    VARCHAR(100) NOT NULL,
+  titulo                 VARCHAR(200) NOT NULL,
+  quantidade             NUMERIC(12,3) NOT NULL,
+  preco_unitario_venda   NUMERIC(12,2) NOT NULL,
+  custo_unitario         NUMERIC(12,2), -- congelado de produtos.custo no momento da venda
+  valor_total_item       NUMERIC(12,2) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_vendas_balcao_itens_venda ON vendas_balcao_itens (venda_id);
+
+-- CORREÇÃO (22/09/2026, mesma etapa acima): `faturamento_pedidos` e
+-- `notas_fiscais` tinham `pedido_id UNIQUE REFERENCES ml_pedidos(id)` — bug
+-- pré-existente nunca notado até aqui porque a tela Faturamento só continha
+-- pedidos do Mercado Livre até 14/09/2026 (quando a Shopee se uniu na mesma
+-- tela, ver lib/relatorioVendas.js). Como ml_pedidos.id e shopee_pedidos.id
+-- são sequências SERIAL INDEPENDENTES, um pedido da Shopee podia colidir
+-- com o id de um pedido do Mercado Livre: na melhor das hipóteses a
+-- atualização de situação falhava (violação de FK contra ml_pedidos), na
+-- pior confirmava/alterava a situação de um pedido ERRADO do Mercado Livre
+-- que só por coincidência tinha o mesmo id. Isso ia se repetir com o 3º
+-- canal (Venda de Balcão, acima) se não fosse corrigido agora.
+--
+-- Correção: cada linha passa a se identificar por (pedido_id, marketplace)
+-- — o MESMO par já usado no `detailKey` de lib/relatorioVendas.js
+-- ("mercado_livre:123"/"shopee:57"/"balcao:9") — em vez de pedido_id
+-- sozinho. A FK direta pra ml_pedidos(id) sai (não dá pra referenciar 3
+-- tabelas de origem diferentes com uma FK só) — a validação de que o
+-- pedido realmente existe passa a ser feita na aplicação
+-- (lib/faturamento.js#empresaDoPedido / lib/notasFiscais.js#empresaDoPedido
+-- — mesmo espírito de ml_pedidos/shopee_pedidos, que também não têm FK
+-- cruzada entre si). Nenhum dado existente precisa ser editado: linhas
+-- antigas não tinham `marketplace`, e o DEFAULT abaixo marca todas como
+-- 'mercado_livre' — a única origem que existia até aqui, então continuam
+-- corretas sem nenhuma migração de dados.
+ALTER TABLE faturamento_pedidos ADD COLUMN IF NOT EXISTS marketplace VARCHAR(20) NOT NULL DEFAULT 'mercado_livre';
+ALTER TABLE faturamento_pedidos DROP CONSTRAINT IF EXISTS faturamento_pedidos_pedido_id_key;
+ALTER TABLE faturamento_pedidos DROP CONSTRAINT IF EXISTS faturamento_pedidos_pedido_id_fkey;
+ALTER TABLE faturamento_pedidos DROP CONSTRAINT IF EXISTS uq_faturamento_pedidos_pedido_marketplace;
+ALTER TABLE faturamento_pedidos ADD CONSTRAINT uq_faturamento_pedidos_pedido_marketplace UNIQUE (pedido_id, marketplace);
+
+ALTER TABLE notas_fiscais ADD COLUMN IF NOT EXISTS marketplace VARCHAR(20) NOT NULL DEFAULT 'mercado_livre';
+ALTER TABLE notas_fiscais DROP CONSTRAINT IF EXISTS notas_fiscais_pedido_id_key;
+ALTER TABLE notas_fiscais DROP CONSTRAINT IF EXISTS notas_fiscais_pedido_id_fkey;
+ALTER TABLE notas_fiscais DROP CONSTRAINT IF EXISTS uq_notas_fiscais_pedido_marketplace;
+ALTER TABLE notas_fiscais ADD CONSTRAINT uq_notas_fiscais_pedido_marketplace UNIQUE (pedido_id, marketplace);
