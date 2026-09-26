@@ -3119,6 +3119,103 @@
       + '</div>';
     }
 
+    // ---- Projeção de vendas do mês corrente (real — 26/09/2026, pedido
+    // explícito do usuário — painel.projecaoVendas, ver
+    // lib/ia/projecaoVendas.js). Sempre o mês calendário atual, independente
+    // do período escolhido no filtro da tela acima. ----
+    function projecaoVendasPanelHTML(painel, painelError){
+      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('lineChart')+'</span>Projeção de vendas do mês</div></div>';
+      if(painelError){
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar.</p></div>';
+      }
+      if(!painel){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      if(painel.projecaoVendasError){
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">'+escapeHtml(painel.projecaoVendasError)+'</p></div>';
+      }
+      const p = painel.projecaoVendas;
+      if(!p){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('lineChart')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">Sem dados suficientes ainda pra projetar o mês.</p></div></div>';
+      }
+      const t = p.tendencia;
+      let tendenciaTxt = 'estável';
+      if(t.acelerando) tendenciaTxt = 'acelerando';
+      else if(t.desacelerando) tendenciaTxt = 'desacelerando';
+      return '<div class="panel" style="height:100%;">'+head
+        + '<div class="ov3-cash-main"><div class="label">Projeção do mês (realizado + tendência)</div>'
+          + '<div class="big">'+escapeHtml(money(p.projecaoTotalMes,'BRL'))+'</div>'
+        + '</div>'
+        + '<div class="ov3-cash-pills">'
+          + '<div class="ov3-cash-pill"><span class="ov3-cash-arrow">'+svg('arrowDownCircle')+'</span><div><small>Já realizado</small><b>'+escapeHtml(money(p.faturamentoRealizado,'BRL'))+'</b></div></div>'
+          + '<div class="ov3-cash-pill"><span class="ov3-cash-arrow">'+svg('lineChart')+'</span><div><small>Projetado p/ '+p.diasRestantes+' dia'+(p.diasRestantes===1?'':'s')+' restante'+(p.diasRestantes===1?'':'s')+'</small><b>'+escapeHtml(money(p.projecaoRestante,'BRL'))+'</b></div></div>'
+        + '</div>'
+        + '<div class="field-hint" style="margin-top:10px;">Tendência '+tendenciaTxt+' — média diária projetada de '+escapeHtml(money(t.mediaDiariaProjetada,'BRL'))+', baseada nos últimos 7/14/30 dias. Isto é uma estimativa, não um valor garantido.</div>'
+      + '</div>';
+    }
+
+    // ---- Clientes Novos e Recorrentes (real — 26/09/2026, pedido explícito
+    // do usuário — painel.clientesNovosRecorrentes, ver
+    // lib/clientesNovosRecorrentes.js). Mercado Livre, Shopee e Balcão nunca
+    // são cruzados — cada canal com o seu próprio identificador de cliente. ----
+    function clientesNovosRecorrentesPanelHTML(painel, painelError){
+      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('users')+'</span>Clientes novos e recorrentes</div></div>';
+      if(painelError){
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar.</p></div>';
+      }
+      if(!painel){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      if(painel.clientesNovosRecorrentesError){
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">'+escapeHtml(painel.clientesNovosRecorrentesError)+'</p></div>';
+      }
+      const c = painel.clientesNovosRecorrentes;
+      const total = c && c.total;
+      if(!total || (total.novos+total.recorrentes+total.reativados)===0){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('users')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">Nenhum cliente identificado no período.</p></div></div>';
+      }
+      return '<div class="panel" style="height:100%;">'+head
+        + '<div class="ov3-cash-pills" style="grid-template-columns:repeat(3,1fr);">'
+          + '<div class="ov3-cash-pill"><div><small>Novos</small><b>'+intFmt(total.novos)+'</b></div></div>'
+          + '<div class="ov3-cash-pill"><div><small>Recorrentes (≤'+c.janelaDias+'d)</small><b>'+intFmt(total.recorrentes)+'</b></div></div>'
+          + '<div class="ov3-cash-pill"><div><small>Reativados</small><b>'+intFmt(total.reativados)+'</b></div></div>'
+        + '</div>'
+        + '<div class="field-hint" style="margin-top:10px;">'+escapeHtml(c.limitacao)+'</div>'
+      + '</div>';
+    }
+
+    // ---- Devolução vs Cancelamento (real — 26/09/2026, pedido explícito do
+    // usuário: "oque é devolção e oque é cancelamento de pedido" —
+    // painel.porCanal.devolucoes/cancelados, ver
+    // lib/relatorioVendas.js#resumirPeriodo). Os dois já saem do faturamento
+    // real (Faturamento/DRE), mas NUNCA aparecem somados juntos aqui — são
+    // motivos diferentes. ----
+    function devolucaoCancelamentoPanelHTML(painel, painelError, contaId){
+      const head = '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('swap')+'</span>Devolução e cancelamento</div></div>';
+      if(contaId){
+        return '<div class="panel" style="height:100%;">'+head+'<p class="field-hint" style="padding:0 2px;">Considera todas as lojas da empresa — não muda com a loja selecionada acima.</p></div>';
+      }
+      if(painelError){
+        return '<div class="panel" style="height:100%;">'+head+'<p style="font-size:12px;color:var(--danger);margin:0;">Não foi possível carregar.</p></div>';
+      }
+      if(!painel){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      }
+      const canal = painel.porCanal || {};
+      const dev = canal.devolucoes || { quantidade:0, valor:null };
+      const canc = canal.cancelados || { quantidade:0, valor:null };
+      if(!dev.quantidade && !canc.quantidade){
+        return '<div class="panel" style="height:100%;">'+head+'<div class="empty-panel" style="padding:20px 10px;"><div class="empty-icon" style="width:36px;height:36px;">'+svg('swap')+'</div><p class="lead" style="font-size:12.5px;margin:8px 0 0;">Nenhuma devolução ou cancelamento no período.</p></div></div>';
+      }
+      return '<div class="panel" style="height:100%;">'+head
+        + '<div class="ov3-cash-pills">'
+          + '<div class="ov3-cash-pill"><span class="ov3-cash-arrow down">'+svg('swap')+'</span><div><small>Devoluções ('+dev.quantidade+')</small><b>'+(dev.valor!==null?escapeHtml(money(dev.valor,'BRL')):'<span class="dash">—</span>')+'</b></div></div>'
+          + '<div class="ov3-cash-pill"><span class="ov3-cash-arrow down">'+svg('x')+'</span><div><small>Cancelamentos ('+canc.quantidade+')</small><b>'+(canc.valor!==null?escapeHtml(money(canc.valor,'BRL')):'<span class="dash">—</span>')+'</b></div></div>'
+        + '</div>'
+        + '<div class="field-hint" style="margin-top:10px;">Devolução = a venda aconteceu e o produto voltou com reembolso confirmado. Cancelamento = o pedido nunca chegou a se concretizar. Os dois já saem do faturamento real, contados separadamente.</div>'
+      + '</div>';
+    }
+
     // ---- Alertas & IA (real — já existia) ----
     const ALERTA_SEVERIDADE_COR = { danger:'danger', warning:'warning', info:'teal' };
     function alertsPanelHTML(painel, painelError){
@@ -3383,6 +3480,11 @@
             + tasksPanelHTML(state.painel, state.painelError)
             + healthPanelHTML(resumo, state.painel, state.painelError)
             + promoPanelHTML()
+          + '</div>'
+          + '<div class="ov3-row3">'
+            + projecaoVendasPanelHTML(state.painel, state.painelError)
+            + clientesNovosRecorrentesPanelHTML(state.painel, state.painelError)
+            + devolucaoCancelamentoPanelHTML(state.painel, state.painelError, state.contaId)
           + '</div>';
       }
 
