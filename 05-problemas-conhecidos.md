@@ -3,6 +3,47 @@
 Lista de problemas, limitações ou pendências identificadas durante o
 desenvolvimento, para não serem esquecidas.
 
+## Clientes Novos/Recorrentes, Devolução — limitações conhecidas (26/09/2026)
+- **Clientes Novos/Recorrentes nunca cruza os 3 canais.** Mercado Livre,
+  Shopee e Venda no Balcão são calculados de forma totalmente
+  independente, cada um com o seu próprio identificador de cliente
+  (`comprador_id` do Mercado Livre, `comprador_user_id` da Shopee, nome
+  digitado normalizado no Balcão). Não existe hoje nenhum dado confiável
+  (CPF, telefone, e-mail) que prove que a mesma pessoa comprou em mais de
+  um canal — cruzar por nome/nickname geraria falso positivo (duas pessoas
+  diferentes com nome parecido) e falso negativo (a mesma pessoa com
+  nicknames diferentes). O usuário pediu explicitamente "Mercado Livre +
+  Shopee + Balcão, todos juntos" mesmo depois de avisado disso — o "total"
+  mostrado na tela é só a SOMA dos 3 canais, nunca uma contagem de pessoas
+  únicas de verdade.
+- **Identificador da Venda de Balcão é o mais fraco dos 3.** Não existe
+  cadastro de CPF/telefone/e-mail na Venda de Balcão — o único dado é o
+  nome digitado na hora da venda, normalizado (minúsculo, espaços
+  colapsados). Duas pessoas diferentes com o mesmo nome (ex.: dois "João
+  Silva") contam como um cliente só; a mesma pessoa digitada de formas
+  diferentes ("João Silva" vs "João da Silva") conta como dois clientes
+  diferentes.
+- **Devolução da Shopee: nome do campo `order_sn` não confirmado ao vivo.**
+  A classificação de devolução da Shopee (`lib/devolucoes.js`) espera o
+  campo `order_sn` na resposta de `GET /api/v2/returns/get_return_list`
+  (conforme documentação de terceiros consultada — ver fonte no código),
+  mas nunca foi confirmado contra uma devolução real desta conta. Se o
+  campo vier com outro nome, a devolução ainda é gravada (com
+  `pedido_ref = null`), só não vincula ao pedido original — nada quebra,
+  mas o vínculo fica incompleto até confirmarmos contra dado real.
+- **`valor_reembolsado` nem sempre vem confirmado.** Quando a API não
+  retorna claramente o valor reembolsado (Mercado Livre: `coverages`
+  vazio/ausente mesmo com reembolso confirmado pelo texto da resolução;
+  Shopee: campo ausente), `lib/relatorioVendas.js` usa o `valorTotal` do
+  pedido como valor da devolução (nunca fica invisível no total), mas isso
+  é uma aproximação — o valor real reembolsado pode ser menor (reembolso
+  parcial).
+- **Projeção de vendas do mês é só estimativa estatística**, baseada na
+  tendência dos últimos 7/14/30 dias — não considera sazonalidade
+  (ex.: Black Friday, Dia das Mães), promoções futuras já programadas, nem
+  ruptura de estoque prevista. Sempre exibida junto do valor já realizado,
+  nunca como um número garantido.
+
 ## Agente de Envio Full: custo mensal é manual — API de Cobrança do Mercado Livre não confirma o nome da cobrança (23/09/2026)
 - **Pergunta do usuário:** "tem como puxar via api oque esta em
   trasferencia para o ful?? / consegue puxar via api direto do mercado

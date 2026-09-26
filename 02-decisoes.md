@@ -3,6 +3,66 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-09-26 (61) — Projeção de vendas do mês, Clientes Novos/Recorrentes e Devolução separada de Cancelamento
+- **Pedido do usuário (literal):** "estou com 3 ideias novas para ser
+  colocadas no nosso sistema / projeção de vendas que vvai aparecer em
+  visao geral / clientes novos e recorrentes / oque é devolção e oque é
+  cancelamento de pedido".
+- **Projeção de vendas (Visão Geral):** o usuário escolheu explicitamente
+  "projeção de vendas dentro daquele mes" em vez das opções de janela
+  corrida (próximos 7/30 dias) que foram oferecidas primeiro — ou seja,
+  quanto a empresa deve faturar no MÊS CALENDÁRIO atual (ex.: setembro
+  inteiro), somando o que já vendeu de verdade + uma estimativa dos dias
+  que faltam, baseada na tendência dos últimos 7/14/30 dias. Reaproveita a
+  MESMA fórmula de tendência já usada e aprovada no Agente de Compras
+  (`calcularMediaDiariaProjetada`, em `lib/ia/comprasMotor.js`) — a conta é
+  genérica (não é específica de 1 produto), só aplicada ao faturamento
+  total da empresa. Ver `lib/ia/projecaoVendas.js`. É sempre uma
+  estimativa, nunca aparece como fato — a tela mostra separado o que já
+  foi realizado do que é projeção.
+- **Clientes Novos e Recorrentes:** o usuário escolheu a definição de
+  "recorrente = 2ª compra dentro de uma janela de tempo" (90 dias por
+  padrão) em vez de "qualquer compra anterior, não importa quando" —
+  quando a compra anterior foi há mais de 90 dias, o cliente entra como
+  "reativado" (categoria adicionada por nós pra não forçar um cliente
+  antigo que voltou a virar "novo" de novo, o que seria inventar que ele
+  nunca comprou antes). Identificação: o usuário escolheu "Mercado Livre +
+  Shopee + Balcão, todos juntos", mesmo depois de avisado que os 3 canais
+  NUNCA são cruzados (não existe hoje nenhum identificador confiável — CPF,
+  telefone, e-mail — que prove que é a mesma pessoa em canais diferentes).
+  Por isso o "total" mostrado é só a soma dos 3 canais calculados
+  independentemente, nunca uma contagem de pessoas únicas de verdade — ver
+  `05-problemas-conhecidos.md`. Ver `lib/clientesNovosRecorrentes.js`.
+- **Devolução separada de Cancelamento:** o usuário confirmou o problema
+  real por trás da pergunta: "Devolução hoje ainda entra como venda de
+  verdade no Faturamento/DRE" — de fato, até esta etapa, só pedidos com
+  status cancelado (ou cancelada, na Shopee/Balcão) saíam do faturamento
+  real; uma devolução formal (produto voltou + reembolso confirmado) não
+  tinha nenhum tratamento financeiro, mesmo com o dinheiro já tendo voltado
+  pro cliente. Corrigido: devolução CONFIRMADA agora sai do faturamento
+  real igual um cancelamento, mas é contada À PARTE, nunca somada com
+  cancelamento (são motivos diferentes — cancelado nunca virou venda de
+  verdade; devolvido foi uma venda que aconteceu e depois voltou). Fonte de
+  dados: reaproveita 100% as APIs de reclamação/devolução JÁ CHAMADAS pelo
+  SAC (`lib/mercadolivre.js#buscarReclamacoes`, filtrando só
+  `type === 'return'`; `lib/shopee.js#buscarDevolucoes`, já usada por
+  `lib/ia/sacShopee.js`) — nenhuma chamada de API nova. Classificação
+  conservadora: só marca "confirmada" quando a própria resposta da API
+  menciona reembolso com clareza (`resolution` mencionando "refund" no
+  Mercado Livre, status `COMPLETED` na Shopee); qualquer coisa incerta fica
+  "aberta", nunca vira "confirmada" no escuro. Ver `lib/devolucoes.js`,
+  `lib/devolucoesScheduler.js` (ciclo automático a cada 30 min),
+  `routes/devolucoes.js`, e a nova tabela `pedido_devolucoes` em
+  `db/schema.sql`.
+- **Base compartilhada das 3 (comprador_ref):** pra Clientes Novos/
+  Recorrentes funcionar, `lib/relatorioVendas.js` passou a expor
+  `compradorRef` — identificador do cliente já existente no banco
+  (`ml_pedidos.comprador_id`, `shopee_pedidos.comprador_user_id`), nunca
+  antes exposto porque nenhuma tela precisava. Na Venda de Balcão, que não
+  tem nenhum ID de cliente cadastrado, usa o nome digitado, normalizado
+  (minúsculo, espaços colapsados) — é de propósito o identificador MAIS
+  FRACO dos 3 canais.
+
 ## 2026-09-23 (60) — Remoção de Concorrente/Promoções do menu + Agente de Envio Full
 - **Pedido do usuário (literal):** "quero fazer algumas mudanças nos
   sistema / retirar analise de concorrentes e radar de concorrente /

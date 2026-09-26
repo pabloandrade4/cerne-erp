@@ -2408,3 +2408,72 @@ CREATE TABLE IF NOT EXISTS envio_full_custos_mensais (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (empresa_id, ano, mes)
 );
+
+-- ============================================================
+-- Etapa: Devoluções (separadas de Cancelamento) — 26/09/2026
+-- ============================================================
+-- Pedido explícito do usuário: entender "oque é devolção e oque é
+-- cancelamento de pedido" — hoje só pedido CANCELADO sai do faturamento
+-- real (ver STATUS_CANCELADO em lib/relatorioVendas.js); uma DEVOLUÇÃO
+-- formal (cliente recebeu, devolveu e foi reembolsado) nasce como uma
+-- "claim" tipo 'return' no Mercado Livre ou uma "devolução" na Shopee, e
+-- até agora só aparecia no SAC — o pedido continuava contando como venda
+-- normal em Faturamento/DRE/Margem, mesmo o dinheiro tendo voltado pro
+-- cliente. Esta tabela guarda cada devolução detectada, pra
+-- lib/relatorioVendas.js poder excluir do faturamento real (só quando
+-- `status='confirmada'` — dinheiro realmente devolvido) e mostrar contada
+-- à parte de cancelamento, nunca misturada.
+--
+-- Fontes (só leitura, nunca inventa nada — mesmo padrão de radar_alertas/
+-- sac_atendimentos):
+--   • Mercado Livre: mesmo endpoint de reclamações já usado pelo SAC
+--     (GET /post-purchase/v1/claims/search, lib/mercadolivre.js#buscarReclamacoes)
+--     — aqui filtramos só `type === 'return'` (devolução formal; outros
+--     tipos como 'mediations'/'cancel_purchase' continuam só no SAC, sem
+--     afetar o faturamento). `pedido_ref` = claim.resource_id (id do
+--     pedido no Mercado Livre).
+--   • Shopee: GET /api/v2/returns/get_return_list
+--     (lib/shopee.js#buscarDevolucoes) — `pedido_ref` = return.order_sn.
+--     IMPORTANTE (mesma honestidade de sempre): primeira vez que este
+--     projeto lê este endpoint pra fins financeiros — o nome do campo
+--     order_sn dentro da resposta de devolução ainda não foi confirmado
+--     contra uma devolução real desta conta (ver 05-problemas-conhecidos.md).
+--
+-- `status`: 'aberta' (em andamento, dinheiro ainda não confirmado — NÃO
+-- exclui do faturamento, pra não tirar uma venda real por uma disputa que
+-- pode ser negada) | 'confirmada' (reembolso confirmado — Mercado Livre:
+-- claim status='closed' + resolution indicando reembolso; Shopee:
+-- status='COMPLETED' — EXCLUI do faturamento real) | 'negada_ou_cancelada'
+-- (claim fechado sem reembolso, ou devolução cancelada pelo comprador —
+-- NÃO exclui, a venda continua valendo).
+-- `valor_reembolsado`: só preenchido quando a API devolve um valor claro
+-- (coverage/refund_amount) — NULL quando não dá pra confirmar (nunca usa
+-- o valor total do pedido como aproximação).
+CREATE TABLE IF NOT EXISTS pedido_devolucoes (
+  id                  SERIAL PRIMARY KEY,
+  empresa_id          INTEGER NOT NULL REFERENCES empresas(id),
+  marketplace         VARCHAR(20) NOT NULL, -- 'mercado_livre' | 'shopee'
+  conta_id            INTEGER, -- ml_contas.id ou shopee_contas.id (sem FK cruzada, mesmo padrão de faturamento_pedidos/notas_fiscais)
+  id_externo          VARCHAR(60) NOT NULL, -- claim id (Mercado Livre) ou return_sn (Shopee)
+  pedido_ref          VARCHAR(60), -- ml_order_id ou order_sn — liga com relatorioVendas.js; NULL só se a API não informar
+  tipo                VARCHAR(30) NOT NULL DEFAULT 'return',
+  status              VARCHAR(30) NOT NULL DEFAULT 'aberta', -- aberta | confirmada | negada_ou_cancelada
+  motivo              TEXT,
+  valor_reembolsado   NUMERIC(12,2),
+  data_criacao        TIMESTAMPTZ,
+  data_conclusao      TIMESTAMPTZ,
+  raw                 JSONB,
+  sincronizado_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (marketplace IN ('mercado_livre', 'shopee')),
+  CHECK (status IN ('aberta', 'confirmada', 'negada_ou_cancelada')),
+  UNIQUE (empresa_id, marketplace, id_externo)
+);
+CREATE INDEX IF NOT EXISTS idx_pedido_devolucoes_empresa ON pedido_devolucoes (empresa_id, status);
+-- Índice usado pelo LEFT JOIN em lib/relatorioVendas.js (empresa + canal +
+-- pedido, só quando confirmada) — filtro parcial porque só devolução
+-- confirmada entra nesse JOIN.
+CREATE INDEX IF NOT EXISTS idx_pedido_devolucoes_pedido_confirmada
+  ON pedido_devolucoes (empresa_id, marketplace, pedido_ref)
+  WHERE status = 'confirmada' AND pedido_ref IS NOT NULL;

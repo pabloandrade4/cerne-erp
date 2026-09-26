@@ -2,6 +2,81 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-09-26 (74) — Projeção de vendas do mês, Clientes Novos/Recorrentes e Devolução separada de Cancelamento
+- **Justificativa completa** em `02-decisoes.md` (61).
+- **`lib/relatorioVendas.js`** (arquivo financeiro central, editado com
+  cuidado):
+  - Novo campo `compradorRef` em `serializarPedido` (identificador do
+    cliente por canal — `ml_pedidos.comprador_id`,
+    `shopee_pedidos.comprador_user_id`, nome normalizado na Venda de
+    Balcão).
+  - Novos campos `devolvido`/`valorReembolsado` em `serializarPedido`, com
+    `LEFT JOIN`/`EXISTS` contra a nova tabela `pedido_devolucoes` nas 3
+    subconsultas do UNION ALL (Mercado Livre/Shopee/Balcão). **Bug
+    corrigido durante o desenvolvimento:** as colunas `devolvido`/
+    `valor_reembolsado` tinham sido colocadas em posições diferentes entre
+    a consulta do Mercado Livre e as da Shopee/Balcão — um `UNION ALL` casa
+    colunas por POSIÇÃO, não por nome, e isso quebrava com "UNION types
+    numeric and boolean cannot be matched"; corrigido alinhando a posição
+    nas 3 consultas (comentário grande deixado no código pra não
+    reintroduzir).
+  - `resumirPeriodo`: novo bucket `devolucoes: { quantidade, valor }`,
+    separado de `cancelados` — um pedido cancelado NUNCA conta como
+    devolvido, mesmo que a API tenha marcado os dois (cancelado sempre
+    vence). `valor` usa o reembolso confirmado pela API quando existe,
+    senão cai pro `valorTotal` do pedido (nunca fica invisível).
+  - `serieDiaria`: pedidos devolvidos agora saem do gráfico diário, mesma
+    regra dos cancelados.
+- **`db/schema.sql`** — nova tabela `pedido_devolucoes` (status
+  aberta/confirmada/negada_ou_cancelada, valor_reembolsado, datas, `raw`
+  da API) + 2 índices.
+- **`lib/devolucoes.js`** (novo) — sincronização de devolução, reaproveitando
+  100% as chamadas de API já existentes do SAC (`lib/mercadolivre.js#
+  buscarReclamacoes`, filtrando `type === 'return'`; `lib/shopee.js#
+  buscarDevolucoes`). Classificação conservadora (`classificarClaim
+  MercadoLivre`/`classificarDevolucaoShopee`) — só confirma reembolso com
+  sinal claro da própria API.
+- **`lib/devolucoesScheduler.js`** (novo) — ciclo automático a cada 30 min
+  (mesmo padrão de `lib/ia/sacScheduler.js`).
+- **`routes/devolucoes.js`** (novo) — `GET /resumo`, `GET /lista`,
+  `POST /sincronizar-agora`.
+- **`server.js`** — require/mount/scheduler-start do módulo de Devoluções.
+- **`lib/ia/projecaoVendas.js`** (novo) — projeção do faturamento do MÊS
+  CORRENTE (realizado até agora + tendência × dias restantes), reaproveitando
+  `calcularMediaDiariaProjetada` (`lib/ia/comprasMotor.js`) e
+  `buscarPedidosDoPeriodo`/`resumirPeriodo` (`lib/relatorioVendas.js`).
+- **`lib/clientesNovosRecorrentes.js`** (novo) — classificação
+  novo/recorrente(≤90d, configurável)/reativado(>90d), por canal, nunca
+  cruzando Mercado Livre/Shopee/Balcão (limitação documentada em
+  `05-problemas-conhecidos.md`).
+- **`lib/visaoGeralPainel.js`** — `painelVisaoGeral` passou a incluir
+  `projecaoVendas`/`projecaoVendasError`, `clientesNovosRecorrentes`/
+  `clientesNovosRecorrentesError`, e `porCanal.devolucoes`/
+  `porCanal.cancelados` — mesmo padrão de nunca quebrar a Visão Geral
+  inteira se um desses cálculos falhar (try/catch, igual já feito pro
+  Radar/Agentes de IA).
+- **Front-end (`public/index.html`)** — 3 novos cards na Visão Geral:
+  "Projeção de vendas do mês", "Clientes novos e recorrentes" e "Devolução
+  e cancelamento" (nova linha `ov3-row3` no final da tela).
+- **Testes:** `test/devolucoes.test.js` (12 casos — classificação de
+  devolução + exclusão do faturamento em `resumirPeriodo`/`serieDiaria`),
+  `test/projecaoVendas.test.js` (4 casos), `test/clientesNovosRecorrentes
+  .test.js` (10 casos) — todos sem depender de Postgres (funções puras).
+  Suíte completa validada contra Postgres real (schema + seed real de
+  `test/fixtures/gerar-seed-sql.js`): 763 passando / 14 falhando (mesmas 19
+  falhas pré-existentes, sem relação com esta etapa — Ads/Alertas/Estoque/
+  DRE/SAC/Shopee routes) / 112 canceladas (testes puramente unitários que
+  não usam Postgres, sempre pulados/cancelados quando rodados junto de
+  arquivos com `DATABASE_URL`, comportamento pré-existente do runner).
+- **`node_modules/pg` (stub de desenvolvimento, NUNCA empacotado no zip):**
+  reescrito nesta etapa pra manter uma sessão `psql` interativa por
+  client (em vez de 1 processo por query) — corrige 2 bugs reais que
+  causavam falso-negativo em testes: (1) `BEGIN`/`COMMIT`/`ROLLBACK` sem
+  atomicidade real (cada statement comitava sozinho, então `ROLLBACK` não
+  desfazia nada); (2) parâmetro array (`= ANY($1::text[])`) virando JSON
+  (`["a","b"]`) em vez de um array literal do Postgres, quebrando com
+  "malformed array literal".
+
 ## 2026-09-23 (73) — Remoção de Concorrente/Promoções do menu + Agente de Envio Full
 - **Removido do menu** (backend intacto, mesmo padrão de 19/09/2026): Análise
   de Concorrente, Radar de Concorrentes, IA de Promoções, Promoções. Editado
