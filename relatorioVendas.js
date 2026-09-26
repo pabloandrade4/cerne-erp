@@ -263,6 +263,14 @@ function serializarPedido(row, aliquotaImposto) {
       : row.marketplace === 'balcao'
         ? row.status === STATUS_CANCELADO_BALCAO
         : row.status === STATUS_CANCELADO,
+    // 26/09/2026 — devolução CONFIRMADA (reembolso já voltou pro cliente).
+    // Só true quando a linha NÃO está cancelada (um pedido cancelado nunca
+    // também "devolvido" — são tratamentos mutuamente exclusivos, ver
+    // resumirPeriodo). valorReembolsado é o que a API confirmou; NULL
+    // quando devolvido=true mas o valor exato não pôde ser confirmado
+    // (nunca usa valorTotal como aproximação).
+    devolvido: !!row.devolvido,
+    valorReembolsado: toNum(row.valor_reembolsado),
     // Adicionado em 24/08/2026 (tela Recebimentos — ver
     // lib/recebimentosMl.js e docs/04-alteracoes.md): status do primeiro
     // pagamento do pedido (payments[0].status, já salvo desde sempre em
@@ -272,6 +280,7 @@ function serializarPedido(row, aliquotaImposto) {
     // existia no banco.
     pagamentoStatus: row.pagamento_status,
     compradorNickname: row.comprador_nickname,
+    compradorRef: row.comprador_ref || null,
     valorTotal: valorVenda,
     moeda: row.moeda,
     produtoResumo: row.item_resumo,
@@ -314,6 +323,31 @@ const SQL_ML_PEDIDOS_UNIFICADOS = `
     p.status,
     p.pagamento_status,
     p.comprador_nickname,
+    -- 26/09/2026, base pra "Clientes Novos e Recorrentes" (ver
+    -- lib/clientesNovosRecorrentes.js): identificador ESTÁVEL do comprador,
+    -- nunca o nickname (que pode mudar) — comprador_id já vem da API do
+    -- Mercado Livre desde sempre, só nunca tinha sido exposto aqui porque
+    -- nenhuma tela precisava até agora.
+    p.comprador_id::text AS comprador_ref,
+    -- 26/09/2026 — devolução CONFIRMADA (reembolso já voltou pro cliente,
+    -- ver db/schema.sql/pedido_devolucoes) some do faturamento real, igual
+    -- cancelamento, mas contada à parte (nunca misturada) — ver
+    -- resumirPeriodo/serieDiaria abaixo. Devolução ainda 'aberta' (disputa
+    -- em andamento) NUNCA tira a venda daqui — só quando confirmada.
+    -- IMPORTANTE: a posição destas duas colunas (logo após comprador_ref)
+    -- tem que ser IDÊNTICA nas 3 consultas deste UNION ALL (Mercado Livre/
+    -- Shopee/Balcão) — um UNION casa colunas por POSIÇÃO, não por nome;
+    -- colocar em posições diferentes já causou
+    -- "UNION types numeric and boolean cannot be matched" (26/09/2026).
+    EXISTS (
+      SELECT 1 FROM pedido_devolucoes d
+       WHERE d.empresa_id = $1 AND d.marketplace = 'mercado_livre'
+         AND d.pedido_ref = p.ml_order_id::text AND d.status = 'confirmada'
+    ) AS devolvido,
+    (SELECT d.valor_reembolsado FROM pedido_devolucoes d
+      WHERE d.empresa_id = $1 AND d.marketplace = 'mercado_livre'
+        AND d.pedido_ref = p.ml_order_id::text AND d.status = 'confirmada'
+      LIMIT 1) AS valor_reembolsado,
     p.valor_total,
     p.moeda,
     p.frete_comprador,
@@ -366,6 +400,16 @@ const SQL_SHOPEE_PEDIDOS_UNIFICADOS = `
     p.order_status AS status,
     NULL::varchar(30) AS pagamento_status, -- Shopee não tem o mesmo conceito de payments[0].status do Mercado Livre nesta etapa
     p.comprador_username AS comprador_nickname,
+    p.comprador_user_id::text AS comprador_ref, -- já vem da API (order.buyer_user_id), salvo desde sempre em shopee_pedidos
+    EXISTS (
+      SELECT 1 FROM pedido_devolucoes d
+       WHERE d.empresa_id = $1 AND d.marketplace = 'shopee'
+         AND d.pedido_ref = p.order_sn AND d.status = 'confirmada'
+    ) AS devolvido,
+    (SELECT d.valor_reembolsado FROM pedido_devolucoes d
+      WHERE d.empresa_id = $1 AND d.marketplace = 'shopee'
+        AND d.pedido_ref = p.order_sn AND d.status = 'confirmada'
+      LIMIT 1) AS valor_reembolsado,
     p.valor_total,
     p.moeda,
     NULL::numeric(12,2) AS frete_comprador, -- a Shopee não separa frete pago pelo comprador nos campos já buscados
@@ -431,6 +475,19 @@ const SQL_BALCAO_PEDIDOS_UNIFICADOS = `
     vb.status,
     NULL::varchar(30) AS pagamento_status,
     vb.cliente_nome AS comprador_nickname,
+    -- Venda de Balcão NUNCA cadastra um ID de cliente (nem CPF, nem
+    -- telefone — ver db/schema.sql) — o nome digitado na hora da venda é o
+    -- único identificador que existe. Normalizado (minúsculo, espaços
+    -- colapsados) pra "João Silva" e "joão  silva" contarem como o mesmo
+    -- cliente em Clientes Novos/Recorrentes; ainda assim é o identificador
+    -- MAIS FRACO dos 3 canais (nome sem sobrenome ou nomes iguais de
+    -- pessoas diferentes colidem) — ver 05-problemas-conhecidos.md.
+    NULLIF(lower(regexp_replace(trim(vb.cliente_nome), '\s+', ' ', 'g')), '') AS comprador_ref,
+    -- Venda de Balcão não tem devolução rastreada (venda presencial, sem
+    -- API nenhuma) — sempre FALSE/NULL, nunca um "não sei" escondido: é um
+    -- fato do canal, mesmo espírito do frete zero já documentado acima.
+    FALSE AS devolvido,
+    NULL::numeric(12,2) AS valor_reembolsado,
     vb.valor_total,
     'BRL'::varchar(5) AS moeda,
     NULL::numeric(12,2) AS frete_comprador,
@@ -540,10 +597,15 @@ function somarComPendencia(pedidos, campo) {
 
 // Resume um conjunto de pedidos (já filtrado pro período) nos totais usados
 // por Visão Geral e Financeiro. Pedidos cancelados ficam de fora de todo
-// esse resumo — eles aparecem só em `cancelados`.
+// esse resumo — eles aparecem só em `cancelados`. 26/09/2026 — devolução
+// CONFIRMADA (reembolso já voltou pro cliente) também some do faturamento
+// real, mas conta à parte em `devolucoes` — nunca junto de `cancelados`,
+// porque são motivos diferentes (pedido cancelado nunca chegou a virar
+// venda de verdade; devolução é uma venda que aconteceu e depois voltou).
 function resumirPeriodo(pedidosComCancelados) {
   const cancelados = pedidosComCancelados.filter((p) => p.cancelado);
-  const pedidos = pedidosComCancelados.filter((p) => !p.cancelado);
+  const devolvidos = pedidosComCancelados.filter((p) => !p.cancelado && p.devolvido);
+  const pedidos = pedidosComCancelados.filter((p) => !p.cancelado && !p.devolvido);
 
   const qtdPedidos = pedidos.length;
   const faturamento = somarComPendencia(pedidos, 'valorTotal');
@@ -563,6 +625,14 @@ function resumirPeriodo(pedidosComCancelados) {
     : null;
 
   const cancelamentoValor = somarComPendencia(cancelados, 'valorTotal');
+  // Valor da devolução: usa o que a própria API confirmou como reembolsado
+  // (valorReembolsado); quando isso ainda não veio, cai pro valorTotal do
+  // pedido (é o valor que de fato saiu do faturamento, mesmo sem o número
+  // exato do reembolso confirmado) — nunca inventa um valor maior que isso.
+  const devolucaoValor = somarComPendencia(
+    devolvidos.map((p) => ({ ...p, valorTotal: p.valorReembolsado !== null ? p.valorReembolsado : p.valorTotal })),
+    'valorTotal'
+  );
 
   // 14/09/2026 — quantos pedidos (não cancelados) entram na margem acima
   // usando a comissão ESTIMADA da Shopee (repasse real ainda não
@@ -581,16 +651,18 @@ function resumirPeriodo(pedidosComCancelados) {
     margemContribuicao,
     margemPercentual,
     cancelados: { quantidade: cancelados.length, valor: cancelamentoValor.valor },
+    devolucoes: { quantidade: devolvidos.length, valor: devolucaoValor.valor },
     comComissaoEstimada,
   };
 }
 
 // Série diária (faturamento e margem de contribuição por dia, em horário de
-// Brasília) pro gráfico de Visão Geral. Pedidos cancelados ficam de fora,
-// mesma regra do resumo. Dias com algum pedido sem custo de SKU cadastrado
-// somam só a margem que já é conhecida (nunca inventa o que falta).
+// Brasília) pro gráfico de Visão Geral. Pedidos cancelados E devolvidos
+// (devolução confirmada) ficam de fora, mesma regra do resumo. Dias com
+// algum pedido sem custo de SKU cadastrado somam só a margem que já é
+// conhecida (nunca inventa o que falta).
 function serieDiaria(pedidosComCancelados) {
-  const pedidos = pedidosComCancelados.filter((p) => !p.cancelado);
+  const pedidos = pedidosComCancelados.filter((p) => !p.cancelado && !p.devolvido);
   const porDia = new Map();
   for (const p of pedidos) {
     // Usa a mesma data efetiva (data_fechamento, com fallback pra
