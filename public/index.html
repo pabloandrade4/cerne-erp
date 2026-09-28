@@ -514,10 +514,23 @@
   .ov3-greeting .sub{ font-size:12.5px; color:var(--text-muted); }
   .ov3-greeting-date{ text-align:right; font-size:12px; color:var(--text-muted); padding-top:4px; }
 
-  .ov3-kpi-grid{ display:grid; grid-template-columns:repeat(6,1fr); gap:12px; }
+  .ov3-kpi-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
   @media (max-width:1400px){ .ov3-kpi-grid{ grid-template-columns:repeat(3,1fr); } }
   @media (max-width:760px){ .ov3-kpi-grid{ grid-template-columns:repeat(2,1fr); } }
   @media (max-width:460px){ .ov3-kpi-grid{ grid-template-columns:1fr; } }
+
+  /* 28/09/2026, pedido explícito do usuário: "a projeção de vendas deve
+     aparecer lá em cima ao lado do faturamento" — nova fileira do topo
+     que junta o grid de KPIs (que começa com o card Faturamento) e o
+     painel de Projeção de vendas do mês lado a lado, em vez do painel
+     ficar lá embaixo junto de Clientes Novos/Recorrentes. */
+  .ov3-top-row{ display:grid; grid-template-columns:1fr 320px; gap:14px; align-items:stretch; }
+  @media (max-width:1300px){ .ov3-top-row{ grid-template-columns:1fr; } }
+
+  /* Fileira de 2 colunas (mesmo .ov3-row3, só com 2 painéis em vez de 3 —
+     usada onde a Projeção de vendas saiu pra virar a fileira acima). */
+  .ov3-row2{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-top:14px; align-items:stretch; }
+  @media (max-width:760px){ .ov3-row2{ grid-template-columns:1fr; } }
   .ov3-kpi{ position:relative; overflow:hidden; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:15px 15px 13px; box-shadow:var(--shadow-sm); }
   .ov3-kpi::before{ content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--tint,var(--copper)); }
   .ov3-kpi-top{ display:flex; align-items:center; justify-content:flex-end; position:relative; }
@@ -1519,14 +1532,13 @@
       { id:'iaGestora', title:'IA Gestora', icon:'messageCircle', desc:'Converse com a IA Gestora sobre os dados reais da empresa e período selecionados — vendas, margem, custos, contas a pagar/receber, estoque e alertas.' },
       { id:'alerts', title:'Alertas & IA', icon:'sparkle', action:'Ver tudo', desc:'Central de alertas inteligentes e sugestões geradas por IA sobre a operação.',
         bullets:['Alertas de risco de ruptura de estoque','Alertas de caixa e prazos financeiros','Sugestões de reposição e compra','Anomalias de custo, taxa ou margem'] },
-      // 19/09/2026, pedido explícito do usuário: "tem como nos fazer
-      // agentes de ia para rodar 24h por dia e fazer uma sala 3d onde vai
-      // mostrar todos agentes trabalhando?" — os processos automáticos já
-      // rodavam 24h no servidor antes disso (schedulers de sincronização,
-      // Radar da IA, Promoções IA, SAC); esta tela só dá uma cara visual
-      // pra esse status real (GET /api/agentes-3d/status), nunca inventa
-      // um agente/dado que não exista de verdade.
-      { id:'salaAgentes', title:'Sala dos Agentes', icon:'box', desc:'Sala 3D mostrando, em tempo real, os 5 agentes de IA que trabalham pra você: Promoções, Ads, Anúncios, Análise de Concorrente e SAC.' },
+      // 28/09/2026, pedido explícito do usuário: "quero retirar a sala de
+      // agentes do sistema" — removida a aba "Sala dos Agentes" (a sala 3D
+      // com os 5 agentes) do menu, mesmo padrão já usado em 19/09/2026 e
+      // 23/09/2026 pras outras abas de agentes removidas: nada foi apagado
+      // por baixo (routes/agentes3d.js, window.SalaAgentes etc. continuam
+      // existindo), só a aba some do menu — ver também a chamada de
+      // load/unload de window.SalaAgentes logo abaixo, em navigate().
     ]},
     { id:'cadastros', label:'Cadastros', open:true, items:[
       { id:'companies', title:'Empresas', icon:'building', action:'Nova empresa', desc:'Cadastro das empresas e CNPJs que operam dentro do ERP.',
@@ -2950,17 +2962,29 @@
 
       const kpis = [
         { label:'Faturamento', icon:'barChart', tint:'copper', spark: spFaturamento,
-          note: resumo.faturamento.valor!==null ? faturamentoTendenciaHTML(faturamentoEvolucao) || 'Bruto no período (vendas não canceladas)' : 'Bruto no período (vendas não canceladas)',
+          // 28/09/2026, pedido explícito do usuário: "quando mostrar o
+          // faturamento total tem que mostrar descontando os cancelamentos
+          // e devoluções" — o VALOR já excluía os dois (resumirPeriodo em
+          // lib/relatorioVendas.js já filtra pedido.status IN
+          // ('cancelado','devolvido') antes de somar faturamento), só a
+          // legenda não citava devolução — corrigido aqui, sem mudar o
+          // cálculo.
+          note: resumo.faturamento.valor!==null ? faturamentoTendenciaHTML(faturamentoEvolucao) || 'Já descontando cancelamentos e devoluções' : 'Já descontando cancelamentos e devoluções',
           valueHtml: resumo.faturamento.valor!==null ? escapeHtml(money(resumo.faturamento.valor, moeda)) : pendCurta },
-        { label:'Margem de contribuição (R$)', icon:'wallet', tint: resumo.margemContribuicao.valor===null ? 'muted' : (resumo.margemContribuicao.valor>=0?'success':'danger'), spark: spMargem,
-          note: 'Venda − taxas − frete vendedor − imposto − custo produto',
+        // 28/09/2026, pedido explícito do usuário: "quero que a margem de
+        // contribuição seja apenas uma em visão geral juntando a margem e
+        // o lucro em reais no mesmo quadrado" — os dois cards (R$ e %) que
+        // existiam separados viraram um só, mostrando o valor em R$ como
+        // número principal e o percentual junto dele (não inventa nenhum
+        // cálculo novo, só reexibe resumo.margemContribuicao.valor e
+        // resumo.margemPercentual, os mesmos já calculados em
+        // lib/relatorioVendas.js#resumirPeriodo, no mesmo card).
+        { label:'Margem de contribuição', icon:'wallet', tint: resumo.margemContribuicao.valor===null ? 'muted' : (resumo.margemContribuicao.valor>=0?'success':'danger'), spark: spMargem,
+          note: 'Sobre a venda já sem cancelamentos/devoluções − taxas − frete vendedor − imposto − custo produto',
           valueHtml: resumo.margemContribuicao.valor!==null
-            ? '<span class="'+(resumo.margemContribuicao.valor>=0?'pos':'neg')+'">'+escapeHtml(moneySigned(resumo.margemContribuicao.valor, moeda))+'</span>'
-            : pendCurta },
-        { label:'Margem de contribuição (%)', icon:'percent', tint: resumo.margemPercentual===null ? 'muted' : (resumo.margemPercentual>=0?'success':'danger'), spark: spMargemPct,
-          note: 'Sobre o faturamento do período',
-          valueHtml: resumo.margemPercentual!==null
-            ? '<span class="'+(resumo.margemPercentual>=0?'pos':'neg')+'">'+escapeHtml(pctFmt(resumo.margemPercentual))+'</span>'
+            ? '<span class="'+(resumo.margemContribuicao.valor>=0?'pos':'neg')+'">'+escapeHtml(moneySigned(resumo.margemContribuicao.valor, moeda))
+              + (resumo.margemPercentual!==null ? ' <span style="font-size:0.6em;font-weight:600;opacity:0.85;">('+escapeHtml(pctFmt(resumo.margemPercentual))+')</span>' : '')
+              + '</span>'
             : pendCurta },
         { label:'Pedidos no período', icon:'bag', tint:'teal',
           note:'Não cancelados',
@@ -3463,7 +3487,10 @@
       } else if(state.data){
         const resumo = state.data.resumo;
         const hasOrders = resumo.qtdPedidos > 0;
-        html += kpi6RowHTML(resumo, 'BRL', hasOrders, state.data.serieDiaria, (!state.contaId && state.painel) ? state.painel.faturamentoEvolucao : null)
+        html += '<div class="ov3-top-row">'
+            + kpi6RowHTML(resumo, 'BRL', hasOrders, state.data.serieDiaria, (!state.contaId && state.painel) ? state.painel.faturamentoEvolucao : null)
+            + projecaoVendasPanelHTML(state.painel, state.painelError)
+          + '</div>'
           + detalhamentoStripHTML(resumo, 'BRL', hasOrders)
           + (state.contaId ? '<div class="field-hint" style="margin:8px 0 0;">"Vendas por Marketplace", Estoque, Contas e Fluxo de Caixa e Alertas &amp; IA abaixo continuam considerando todas as lojas da empresa — os indicadores acima, o gráfico de desempenho e Anúncios e Performance respeitam a loja selecionada.</div>' : '')
           + '<div class="ov3-row3 wide-chart">'
@@ -3481,8 +3508,7 @@
             + healthPanelHTML(resumo, state.painel, state.painelError)
             + promoPanelHTML()
           + '</div>'
-          + '<div class="ov3-row3">'
-            + projecaoVendasPanelHTML(state.painel, state.painelError)
+          + '<div class="ov3-row2">'
             + clientesNovosRecorrentesPanelHTML(state.painel, state.painelError)
             + devolucaoCancelamentoPanelHTML(state.painel, state.painelError, state.contaId)
           + '</div>';
@@ -4193,8 +4219,12 @@
       const moneyKpi = (v) => v===null ? 'Pendente' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
       const items = [
         { label:'Pedidos', icon:'cart', tint:'copper', valueHtml: String(r.qtdPedidos), note:state.resumo.periodo.label },
-        { label:'Vendas (R$)', icon:'lineChart', tint:'success', valueHtml: moneyKpi(r.faturamento.valor), note:'Bruto, pedidos não cancelados' },
-        { label:'Margem (R$)', icon:'wallet', tint: r.margemContribuicao.valor===null?'muted':(r.margemContribuicao.valor>=0?'success':'danger'), valueHtml: moneyKpi(r.margemContribuicao.valor), note: r.margemContribuicao.pendentes ? r.margemContribuicao.pendentes+' pedido(s) sem custo' : (r.comComissaoEstimada ? r.comComissaoEstimada+' pedido(s) Shopee com comissão estimada' : 'Todos os pedidos com custo') },
+        // 28/09/2026, pedido explícito do usuário: legenda atualizada pra
+        // citar devolução junto de cancelamento — o valor (r.faturamento,
+        // vindo do mesmo resumirPeriodo de lib/relatorioVendas.js) já
+        // excluía os dois, só a legenda não mencionava devolução.
+        { label:'Vendas (R$)', icon:'lineChart', tint:'success', valueHtml: moneyKpi(r.faturamento.valor), note:'Já descontando cancelamentos e devoluções' },
+        { label:'Margem (R$)', icon:'wallet', tint: r.margemContribuicao.valor===null?'muted':(r.margemContribuicao.valor>=0?'success':'danger'), valueHtml: moneyKpi(r.margemContribuicao.valor), note: r.margemContribuicao.pendentes ? r.margemContribuicao.pendentes+' pedido(s) sem custo' : (r.comComissaoEstimada ? r.comComissaoEstimada+' pedido(s) Shopee com comissão estimada' : 'Todos os pedidos com custo (já sem cancel./devol.)') },
         { label:'Margem (%)', icon:'percent', tint:'purple', valueHtml: r.margemPercentual===null?'Pendente':r.margemPercentual.toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%', note:'Sobre o faturamento' },
         { label:'Ticket médio', icon:'activity', tint:'petrol', valueHtml: moneyKpi(ticketMedio), note:'Vendas ÷ pedidos' },
         { label:'Cancelados', icon:'alertCircle', tint: r.cancelados.quantidade>0?'danger':'muted', valueHtml: String(r.cancelados.quantidade), note: r.cancelados.valor ? moneyKpi(r.cancelados.valor)+' não contabilizado' : 'Nenhum no período' },
