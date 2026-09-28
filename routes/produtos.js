@@ -96,11 +96,18 @@ router.get('/', async (req, res, next) => {
 // mas pro lado do SKU), esta rota devolve os SKUs que JÁ apareceram em
 // pedidos reais (Mercado Livre + Shopee) desta empresa mas que AINDA não
 // têm produto cadastrado — exatamente a mesma lógica de casamento usada em
-// lib/relatorioVendas.js (pr.sku = pi.sku, comparação exata) pra sugerir só
-// SKUs que, se cadastrados aqui do jeito que aparecem no pedido, vão bater
-// certinho com o cálculo de margem. Nunca sugere um SKU que já está
-// cadastrado (por mais que o produto atual esteja sem custo por outro
-// motivo — essa rota é só pra SKU nunca visto em Produtos).
+// lib/relatorioVendas.js pra sugerir só SKUs que, se cadastrados aqui do
+// jeito que aparecem no pedido, vão bater certinho com o cálculo de margem.
+// Nunca sugere um SKU que já está cadastrado (por mais que o produto atual
+// esteja sem custo por outro motivo — essa rota é só pra SKU nunca visto em
+// Produtos).
+// 28/09/2026 — CORRIGIDO: a comparação de "já cadastrado" era exata
+// (sku NOT IN (...)), então um SKU com maiúscula/minúscula diferente do
+// cadastro (ex.: "100cx-16x11x6" vs "100CX-16X11X6") ou com uma quebra de
+// linha colada no fim aparecia aqui como sugestão, mesmo já tendo produto
+// e custo cadastrados — e cadastrar de novo criaria um SKU duplicado, sem
+// resolver o pareamento de verdade. Agora compara normalizado
+// (UPPER(BTRIM(...))), mesma normalização usada em lib/relatorioVendas.js.
 router.get('/sugestoes-sku', async (req, res, next) => {
   try {
     const { empresaId } = req.query;
@@ -134,7 +141,7 @@ router.get('/sugestoes-sku', async (req, res, next) => {
               (array_agg(nome ORDER BY data_pedido DESC NULLS LAST, pedido_id DESC))[1] AS nome_sugerido,
               count(DISTINCT pedido_id) AS qtd_pedidos
        FROM todos
-       WHERE sku NOT IN (SELECT sku FROM produtos WHERE empresa_id = $1)
+       WHERE UPPER(BTRIM(sku)) NOT IN (SELECT UPPER(BTRIM(sku)) FROM produtos WHERE empresa_id = $1)
        GROUP BY sku
        ORDER BY qtd_pedidos DESC, sku
        LIMIT 500`,
