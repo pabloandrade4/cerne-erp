@@ -19,6 +19,7 @@ const { iniciarDevolucoesAutomatico } = require('./lib/devolucoesScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
+const shopeeAdsRouter = require('./routes/shopeeAds');
 const pedidosRouter = require('./routes/pedidos');
 const custosRouter = require('./routes/custos');
 const relatoriosRouter = require('./routes/relatorios');
@@ -72,6 +73,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/empresas', empresasRouter);
 app.use('/api/integracoes/mercadolivre', integracoesRouter);
 app.use('/api/integracoes/shopee', shopeeRouter);
+app.use('/api/shopee-ads', shopeeAdsRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api', custosRouter);
 app.use('/api/relatorios', relatoriosRouter);
@@ -147,6 +149,8 @@ async function start() {
     // no servidor, nunca depende do navegador aberto), ver
     // lib/shopeeSyncScheduler.js.
     iniciarSincronizacaoAutomaticaShopee();
+    // Ads da Shopee (16/10/2026) — série diária de gasto/vendas, a cada 30 min, sempre no servidor.
+    require('./lib/shopeeAdsScheduler').iniciar();
     // Radar da IA — acompanhamento contínuo de anúncios e do negócio,
     // sempre no servidor, nunca dependendo do navegador aberto (ver
     // lib/ia/radarScheduler.js).
