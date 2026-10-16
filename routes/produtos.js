@@ -158,6 +158,85 @@ router.get('/sugestoes-sku', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ---- Atualizar CUSTO por planilha (02/10/2026, pedido explícito do usuário)
+// Ver lib/produtosImportacao.js. Três rotas, todas ANTES de '/:id'.
+
+// GET /api/produtos/custos/modelo?empresaId=ID — planilha com os produtos
+// atuais (SKU, Nome, Custo) pra editar a coluna Custo e enviar de volta.
+router.get('/custos/modelo', async (req, res, next) => {
+  try {
+    const { empresaId } = req.query;
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const { rows } = await pool.query('SELECT sku, nome, custo FROM produtos WHERE empresa_id = $1 ORDER BY nome', [empresaId]);
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Custos');
+    ws.addRow(['SKU', 'Nome', 'Custo']);
+    ws.getRow(1).font = { bold: true };
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    ws.columns = [{ key: 'sku', width: 26 }, { key: 'nome', width: 50 }, { key: 'custo', width: 14, style: { numFmt: '#,##0.00' } }];
+    for (const r of rows) ws.addRow([r.sku, r.nome, Number(r.custo)]);
+    const ins = wb.addWorksheet('Instruções');
+    ins.addRows([
+      ['Como usar'],
+      ['1. Edite só a coluna Custo (em reais, ex.: 3,50). Não mude o SKU — é ele que identifica o produto.'],
+      ['2. Pode apagar as linhas dos produtos que não quer mexer, ou deixar o Custo em branco (o custo atual é mantido).'],
+      ['3. Salve e envie o arquivo em Cadastros → Produtos → Atualizar custos por planilha. Você vê uma prévia antes de gravar.'],
+      ['4. SKU que não existe em Produtos não é criado — aparece como "não encontrado" na prévia.'],
+    ]);
+    ins.getRow(1).font = { bold: true };
+    ins.getColumn(1).width = 110;
+    const buffer = await wb.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="custos-produtos.xlsx"');
+    res.send(Buffer.from(buffer));
+  } catch (err) { next(err); }
+});
+
+// POST /api/produtos/custos/importar?empresaId=ID&confirmar=0|1 — corpo = bytes
+// crus do CSV/XLSX (header X-File-Name). confirmar=0 só mostra a prévia;
+// confirmar=1 grava (tudo ou nada, numa transação).
+router.post('/custos/importar', express.raw({ type: 'application/octet-stream', limit: '10mb' }), async (req, res, next) => {
+  try {
+    const importacaoCsv = require('../lib/contasPagarImportacao');
+    const prodImport = require('../lib/produtosImportacao');
+    const empresaId = Number(req.query.empresaId);
+    if (!empresaId) return res.status(400).json({ error: 'Informe empresaId.' });
+    const nomeArquivo = decodeURIComponent(String(req.headers['x-file-name'] || ''));
+    if (!nomeArquivo) return res.status(400).json({ error: 'Informe o nome do arquivo.' });
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'Arquivo vazio.' });
+
+    const lido = await importacaoCsv.lerArquivo(req.body, nomeArquivo);
+    if (!lido.colunas.length || !lido.linhas.length) return res.status(400).json({ error: 'Não encontrei cabeçalho ou linhas de dados na planilha.' });
+    const mapeamento = prodImport.detectarColunas(lido.colunas);
+    if (!mapeamento.sku || !mapeamento.custo) {
+      return res.status(400).json({ error: 'A planilha precisa ter uma coluna "SKU" e uma coluna "Custo". Colunas encontradas: ' + lido.colunas.join(', ') + '.' });
+    }
+
+    const { rows: produtos } = await pool.query('SELECT id, sku, nome, custo FROM produtos WHERE empresa_id = $1', [empresaId]);
+    const avaliacao = prodImport.avaliarLinhas(lido.linhas, mapeamento, produtos);
+
+    if (String(req.query.confirmar) !== '1') return res.json({ confirmado: false, ...avaliacao });
+
+    const aAtualizar = avaliacao.linhas.filter(l => l.status === 'atualizar');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const l of aAtualizar) {
+        await client.query('UPDATE produtos SET custo = $1, updated_at = now() WHERE empresa_id = $2 AND id = ANY($3::int[])', [l.custoNovo, empresaId, l.produtoIds]);
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally { client.release(); }
+    res.json({ confirmado: true, atualizados: aAtualizar.length, ...avaliacao });
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    next(err);
+  }
+});
+
 // GET /api/produtos/:id
 router.get('/:id', async (req, res, next) => {
   try {

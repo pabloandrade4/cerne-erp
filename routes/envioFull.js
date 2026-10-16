@@ -14,6 +14,7 @@ function round2(n) { return Math.round(n * 100) / 100; }
 function linhaParaApi({ produtoBase, calc, motivo }) {
   return {
     produtoBaseId: produtoBase.id,
+    registrado: produtoBase.registrado !== false,
     codigo: produtoBase.codigo,
     nome: produtoBase.nome,
     estoqueGalpao: calc.estoqueGalpao,
