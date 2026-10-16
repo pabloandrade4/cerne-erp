@@ -2477,3 +2477,38 @@ CREATE INDEX IF NOT EXISTS idx_pedido_devolucoes_empresa ON pedido_devolucoes (e
 CREATE INDEX IF NOT EXISTS idx_pedido_devolucoes_pedido_confirmada
   ON pedido_devolucoes (empresa_id, marketplace, pedido_ref)
   WHERE status = 'confirmada' AND pedido_ref IS NOT NULL;
+
+-- ============================================================
+-- Ads da Shopee (16/10/2026, pedido explícito do usuário: "puxe o ads da
+-- Shopee também, separado do Mercado Livre, e uma aba que junte"). Série
+-- diária por loja (Shopee Ads CPC, endpoint ads/get_all_cpc_ads_daily_performance),
+-- sempre re-sincronizada numa janela corrida (nunca histórico congelado).
+-- `gmv_direto` = vendas do produto anunciado; `gmv_amplo` = qualquer item da
+-- loja atribuído ao anúncio (nomes da Shopee: direct_gmv / broad_gmv).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS shopee_ads_diario (
+  shopee_conta_id   INTEGER NOT NULL REFERENCES shopee_contas(id) ON DELETE CASCADE,
+  data              DATE NOT NULL,
+  gasto             NUMERIC(12,2),
+  impressoes        INTEGER,
+  cliques           INTEGER,
+  pedidos_diretos   INTEGER,
+  pedidos_amplos    INTEGER,
+  gmv_direto        NUMERIC(12,2),
+  gmv_amplo         NUMERIC(12,2),
+  atualizado_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (shopee_conta_id, data)
+);
+
+CREATE TABLE IF NOT EXISTS shopee_ads_status (
+  shopee_conta_id           INTEGER PRIMARY KEY REFERENCES shopee_contas(id) ON DELETE CASCADE,
+  disponivel                BOOLEAN NOT NULL DEFAULT false,
+  mensagem                  TEXT,
+  detalhe_api               JSONB,
+  saldo                     NUMERIC(12,2),
+  ultima_sincronizacao_em   TIMESTAMPTZ,
+  ultima_sincronizacao_ok   BOOLEAN,
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE shopee_ads_diario ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shopee_ads_status ENABLE ROW LEVEL SECURITY;
