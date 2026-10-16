@@ -1603,6 +1603,10 @@
     { id:'analise', label:'Análise', open:false, items:[
       { id:'ads', title:'Ads', icon:'megaphone', action:'Conectar Ads', desc:'Investimento e retorno das campanhas de publicidade dentro dos marketplaces.',
         bullets:['Investimento por conta e campanha','ACOS e ROAS por produto','Impacto do Ads na margem real','Sugestões de otimização'] },
+      { id:'adsShopee', title:'Ads Shopee', icon:'megaphone', desc:'Investimento e vendas atribuídas aos anúncios pagos da Shopee, de todas as lojas.',
+        bullets:['Gasto, cliques, vendas e ROAS por dia','Uma linha por loja Shopee','Saldo de Ads da loja','Mostra o motivo real se a Shopee não liberar'] },
+      { id:'adsTotal', title:'Ads Total (ML + Shopee)', icon:'megaphone', desc:'Mercado Livre e Shopee juntos: quanto você investiu em anúncios pagos e quanto voltou.',
+        bullets:['Total investido e vendas atribuídas','Comparativo Mercado Livre x Shopee','ROAS e ACOS combinados','Evolução por dia'] },
       { id:'performanceAnuncios', title:'Performance de Anúncios', icon:'tag', desc:'Cada anúncio real do Mercado Livre, com vendas, faturamento, crescimento e indicador de desempenho — critérios objetivos e documentados.',
         bullets:['Ranking por vendas, faturamento e crescimento','🟢🟡🔴 com critérios objetivos e documentados','Anúncios sem vender há vários dias','Filtros por empresa, loja, período, SKU e status'] },
       { id:'visitasConversao', title:'Visitas e Conversão', icon:'eye', desc:'Funil de cada anúncio: visitas, vendas e conversão — dado real da API do Mercado Livre, "Dado não disponível" quando a API não retorna.',
@@ -1727,7 +1731,7 @@
     section.className = 'page';
     section.id = 'page-'+id;
 
-    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','vendaBalcao','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','planoAcaoDia','agenteAds','envioFull','agentePromocoes','concorrente','sacMercadoLivre','sacShopee','salaAgentes','radarConcorrentes'];
+    const REAL_MODULES = ['companies','marketplaces','orders','finance','products','mapaProdutos','anuncios','suppliers','stock','stockFull','purchases','vendaBalcao','payable','receivable','settlements','dre','billing','invoices','fixedExpenses','cashFlow','ads','adsShopee','adsTotal','performanceAnuncios','visitasConversao','margemAnuncio','promocoesIa','reports','iaGestora','alerts','agentesIaHub','planoAcaoDia','agenteAds','envioFull','agentePromocoes','concorrente','sacMercadoLivre','sacShopee','salaAgentes','radarConcorrentes'];
     let inner = '<div class="page-head"><div><h1>'+p.title+'</h1><div class="page-desc">'+(p.desc || 'Panorama consolidado de todas as empresas, marketplaces e operações.')+'</div></div>';
     if(id === 'companies'){
       inner += '<button class="primary-btn enabled" id="btnNewEmpresa" type="button">'+svg('plus')+'<span>Nova empresa</span></button>';
@@ -1795,6 +1799,8 @@
     else if(id === 'fixedExpenses'){ inner += '<div id="despesasFixasRoot"></div>'; }
     else if(id === 'cashFlow'){ inner += '<div id="fluxoCaixaRoot"></div>'; }
     else if(id === 'ads'){ inner += '<div id="adsRoot"></div>'; }
+    else if(id === 'adsShopee'){ inner += '<div id="adsShopeeRoot"></div>'; }
+    else if(id === 'adsTotal'){ inner += '<div id="adsTotalRoot"></div>'; }
     else if(id === 'performanceAnuncios'){ inner += '<div id="performanceAnunciosRoot"></div>'; }
     else if(id === 'visitasConversao'){ inner += '<div id="visitasConversaoRoot"></div>'; }
     else if(id === 'margemAnuncio'){ inner += '<div id="margemAnuncioRoot"></div>'; }
@@ -1855,6 +1861,8 @@
     if(id === 'fixedExpenses' && window.DespesasFixas) window.DespesasFixas.load();
     if(id === 'cashFlow' && window.FluxoCaixa) window.FluxoCaixa.load();
     if(id === 'ads' && window.Ads) window.Ads.load();
+    if(id === 'adsShopee' && window.AdsShopee) window.AdsShopee.load('shopee');
+    if(id === 'adsTotal' && window.AdsShopee) window.AdsShopee.load('total');
     if(id === 'performanceAnuncios' && window.PerformanceAnuncios) window.PerformanceAnuncios.load(queryStr);
     if(id === 'visitasConversao' && window.VisitasConversao) window.VisitasConversao.load(queryStr);
     if(id === 'margemAnuncio' && window.MargemAnuncio) window.MargemAnuncio.load(queryStr);
@@ -11377,6 +11385,119 @@
     }
 
     window.Ads = { load };
+  })();
+
+
+  /* ================= ADS SHOPEE + ADS TOTAL (16/10/2026) =================
+     Duas telas, um módulo: 'shopee' (só Shopee, todas as lojas) e 'total'
+     (Mercado Livre + Shopee juntos). Tudo vem do banco via /api/shopee-ads
+     (sincronização automática no servidor) — nunca estimado pelo ERP. */
+  (function(){
+    const state = { modo:'shopee', data:null, loading:false, error:null, syncing:false };
+    const esc = (v)=> String(v==null?'':v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const brl = (v)=> v==null ? '—' : 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const num = (v)=> v==null ? '—' : Number(v).toLocaleString('pt-BR');
+    const pct = (v)=> v==null ? '—' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+    const roasF = (v)=> v==null ? '—' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'x';
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap'); if(!wrap) return;
+      const el = document.createElement('div'); el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+esc(message)+'</span>';
+      wrap.appendChild(el); setTimeout(()=>el.remove(), 4500);
+    }
+    const dia = (iso)=> { const p=String(iso).split('-'); return p[2]+'/'+p[1]; };
+    function rootEl(){ return document.getElementById(state.modo==='total' ? 'adsTotalRoot' : 'adsShopeeRoot'); }
+
+    function card(label, valor, sub){
+      return '<div style="background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:12px;padding:14px 16px;"><div style="font-size:11px;font-weight:700;color:var(--text-muted);">'+label+'</div><div style="font-size:22px;font-weight:700;margin-top:6px;">'+valor+'</div>'+(sub?'<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">'+sub+'</div>':'')+'</div>';
+    }
+    function cardsGrid(cards){ return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;">'+cards.join('')+'</div>'; }
+
+    function htmlShopee(d){
+      const t = d.totais;
+      let h = cardsGrid([
+        card('Investido em Ads', brl(t.gasto)),
+        card('Vendas atribuídas', brl(t.receita), 'pedidos: '+num(t.pedidos)),
+        card('ROAS', roasF(t.roas), 'ACOS '+pct(t.acos)),
+        card('Cliques', num(t.cliques), 'CTR '+pct(t.ctr)+' · CPC '+brl(t.cpc)),
+      ]);
+      const problemas = d.lojas.filter(l=>!l.disponivel && l.mensagem);
+      if(problemas.length){
+        h += '<div class="bd-note" style="margin-bottom:12px;">'+svg('alertCircle')+'<span>'+problemas.map(l=>'<strong>'+esc(l.nome||('Loja '+l.id))+'</strong>: '+esc(l.mensagem)).join('<br>')+'</span></div>';
+      }
+      h += '<div class="table-card" style="margin-bottom:16px;"><div class="table-wrap"><table class="data-table"><thead><tr><th>Loja</th><th>Investido</th><th>Vendas atribuídas</th><th>ROAS</th><th>Saldo Ads</th><th>Última atualização</th></tr></thead><tbody>'
+        + (d.lojas.length ? d.lojas.map(l=>'<tr><td>'+esc(l.nome||('Loja '+l.id))+'</td><td class="tab-nums">'+brl(l.gasto)+'</td><td class="tab-nums">'+brl(l.receita)+'</td><td class="tab-nums">'+roasF(l.roas)+'</td><td class="tab-nums">'+brl(l.saldo)+'</td><td>'+(l.ultimaSincronizacaoEm? new Date(l.ultimaSincronizacaoEm).toLocaleString('pt-BR') : 'ainda não sincronizou')+'</td></tr>').join('') : '<tr><td colspan="6">Nenhuma loja Shopee conectada.</td></tr>')
+        + '</tbody></table></div></div>';
+      h += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Dia</th><th>Investido</th><th>Vendas atribuídas</th><th>ROAS</th><th>Cliques</th></tr></thead><tbody>'
+        + (d.dias.length ? d.dias.slice().reverse().map(x=>'<tr><td>'+dia(x.data)+'</td><td class="tab-nums">'+brl(x.gasto)+'</td><td class="tab-nums">'+brl(x.receita)+'</td><td class="tab-nums">'+roasF(x.gasto>0?x.receita/x.gasto:null)+'</td><td class="tab-nums">'+num(x.cliques)+'</td></tr>').join('') : '<tr><td colspan="5">Sem dados de Ads da Shopee neste período.</td></tr>')
+        + '</tbody></table></div></div>';
+      return h;
+    }
+
+    function htmlTotal(d){
+      const t = d.total, ml = d.mercadoLivre, sp = d.shopee;
+      let h = cardsGrid([
+        card('Investido total', brl(t.gasto)),
+        card('Vendas atribuídas', brl(t.receita)),
+        card('ROAS combinado', roasF(t.roas), 'ACOS '+pct(t.acos)),
+      ]);
+      h += '<div class="table-card" style="margin-bottom:16px;"><div class="table-wrap"><table class="data-table"><thead><tr><th>Canal</th><th>Investido</th><th>Vendas atribuídas</th><th>ROAS</th><th>ACOS</th></tr></thead><tbody>'
+        + '<tr><td>Mercado Livre</td><td class="tab-nums">'+brl(ml.gasto)+'</td><td class="tab-nums">'+brl(ml.receita)+'</td><td class="tab-nums">'+roasF(ml.roas)+'</td><td class="tab-nums">'+pct(ml.acos)+'</td></tr>'
+        + '<tr><td>Shopee</td><td class="tab-nums">'+brl(sp.gasto)+'</td><td class="tab-nums">'+brl(sp.receita)+'</td><td class="tab-nums">'+roasF(sp.roas)+'</td><td class="tab-nums">'+pct(sp.acos)+'</td></tr>'
+        + '<tr><td><strong>Total</strong></td><td class="tab-nums"><strong>'+brl(t.gasto)+'</strong></td><td class="tab-nums"><strong>'+brl(t.receita)+'</strong></td><td class="tab-nums"><strong>'+roasF(t.roas)+'</strong></td><td class="tab-nums"><strong>'+pct(t.acos)+'</strong></td></tr>'
+        + '</tbody></table></div></div>';
+      h += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Dia</th><th>ML investido</th><th>ML vendas</th><th>Shopee investido</th><th>Shopee vendas</th><th>Total investido</th></tr></thead><tbody>'
+        + (d.dias.length ? d.dias.slice().reverse().map(x=>'<tr><td>'+dia(x.data)+'</td><td class="tab-nums">'+brl(x.gastoMl)+'</td><td class="tab-nums">'+brl(x.receitaMl)+'</td><td class="tab-nums">'+brl(x.gastoShopee)+'</td><td class="tab-nums">'+brl(x.receitaShopee)+'</td><td class="tab-nums">'+brl(x.gastoMl+x.gastoShopee)+'</td></tr>').join('') : '<tr><td colspan="6">Sem dados de Ads neste período.</td></tr>')
+        + '</tbody></table></div></div>';
+      return h;
+    }
+
+    function render(){
+      const root = rootEl(); if(!root) return;
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){ root.innerHTML = '<div class="empty-panel"><h2>Nenhuma empresa ativa</h2></div>'; return; }
+      let h = '<div class="field-hint" style="margin-bottom:12px;max-width:900px;">'
+        + (state.modo==='total'
+          ? 'Soma do Product Ads do Mercado Livre com o Shopee Ads, no período escolhido no topo. Vendas atribuídas são as que cada plataforma credita aos anúncios pagos (podem incluir vendas que aconteceriam mesmo sem anúncio).'
+          : 'Dados do Shopee Ads (anúncios pagos) de todas as lojas Shopee da empresa. Sincroniza sozinho a cada 30 minutos.')
+        + '</div>'
+        + '<div class="toolbar" style="margin-bottom:12px;"><button class="btn-secondary" id="adsShopeeSync" type="button" '+(state.syncing?'disabled':'')+'>'+svg('refreshCw')+'<span>'+(state.syncing?'Atualizando…':'Atualizar agora')+'</span></button></div>';
+      if(state.loading && !state.data) h += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando…</span></div></div>';
+      else if(state.error) h += '<div class="bd-note">'+svg('alertCircle')+'<span>'+esc(state.error)+'</span></div>';
+      else if(state.data) h += state.modo==='total' ? htmlTotal(state.data) : htmlShopee(state.data);
+      root.innerHTML = h;
+      const b = document.getElementById('adsShopeeSync');
+      if(b) b.addEventListener('click', sincronizar);
+    }
+
+    async function carregar(){
+      const f = window.CerneFiltro.state;
+      if(!f.empresaId){ state.data=null; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const url = '/api/shopee-ads'+(state.modo==='total'?'/unificado':'')+'?empresaId='+f.empresaId+'&periodo='+encodeURIComponent(f.periodo)+window.CerneFiltro.periodoExtra();
+        const res = await fetch(url);
+        const j = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((j&&j.error)||'Não foi possível carregar o Ads.');
+        state.data = j;
+      }catch(e){ state.error = e.message; state.data = null; }
+      state.loading = false; render();
+    }
+    async function sincronizar(){
+      const f = window.CerneFiltro.state;
+      state.syncing = true; render();
+      try{
+        const res = await fetch('/api/shopee-ads/sincronizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({empresaId:f.empresaId})});
+        const j = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((j&&j.error)||'Falha ao atualizar.');
+        const falhas = (j.resultados||[]).filter(r=>!r.ok);
+        toast(falhas.length ? 'Shopee recusou: '+falhas[0].mensagem : 'Ads da Shopee atualizado.', falhas.length?'error':'success');
+      }catch(e){ toast(e.message,'error'); }
+      state.syncing = false; await carregar();
+    }
+    function load(modo){ state.modo = modo || 'shopee'; state.data = null; carregar(); }
+    window.CerneFiltro.onChange(()=>{ if(rootEl()) carregar(); });
+    window.AdsShopee = { load };
   })();
 
   /* ================= MODAL COMPARTILHADO — Detalhe do anúncio (Análise) =================
