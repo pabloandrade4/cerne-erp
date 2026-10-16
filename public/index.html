@@ -1630,17 +1630,11 @@
     // outras 3, só a frase final "deixar apenas ads e performance"; avise
     // se quiser que ela saia também.
     { id:'agentesIa', label:'Agentes IA', open:true, items:[
-      // 20/09/2026, pedido explícito do usuário: "preciso que o analista
-      // analise a conta toda... como podemos fazer com que os agentes
-      // analise a conta por completo e coloque pontual oque deve ser
-      // feito, lembrando que nao pode ser no chute ou inventado tem que
-      // ser com base em metricas e numeros da conta". Etapa 3 (Agente
-      // Coordenador, lib/ia/coordenadorDiario.js) + Etapa 5 (esta tela) —
-      // cruza os achados que os agentes já produzem todo dia (Ads,
-      // Promoções, Anúncios, Concorrente, SAC) e aponta a causa provável +
-      // o que fazer, sempre citando o dado real por trás.
-      { id:'planoAcaoDia', title:'Plano de Ação do Dia', icon:'checkCircle', desc:'A cada dia, o Agente Coordenador cruza os achados de Ads, Promoções, Anúncios, Concorrente e SAC pro mesmo SKU e aponta a causa provável e o que fazer — sempre citando o número real por trás, nunca um chute.',
-        bullets:['Cruza achados de agentes diferentes pro mesmo SKU (ex.: anúncio caiu + Ads pausado)','Cada conclusão cita o dado real que a embasa — nunca um texto solto','Acompanha estoque zerado, promoção com margem comprometida e concorrente cadastrado','Roda automaticamente todo dia — "Analisar agora" pra rodar na hora'] },
+      // 02/10/2026, pedido explícito do usuário: "quero tirar do nosso
+      // sistema plano de ação do dia" — aba removida do menu, mesmo padrão
+      // das outras abas removidas: nada foi apagado por baixo (o Agente
+      // Coordenador em lib/ia/coordenadorDiario.js e window.PlanoAcaoDia
+      // continuam existindo), só a aba some do menu.
       { id:'agenteAds', title:'Ads e Performance', icon:'megaphone', desc:'O agente de IA analisa suas campanhas e anúncios e sugere ações de orçamento, ACOS e pausa/escala — você aprova, altera ou recusa, e cada decisão vira histórico de aprendizado do agente.',
         bullets:['Sugestões com base nos dados reais de cada campanha/anúncio','Você decide: aprovar, alterar ou recusar','Nunca executa nada sozinho no Mercado Livre nesta fase','Histórico de decisões e resultado posterior, para o agente aprender'] },
       // 23/09/2026, pedido explícito do usuário: "agente de envio full -
@@ -2441,7 +2435,7 @@
   (function(){
     const state = {
       empresas:[], empresaId:null, loadingEmpresas:false, conta:null, loadingConta:false, syncing:false, configurado:null, syncResult:null,
-      contaShopee:null, loadingContaShopee:false, configuradoShopee:null, renovandoShopee:false,
+      contaShopee:null, contasShopee:[], contaShopeeId:null, loadingContaShopee:false, configuradoShopee:null, renovandoShopee:false,
       syncingShopee:false, syncResultShopee:null, pedidosShopee:[], loadingPedidosShopee:false,
     };
 
@@ -2487,8 +2481,11 @@
       state.loadingContaShopee = true; render();
       try{
         const data = await apiShopee('?empresaId='+state.empresaId);
-        state.contaShopee = (data.contas && data.contas[0]) || null;
-      }catch(e){ state.contaShopee = null; }
+        state.contasShopee = data.contas || [];
+        // 16/10/2026: várias lojas Shopee por empresa — mantém a selecionada, senão a primeira.
+        state.contaShopee = state.contasShopee.find(c=>c.id===state.contaShopeeId) || state.contasShopee[0] || null;
+        state.contaShopeeId = state.contaShopee ? state.contaShopee.id : null;
+      }catch(e){ state.contaShopee = null; state.contasShopee = []; }
       state.loadingContaShopee = false; render();
       if(state.contaShopee) await loadPedidosShopee();
       else state.pedidosShopee = [];
@@ -2598,7 +2595,10 @@
         html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando conexão…</span></div></div>';
       } else if(state.contaShopee){
         const cs = state.contaShopee;
-        html += '<div class="conn-card-real">'
+        html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">'
+          + state.contasShopee.map(c=>'<button type="button" class="'+(c.id===cs.id?'btn-primary':'btn-secondary')+'" data-shopee-loja="'+c.id+'">'+svg('store')+'<span>'+escapeHtml(c.shopName || ('Loja '+c.shopId))+'</span></button>').join('')
+          + '<button type="button" class="btn-secondary" id="shopeeAddBtn">'+svg('link')+'<span>Conectar outra loja</span></button></div>'
+          + '<div class="conn-card-real">'
           + '<div class="cc-left"><div class="cc-ic">'+svg('store')+'</div><div>'
             + '<div class="cc-nick">'+escapeHtml(cs.shopName || ('Loja '+cs.shopId))+'</div>'
             + '<div class="cc-sub">Shopee'+(cs.region?(' · '+cs.region):'')+' · Shop ID '+cs.shopId+'</div>'
@@ -2673,6 +2673,14 @@
 
       const shopeeConnectBtn = document.getElementById('shopeeConnectBtn');
       if(shopeeConnectBtn) shopeeConnectBtn.addEventListener('click', ()=>{ window.location.href = '/api/integracoes/shopee/conectar?empresaId='+state.empresaId; });
+      const shopeeAddBtn = document.getElementById('shopeeAddBtn');
+      if(shopeeAddBtn) shopeeAddBtn.addEventListener('click', ()=>{ window.location.href = '/api/integracoes/shopee/conectar?empresaId='+state.empresaId; });
+      document.querySelectorAll('[data-shopee-loja]').forEach(btn=>btn.addEventListener('click', ()=>{
+        state.contaShopeeId = Number(btn.getAttribute('data-shopee-loja'));
+        state.contaShopee = state.contasShopee.find(c=>c.id===state.contaShopeeId) || state.contaShopee;
+        state.syncResultShopee = null; state.pedidosShopee = [];
+        render(); loadPedidosShopee();
+      }));
       const shopeeReconnectBtn = document.getElementById('shopeeReconnectBtn');
       if(shopeeReconnectBtn) shopeeReconnectBtn.addEventListener('click', ()=>{ window.location.href = '/api/integracoes/shopee/conectar?empresaId='+state.empresaId; });
       const shopeeRenovarBtn = document.getElementById('shopeeRenovarBtn');
@@ -4975,6 +4983,7 @@
 
       html += '<div class="section-label"><span>Produtos cadastrados</span></div>'
         + '<div class="toolbar">'
+          + '<button class="ghost-btn" id="prdCustosPlanilha" type="button" style="cursor:pointer;opacity:1;">'+svg('download')+'<span>Atualizar custos por planilha</span></button>'
           + '<div class="seg" id="prdSeg">'
             + [['todos','Todos'],['ativos','Ativos'],['inativos','Inativos']].map(function(par){ return '<button data-status="'+par[0]+'" class="'+(state.status===par[0]?'active':'')+'">'+par[1]+'</button>'; }).join('')
           + '</div>'
@@ -5028,6 +5037,8 @@
         }catch(err){ toast(err.message, 'error'); }
         saveAliquota.disabled = false;
       });
+      const btnCustosPlanilha = document.getElementById('prdCustosPlanilha');
+      if(btnCustosPlanilha) btnCustosPlanilha.addEventListener('click', abrirModalCustosPlanilha);
       const seg = document.getElementById('prdSeg');
       if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{ state.status = b.dataset.status; loadItens(); }));
       const search = document.getElementById('prdSearch');
@@ -5163,6 +5174,76 @@
           }
         }
       });
+    }
+
+    // ---- Atualizar custos por planilha (02/10/2026, pedido explícito do
+    // usuário). 1) baixa a planilha com os produtos atuais; 2) edita a
+    // coluna Custo; 3) envia de volta — o sistema mostra uma prévia (o que
+    // vai mudar) e só grava quando o usuário confirma. Ver
+    // lib/produtosImportacao.js e routes/produtos.js (/custos/*). ----
+    function abrirModalCustosPlanilha(){
+      if(!state.empresaId){ toast('Selecione uma empresa primeiro.', 'error'); return; }
+      const modalRoot = document.getElementById('modalRoot');
+      const close = ()=>{ modalRoot.innerHTML=''; };
+      let arquivo = null;
+      const STATUS_TXT = { atualizar:'Vai atualizar', sem_mudanca:'Sem mudança', nao_encontrado:'SKU não cadastrado', erro:'Erro', ignorada:'Ignorada' };
+
+      function tela(corpo){
+        modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card wide">'
+          + '<div class="modal-head"><div class="modal-title">Atualizar custos por planilha</div><button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + corpo + '</div></div>';
+        document.getElementById('modalClose').addEventListener('click', close);
+        const ov = document.getElementById('modalOverlay');
+        ov.addEventListener('click', (e)=>{ if(e.target===ov) close(); });
+      }
+
+      function telaInicial(erro){
+        tela('<div class="modal-sub">1) Baixe a planilha com seus produtos atuais · 2) mude só a coluna <strong>Custo</strong> no Excel · 3) envie de volta aqui. Você vê uma prévia antes de gravar qualquer coisa.</div>'
+          + '<div style="margin:12px 0;"><a class="ghost-btn" href="/api/produtos/custos/modelo?empresaId='+state.empresaId+'" style="cursor:pointer;opacity:1;">'+svg('download')+'<span>Baixar planilha com meus produtos</span></a></div>'
+          + '<div class="field"><label>Planilha preenchida <span class="opt">(.xlsx ou .csv, com colunas SKU e Custo)</span></label><input type="file" id="prdArquivoCustos" accept=".xlsx,.csv"></div>'
+          + (erro ? '<div class="field-error" style="display:block;">'+escapeHtml(erro)+'</div>' : '')
+          + '<div class="modal-actions"><button type="button" class="btn-secondary" id="modalCancel">Fechar</button>'
+          + '<button type="button" class="btn-primary" id="prdAnalisar">'+svg('check')+'<span>Ver prévia</span></button></div>');
+        document.getElementById('modalCancel').addEventListener('click', close);
+        document.getElementById('prdAnalisar').addEventListener('click', async ()=>{
+          const f = document.getElementById('prdArquivoCustos').files[0];
+          if(!f){ telaInicial('Escolha o arquivo da planilha primeiro.'); return; }
+          arquivo = f;
+          await enviar(false);
+        });
+      }
+
+      async function enviar(confirmar){
+        const btn = document.getElementById('prdAnalisar') || document.getElementById('prdConfirmarCustos');
+        if(btn) btn.disabled = true;
+        try{
+          const res = await fetch('/api/produtos/custos/importar?empresaId='+state.empresaId+'&confirmar='+(confirmar?1:0), { method:'POST', headers:{'Content-Type':'application/octet-stream','X-File-Name':encodeURIComponent(arquivo.name)}, body: arquivo });
+          const body = await res.json().catch(()=>({}));
+          if(!res.ok) throw new Error(body.error || 'Não foi possível ler a planilha.');
+          if(confirmar){ close(); toast(body.atualizados+' custo(s) atualizado(s).'); loadItens(); return; }
+          telaPrevia(body);
+        }catch(err){ telaInicial(err.message); }
+      }
+
+      function telaPrevia(r){
+        const s = r.resumo;
+        const linhas = r.linhas.filter(l=> l.status!=='sem_mudanca');
+        tela('<div class="modal-sub">'+s.aAtualizar+' para atualizar · '+s.semMudanca+' sem mudança · '+s.naoEncontrados+' SKU não cadastrado · '+s.erros+' com erro · '+s.ignoradas+' ignorada(s)</div>'
+          + '<div class="table-wrap" style="max-height:340px;overflow:auto;margin-top:8px;"><table class="data-table"><thead><tr><th>Linha</th><th>SKU</th><th>Produto</th><th>Custo atual</th><th>Custo novo</th><th>Situação</th></tr></thead><tbody>'
+          + (linhas.length ? linhas.map(l=> '<tr'+(l.status==='atualizar'?'':' style="opacity:.75;"')+'><td class="tab-nums">'+l.linha+'</td><td class="mono">'+escapeHtml(l.sku||'—')+'</td><td>'+escapeHtml(l.nome||'—')+'</td>'
+              + '<td class="mono">'+(l.custoAtual!==undefined?money(l.custoAtual):'—')+'</td><td class="mono">'+(l.custoNovo!==undefined?money(l.custoNovo):'—')+'</td>'
+              + '<td>'+escapeHtml(STATUS_TXT[l.status]||l.status)+(l.motivo?'<div class="cell-stack-sub">'+escapeHtml(l.motivo)+'</div>':'')+'</td></tr>').join('')
+            : '<tr><td colspan="6" style="text-align:center;color:var(--text-faint);padding:18px 0;">Nenhuma mudança encontrada na planilha.</td></tr>')
+          + '</tbody></table></div>'
+          + '<div class="modal-actions"><button type="button" class="btn-secondary" id="modalCancel">Voltar</button>'
+          + (s.aAtualizar ? '<button type="button" class="btn-primary" id="prdConfirmarCustos">'+svg('check')+'<span>Atualizar '+s.aAtualizar+' custo(s)</span></button>' : '')
+          + '</div>');
+        document.getElementById('modalCancel').addEventListener('click', ()=> telaInicial());
+        const c = document.getElementById('prdConfirmarCustos');
+        if(c) c.addEventListener('click', ()=> enviar(true));
+      }
+
+      telaInicial();
     }
 
     document.getElementById('btnNewProduto').addEventListener('click', ()=> openModal());
@@ -7244,8 +7325,11 @@
       const envioCell = (l.quantidadeSugeridaEnvio>0)
         ? ('<strong>'+intFmt(l.quantidadeSugeridaEnvio)+'</strong>' + (l.semEstoqueGalpaoSuficiente ? ' <span title="Galpão não tem o suficiente" style="color:var(--danger);">⚠</span>' : ''))
         : '<span style="color:var(--text-faint);">—</span>';
-      const podeAgir = l.quantidadeSugeridaEnvio > 0 && !l.semEstoqueGalpaoSuficiente;
-      const acoesHtml = podeAgir
+      const naoCadastrado = l.registrado === false;
+      const podeAgir = l.quantidadeSugeridaEnvio > 0 && !l.semEstoqueGalpaoSuficiente && !naoCadastrado;
+      const acoesHtml = (naoCadastrado && l.quantidadeSugeridaEnvio > 0)
+        ? '<span title="Cadastre este modelo em Produtos Base para poder aprovar o envio por aqui" style="color:var(--text-faint);font-size:11.5px;">cadastre o modelo</span>'
+        : podeAgir
         ? '<div class="row-actions"><button class="row-ic-btn" data-aprovar-envio="'+l.produtoBaseId+'" title="Aprovar envio ao Full" type="button">'+svg('check')+'</button><button class="row-ic-btn" data-ignorar-envio="'+l.produtoBaseId+'" title="Ignorar por enquanto" type="button">'+svg('x')+'</button></div>'
         : (l.semEstoqueGalpaoSuficiente ? '<span style="color:var(--text-faint);font-size:11.5px;">segurar — sem estoque</span>' : '');
       return '<tr>'
@@ -7284,6 +7368,15 @@
       if(!linhas.length){
         html += '<div class="empty-panel" style="margin-top:16px;"><div class="empty-icon">'+svg('search')+'</div><h2>Nenhum modelo encontrado</h2><p class="lead">Nenhum modelo corresponde à busca atual.</p></div>';
         return html;
+      }
+      const precisam = state.linhas.filter((l)=> l.quantidadeSugeridaEnvio>0 && (l.status==='ruptura'||l.status==='enviar_agora'||l.status==='programar_envio'))
+        .sort((a,b)=> (STATUS_ORDEM[a.status]||0)-(STATUS_ORDEM[b.status]||0));
+      if(precisam.length){
+        html += '<div class="table-card" style="margin-top:16px;padding:14px 16px;border-left:4px solid var(--danger);"><strong>Precisa abastecer o Full ('+precisam.length+')</strong>'
+          + '<div style="margin-top:6px;font-size:13px;line-height:1.7;">'
+          + precisam.slice(0,12).map((l)=> escapeHtml(l.codigo)+': enviar <strong>'+intFmt(l.quantidadeSugeridaEnvio)+'</strong>'+(l.semEstoqueGalpaoSuficiente?' (Galpão insuficiente)':'')+' — '+escapeHtml(l.statusLabel||'')).join('<br>')
+          + (precisam.length>12?'<br>…e mais '+(precisam.length-12)+' na tabela abaixo.':'')
+          + '</div></div>';
       }
       html += '<div class="table-card" style="margin-top:16px;"><div class="table-wrap"><table class="data-table"><thead><tr>'
         + '<th>Modelo</th><th>Galpão</th><th>Full</th><th>Venda 7d</th><th>Média/dia</th><th>Cobertura Full</th><th>Full acaba em</th><th>Prazo envio</th><th>Enviar sugerido</th><th>Status</th><th>Ações</th>'
@@ -7532,11 +7625,117 @@
       finally{ state.loading = false; render(); }
     }
 
-    function load(){ loadVendas(); }
+    // ---- Calculadora de PREÇO (02/10/2026, pedido explícito do usuário:
+    // "quero que dê pra eu digitar qual kit eu vou vender e quero que dê
+    // pra colocar a margem que vou vender... a calculadora dá o preço que
+    // deve ser passado para o cliente"). Mesma definição de margem usada no
+    // resto do sistema (lib/relatorioVendas.js): margem = venda − taxas −
+    // frete − imposto − custo do produto, e a margem % é sobre o preço de
+    // venda. Aqui o caminho é o inverso: dado o custo (cadastrado em
+    // Produtos), o imposto da empresa e a margem % desejada, acha o preço:
+    //   preço = (custo×qtd + taxa fixa + frete) ÷ (1 − imposto% − taxa% − margem%)
+    // É só uma conta de tela — nunca grava nada. O custo vem sempre do
+    // cadastro de Produtos (nunca digitado solto); taxa do marketplace e
+    // frete ficam por conta do usuário (começam em 0), pra nunca inventar
+    // uma tarifa que o sistema não sabe. ----
+    const calc = { empresaId:null, loading:false, produtos:[], impostoPct:0, busca:'', qtd:'1', margem:'20', taxaPct:'0', taxaFixa:'0', frete:'0', impostoEditado:null };
+
+    function numBRsimple(v){ const s = String(v==null?'':v).trim(); if(!s) return 0; const n = Number(s.indexOf(',')>=0 ? s.replace(/\./g,'').replace(',','.') : s); return Number.isFinite(n) ? n : NaN; }
+    function pctTxt(v){ return Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:2})+'%'; }
+
+    function calcAcharProduto(txt){
+      const t = String(txt||'').trim().toLowerCase();
+      if(!t) return null;
+      let p = calc.produtos.find(x=> (x.sku+' — '+x.nome).toLowerCase()===t);
+      if(!p) p = calc.produtos.find(x=> String(x.sku).trim().toLowerCase()===t);
+      if(!p){ const porNome = calc.produtos.filter(x=> String(x.nome).trim().toLowerCase()===t); if(porNome.length===1) p = porNome[0]; }
+      return p || null;
+    }
+
+    function calcResultadoHTML(){
+      const prod = calcAcharProduto(calc.busca);
+      if(!calc.busca.trim()) return '<div class="field-hint">Digite o SKU ou nome do kit acima (aparecem sugestões do seu cadastro de Produtos), informe a margem que quer ter e o preço aparece aqui.</div>';
+      if(!prod) return '<div class="field-hint" style="color:var(--warning,#b45309);">Não achei esse kit no cadastro de Produtos ativos. Escolha uma das sugestões da lista (ou cadastre o produto em Cadastros → Produtos).</div>';
+      if(!(prod.custo>0)) return '<div class="field-hint" style="color:var(--danger);">Esse produto está com custo zerado no cadastro — atualize o custo em Cadastros → Produtos (ou por planilha) pra calcular o preço.</div>';
+      const qtd = numBRsimple(calc.qtd), margem = numBRsimple(calc.margem), taxa = numBRsimple(calc.taxaPct), fixa = numBRsimple(calc.taxaFixa), frete = numBRsimple(calc.frete);
+      const imposto = calc.impostoEditado!==null ? numBRsimple(calc.impostoEditado) : calc.impostoPct;
+      if([qtd,margem,taxa,fixa,frete,imposto].some(n=>Number.isNaN(n)) || !(qtd>0)) return '<div class="field-hint" style="color:var(--danger);">Confira os números digitados — algum campo está inválido.</div>';
+      const denom = 1 - (imposto+taxa+margem)/100;
+      if(!(denom>0)) return '<div class="field-hint" style="color:var(--danger);">Impossível: imposto ('+pctTxt(imposto)+') + taxa ('+pctTxt(taxa)+') + margem ('+pctTxt(margem)+') passam de 100% do preço. Diminua a margem.</div>';
+      const custoTotal = round2(prod.custo*qtd);
+      const preco = (custoTotal + fixa + frete) / denom;
+      const precoR = Math.ceil(preco*100)/100; // arredonda pra cima — nunca ficar abaixo da margem pedida
+      const valImposto = round2(precoR*imposto/100), valTaxa = round2(precoR*taxa/100);
+      const lucro = round2(precoR - custoTotal - fixa - frete - valImposto - valTaxa);
+      const margemReal = precoR>0 ? (lucro/precoR)*100 : 0;
+      return '<div class="kpi-hero" style="--tint:var(--success);--tint-soft:var(--success-soft);max-width:420px;margin-bottom:10px;">'
+          + '<div class="kpi-hero-label">Preço a passar pro cliente'+(qtd!==1?' ('+qtd+' un.)':'')+'</div>'
+          + '<div class="kpi-hero-value">'+money(precoR)+'</div>'
+          + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+(qtd>1 ? money(round2(precoR/qtd))+' por unidade · ' : '')+'Lucro de '+money(lucro)+' ('+pctTxt(margemReal)+')</span></div>'
+        + '</div>'
+        + '<div style="max-width:420px;">'
+          + '<div class="bd-row"><span class="bd-label">Preço de venda</span><span class="bd-value">'+money(precoR)+'</span></div>'
+          + '<div class="bd-row neg"><span class="bd-label">(−) Custo do produto ('+escapeHtml(prod.sku)+' × '+qtd+')</span><span class="bd-value">− '+money(custoTotal)+'</span></div>'
+          + '<div class="bd-row neg"><span class="bd-label">(−) Imposto ('+pctTxt(imposto)+')</span><span class="bd-value">− '+money(valImposto)+'</span></div>'
+          + (taxa>0||fixa>0 ? '<div class="bd-row neg"><span class="bd-label">(−) Taxas do marketplace</span><span class="bd-value">− '+money(round2(valTaxa+fixa))+'</span></div>' : '')
+          + (frete>0 ? '<div class="bd-row neg"><span class="bd-label">(−) Frete pago por você</span><span class="bd-value">− '+money(frete)+'</span></div>' : '')
+          + '<div class="bd-row total"><span class="bd-label">= Lucro (margem de contribuição)</span><span class="bd-value positive">'+money(lucro)+'</span></div>'
+        + '</div>';
+    }
+
+    function calcPrecoHTML(){
+      const impostoVal = calc.impostoEditado!==null ? calc.impostoEditado : String(calc.impostoPct).replace('.',',');
+      return '<div class="panel" style="margin-bottom:16px;">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('wallet')+'</span>Calculadora de preço</div></div>'
+        + '<div class="field-hint" style="margin:-4px 0 10px;max-width:820px;">Escolha o kit, diga a margem que quer ter e o sistema calcula o preço pra passar pro cliente — já descontando custo, imposto e (se você informar) taxa do marketplace e frete.</div>'
+        + '<div class="inline-form" style="margin-top:0;">'
+          + '<div class="field" style="min-width:260px;"><label>Kit / produto <span class="opt">(SKU ou nome)</span></label><input type="text" id="calcBusca" list="calcProdutosList" autocomplete="off" placeholder="Digite o SKU ou o nome do kit" value="'+escapeHtml(calc.busca)+'">'
+            + '<datalist id="calcProdutosList">'+calc.produtos.map(p=>'<option value="'+escapeHtml(p.sku+' — '+p.nome)+'"></option>').join('')+'</datalist></div>'
+          + '<div class="field narrow" style="max-width:100px;"><label>Qtd.</label><input type="text" inputmode="decimal" id="calcQtd" value="'+escapeHtml(calc.qtd)+'"></div>'
+          + '<div class="field narrow" style="max-width:150px;"><label>Margem que quero (%)</label><input type="text" inputmode="decimal" id="calcMargem" value="'+escapeHtml(calc.margem)+'"></div>'
+        + '</div>'
+        + '<div class="inline-form">'
+          + '<div class="field narrow"><label>Imposto (%) <span class="opt">da empresa</span></label><input type="text" inputmode="decimal" id="calcImposto" value="'+escapeHtml(impostoVal)+'"></div>'
+          + '<div class="field narrow"><label>Taxa do marketplace (%) <span class="opt">opcional</span></label><input type="text" inputmode="decimal" id="calcTaxaPct" value="'+escapeHtml(calc.taxaPct)+'"></div>'
+          + '<div class="field narrow"><label>Taxa fixa (R$) <span class="opt">opcional</span></label><input type="text" inputmode="decimal" id="calcTaxaFixa" value="'+escapeHtml(calc.taxaFixa)+'"></div>'
+          + '<div class="field narrow"><label>Frete que eu pago (R$) <span class="opt">opcional</span></label><input type="text" inputmode="decimal" id="calcFrete" value="'+escapeHtml(calc.frete)+'"></div>'
+        + '</div>'
+        + '<div id="calcResultado" style="margin-top:6px;">'+calcResultadoHTML()+'</div>'
+      + '</div>';
+    }
+
+    function bindCalcPreco(){
+      const ligar = (id, chave)=>{
+        const el = document.getElementById(id);
+        if(!el) return;
+        el.addEventListener('input', ()=>{
+          calc[chave] = el.value;
+          const out = document.getElementById('calcResultado');
+          if(out) out.innerHTML = calcResultadoHTML();
+        });
+      };
+      ligar('calcBusca','busca'); ligar('calcQtd','qtd'); ligar('calcMargem','margem');
+      ligar('calcTaxaPct','taxaPct'); ligar('calcTaxaFixa','taxaFixa'); ligar('calcFrete','frete');
+      ligar('calcImposto','impostoEditado');
+    }
+
+    async function loadCalcDados(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ calc.produtos = []; return; }
+      if(calc.empresaId !== filtro.empresaId){ calc.empresaId = filtro.empresaId; calc.impostoEditado = null; calc.busca = ''; }
+      try{
+        calc.produtos = await apiProdutosAtivos(filtro.empresaId);
+        const res = await fetch('/api/config-financeiro/'+filtro.empresaId);
+        const body = await res.json().catch(()=>({}));
+        calc.impostoPct = res.ok && body && Number.isFinite(Number(body.aliquotaImposto)) ? Number(body.aliquotaImposto) : 0;
+      }catch(e){ /* sem produtos a calculadora só mostra a dica — nunca quebra a tela */ }
+    }
+
+    function load(){ loadCalcDados().then(render); loadVendas(); }
 
     window.CerneFiltro.onChange(()=>{
       const page = document.getElementById('page-vendaBalcao');
-      if(page && page.classList.contains('active')) loadVendas();
+      if(page && page.classList.contains('active')){ loadCalcDados().then(render); loadVendas(); }
       else render();
     });
 
@@ -7578,6 +7777,8 @@
 
       let html = '<div class="field-hint" style="margin-bottom:12px;max-width:820px;">Venda feita presencialmente, na sua empresa, pro cliente final — sempre à vista. Depois de registrada, ela conta como faturamento de verdade: aparece na Visão Geral, no DRE, nos Relatórios e no Faturamento, e o estoque "fora do Full" já sai descontado.</div>';
 
+      html += calcPrecoHTML();
+
       html += '<div class="toolbar"><span></span><div class="search-box">'+svg('search')+'<input type="text" id="vbSearch" placeholder="Buscar por cliente ou número da venda" value="'+state.search.replace(/"/g,'&quot;')+'"></div></div>';
 
       if(state.loading || filtro.loadingEmpresas){
@@ -7609,6 +7810,7 @@
       }
 
       root.innerHTML = html;
+      bindCalcPreco();
 
       const search = document.getElementById('vbSearch');
       if(search) search.addEventListener('input', ()=>{
@@ -7645,30 +7847,78 @@
       return { bruto, custoTotal, temSemCusto };
     }
 
-    function modalRenderCarrinho(){
-      const tbody = document.getElementById('vbCarrinhoBody');
+    // 05/10/2026, pedido explícito do usuário: na tabela da venda, ao digitar
+    // o PREÇO de venda aparece a MARGEM %; ao digitar a MARGEM % o PREÇO é
+    // calculado. Margem % = (preço − custo) ÷ preço — a mesma margem da
+    // linha "Margem estimada" abaixo (venda − custo; balcão não tem taxa de
+    // marketplace). Preço pela margem: custo ÷ (1 − margem%). Os campos são
+    // atualizados NO LUGAR (sem refazer a tabela) pra o cursor não sair do
+    // campo a cada tecla digitada.
+    function fmtNumInput(n){ return String(n).replace('.',','); }
+    function margemPctDe(it){
+      if(it.custo===null || it.custo===undefined || !(it.precoUnitarioVenda>0)) return null;
+      return round2(((it.precoUnitarioVenda - it.custo) / it.precoUnitarioVenda) * 100);
+    }
+    function precoPelaMargem(custo, margemPct){
+      if(custo===null || custo===undefined || !(margemPct<100)) return null;
+      return Math.ceil((custo / (1 - margemPct/100)) * 100) / 100; // arredonda pra cima: nunca abaixo da margem pedida
+    }
+
+    function modalRenderTotais(){
       const totais = document.getElementById('vbTotais');
-      if(!tbody || !totais) return;
-      if(!carrinho.length){
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:18px 0;">Nenhum produto adicionado ainda.</td></tr>';
-      } else {
-        tbody.innerHTML = carrinho.map((it,idx)=> '<tr>'
-          + '<td>'+escapeHtml(it.nome)+'<div class="cell-stack-sub mono">SKU '+escapeHtml(it.sku)+'</div></td>'
-          + '<td style="width:90px;"><input type="number" min="0.001" step="0.001" class="vb-qtd" data-idx="'+idx+'" value="'+it.quantidade+'" style="width:80px;"></td>'
-          + '<td style="width:130px;"><input type="text" inputmode="decimal" class="vb-preco" data-idx="'+idx+'" value="'+String(it.precoUnitarioVenda).replace('.',',')+'" style="width:110px;"></td>'
-          + '<td class="mono">'+money(round2(it.quantidade*it.precoUnitarioVenda))+'</td>'
-          + '<td><button type="button" class="row-ic-btn danger" data-remover-item="'+idx+'">'+svg('trash')+'</button></td>'
-        + '</tr>').join('');
-      }
+      if(!totais) return;
       const t = carrinhoTotais();
       const descontoInput = document.getElementById('vbDesconto');
       const desconto = descontoInput ? (Number((descontoInput.value||'0').replace(',','.')) || 0) : 0;
       const liquido = round2(t.bruto - desconto);
       const margem = t.temSemCusto ? null : round2(liquido - t.custoTotal);
+      const margemPct = (margem===null || !(liquido>0)) ? null : round2((margem/liquido)*100);
       totais.innerHTML = '<div class="bd-row"><span class="bd-label">Subtotal dos itens</span><span class="bd-value">'+money(t.bruto)+'</span></div>'
         + '<div class="bd-row neg"><span class="bd-label">(−) Desconto</span><span class="bd-value">− '+money(desconto)+'</span></div>'
         + '<div class="bd-row total"><span class="bd-label">= Total da venda</span><span class="bd-value">'+money(liquido)+'</span></div>'
-        + '<div class="bd-row total"><span class="bd-label">Margem estimada</span><span class="bd-value '+(margem===null?'':(margem>=0?'positive':'negative'))+'">'+(margem===null?'Parcial — item sem custo cadastrado':money(margem))+'</span></div>';
+        + '<div class="bd-row total"><span class="bd-label">Margem estimada</span><span class="bd-value '+(margem===null?'':(margem>=0?'positive':'negative'))+'">'+(margem===null?'Parcial — item sem custo cadastrado':money(margem)+(margemPct!==null?' ('+pctFmtBR(margemPct)+')':''))+'</span></div>';
+    }
+    function pctFmtBR(v){ return Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:2})+'%'; }
+
+    // Atualiza só as células calculadas de UMA linha (total e, se pedido, o
+    // campo de margem/preço), sem recriar os inputs.
+    function modalAtualizarLinha(idx, quem){
+      const it = carrinho[idx];
+      const tr = document.querySelector('#vbCarrinhoBody tr[data-row="'+idx+'"]');
+      if(!tr || !it) return;
+      const totalEl = tr.querySelector('.vb-total');
+      if(totalEl) totalEl.textContent = money(round2(it.quantidade*it.precoUnitarioVenda));
+      if(quem!=='margem'){
+        const m = margemPctDe(it);
+        const mEl = tr.querySelector('.vb-margem');
+        if(mEl) mEl.value = m===null ? '' : fmtNumInput(m);
+      }
+      if(quem!=='preco'){
+        const pEl = tr.querySelector('.vb-preco');
+        if(pEl) pEl.value = it.precoUnitarioVenda ? fmtNumInput(it.precoUnitarioVenda) : '';
+      }
+    }
+
+    function modalRenderCarrinho(){
+      const tbody = document.getElementById('vbCarrinhoBody');
+      if(!tbody) return;
+      if(!carrinho.length){
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-faint);padding:18px 0;">Nenhum produto adicionado ainda.</td></tr>';
+      } else {
+        tbody.innerHTML = carrinho.map((it,idx)=> {
+          const m = margemPctDe(it);
+          const semCusto = it.custo===null || it.custo===undefined;
+          return '<tr data-row="'+idx+'">'
+          + '<td>'+escapeHtml(it.nome)+'<div class="cell-stack-sub mono">SKU '+escapeHtml(it.sku)+'</div></td>'
+          + '<td style="width:80px;"><input type="number" min="0.001" step="0.001" class="vb-qtd" data-idx="'+idx+'" value="'+it.quantidade+'" style="width:70px;"></td>'
+          + '<td class="mono" style="width:90px;">'+(semCusto?'<span class="dash">sem custo</span>':money(it.custo))+'</td>'
+          + '<td style="width:120px;"><input type="text" inputmode="decimal" class="vb-preco" data-idx="'+idx+'" value="'+(it.precoUnitarioVenda?fmtNumInput(it.precoUnitarioVenda):'')+'" placeholder="0,00" style="width:100px;"></td>'
+          + '<td style="width:100px;"><input type="text" inputmode="decimal" class="vb-margem" data-idx="'+idx+'" value="'+(m===null?'':fmtNumInput(m))+'" placeholder="%"'+(semCusto?' disabled title="Cadastre o custo do produto pra usar a margem"':'')+' style="width:80px;"></td>'
+          + '<td class="mono vb-total">'+money(round2(it.quantidade*it.precoUnitarioVenda))+'</td>'
+          + '<td><button type="button" class="row-ic-btn danger" data-remover-item="'+idx+'">'+svg('trash')+'</button></td>'
+        + '</tr>'; }).join('');
+      }
+      modalRenderTotais();
     }
 
     function abrirModalNovaVenda(){
@@ -7694,21 +7944,20 @@
 
     function renderModalNovaVenda(){
       const modalRoot = document.getElementById('modalRoot');
-      const html = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card wide">'
+      const html = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card wide" style="max-width:820px;width:96%;">'
         + '<div class="modal-head"><div class="modal-title">Nova venda de balcão</div><button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
         + '<div class="modal-sub">Sempre à vista — pago na hora.</div>'
         + '<form id="vbForm">'
           + '<div class="inline-form" style="margin-top:0;">'
-            + '<div class="field"><label>Adicionar produto do catálogo</label><select id="vbProdutoSelect">'
-              + '<option value="">Selecione um produto…</option>'
-              + produtosCatalogo.map(p=> '<option value="'+p.id+'">'+escapeHtml(p.nome)+' — SKU '+escapeHtml(p.sku)+'</option>').join('')
-            + '</select></div>'
+            + '<div class="field"><label>Caixa / produto <span class="opt">(digite o SKU ou o nome)</span></label>'
+              + '<input type="text" id="vbProdutoBusca" list="vbProdutosList" autocomplete="off" placeholder="Ex.: 100CX-22X11X8">'
+              + '<datalist id="vbProdutosList">'+produtosCatalogo.map(p=> '<option value="'+escapeHtml(p.sku+' — '+p.nome)+'"></option>').join('')+'</datalist></div>'
             + '<div class="field narrow" style="max-width:120px;"><label>Qtd.</label><input type="number" min="0.001" step="0.001" id="vbProdutoQtd" value="1"></div>'
             + '<div class="field narrow" style="max-width:60px;align-self:flex-end;"><button type="button" class="ghost-btn" id="vbAdicionarItem" style="cursor:pointer;opacity:1;">'+svg('plus')+'</button></div>'
           + '</div>'
 
           + '<div class="table-wrap" style="margin-top:6px;"><table class="data-table"><thead><tr>'
-            + '<th>Produto</th><th>Qtd.</th><th>Preço unit.</th><th>Total</th><th></th>'
+            + '<th>Produto</th><th>Qtd.</th><th>Custo unit.</th><th>Preço unit. (R$)</th><th>Margem (%)</th><th>Total</th><th></th>'
           + '</tr></thead><tbody id="vbCarrinhoBody"></tbody></table></div>'
 
           + '<div class="inline-form">'
@@ -7738,32 +7987,65 @@
       document.getElementById('modalClose').addEventListener('click', close);
       document.getElementById('modalCancel').addEventListener('click', close);
 
-      document.getElementById('vbAdicionarItem').addEventListener('click', ()=>{
-        const sel = document.getElementById('vbProdutoSelect');
+      // Acha o produto pelo que foi digitado: "SKU — nome" (item da lista),
+      // SKU exato, nome exato ou — se só UM produto contém o texto — esse.
+      function achaProdutoDigitado(txt){
+        const t = String(txt||'').trim().toLowerCase();
+        if(!t) return null;
+        let p = produtosCatalogo.find(x=> (x.sku+' — '+x.nome).toLowerCase()===t) || produtosCatalogo.find(x=> String(x.sku).trim().toLowerCase()===t);
+        if(p) return p;
+        const nomes = produtosCatalogo.filter(x=> String(x.nome).trim().toLowerCase()===t);
+        if(nomes.length===1) return nomes[0];
+        const parecidos = produtosCatalogo.filter(x=> (x.sku+' '+x.nome).toLowerCase().includes(t));
+        return parecidos.length===1 ? parecidos[0] : null;
+      }
+      function adicionarProdutoDigitado(silencioso){
+        const buscaEl = document.getElementById('vbProdutoBusca');
         const qtdEl = document.getElementById('vbProdutoQtd');
-        const produtoId = Number(sel.value);
-        if(!produtoId){ toast('Selecione um produto.', 'error'); return; }
-        const produto = produtosCatalogo.find(p=>p.id===produtoId);
-        const quantidade = Number(qtdEl.value);
+        const produto = achaProdutoDigitado(buscaEl.value);
+        if(!produto){ if(!silencioso) toast(buscaEl.value.trim() ? 'Não achei essa caixa/produto. Escolha uma da lista que aparece ao digitar.' : 'Digite o SKU ou o nome da caixa.', 'error'); return; }
+        const quantidade = Number(String(qtdEl.value).replace(',','.'));
         if(!Number.isFinite(quantidade) || quantidade<=0){ toast('Informe uma quantidade válida.', 'error'); return; }
         const existente = carrinho.find(it=>it.sku===produto.sku);
-        if(existente){ existente.quantidade = round2(existente.quantidade + quantidade); }
-        else { carrinho.push({ sku:produto.sku, nome:produto.nome, custo:produto.custo, quantidade, precoUnitarioVenda:0 }); }
-        sel.value=''; qtdEl.value='1';
+        let idx;
+        if(existente){ existente.quantidade = round2(existente.quantidade + quantidade); idx = carrinho.indexOf(existente); }
+        else { carrinho.push({ sku:produto.sku, nome:produto.nome, custo:produto.custo, quantidade, precoUnitarioVenda:0 }); idx = carrinho.length-1; }
+        buscaEl.value=''; qtdEl.value='1';
         modalRenderCarrinho();
+        const novoPreco = document.querySelector('#vbCarrinhoBody tr[data-row="'+idx+'"] .vb-preco');
+        if(novoPreco) novoPreco.focus();
+      }
+      document.getElementById('vbAdicionarItem').addEventListener('click', ()=> adicionarProdutoDigitado(false));
+      const buscaEl0 = document.getElementById('vbProdutoBusca');
+      // Enter no campo de busca adiciona o produto (e NÃO finaliza a venda).
+      buscaEl0.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); adicionarProdutoDigitado(false); } });
+      // Escolheu um item da lista (texto idêntico a "SKU — nome") → já adiciona.
+      buscaEl0.addEventListener('change', ()=>{
+        const p = achaProdutoDigitado(buscaEl0.value);
+        if(p && (p.sku+' — '+p.nome).toLowerCase()===buscaEl0.value.trim().toLowerCase()) adicionarProdutoDigitado(true);
       });
+      buscaEl0.focus();
 
       document.getElementById('vbCarrinhoBody').addEventListener('input', (e)=>{
         const idx = Number(e.target.dataset.idx);
-        if(Number.isNaN(idx)) return;
+        if(Number.isNaN(idx) || !carrinho[idx]) return;
+        const it = carrinho[idx];
+        const num = (s)=>{ const t=String(s).trim(); if(!t) return NaN; const n = Number(t.indexOf(',')>=0 ? t.replace(/\./g,'').replace(',','.') : t); return n; };
         if(e.target.classList.contains('vb-qtd')){
           const v = Number(e.target.value);
-          if(Number.isFinite(v) && v>0) carrinho[idx].quantidade = v;
+          if(Number.isFinite(v) && v>0) it.quantidade = v;
+          modalAtualizarLinha(idx, 'qtd');
         } else if(e.target.classList.contains('vb-preco')){
-          const v = Number(String(e.target.value).replace(',','.'));
-          carrinho[idx].precoUnitarioVenda = Number.isFinite(v) ? v : 0;
+          const v = num(e.target.value);
+          it.precoUnitarioVenda = Number.isFinite(v) && v>0 ? v : 0;
+          modalAtualizarLinha(idx, 'preco');   // recalcula a margem %
+        } else if(e.target.classList.contains('vb-margem')){
+          const v = num(e.target.value);
+          const preco = Number.isFinite(v) ? precoPelaMargem(it.custo, v) : null;
+          if(preco!==null){ it.precoUnitarioVenda = preco; }
+          modalAtualizarLinha(idx, 'margem');  // recalcula o preço
         }
-        modalRenderCarrinho();
+        modalRenderTotais();
       });
       document.getElementById('vbCarrinhoBody').addEventListener('click', (e)=>{
         const btn = e.target.closest('[data-remover-item]');
@@ -7771,7 +8053,7 @@
         carrinho.splice(Number(btn.dataset.removerItem), 1);
         modalRenderCarrinho();
       });
-      document.getElementById('vbDesconto').addEventListener('input', modalRenderCarrinho);
+      document.getElementById('vbDesconto').addEventListener('input', modalRenderTotais);
 
       document.getElementById('vbForm').addEventListener('submit', async (e)=>{
         e.preventDefault();
