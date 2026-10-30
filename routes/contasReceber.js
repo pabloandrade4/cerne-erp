@@ -35,6 +35,11 @@ router.get('/origens-sugeridas', (req, res) => {
 
 router.post('/', async (req, res, next) => {
   try {
+    if (req.body && Number(req.body.parcelas) >= 2) {
+      const parcelado = await contasReceber.criarContasParceladas(req.body);
+      if (parcelado.errors) return res.status(400).json({ errors: parcelado.errors });
+      return res.status(201).json({ contas: parcelado.contas, conta: parcelado.contas[0] });
+    }
     const result = await contasReceber.criarContaReceber(req.body);
     if (result.errors) return res.status(400).json({ errors: result.errors });
     res.status(201).json({ conta: result.conta });
@@ -52,7 +57,16 @@ router.put('/:id', async (req, res, next) => {
 
 router.patch('/:id/receber', async (req, res, next) => {
   try {
-    const result = await contasReceber.marcarComoRecebido(req.params.id, req.body.dataRecebida);
+    const result = await contasReceber.marcarComoRecebido(req.params.id, req.body.dataRecebida, { valorRecebido: req.body.valorRecebido });
+    if (result.notFound) return res.status(404).json({ error: 'Conta a receber não encontrada.' });
+    if (result.errors) return res.status(400).json({ errors: result.errors });
+    res.json({ conta: result.conta });
+  } catch (err) { next(err); }
+});
+
+router.patch('/:id/estornar', async (req, res, next) => {
+  try {
+    const result = await contasReceber.estornarRecebimento(req.params.id);
     if (result.notFound) return res.status(404).json({ error: 'Conta a receber não encontrada.' });
     if (result.errors) return res.status(400).json({ errors: result.errors });
     res.json({ conta: result.conta });

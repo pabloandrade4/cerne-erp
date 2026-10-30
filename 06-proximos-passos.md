@@ -1,5 +1,6 @@
 # Próximos Passos
 
+- **Fase 2 concluída (30/10/2026).** Próximo: Fase 3 — importar extrato OFX/CSV e conciliar com aprovação (montar `routes/conciliacao.js` e `routes/extratoBancario.js`, hoje fora do `server.js`); depois Fase 4 (fluxo de caixa 30/60/90 com alerta) e Fase 5 (tela Agentes).
 - **Concluído em 27/08/2026 — Etapa (b) da "IA Gestora que conhece o
   negócio" implementada — camada de contexto de negócio, raio-X da
   empresa, `identificar_produto_fisico` e "produto em foco" (testado:

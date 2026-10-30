@@ -2,6 +2,42 @@
 
 Registro cronológico de mudanças relevantes no projeto (mais recente no topo).
 
+## 2026-10-30 (76) — Fase 2: contas a pagar/receber completas e repasses ML/Shopee
+- **Sem mudança no banco de dados** (nenhuma tabela/coluna nova, nenhum script SQL).
+- **`lib/contasPagar.js` / `routes/contasPagar.js`:** visão "todas" (`empresaId=todas`, só leitura — PF + Andrade somadas, com coluna Empresa); baixa com data, valor realmente pago, forma de pagamento e conta bancária (`PATCH /:id/pagar`); estorno da baixa (`PATCH /:id/estornar`, volta a pendente); parcelamento (`POST /` com `parcelas` >= 2 e `valorEhTotal`, uma conta por mês, última parcela absorve os centavos). "Pagas no período" passa a somar o valor realmente pago.
+- **`lib/contasReceber.js` / `routes/contasReceber.js`:** mesmas melhorias (todas, baixa com valor recebido diferente — anota o previsto na observação —, estorno, parcelas). A lista agora mostra sempre o que está a receber/atrasado (só o já recebido é filtrado pelo período), igual a Contas a Pagar.
+- **Novo `lib/repasses.js` + `routes/repasses.js` (`/api/repasses`):** repasses ML + Shopee por dia ESTIMADO (venda + N dias; padrão ML 14, Shopee 7, ajustáveis na tela). Valor líquido = venda − tarifas − frete do vendedor − cupom − devoluções. `POST /api/repasses/lancar-previsao` cria Contas a Receber (um por marketplace/dia), sem duplicar (marca `[repasse:...]` na observação).
+- **`public/index.html`:** botão "Só esta empresa / PF + Andrade juntas" em Contas a Pagar, Contas a Receber e Repasses; janela "Dar baixa"; botão desfazer baixa; campos Parcelas; painel "Repasses" no topo de Recebimentos.
+- Testado: Postgres real (23 verificações das funções) + navegador automatizado com respostas simuladas.
+
+## 2026-10-30 (75) — Fase 1 "Cerne só financeiro": menu enxuto e rotinas/agentes pausados
+- **Justificativa completa** em `02-decisoes.md` (62).
+- **`public/index.html`:** removidos do `GROUPS` (menu) — IA Gestora, Alertas
+  & IA, Produtos, Mapa de Produtos, Anúncios, Fornecedores, Estoque, Estoque
+  Full, Compras com IA, Calculadora de Vendas e os grupos inteiros Análise
+  (Ads, Ads Shopee, Ads Total, Performance, Visitas e Conversão, Margem por
+  Anúncio, Relatórios) e Agentes IA (Ads e Performance, Envio Full). Ficam:
+  Visão Geral, Empresas, Marketplaces, Pedidos e o grupo Financeiro (agora
+  aberto por padrão). **Nada foi apagado** — telas, rotas, tabelas e
+  histórico seguem no código; id escondido cai em Visão Geral. Além disso, os
+  99 `document.getElementById('x').addEventListener` viraram `?.` (null-safe)
+  porque um botão de tela escondida quebrava o carregamento.
+- **`lib/pausas.js` (novo) + `server.js`:** chave liga/desliga das rotinas
+  automáticas. **Padrão: tudo pausado** (radar_ia, promocoes_ia, sac, daily,
+  concorrente_ia, radar_concorrentes, compras_ia, envio_full, devolucoes,
+  ads_ml, ads_shopee). Para religar: variável `CERNE_ATIVAR` no Render
+  (ex.: `envio_full,devolucoes` ou `todos`). Seguem rodando: pedidos ML,
+  pedidos Shopee, token Shopee e despesas fixas.
+- **Arquivamento (30/10/2026, pedido do usuário: "as coisas que não vou usar
+  quero que exclua de lá mas guarde em uma pasta separada"):** o que ficou
+  escondido foi MOVIDO para `_arquivo/` (ver `_arquivo/LEIA-ME.md`): 24 telas do
+  `public/index.html` (1,1 MB -> 0,5 MB), as rotas/lib/testes dessas funções e
+  as cópias antigas soltas na raiz. `server.js` não liga mais essas rotas nem
+  rotinas (sobram só `devolucoes` e `ads_ml` em `CERNE_ATIVAR`). Seguem no
+  projeto: Produtos, Fornecedores, Venda de Balcão (rota), Ads ML/Performance,
+  Devoluções, extrato e conciliação bancária. Banco intocado.
+- **Banco:** nenhuma alteração.
+
 ## 2026-09-26 (74) — Projeção de vendas do mês, Clientes Novos/Recorrentes e Devolução separada de Cancelamento
 - **Justificativa completa** em `02-decisoes.md` (61).
 - **`lib/relatorioVendas.js`** (arquivo financeiro central, editado com

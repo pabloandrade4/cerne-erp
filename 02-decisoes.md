@@ -3,6 +3,29 @@
 Registro de decisões importantes tomadas ao longo do desenvolvimento, na ordem
 em que foram tomadas (mais recente no topo).
 
+## 2026-10-30 (63) — Fase 2: sem mudança de banco; data de repasse é estimativa
+- Nenhuma mudança de banco: baixa/forma/conta usam colunas que já existiam em `contas_pagar`; em Contas a Receber o valor diferente do previsto sobrescreve `valor` e o previsto vai para a observação.
+- "Juntas" é só leitura (`empresaId=todas`). Lançar/editar/baixar sempre pertence a uma empresa só.
+- Nem o ML nem a Shopee informam a data real de liberação nos dados que já buscamos → a data é venda + N dias, rotulada "estimada". Quando uma fonte real existir (extrato OFX na Fase 3), a conciliação confirma/corrige.
+
+## 2026-10-30 (62) — Cerne passa a ser só financeiro; agentes próprios pausados
+- **Pedido do usuário:** transformar o Cerne em sistema só de financeiro
+  (fluxo de caixa, conciliação, projeção 30/60/90, contas a pagar/receber),
+  oficial; o JARVIS só lê. Agentes de IA próprios do Cerne ficam pausados e
+  os do JARVIS entram no lugar (Fase 5).
+- **Decisões:** (1) esconder do menu, nunca apagar; (2) rotinas automáticas
+  pausadas por padrão via `CERNE_ATIVAR` (lib/pausas.js), sem tocar no banco;
+  (3) Devoluções e Ads (ML/Shopee) também pausados, por escolha do usuário —
+  os dados já gravados permanecem; (4) Pedidos continua no menu (necessário
+  para auditar repasse); (5) pedidos ML/Shopee, token Shopee e despesas fixas
+  continuam, pois o financeiro depende deles.
+- **Arquivamento:** a regra "esconder, nunca apagar" foi substituída pelo
+  pedido explícito do usuário de tirar do projeto o que não usa e guardar em
+  `_arquivo/` (nada se perde; `_arquivo/LEIA-ME.md` ensina a voltar). Banco
+  intocado.
+- **Atenção:** com Devoluções pausado, devoluções novas não entram até religar
+  (`CERNE_ATIVAR=devolucoes`).
+
 ## 2026-09-26 (61) — Projeção de vendas do mês, Clientes Novos/Recorrentes e Devolução separada de Cancelamento
 - **Pedido do usuário (literal):** "estou com 3 ideias novas para ser
   colocadas no nosso sistema / projeção de vendas que vvai aparecer em

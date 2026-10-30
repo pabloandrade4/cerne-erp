@@ -6,35 +6,22 @@ const { iniciarSePermitido } = require('./lib/pausas');
 const { iniciarSincronizacaoAutomatica } = require('./lib/syncScheduler');
 const { iniciarRenovacaoAutomatica: iniciarRenovacaoAutomaticaShopee } = require('./lib/shopeeTokenScheduler');
 const { iniciarSincronizacaoAutomaticaShopee } = require('./lib/shopeeSyncScheduler');
-const { iniciarRadarDaIA } = require('./lib/ia/radarScheduler');
 const { iniciarSincronizacaoAutomaticaAds } = require('./lib/adsScheduler');
 const { iniciarGeracaoAutomaticaDeDespesasFixas } = require('./lib/despesasFixasScheduler');
-const { iniciarPromocoesIA } = require('./lib/ia/promocoesScheduler');
-const { iniciarSacScheduler } = require('./lib/ia/sacScheduler');
-const { iniciarDailyAutomatico } = require('./lib/ia/dailyScheduler');
-const { iniciarConcorrenteIA } = require('./lib/ia/concorrenteScheduler');
-const { iniciarRadarConcorrentesScheduler } = require('./lib/ia/radarConcorrentesScheduler');
-const { iniciarComprasIaAutomatico } = require('./lib/comprasIaScheduler');
-const { iniciarEnvioFullAutomatico } = require('./lib/envioFullScheduler');
 const { iniciarDevolucoesAutomatico } = require('./lib/devolucoesScheduler');
 const empresasRouter = require('./routes/empresas');
 const integracoesRouter = require('./routes/integracoes');
 const shopeeRouter = require('./routes/shopee');
-const shopeeAdsRouter = require('./routes/shopeeAds');
 const pedidosRouter = require('./routes/pedidos');
 const custosRouter = require('./routes/custos');
 const relatoriosRouter = require('./routes/relatorios');
 const produtosRouter = require('./routes/produtos');
 const fornecedoresRouter = require('./routes/fornecedores');
-const anunciosRouter = require('./routes/anuncios');
-const estoqueRouter = require('./routes/estoque');
 const estoqueFullRouter = require('./routes/estoqueFull');
-const comprasRouter = require('./routes/compras');
-const produtosBaseRouter = require('./routes/produtosBase');
-const estoqueProdutoBaseRouter = require('./routes/estoqueProdutoBase');
 const contasPagarRouter = require('./routes/contasPagar');
 const contasReceberRouter = require('./routes/contasReceber');
 const recebimentosRouter = require('./routes/recebimentos');
+const repassesRouter = require('./routes/repasses');
 const contasBancariasRouter = require('./routes/contasBancarias');
 const categoriasFinanceirasRouter = require('./routes/categoriasFinanceiras');
 const despesasFixasRouter = require('./routes/despesasFixas');
@@ -44,23 +31,10 @@ const faturamentoRouter = require('./routes/faturamento');
 const notasFiscaisRouter = require('./routes/notasFiscais');
 const adsRouter = require('./routes/ads');
 const visaoGeralRouter = require('./routes/visaoGeral');
-const iaGestoraRouter = require('./routes/iaGestora');
 const performanceAnunciosRouter = require('./routes/performanceAnuncios');
-const visitasConversaoRouter = require('./routes/visitasConversao');
-const margemAnuncioRouter = require('./routes/margemAnuncio');
-const alertasRouter = require('./routes/alertas');
 const whatsappRouter = require('./routes/whatsapp');
 const telegramRouter = require('./routes/telegram');
-const promocoesRouter = require('./routes/promocoes');
-const iaAgentesRouter = require('./routes/iaAgentes');
-const dailyRouter = require('./routes/daily');
-const sacRouter = require('./routes/sac');
-const agentes3dRouter = require('./routes/agentes3d');
-const concorrenteRouter = require('./routes/concorrente');
-const radarConcorrentesRouter = require('./routes/radarConcorrentes');
-const comprasIaRouter = require('./routes/comprasIa');
 const vendaBalcaoRouter = require('./routes/vendaBalcao');
-const envioFullRouter = require('./routes/envioFull');
 const devolucoesRouter = require('./routes/devolucoes');
 
 const app = express();
@@ -74,25 +48,18 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/empresas', empresasRouter);
 app.use('/api/integracoes/mercadolivre', integracoesRouter);
 app.use('/api/integracoes/shopee', shopeeRouter);
-app.use('/api/shopee-ads', shopeeAdsRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api', custosRouter);
 app.use('/api/relatorios', relatoriosRouter);
 app.use('/api/produtos', produtosRouter);
 app.use('/api/fornecedores', fornecedoresRouter);
-app.use('/api/anuncios', anunciosRouter);
-app.use('/api/estoque', estoqueRouter);
 app.use('/api/estoque-full', estoqueFullRouter);
-app.use('/api/compras', comprasRouter);
-app.use('/api/compras-ia', comprasIaRouter);
-app.use('/api/envio-full', envioFullRouter);
 app.use('/api/devolucoes', devolucoesRouter);
 app.use('/api/vendas-balcao', vendaBalcaoRouter);
-app.use('/api/produtos-base', produtosBaseRouter);
-app.use('/api/estoque-produto-base', estoqueProdutoBaseRouter);
 app.use('/api/contas-pagar', contasPagarRouter);
 app.use('/api/contas-receber', contasReceberRouter);
 app.use('/api/recebimentos', recebimentosRouter);
+app.use('/api/repasses', repassesRouter);
 app.use('/api/contas-bancarias', contasBancariasRouter);
 app.use('/api/categorias-financeiras', categoriasFinanceirasRouter);
 app.use('/api/despesas-fixas', despesasFixasRouter);
@@ -102,20 +69,9 @@ app.use('/api/faturamento', faturamentoRouter);
 app.use('/api/notas-fiscais', notasFiscaisRouter);
 app.use('/api/ads', adsRouter);
 app.use('/api/visao-geral', visaoGeralRouter);
-app.use('/api/ia-gestora', iaGestoraRouter);
 app.use('/api/performance-anuncios', performanceAnunciosRouter);
-app.use('/api/visitas-conversao', visitasConversaoRouter);
-app.use('/api/margem-anuncio', margemAnuncioRouter);
-app.use('/api/alertas', alertasRouter);
 app.use('/api/integracoes/whatsapp', whatsappRouter);
 app.use('/api/integracoes/telegram', telegramRouter);
-app.use('/api/promocoes', promocoesRouter);
-app.use('/api/ia-agentes', iaAgentesRouter);
-app.use('/api/ia/daily', dailyRouter);
-app.use('/api/sac', sacRouter);
-app.use('/api/agentes-3d', agentes3dRouter);
-app.use('/api/concorrente', concorrenteRouter);
-app.use('/api/radar-concorrentes', radarConcorrentesRouter);
 
 // Front-end estático (o mesmo layout/design já aprovado)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -150,12 +106,6 @@ async function start() {
     // no servidor, nunca depende do navegador aberto), ver
     // lib/shopeeSyncScheduler.js.
     iniciarSincronizacaoAutomaticaShopee();
-    // Ads da Shopee (16/10/2026) — série diária de gasto/vendas, a cada 30 min, sempre no servidor.
-    iniciarSePermitido('ads_shopee', () => require('./lib/shopeeAdsScheduler').iniciar());
-    // Radar da IA — acompanhamento contínuo de anúncios e do negócio,
-    // sempre no servidor, nunca dependendo do navegador aberto (ver
-    // lib/ia/radarScheduler.js).
-    iniciarSePermitido('radar_ia', iniciarRadarDaIA);
     // Product Ads (Mercado Livre) — sincronização em background, sempre no
     // servidor, nunca dependendo da tela Ads estar aberta (ver
     // lib/adsScheduler.js).
@@ -164,57 +114,11 @@ async function start() {
     // sempre no servidor, nunca dependendo da tela estar aberta (ver
     // lib/despesasFixasScheduler.js).
     iniciarGeracaoAutomaticaDeDespesasFixas();
-    // IA de Promoções — busca promoções do Mercado Livre e recalcula a
-    // margem real a cada 1h, sempre no servidor, nunca dependendo da tela
-    // estar aberta (ver lib/ia/promocoesScheduler.js).
-    iniciarSePermitido('promocoes_ia', iniciarPromocoesIA);
-    // Agentes de SAC (Mercado Livre + Shopee) — verificação automática de
-    // novos atendimentos e geração de sugestões de resposta a cada 10min,
-    // sempre no servidor, nunca dependendo de alguém clicar em "Sincronizar
-    // agora" (pedido explícito do usuário, 15/09/2026: "nao quero ter que
-    // ficar sincronizando nada quero tudo automatico"). Continua 100% modo
-    // supervisionado — nada aqui envia mensagem nenhuma sozinho, só gera
-    // sugestão pendente de aprovação humana (ver lib/ia/sacScheduler.js).
-    iniciarSePermitido('sac', iniciarSacScheduler);
-    // Daily dos Agentes — Etapa 4 (19/09/2026, pedido explícito do usuário:
-    // "resumo diário... pelo WhatsApp"): agendamento automático + envio por
-    // WhatsApp do resumo diário real (Ads e Promoções), sempre no servidor,
-    // nunca dependendo do ERP aberto no navegador (ver lib/ia/dailyScheduler.js).
-    iniciarSePermitido('daily', iniciarDailyAutomatico);
-    // Análise de Concorrente — Etapa "agente autônomo" (19/09/2026, pedido
-    // explícito do usuário: "quero que essas ia nunca pare de trabalhar...
-    // sempre buscar concorrentes que estão vendendo o mesmo produto que
-    // eu"): varredura automática 1x por dia + aviso por WhatsApp quando
-    // aparece algo novo/pior, sempre no servidor, nunca dependendo de
-    // alguém abrir a tela (ver lib/ia/concorrenteScheduler.js).
-    iniciarSePermitido('concorrente_ia', iniciarConcorrenteIA);
-    // Radar de Concorrentes — 21/09/2026, pedido explícito do usuário (com
-    // mockup de referência visual): cadastra concorrente por link do
-    // anúncio (nome + SKU + marketplace) e o sistema relê esse anúncio
-    // sozinho de tempos em tempos, salvando histórico e gerando alertas —
-    // sempre no servidor, nunca dependendo de alguém abrir a tela (ver
-    // lib/ia/radarConcorrentesScheduler.js). Funcionalidade nova e
-    // independente da Análise de Concorrente acima (ver comentário grande
-    // em db/schema.sql, tabela radar_concorrentes, sobre a diferença).
-    iniciarSePermitido('radar_concorrentes', iniciarRadarConcorrentesScheduler);
-    // Compras com IA — 22/09/2026, pedido explícito do usuário: substitui a
-    // aba Compras por uma central de reposição de estoque, recalculando a
-    // recomendação de cada modelo físico automaticamente, sempre no
-    // servidor, nunca dependendo de alguém abrir a tela (ver
-    // lib/comprasIaScheduler.js). Nunca compra sozinha — só gera
-    // recomendação pendente de aprovação humana.
-    iniciarSePermitido('compras_ia', iniciarComprasIaAutomatico);
-    // Agente de Envio Full — 23/09/2026, pedido explícito do usuário:
-    // recomendar quando enviar estoque ao Full, quando está acabando e
-    // quando segurar, mesma régua de Compras com IA adaptada pro Full,
-    // sempre no servidor, nunca dependendo de alguém abrir a tela (ver
-    // lib/envioFullScheduler.js). Nunca envia nada sozinho — só gera
-    // recomendação pendente de aprovação humana.
-    iniciarSePermitido('envio_full', iniciarEnvioFullAutomatico);
     // Devoluções — 26/09/2026, pedido explícito do usuário: separar
     // devolução de cancelamento. Sempre no servidor, nunca dependendo de
     // alguém abrir a tela (ver lib/devolucoesScheduler.js). Só leitura —
     // nunca aceita/recusa nada no Mercado Livre/Shopee.
+    // 30/10/2026: rotinas/agentes de IA (radar, promoções, SAC, daily, concorrente, compras, envio Full, Ads Shopee) foram ARQUIVADOS em _arquivo/ (ver _arquivo/LEIA-ME.md).
     iniciarSePermitido('devolucoes', iniciarDevolucoesAutomatico);
   });
 }

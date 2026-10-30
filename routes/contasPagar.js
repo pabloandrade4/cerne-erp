@@ -133,6 +133,12 @@ router.get('/importar/modelo', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
+    // Com `parcelas` (>= 2) cria uma conta por mês de uma vez.
+    if (req.body && Number(req.body.parcelas) >= 2) {
+      const parcelado = await contasPagar.criarContasParceladas(req.body);
+      if (parcelado.errors) return res.status(400).json({ errors: parcelado.errors });
+      return res.status(201).json({ contas: parcelado.contas, conta: parcelado.contas[0] });
+    }
     const result = await contasPagar.criarContaPagar(req.body);
     if (result.errors) return res.status(400).json({ errors: result.errors });
     res.status(201).json({ conta: result.conta });
@@ -150,7 +156,18 @@ router.put('/:id', async (req, res, next) => {
 
 router.patch('/:id/pagar', async (req, res, next) => {
   try {
-    const result = await contasPagar.marcarComoPago(req.params.id, req.body.dataPagamento);
+    const result = await contasPagar.marcarComoPago(req.params.id, req.body.dataPagamento, {
+      valorPago: req.body.valorPago, formaPagamento: req.body.formaPagamento, contaBancariaId: req.body.contaBancariaId,
+    });
+    if (result.notFound) return res.status(404).json({ error: 'Conta a pagar não encontrada.' });
+    if (result.errors) return res.status(400).json({ errors: result.errors });
+    res.json({ conta: result.conta });
+  } catch (err) { next(err); }
+});
+
+router.patch('/:id/estornar', async (req, res, next) => {
+  try {
+    const result = await contasPagar.estornarPagamento(req.params.id);
     if (result.notFound) return res.status(404).json({ error: 'Conta a pagar não encontrada.' });
     if (result.errors) return res.status(400).json({ errors: result.errors });
     res.json({ conta: result.conta });
