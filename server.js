@@ -2,6 +2,7 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const migrate = require('./db/migrate');
+const { iniciarSePermitido } = require('./lib/pausas');
 const { iniciarSincronizacaoAutomatica } = require('./lib/syncScheduler');
 const { iniciarRenovacaoAutomatica: iniciarRenovacaoAutomaticaShopee } = require('./lib/shopeeTokenScheduler');
 const { iniciarSincronizacaoAutomaticaShopee } = require('./lib/shopeeSyncScheduler');
@@ -150,15 +151,15 @@ async function start() {
     // lib/shopeeSyncScheduler.js.
     iniciarSincronizacaoAutomaticaShopee();
     // Ads da Shopee (16/10/2026) — série diária de gasto/vendas, a cada 30 min, sempre no servidor.
-    require('./lib/shopeeAdsScheduler').iniciar();
+    iniciarSePermitido('ads_shopee', () => require('./lib/shopeeAdsScheduler').iniciar());
     // Radar da IA — acompanhamento contínuo de anúncios e do negócio,
     // sempre no servidor, nunca dependendo do navegador aberto (ver
     // lib/ia/radarScheduler.js).
-    iniciarRadarDaIA();
+    iniciarSePermitido('radar_ia', iniciarRadarDaIA);
     // Product Ads (Mercado Livre) — sincronização em background, sempre no
     // servidor, nunca dependendo da tela Ads estar aberta (ver
     // lib/adsScheduler.js).
-    iniciarSincronizacaoAutomaticaAds();
+    iniciarSePermitido('ads_ml', iniciarSincronizacaoAutomaticaAds);
     // Despesas Fixas — geração automática das Contas a Pagar recorrentes,
     // sempre no servidor, nunca dependendo da tela estar aberta (ver
     // lib/despesasFixasScheduler.js).
@@ -166,7 +167,7 @@ async function start() {
     // IA de Promoções — busca promoções do Mercado Livre e recalcula a
     // margem real a cada 1h, sempre no servidor, nunca dependendo da tela
     // estar aberta (ver lib/ia/promocoesScheduler.js).
-    iniciarPromocoesIA();
+    iniciarSePermitido('promocoes_ia', iniciarPromocoesIA);
     // Agentes de SAC (Mercado Livre + Shopee) — verificação automática de
     // novos atendimentos e geração de sugestões de resposta a cada 10min,
     // sempre no servidor, nunca dependendo de alguém clicar em "Sincronizar
@@ -174,19 +175,19 @@ async function start() {
     // ficar sincronizando nada quero tudo automatico"). Continua 100% modo
     // supervisionado — nada aqui envia mensagem nenhuma sozinho, só gera
     // sugestão pendente de aprovação humana (ver lib/ia/sacScheduler.js).
-    iniciarSacScheduler();
+    iniciarSePermitido('sac', iniciarSacScheduler);
     // Daily dos Agentes — Etapa 4 (19/09/2026, pedido explícito do usuário:
     // "resumo diário... pelo WhatsApp"): agendamento automático + envio por
     // WhatsApp do resumo diário real (Ads e Promoções), sempre no servidor,
     // nunca dependendo do ERP aberto no navegador (ver lib/ia/dailyScheduler.js).
-    iniciarDailyAutomatico();
+    iniciarSePermitido('daily', iniciarDailyAutomatico);
     // Análise de Concorrente — Etapa "agente autônomo" (19/09/2026, pedido
     // explícito do usuário: "quero que essas ia nunca pare de trabalhar...
     // sempre buscar concorrentes que estão vendendo o mesmo produto que
     // eu"): varredura automática 1x por dia + aviso por WhatsApp quando
     // aparece algo novo/pior, sempre no servidor, nunca dependendo de
     // alguém abrir a tela (ver lib/ia/concorrenteScheduler.js).
-    iniciarConcorrenteIA();
+    iniciarSePermitido('concorrente_ia', iniciarConcorrenteIA);
     // Radar de Concorrentes — 21/09/2026, pedido explícito do usuário (com
     // mockup de referência visual): cadastra concorrente por link do
     // anúncio (nome + SKU + marketplace) e o sistema relê esse anúncio
@@ -195,26 +196,26 @@ async function start() {
     // lib/ia/radarConcorrentesScheduler.js). Funcionalidade nova e
     // independente da Análise de Concorrente acima (ver comentário grande
     // em db/schema.sql, tabela radar_concorrentes, sobre a diferença).
-    iniciarRadarConcorrentesScheduler();
+    iniciarSePermitido('radar_concorrentes', iniciarRadarConcorrentesScheduler);
     // Compras com IA — 22/09/2026, pedido explícito do usuário: substitui a
     // aba Compras por uma central de reposição de estoque, recalculando a
     // recomendação de cada modelo físico automaticamente, sempre no
     // servidor, nunca dependendo de alguém abrir a tela (ver
     // lib/comprasIaScheduler.js). Nunca compra sozinha — só gera
     // recomendação pendente de aprovação humana.
-    iniciarComprasIaAutomatico();
+    iniciarSePermitido('compras_ia', iniciarComprasIaAutomatico);
     // Agente de Envio Full — 23/09/2026, pedido explícito do usuário:
     // recomendar quando enviar estoque ao Full, quando está acabando e
     // quando segurar, mesma régua de Compras com IA adaptada pro Full,
     // sempre no servidor, nunca dependendo de alguém abrir a tela (ver
     // lib/envioFullScheduler.js). Nunca envia nada sozinho — só gera
     // recomendação pendente de aprovação humana.
-    iniciarEnvioFullAutomatico();
+    iniciarSePermitido('envio_full', iniciarEnvioFullAutomatico);
     // Devoluções — 26/09/2026, pedido explícito do usuário: separar
     // devolução de cancelamento. Sempre no servidor, nunca dependendo de
     // alguém abrir a tela (ver lib/devolucoesScheduler.js). Só leitura —
     // nunca aceita/recusa nada no Mercado Livre/Shopee.
-    iniciarDevolucoesAutomatico();
+    iniciarSePermitido('devolucoes', iniciarDevolucoesAutomatico);
   });
 }
 
