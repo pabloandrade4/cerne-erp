@@ -1,0 +1,334 @@
+  /* ================= PERFORMANCE DE ANÚNCIOS =================
+     Ativada em 26/08/2026, pedido explícito do usuário. Vendas vêm da mesma
+     fonte única de sempre (lib/relatorioVendas.js); preço/status/estoque
+     vêm AO VIVO do Mercado Livre (mesma fonte da tela Anúncios) — quando a
+     conta está com erro de conexão, esses campos aparecem indisponíveis,
+     NUNCA um valor antigo ou estimado. Os indicadores 🟢🟡🔴 seguem
+     critérios objetivos e documentados (ver lib/performanceAnuncios.js e
+     docs/01-regras-de-negocio.md) — nunca definidos "no olho". Empresa e
+     período vêm do filtro do header (window.CerneFiltro); loja, SKU e
+     status são filtros só desta tela. */
+  (function(){
+    const state = { loading:false, error:null, data:null, contaId:'', sku:'', status:'', sort:'maisVendidos' };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '<span style="color:var(--text-faint);font-style:italic;">indisponível</span>' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pctFmt(v){ return v===null||v===undefined ? '—' : (v>=0?'+':'')+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    // Miniatura da capa/foto principal do anúncio (dado real, vindo AO VIVO
+    // do Mercado Livre — ver lib/mlAnuncios.js). "Placeholder discreto"
+    // (ícone neutro) quando o anúncio não tem imagem disponível — nunca uma
+    // imagem inventada/de outro anúncio. onerror troca pro placeholder se a
+    // URL vier quebrada (imagem removida no Mercado Livre depois do
+    // catálogo ter sido consultado, por exemplo).
+    function thumbHTML(url, tam){
+      const cls = tam==='lg' ? 'anuncio-thumb-lg' : 'anuncio-thumb';
+      const clsPh = tam==='lg' ? 'anuncio-thumb-lg-placeholder' : 'anuncio-thumb-placeholder';
+      const px = tam==='lg' ? 64 : 36;
+      if(!url) return '<span class="'+clsPh+'" title="Sem imagem disponível">'+svg('box')+'</span>';
+      return '<span style="position:relative;display:inline-block;width:'+px+'px;height:'+px+'px;flex-shrink:0;">'
+        + '<img class="'+cls+'" src="'+escapeHtml(url)+'" alt="" loading="lazy" style="position:absolute;inset:0;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+        + '<span class="'+clsPh+'" style="display:none;position:absolute;inset:0;">'+svg('box')+'</span>'
+      + '</span>';
+    }
+
+    async function apiPerformance(empresaId, periodo, contaId, sku, status, desde, ate){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      if(sku) params.set('sku', sku);
+      if(status) params.set('status', status);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
+      const res = await fetch('/api/performance-anuncios?'+params.toString());
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Performance de Anúncios.');
+      return body;
+    }
+
+    async function loadDados(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiPerformance(filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.status, filtro.desdePersonalizado, filtro.atePersonalizado); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    function load(queryStr){
+      if(queryStr){
+        const params = new URLSearchParams(queryStr);
+        if(params.get('sku')) state.sku = params.get('sku');
+      }
+      loadDados();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-performanceAnuncios');
+      if(page && page.classList.contains('active')) loadDados();
+      else render();
+    });
+
+    const OPCOES_ORDENACAO = [
+      { valor:'maisVendidos', label:'Mais vendidos' },
+      { valor:'menosVendidos', label:'Menos vendidos' },
+      { valor:'maiorFaturamento', label:'Maior faturamento' },
+      { valor:'menorFaturamento', label:'Menor faturamento' },
+      { valor:'maiorCrescimento', label:'Maior crescimento' },
+      { valor:'maiorQueda', label:'Maior queda' },
+      { valor:'semVendas', label:'Anúncios sem vendas' },
+    ];
+    function valOr(l, campo, seAusente){ const v = l[campo]; return v===null||v===undefined ? seAusente : v; }
+    function ordenarLinhas(linhas, sort){
+      if(sort === 'semVendas'){
+        return linhas.filter(l=>l.semVendaNoPeriodo).slice().sort((a,b)=> valOr(b,'diasSemVender', 999999) - valOr(a,'diasSemVender', 999999));
+      }
+      const copia = linhas.slice();
+      if(sort==='menosVendidos') return copia.sort((a,b)=> a.unidadesVendidas - b.unidadesVendidas);
+      if(sort==='menorFaturamento') return copia.sort((a,b)=> (a.faturamento||0) - (b.faturamento||0));
+      if(sort==='maiorCrescimento') return copia.sort((a,b)=> valOr(b,'crescimentoPercentual',-Infinity) - valOr(a,'crescimentoPercentual',-Infinity));
+      if(sort==='maiorQueda') return copia.sort((a,b)=> valOr(a,'crescimentoPercentual',Infinity) - valOr(b,'crescimentoPercentual',Infinity));
+      if(sort==='maiorFaturamento') return copia.sort((a,b)=> (b.faturamento||0) - (a.faturamento||0));
+      return copia.sort((a,b)=> b.unidadesVendidas - a.unidadesVendidas); // 'maisVendidos' (padrão)
+    }
+
+    function statusLabel(status){
+      const map = { active:'Ativo', paused:'Pausado', closed:'Encerrado' };
+      return map[status] || (status ? escapeHtml(status) : 'Indisponível');
+    }
+
+    function indicadorHTML(l){
+      if(l.indicador==='baixo') return '<span style="color:var(--danger);font-weight:600;white-space:nowrap;">🔴 Baixo desempenho</span>';
+      if(l.indicador==='atencao') return '<span style="color:var(--warning);font-weight:600;white-space:nowrap;">🟡 Atenção</span>';
+      if(l.indicador==='bom') return '<span style="color:var(--success);font-weight:600;white-space:nowrap;">🟢 Bom desempenho</span>';
+      if(l.indicador==='sem_classificacao') return '<span style="color:var(--text-faint);">Sem classificação ainda</span>';
+      return '<span style="color:var(--text-faint);">'+statusLabel(l.status)+'</span>';
+    }
+
+    function tagsHTML(l){
+      const tags = [];
+      if(l.tags.semVendaVariosDias) tags.push('Sem vender há '+l.diasSemVender+'d');
+      else if(l.semVendaHistorico) tags.push('Nunca vendeu');
+      if(l.tags.vendendoCadaVezMenos) tags.push('Vendendo menos');
+      if(l.tags.crescendo) tags.push('Crescendo');
+      if(l.tags.praticamenteParado) tags.push('Praticamente parado');
+      if(l.novoNoPeriodo) tags.push('Novo no período');
+      if(!tags.length) return '';
+      return tags.map(t=>'<span style="display:inline-block;font-size:11px;padding:2px 7px;border-radius:20px;background:var(--surface-2);color:var(--text-muted);margin:0 4px 4px 0;">'+escapeHtml(t)+'</span>').join('');
+    }
+
+    function anuncioCellHTML(l){
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="anuncio-cell-flex">'
+        + thumbHTML(l.imagemUrl)
+        + '<div class="cell-stack">'
+          + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+          + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+        + '</div></div></a></td>';
+    }
+
+    // ---- KPIs, ranking e gráfico de topo — tudo Σ/ordenação das MESMAS
+    // linhas já retornadas por /api/performance-anuncios (l.faturamento,
+    // l.unidadesVendidas, l.quantidadePedidos, l.crescimentoPercentual,
+    // l.indicador) — nenhum número novo, só soma/ordenação de exibição. */
+    function kpiHeroHTML(linhas){
+      if(!linhas.length) return '';
+      const faturamentoTotal = linhas.reduce((s,l)=> s+(l.faturamento||0), 0);
+      const faturamentoAnteriorTotal = linhas.reduce((s,l)=> s+(l.faturamentoPeriodoAnterior||0), 0);
+      const unidadesTotal = linhas.reduce((s,l)=> s+(l.unidadesVendidas||0), 0);
+      const pedidosTotal = linhas.reduce((s,l)=> s+(l.quantidadePedidos||0), 0);
+      const crescimento = faturamentoAnteriorTotal>0 ? ((faturamentoTotal-faturamentoAnteriorTotal)/faturamentoAnteriorTotal*100) : null;
+      const contagem = { bom:0, atencao:0, baixo:0 };
+      linhas.forEach(l=>{ if(contagem[l.indicador]!==undefined) contagem[l.indicador]++; });
+      const ativos = linhas.filter(l=>l.status==='active').length;
+      const items = [
+        { label:'Vendas (Faturamento)', icon:'barChart', tint:'copper', valueHtml:'R$ '+faturamentoTotal.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}), note: crescimento===null ? 'Sem base de comparação' : ((crescimento>=0?'↑ ':'↓ ')+Math.abs(crescimento).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'% vs. período anterior') },
+        { label:'Unidades vendidas', icon:'box', tint:'petrol', valueHtml:String(unidadesTotal), note: pedidosTotal+' pedido(s)' },
+        { label:'Anúncios monitorados', icon:'tag', tint:'purple', valueHtml:String(linhas.length), note: ativos+' ativo(s) no Mercado Livre' },
+        { label:'🟢 Bom desempenho', icon:'checkCircle', tint:'success', valueHtml:String(contagem.bom), note:'Sem sinais de queda/parada' },
+        { label:'🟡 Atenção', icon:'alertCircle', tint: contagem.atencao>0?'warning':'muted', valueHtml:String(contagem.atencao), note:'Vale acompanhar' },
+        { label:'🔴 Baixo desempenho', icon:'alertCircle', tint: contagem.baixo>0?'danger':'muted', valueHtml:String(contagem.baixo), note:'Precisa de atenção' },
+      ];
+      return '<div class="kpi-hero-grid" style="margin-bottom:14px;">' + items.map(k=>
+        '<div class="kpi-hero" style="--tint:var(--'+k.tint+');--tint-soft:var(--'+k.tint+'-soft);">'
+          + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
+          + '<div class="kpi-hero-label">'+escapeHtml(k.label)+'</div>'
+          + '<div class="kpi-hero-value" style="font-size:19px;">'+k.valueHtml+'</div>'
+          + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
+        + '</div>'
+      ).join('') + '</div>';
+    }
+
+    function rankingListHTML(titulo, icone, linhas){
+      if(!linhas.length) return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg(icone)+'</span>'+escapeHtml(titulo)+'</div></div><div class="field-hint">Sem dados suficientes.</div></div>';
+      return '<div class="panel">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg(icone)+'</span>'+escapeHtml(titulo)+'</div></div>'
+        + linhas.map((l,i)=> '<div class="item-row"><div style="display:flex;align-items:center;gap:10px;min-width:0;">'
+            + '<span style="flex-shrink:0;width:20px;color:var(--text-faint);font-weight:700;font-size:12px;">'+(i+1)+'</span>'
+            + thumbHTML(l.imagemUrl)
+            + '<div class="cell-stack" style="min-width:0;"><span class="ir-title" title="'+escapeHtml(l.anuncio||'—')+'">'+escapeHtml(l.anuncio||'(sem título)')+'</span><span class="ir-sku mono">'+escapeHtml(l.sku||'sem SKU')+'</span></div>'
+          + '</div>'
+          + '<div class="mono" style="text-align:right;flex-shrink:0;">'+money(l.faturamento)+'<div class="cell-stack-sub" style="'+(l.crescimentoPercentual!==null?(l.crescimentoPercentual>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.novoNoPeriodo?'Novo':pctFmt(l.crescimentoPercentual))+'</div></div>'
+        + '</div>').join('')
+      + '</div>';
+    }
+
+    function chartFaturamentoHTML(linhas){
+      const top = linhas.slice().sort((a,b)=>(b.faturamento||0)-(a.faturamento||0)).slice(0,8);
+      if(!top.length || !top.some(l=>l.faturamento>0)) return '<div class="chart-canvas h-lg">'+chartGridLines(4)+chartEmptyState('barChart','Sem faturamento no período pra mostrar no gráfico.')+'</div>';
+      const maxV = Math.max(...top.map(l=>l.faturamento||0), 1);
+      return '<div style="display:flex;align-items:flex-end;gap:14px;height:190px;padding:6px 4px 0;">'
+        + top.map(l=>{
+            const h = Math.max(4, Math.round((l.faturamento||0)/maxV*160));
+            return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;" title="'+escapeHtml(l.anuncio||'')+': '+money(l.faturamento)+'">'
+              + '<div class="mono" style="font-size:10.5px;color:var(--text-faint);">'+money(l.faturamento).replace('R$ ','')+'</div>'
+              + '<div style="width:100%;max-width:34px;height:'+h+'px;background:var(--copper);border-radius:5px 5px 0 0;"></div>'
+              + '<div style="font-size:10px;color:var(--text-faint);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;">'+escapeHtml((l.sku||l.anuncio||'').slice(0,12))+'</div>'
+            + '</div>';
+        }).join('')
+      + '</div>';
+    }
+
+    function criteriosResumoHTML(c){
+      if(!c) return '';
+      return '<div class="field-hint" style="margin-bottom:12px;max-width:960px;">Critérios objetivos: 🔴 Baixo desempenho = '+c.diasSemVenderRuim+'+ dias sem vender, ou parou de vender (vendia no período anterior e não vendeu agora), ou queda de '+Math.abs(c.quedaFortePct)+'% ou mais nas unidades vendidas. 🟡 Atenção = '+c.diasSemVenderAtencao+' a '+(c.diasSemVenderRuim-1)+' dias sem vender, ou queda de '+Math.abs(c.quedaModeradaPct)+'% ou mais, ou vendendo muito pouco (média ≤ '+c.mediaDiaParado+' unidade/dia). 🟢 Bom desempenho = vendeu no período sem nenhum desses sinais. Só se aplica a anúncios com status ativo.</div>';
+    }
+
+    function tabelaHTML(linhas){
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Produto</th><th>Loja</th><th>Status</th><th>Indicador</th><th>Preço atual</th>'
+        + '<th>Unid. vendidas</th><th>Pedidos</th><th>Faturamento</th><th>Média/dia</th><th>vs. período anterior</th><th>Sinalizações</th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td>'+(l.produto?escapeHtml(l.produto):'<span style="color:var(--text-faint);">—</span>')+'</td>'
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td>'+statusLabel(l.status)+'</td>'
+          + '<td>'+indicadorHTML(l)+'</td>'
+          + '<td class="mono">'+money(l.precoAtual)+'</td>'
+          + '<td class="mono tab-nums">'+l.unidadesVendidas+'</td>'
+          + '<td class="mono tab-nums">'+l.quantidadePedidos+'</td>'
+          + '<td class="mono">'+money(l.faturamento)+'</td>'
+          + '<td class="mono">'+Number(l.mediaVendasPorDia).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'
+          + '<td class="mono" style="'+(l.crescimentoPercentual!==null?(l.crescimentoPercentual>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.novoNoPeriodo?'<span style="color:var(--teal);">Novo</span>':pctFmt(l.crescimentoPercentual))+'</td>'
+          + '<td>'+tagsHTML(l)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    function abrirDetalhe(l){
+      window.AnuncioDetalheModal.abrir({
+        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, imagemUrl: l.imagemUrl, origem: 'performanceAnuncios',
+        campos: [
+          { label:'Produto cadastrado', value: l.produto },
+          { label:'Status', html: statusLabel(l.status) },
+          { label:'Indicador', html: indicadorHTML(l) },
+          { label:'Preço atual', html: money(l.precoAtual) },
+          { label:'Unidades vendidas', value: l.unidadesVendidas },
+          { label:'Pedidos', value: l.quantidadePedidos },
+          { label:'Faturamento', html: money(l.faturamento) },
+          { label:'Média de vendas/dia', value: l.mediaVendasPorDia },
+          { label:'Unid. período anterior', value: l.unidadesPeriodoAnterior },
+          { label:'Crescimento', html: l.novoNoPeriodo ? 'Novo no período' : pctFmt(l.crescimentoPercentual) },
+          { label:'Dias sem vender', value: l.diasSemVender===null ? (l.semVendaHistorico ? 'nunca vendeu' : '—') : l.diasSemVender },
+        ],
+      });
+    }
+
+    function render(){
+      const root = document.getElementById('performanceAnunciosRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver Performance de Anúncios aqui.</p></div>';
+        return;
+      }
+
+      let html = criteriosResumoHTML(state.data && state.data.criterios);
+
+      if(state.data && !state.data.semConta){
+        html += '<div class="toolbar"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="paLojaSelect"><option value="">Todas as lojas</option>'
+            + state.data.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+          + '</select></div>'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="paStatusSelect"><option value="">Todos os status</option>'
+            + ['active','paused','closed'].map(s=>'<option value="'+s+'" '+(s===state.status?'selected':'')+'>'+statusLabel(s)+'</option>').join('')
+          + '</select></div>'
+          + '<input type="text" id="paSkuInput" placeholder="Buscar por SKU…" value="'+escapeHtml(state.sku)+'" style="height:38px;padding:0 12px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-1);min-width:160px;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="paSortSelect">'
+            + OPCOES_ORDENACAO.map(o=>'<option value="'+o.valor+'" '+(o.valor===state.sort?'selected':'')+'>Ordenar por: '+escapeHtml(o.label)+'</option>').join('')
+          + '</select></div>'
+        + '</div></div>';
+
+        if(state.data.situacaoPorConta && state.data.situacaoPorConta.some(s=>!s.disponivel)){
+          html += '<div class="table-card" style="padding:12px 16px;margin-bottom:14px;border-left:3px solid var(--warning);">'
+            + state.data.situacaoPorConta.filter(s=>!s.disponivel).map(s=>
+              '<div style="font-size:12.5px;color:var(--text-muted);display:flex;gap:8px;align-items:flex-start;margin:4px 0;">'
+                + '<span style="color:var(--warning);flex-shrink:0;">'+svg('alertCircle')+'</span>'
+                + '<span><strong>'+escapeHtml(s.loja||('Conta '+s.contaId))+'</strong>: '+escapeHtml(s.mensagem||'')+'</span>'
+              + '</div>'
+            ).join('')
+          + '</div>';
+        }
+
+        if(state.data.linhas && state.data.linhas.length){
+          html += kpiHeroHTML(state.data.linhas);
+          html += '<div class="grid-2" style="margin-bottom:14px;align-items:start;">'
+            + '<div class="chart-card"><div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('barChart')+'</span>Faturamento por anúncio (top 8)</div></div>'
+              + chartFaturamentoHTML(state.data.linhas)
+            + '</div>'
+            + '<div style="display:flex;flex-direction:column;gap:14px;">'
+              + rankingListHTML('Ranking por faturamento', 'barChart', state.data.linhas.slice().sort((a,b)=>(b.faturamento||0)-(a.faturamento||0)).slice(0,5))
+              + rankingListHTML('Ranking por crescimento', 'activity', state.data.linhas.slice().filter(l=>l.crescimentoPercentual!==null||l.novoNoPeriodo).sort((a,b)=>(b.novoNoPeriodo?Infinity:b.crescimentoPercentual)-(a.novoNoPeriodo?Infinity:a.crescimentoPercentual)).slice(0,5))
+            + '</div>'
+          + '</div>';
+        }
+      }
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando Performance de Anúncios…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data && state.data.semConta){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma conta do Mercado Livre conectada</h2><p class="lead">Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> para ver Performance de Anúncios aqui.</p></div>';
+      } else if(state.data && !state.data.linhas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
+          + '<h2>Nenhum anúncio encontrado</h2><p class="lead">Nenhum anúncio com venda ou dado ao vivo para os filtros escolhidos.</p></div>';
+      } else if(state.data){
+        const linhasOrdenadas = ordenarLinhas(state.data.linhas, state.sort);
+        if(!linhasOrdenadas.length){
+          html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div><h2>Nenhum anúncio nesta ordenação/filtro</h2><p class="lead">Experimente "Todas as lojas"/"Todos os status" ou outra ordenação.</p></div>';
+        } else {
+          html += tabelaHTML(linhasOrdenadas);
+        }
+      }
+
+      root.innerHTML = html;
+
+      const selLoja = document.getElementById('paLojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadDados(); });
+      const selStatus = document.getElementById('paStatusSelect');
+      if(selStatus) selStatus.addEventListener('change', ()=>{ state.status = selStatus.value; loadDados(); });
+      const skuInput = document.getElementById('paSkuInput');
+      if(skuInput){
+        let debounce = null;
+        skuInput.addEventListener('input', ()=>{
+          clearTimeout(debounce);
+          debounce = setTimeout(()=>{ state.sku = skuInput.value; loadDados(); }, 400);
+        });
+      }
+      const selSort = document.getElementById('paSortSelect');
+      if(selSort) selSort.addEventListener('change', ()=>{ state.sort = selSort.value; render(); });
+
+      root.querySelectorAll('.anuncio-link').forEach(el=>{
+        el.addEventListener('click', ()=>{
+          const mlItemId = el.dataset.mlItem;
+          const l = (state.data.linhas||[]).find(x=>x.mlItemId===mlItemId);
+          if(l) abrirDetalhe(l);
+        });
+      });
+    }
+
+    window.PerformanceAnuncios = { load };
+  })();
+

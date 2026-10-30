@@ -1,0 +1,311 @@
+  /* ================= MARGEM POR ANÚNCIO =================
+     Ativada em 26/08/2026, pedido explícito do usuário. Usa a MESMA regra
+     financeira de Pedidos/Financeiro/Relatórios/Ads (lib/resultadoVenda.js)
+     — nenhuma fórmula nova. Investimento em Ads vem da mesma fonte da tela
+     Ads. Quando falta custo de algum SKU, a margem aparece marcada como
+     incompleta (nunca uma soma parcial disfarçada de completa). */
+  (function(){
+    const state = { loading:false, error:null, data:null, contaId:'', sku:'', sort:'maiorResultado' };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function pendenteCusto(){ return '<span style="color:var(--text-faint);font-style:italic;" title="Falta cadastrar o custo deste SKU em Produtos.">margem incompleta</span>'; }
+    // Pedido explícito do usuário: "Se o Ads ainda não estiver sincronizado
+    // para determinado anúncio, mostre: Ads pendente" (texto literal).
+    function pendenteAds(){ return '<span style="color:var(--text-faint);font-style:italic;" title="Sem sincronização de Ads para este anúncio/período.">Ads pendente</span>'; }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pctFmt(v){ return v===null||v===undefined ? '—' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    function intFmt(v){ return v===null||v===undefined ? '—' : Number(v).toLocaleString('pt-BR'); }
+    function thumbHTML(url){
+      if(!url) return '<span class="anuncio-thumb-placeholder" title="Sem imagem disponível">'+svg('box')+'</span>';
+      return '<span style="position:relative;display:inline-block;width:36px;height:36px;flex-shrink:0;">'
+        + '<img class="anuncio-thumb" src="'+escapeHtml(url)+'" alt="" loading="lazy" style="position:absolute;inset:0;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+        + '<span class="anuncio-thumb-placeholder" style="display:none;position:absolute;inset:0;">'+svg('box')+'</span>'
+      + '</span>';
+    }
+    // "Performance atribuída pelo Mercado Ads" — dado bruto que o próprio
+    // Ads calcula (cliques, impressões, CTR/CVR/ROAS, faturamento que o Ads
+    // ATRIBUI ao anúncio) — pedido explícito do usuário: "deixe separado:
+    // Performance atribuída pelo Mercado Ads de Resultado real do anúncio
+    // após Ads". Renderizado à parte do resultado real (que usa só vendas
+    // reais, nunca a atribuição do Ads).
+    function adsAtribuidoResumoHTML(ads){
+      if(!ads || !ads.disponivel) return '<span style="color:var(--text-faint);font-style:italic;">Ads pendente</span>';
+      const partes = [];
+      if(ads.cliques!==null && ads.cliques!==undefined) partes.push(intFmt(ads.cliques)+' cliques');
+      if(ads.impressoes!==null && ads.impressoes!==undefined) partes.push(intFmt(ads.impressoes)+' impr.');
+      if(ads.roasApi!==null && ads.roasApi!==undefined) partes.push('ROAS '+Number(ads.roasApi).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}));
+      else if(ads.acosApi!==null && ads.acosApi!==undefined) partes.push('ACOS '+pctFmt(ads.acosApi));
+      return '<span style="font-size:12px;color:var(--text-muted);">'+(partes.length?escapeHtml(partes.join(' · ')):'<span style="color:var(--text-faint);font-style:italic;">sem métricas</span>')+'</span>'
+        + (ads.campanha?('<div class="cell-stack-sub">'+escapeHtml(ads.campanha)+'</div>'):'');
+    }
+
+    async function apiMargem(empresaId, periodo, contaId, sku, desde, ate){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      if(sku) params.set('sku', sku);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
+      const res = await fetch('/api/margem-anuncio?'+params.toString());
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Margem por Anúncio.');
+      return body;
+    }
+
+    async function loadDados(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiMargem(filtro.empresaId, filtro.periodo, state.contaId, state.sku, filtro.desdePersonalizado, filtro.atePersonalizado); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    function load(queryStr){
+      if(queryStr){
+        const params = new URLSearchParams(queryStr);
+        if(params.get('sku')) state.sku = params.get('sku');
+      }
+      loadDados();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-margemAnuncio');
+      if(page && page.classList.contains('active')) loadDados();
+      else render();
+    });
+
+    const OPCOES_ORDENACAO = [
+      { valor:'maiorResultado', label:'Maior resultado' },
+      { valor:'maiorPrejuizo', label:'Maior prejuízo' },
+      { valor:'maiorMargemPct', label:'Maior margem %' },
+      { valor:'menorMargemPct', label:'Menor margem %' },
+      { valor:'maiorFaturamento', label:'Maior faturamento' },
+      { valor:'maiorGastoAds', label:'Maior gasto com Ads' },
+    ];
+    function valOr(l, campo, seAusente){ const v = l[campo]; return v===null||v===undefined ? seAusente : v; }
+    function ordenarLinhas(linhas, sort){
+      const copia = linhas.slice();
+      if(sort==='maiorPrejuizo') return copia.sort((a,b)=> valOr(a,'resultadoAposAds',Infinity) - valOr(b,'resultadoAposAds',Infinity));
+      if(sort==='maiorMargemPct') return copia.sort((a,b)=> valOr(b,'margemContribuicaoPct',-Infinity) - valOr(a,'margemContribuicaoPct',-Infinity));
+      if(sort==='menorMargemPct') return copia.sort((a,b)=> valOr(a,'margemContribuicaoPct',Infinity) - valOr(b,'margemContribuicaoPct',Infinity));
+      if(sort==='maiorFaturamento') return copia.sort((a,b)=> (b.faturamento||0) - (a.faturamento||0));
+      if(sort==='maiorGastoAds') return copia.sort((a,b)=> valOr(b,'investimentoAds',-Infinity) - valOr(a,'investimentoAds',-Infinity));
+      return copia.sort((a,b)=> valOr(b,'resultadoAposAds',-Infinity) - valOr(a,'resultadoAposAds',-Infinity)); // 'maiorResultado'
+    }
+
+    // ---- KPIs, ranking e gráfico de topo — Σ/ordenação das MESMAS linhas
+    // já retornadas por /api/margem-anuncio (nenhuma fórmula nova; margem
+    // incompleta e Ads pendente ficam de fora das somas, nunca tratados
+    // como zero). */
+    function kpiHeroHTML(linhas){
+      if(!linhas.length) return '';
+      const faturamentoTotal = linhas.reduce((s,l)=>s+(l.faturamento||0),0);
+      const completas = linhas.filter(l=>!l.margemIncompleta);
+      const margemTotal = completas.reduce((s,l)=>s+(l.margemContribuicao||0),0);
+      const margemPctMedia = faturamentoTotal>0 && completas.length ? (margemTotal/faturamentoTotal*100) : null;
+      const comAds = linhas.filter(l=>l.resultadoAposAds!==null);
+      const resultadoAposAdsTotal = comAds.reduce((s,l)=>s+l.resultadoAposAds,0);
+      const negativas = linhas.filter(l=>l.destaques.margemNegativa).length;
+      const prejuizoAds = linhas.filter(l=>l.destaques.prejuizoAposAds).length;
+      const items = [
+        { label:'Faturamento', icon:'barChart', tint:'copper', valueHtml: money(faturamentoTotal), note: linhas.length+' anúncio(s)' },
+        { label:'Margem de contribuição', icon:'wallet', tint: margemTotal>=0?'success':'danger', valueHtml: completas.length?money(margemTotal):pendenteCusto(), note: (linhas.length-completas.length)>0 ? (linhas.length-completas.length)+' com margem incompleta' : 'Todos os anúncios com custo' },
+        { label:'Margem % média', icon:'percent', tint:'purple', valueHtml: margemPctMedia===null?'—':pctFmt(margemPctMedia), note:'Sobre o faturamento' },
+        { label:'Resultado após Ads', icon:'activity', tint: resultadoAposAdsTotal>=0?'success':'danger', valueHtml: comAds.length?money(resultadoAposAdsTotal):pendenteAds(), note: (linhas.length-comAds.length)>0 ? (linhas.length-comAds.length)+' com Ads pendente' : 'Todos com Ads sincronizado' },
+        { label:'Margem negativa', icon:'alertCircle', tint: negativas>0?'danger':'muted', valueHtml:String(negativas), note:'Anúncio(s) vendendo no prejuízo' },
+        { label:'Prejuízo após Ads', icon:'alertCircle', tint: prejuizoAds>0?'danger':'muted', valueHtml:String(prejuizoAds), note:'Margem positiva, mas Ads consome tudo' },
+      ];
+      return '<div class="kpi-hero-grid" style="margin-bottom:14px;">' + items.map(k=>
+        '<div class="kpi-hero" style="--tint:var(--'+k.tint+');--tint-soft:var(--'+k.tint+'-soft);">'
+          + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
+          + '<div class="kpi-hero-label">'+escapeHtml(k.label)+'</div>'
+          + '<div class="kpi-hero-value" style="font-size:18px;">'+k.valueHtml+'</div>'
+          + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
+        + '</div>'
+      ).join('') + '</div>';
+    }
+    function rankingListHTML(titulo, icone, linhas, valorFn){
+      if(!linhas.length) return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg(icone)+'</span>'+escapeHtml(titulo)+'</div></div><div class="field-hint">Sem dados suficientes.</div></div>';
+      return '<div class="panel">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg(icone)+'</span>'+escapeHtml(titulo)+'</div></div>'
+        + linhas.map((l,i)=> '<div class="item-row"><div style="display:flex;align-items:center;gap:10px;min-width:0;">'
+            + '<span style="flex-shrink:0;width:20px;color:var(--text-faint);font-weight:700;font-size:12px;">'+(i+1)+'</span>'
+            + thumbHTML(l.imagemUrl)
+            + '<div class="cell-stack" style="min-width:0;"><span class="ir-title" title="'+escapeHtml(l.anuncio||'—')+'">'+escapeHtml(l.anuncio||'(sem título)')+'</span><span class="ir-sku mono">'+escapeHtml(l.sku||'sem SKU')+'</span></div>'
+          + '</div>'
+          + '<div class="mono" style="text-align:right;flex-shrink:0;">'+valorFn(l)+'</div>'
+        + '</div>').join('')
+      + '</div>';
+    }
+    function chartMargemHTML(linhas){
+      const top = linhas.filter(l=>!l.margemIncompleta).slice().sort((a,b)=>(b.margemContribuicao||0)-(a.margemContribuicao||0)).slice(0,8);
+      if(!top.length) return '<div class="chart-canvas h-lg">'+chartGridLines(4)+chartEmptyState('wallet','Sem margem completa no período pra mostrar no gráfico.')+'</div>';
+      const maxV = Math.max(...top.map(l=>Math.abs(l.margemContribuicao||0)), 1);
+      return '<div style="display:flex;align-items:flex-end;gap:14px;height:190px;padding:6px 4px 0;">'
+        + top.map(l=>{
+            const h = Math.max(4, Math.round(Math.abs(l.margemContribuicao||0)/maxV*160));
+            const cor = l.margemContribuicao>=0 ? 'var(--success)' : 'var(--danger)';
+            return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;" title="'+escapeHtml(l.anuncio||'')+': '+money(l.margemContribuicao)+'">'
+              + '<div class="mono" style="font-size:10.5px;color:var(--text-faint);">'+money(l.margemContribuicao).replace('R$ ','')+'</div>'
+              + '<div style="width:100%;max-width:34px;height:'+h+'px;background:'+cor+';border-radius:5px 5px 0 0;"></div>'
+              + '<div style="font-size:10px;color:var(--text-faint);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;">'+escapeHtml((l.sku||l.anuncio||'').slice(0,12))+'</div>'
+            + '</div>';
+        }).join('')
+      + '</div>';
+    }
+
+    function destaquesHTML(l){
+      const tags = [];
+      if(l.destaques.margemNegativa) tags.push(['Margem negativa','var(--danger)']);
+      else if(l.destaques.prejuizoAposAds) tags.push(['Prejuízo após Ads','var(--danger)']);
+      if(l.destaques.faturaMuitoPoucaMargem) tags.push(['Fatura muito, pouca margem','var(--warning)']);
+      if(l.destaques.adsConsumindoResultado) tags.push(['Ads consumindo resultado','var(--warning)']);
+      if(l.destaques.vendePoucoOtimaMargem) tags.push(['Vende pouco, ótima margem','var(--teal)']);
+      if(l.destaques.vendeMuitoMargemSaudavel) tags.push(['Vende muito, margem saudável','var(--success)']);
+      if(!tags.length) return '';
+      return tags.map(([t,cor])=>'<span style="display:inline-block;font-size:11px;padding:2px 7px;border-radius:20px;background:var(--surface-2);color:'+cor+';font-weight:600;margin:0 4px 4px 0;">'+escapeHtml(t)+'</span>').join('');
+    }
+
+    function anuncioCellHTML(l){
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="anuncio-cell-flex">'
+        + thumbHTML(l.imagemUrl)
+        + '<div class="cell-stack">'
+          + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+          + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+        + '</div></div></a></td>';
+    }
+
+    function tabelaHTML(linhas){
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Produto</th><th>Loja</th><th>Pedidos</th><th>Qtd vendida</th><th>Faturamento</th><th>Custo produtos</th><th>Imposto</th>'
+        + '<th>Tarifas</th><th>Frete vendedor</th><th>Margem contrib.</th><th>Margem %</th><th>Ads (investimento)</th><th>Ads (atribuído pelo Mercado Ads)</th><th>Resultado real após Ads</th><th>Margem real após Ads %</th><th>Destaques</th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td>'+(l.produto?escapeHtml(l.produto):'<span style="color:var(--text-faint);">—</span>')+'</td>'
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td class="mono tab-nums">'+l.quantidadePedidos+'</td>'
+          + '<td class="mono tab-nums">'+l.quantidadeVendida+'</td>'
+          + '<td class="mono">'+money(l.faturamento)+'</td>'
+          + '<td class="mono">'+(l.custoProdutos===null?pendenteCusto():money(l.custoProdutos))+'</td>'
+          + '<td class="mono">'+money(l.imposto)+'</td>'
+          + '<td class="mono">'+(l.tarifas===null?'<span style="color:var(--text-faint);">—</span>':money(l.tarifas))+'</td>'
+          + '<td class="mono">'+(l.freteVendedor===null?'<span style="color:var(--text-faint);">—</span>':money(l.freteVendedor))+'</td>'
+          + '<td class="mono" style="'+(l.margemContribuicao!==null?(l.margemContribuicao>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.margemIncompleta?pendenteCusto():money(l.margemContribuicao))+'</td>'
+          + '<td class="mono">'+(l.margemIncompleta?'—':pctFmt(l.margemContribuicaoPct))+'</td>'
+          + '<td class="mono">'+(l.semDadosAds?pendenteAds():money(l.investimentoAds))+'</td>'
+          + '<td>'+adsAtribuidoResumoHTML(l.adsAtribuido)+'</td>'
+          + '<td class="mono" style="'+(l.resultadoAposAds!==null?(l.resultadoAposAds>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.resultadoAposAds===null?(l.margemIncompleta?pendenteCusto():pendenteAds()):money(l.resultadoAposAds))+'</td>'
+          + '<td class="mono">'+(l.margemAposAdsPct===null?'—':pctFmt(l.margemAposAdsPct))+'</td>'
+          + '<td>'+destaquesHTML(l)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    function abrirDetalhe(l){
+      const ads = l.adsAtribuido;
+      window.AnuncioDetalheModal.abrir({
+        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, imagemUrl: l.imagemUrl, origem: 'margemAnuncio',
+        campos: [
+          { label:'Pedidos', value: l.quantidadePedidos },
+          { label:'Quantidade vendida', value: l.quantidadeVendida },
+          { label:'Faturamento', html: money(l.faturamento) },
+          { label:'Custo dos produtos', html: l.custoProdutos===null?pendenteCusto():money(l.custoProdutos) },
+          { label:'Imposto', html: money(l.imposto) },
+          { label:'Tarifas/comissões', html: l.tarifas===null?'—':money(l.tarifas) },
+          { label:'Frete do vendedor', html: l.freteVendedor===null?'—':money(l.freteVendedor) },
+          { label:'Margem de contribuição (antes do Ads)', html: l.margemIncompleta?pendenteCusto():money(l.margemContribuicao) },
+          { label:'Margem de contribuição %', html: l.margemIncompleta?'—':pctFmt(l.margemContribuicaoPct) },
+          { label:'— Resultado real (vendas reais) —', html: '<hr style="border:none;border-top:1px solid var(--border-strong);margin:2px 0;">' },
+          { label:'Investimento em Ads (real, sincronizado)', html: l.semDadosAds?pendenteAds():money(l.investimentoAds) },
+          { label:'Resultado real após Ads', html: l.resultadoAposAds===null?'—':money(l.resultadoAposAds) },
+          { label:'Margem real após Ads %', html: l.margemAposAdsPct===null?'—':pctFmt(l.margemAposAdsPct) },
+          { label:'— Performance atribuída pelo Mercado Ads —', html: '<hr style="border:none;border-top:1px solid var(--border-strong);margin:2px 0;">' },
+          { label:'Campanha', value: (ads && ads.campanha) || (ads && ads.disponivel ? '—' : 'Ads pendente') },
+          { label:'Cliques', value: ads && ads.disponivel ? intFmt(ads.cliques) : 'Ads pendente' },
+          { label:'Impressões', value: ads && ads.disponivel ? intFmt(ads.impressoes) : 'Ads pendente' },
+          { label:'CTR (Mercado Ads)', html: ads && ads.disponivel ? pctFmt(ads.ctrApi) : pendenteAds() },
+          { label:'CVR (Mercado Ads)', html: ads && ads.disponivel ? pctFmt(ads.cvrApi) : pendenteAds() },
+          { label:'ROAS (Mercado Ads)', value: ads && ads.disponivel && ads.roasApi!==null && ads.roasApi!==undefined ? ads.roasApi : (ads && ads.disponivel ? '—' : 'Ads pendente') },
+          { label:'ACOS (Mercado Ads)', html: ads && ads.disponivel ? pctFmt(ads.acosApi) : pendenteAds() },
+          { label:'Faturamento atribuído pelo Ads', html: ads && ads.disponivel ? money(ads.faturamentoAtribuido) : pendenteAds() },
+        ],
+      });
+    }
+
+    function render(){
+      const root = document.getElementById('margemAnuncioRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver Margem por Anúncio aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:980px;">FATURAMENTO − tarifas/comissões − frete do vendedor − imposto − custo dos produtos = <strong>MARGEM DE CONTRIBUIÇÃO</strong>. MARGEM DE CONTRIBUIÇÃO − Ads = <strong>RESULTADO APÓS ADS</strong>. Mesma fórmula usada em Pedidos, Financeiro e Relatórios — nunca uma conta nova. Quando falta o custo de algum SKU em <strong>Produtos</strong>, a margem daquele anúncio aparece marcada como incompleta. A coluna <strong>"Ads (atribuído pelo Mercado Ads)"</strong> mostra cliques/impressões/CTR/ROAS calculados pelo próprio Mercado Ads — é informativo, separado do <strong>resultado real</strong> (que usa só vendas reais). Quando um anúncio ainda não tem Ads sincronizado, aparece <strong>"Ads pendente"</strong> e a margem antes do Ads continua calculada normalmente.</div>';
+
+      if(state.data && !state.data.semConta){
+        html += '<div class="toolbar"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="maLojaSelect"><option value="">Todas as lojas</option>'
+            + state.data.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+          + '</select></div>'
+          + '<input type="text" id="maSkuInput" placeholder="Buscar por SKU…" value="'+escapeHtml(state.sku)+'" style="height:38px;padding:0 12px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-1);min-width:160px;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="maSortSelect">'
+            + OPCOES_ORDENACAO.map(o=>'<option value="'+o.valor+'" '+(o.valor===state.sort?'selected':'')+'>Ordenar por: '+escapeHtml(o.label)+'</option>').join('')
+          + '</select></div>'
+        + '</div></div>';
+
+        if(state.data.linhas && state.data.linhas.length){
+          html += kpiHeroHTML(state.data.linhas);
+          html += '<div class="grid-2" style="margin-bottom:14px;align-items:start;">'
+            + '<div class="chart-card"><div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('wallet')+'</span>Margem de contribuição por anúncio (top 8)</div></div>'
+              + chartMargemHTML(state.data.linhas)
+            + '</div>'
+            + '<div style="display:flex;flex-direction:column;gap:14px;">'
+              + rankingListHTML('Maior resultado após Ads', 'activity', state.data.linhas.filter(l=>l.resultadoAposAds!==null).slice().sort((a,b)=>b.resultadoAposAds-a.resultadoAposAds).slice(0,5), l=>money(l.resultadoAposAds))
+              + rankingListHTML('Maior margem %', 'percent', state.data.linhas.filter(l=>!l.margemIncompleta).slice().sort((a,b)=>(b.margemContribuicaoPct||0)-(a.margemContribuicaoPct||0)).slice(0,5), l=>pctFmt(l.margemContribuicaoPct))
+            + '</div>'
+          + '</div>';
+        }
+      }
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando Margem por Anúncio…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data && state.data.semConta){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma conta do Mercado Livre conectada</h2><p class="lead">Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> para ver Margem por Anúncio aqui.</p></div>';
+      } else if(state.data && !state.data.linhas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('wallet')+'</div>'
+          + '<h2>Nenhuma venda no período</h2><p class="lead">Não há vendas para os filtros escolhidos.</p></div>';
+      } else if(state.data){
+        html += tabelaHTML(ordenarLinhas(state.data.linhas, state.sort));
+      }
+
+      root.innerHTML = html;
+
+      const selLoja = document.getElementById('maLojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadDados(); });
+      const skuInput = document.getElementById('maSkuInput');
+      if(skuInput){
+        let debounce = null;
+        skuInput.addEventListener('input', ()=>{ clearTimeout(debounce); debounce = setTimeout(()=>{ state.sku = skuInput.value; loadDados(); }, 400); });
+      }
+      const selSort = document.getElementById('maSortSelect');
+      if(selSort) selSort.addEventListener('change', ()=>{ state.sort = selSort.value; render(); });
+
+      root.querySelectorAll('.anuncio-link').forEach(el=>{
+        el.addEventListener('click', ()=>{
+          const mlItemId = el.dataset.mlItem;
+          const l = (state.data.linhas||[]).find(x=>x.mlItemId===mlItemId);
+          if(l) abrirDetalhe(l);
+        });
+      });
+    }
+
+    window.MargemAnuncio = { load };
+  })();
+

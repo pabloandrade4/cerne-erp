@@ -1,0 +1,540 @@
+  /* ================= IA GESTORA — central de análise =================
+     Ativada em 2026 (3 passos — ver docs/02-decisoes.md). Reescrita em
+     25/08/2026 ("IA Gestora — central de análise", 3 novos passos):
+       1) Histórico de conversas salvo no banco (login real — ver
+          routes/iaGestora.js/lib/auth — escopado só a esta página).
+       2) Respostas visuais (resumo/KPIs/tabela/gráfico/insights/atenção) —
+          o "card" é montado no backend (lib/ia/estrutura.js) a partir de
+          dados reais; aqui é só desenho, nenhum número é calculado no
+          front-end.
+       3) Botão "Baixar planilha" quando a mensagem tem card visual — a
+          planilha vem pronta do backend (mesmos dados, nunca gerada aqui).
+     Sempre usa a empresa e o período do HEADER (window.CerneFiltro), igual
+     antes — nenhum seletor próprio nesta tela. */
+  (function(){
+    const SUGESTOES = [
+      'Como estão minhas vendas hoje?',
+      'Qual produto mais lucrou este mês?',
+      'Tem alguma venda dando prejuízo?',
+      'Quanto vou receber?',
+      'Quais problemas precisam da minha atenção?',
+    ];
+
+    const state = {
+      checkingAuth: true, usuario: null,
+      loginEmail: '', loginSenha: '', loginErro: null, loginLoading: false,
+      conversas: [], loadingConversas: false, contextEmpresaId: null,
+      conversaId: null, messages: [], loading: false,
+      // Radar da IA (25/08/2026) — resumo do que já foi persistido pelo
+      // ciclo automático em segundo plano (server/lib/ia/radarScheduler.js).
+      // Só LEITURA (GET /radar-resumo) — nunca dispara uma análise nova.
+      radar: null, radarLoading: false, radarError: null,
+      // Painel "Insights principais" (26/08/2026 — redesign visual, ver
+      // docs/02-decisoes.md). Reaproveita /api/relatorios/resumo-vendas —
+      // MESMO endpoint já usado por Visão Geral/Pedidos/Financeiro, nenhuma
+      // rota nova. Só leitura; "soma de exibição" (ticket médio = faturamento
+      // ÷ pedidos, igual ao já feito em Pedidos), nenhum cálculo novo.
+      resumoInsights: null, loadingResumoInsights: false, contextPeriodo: null,
+    };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      if(!wrap) return;
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+
+    async function apiIa(path, opts){
+      const res = await fetch('/api/ia-gestora'+path, { credentials: 'same-origin', ...opts, headers: { 'Content-Type': 'application/json', ...(opts&&opts.headers) } });
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok){ const err = new Error((body && body.error) || 'Não foi possível falar com a IA Gestora agora.'); err.status = res.status; err.codigo = body && body.codigo; throw err; }
+      return body;
+    }
+    const apiMe = () => apiIa('/me');
+    const apiLogin = (email, senha) => apiIa('/login', { method:'POST', body: JSON.stringify({ email, senha }) });
+    const apiLogout = () => apiIa('/logout', { method:'POST' });
+    const apiListarConversas = (empresaId) => apiIa('/conversas?empresaId='+empresaId);
+    const apiAbrirConversa = (id) => apiIa('/conversas/'+id);
+    const apiExcluirConversa = (id) => apiIa('/conversas/'+id, { method:'DELETE' });
+    // `desde`/`ate` só valem quando periodo==='personalizado' (mesma regra
+    // de lib/periodo.js) — passados sempre que o filtro do cabeçalho os tiver.
+    const apiPerguntar = (empresaId, periodo, pergunta, conversaId, desde, ate) => apiIa('/perguntar', { method:'POST', body: JSON.stringify({ empresaId, periodo, desde, ate, pergunta, conversaId: conversaId||undefined }) });
+    const apiRadarResumo = (empresaId) => apiIa('/radar-resumo?empresaId='+empresaId);
+    // Mesmo endpoint reaproveitado por Pedidos nesta sessão — não é uma rota
+    // da IA Gestora, é o resumo geral de vendas já usado em outras telas.
+    async function apiResumoVendas(empresaId, periodo, extra){
+      const res = await fetch('/api/relatorios/resumo-vendas?empresaId='+empresaId+'&periodo='+periodo+(extra||''));
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Falha ao carregar os indicadores.');
+      return body;
+    }
+
+    function empresaAtualNome(){
+      const filtro = window.CerneFiltro.state;
+      const emp = filtro.empresas.find(e => e.id === filtro.empresaId);
+      return emp ? (emp.nomeFantasia || emp.razaoSocial) : null;
+    }
+    function periodoAtualLabel(){
+      return window.CerneFiltro.periodoLabel();
+    }
+
+    async function carregarConversas(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.conversas = []; return; }
+      state.loadingConversas = true; render();
+      try{
+        const body = await apiListarConversas(filtro.empresaId);
+        state.conversas = body.conversas || [];
+      }catch(e){ /* lista de histórico é auxiliar — uma falha aqui não impede conversar */ }
+      state.loadingConversas = false; render();
+    }
+
+    // Radar da IA — só leitura do que o ciclo em segundo plano já persistiu
+    // (nunca dispara um ciclo novo aqui). Auxiliar, igual à lista de
+    // conversas: uma falha aqui não impede conversar com a IA Gestora.
+    async function carregarRadar(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.radar = null; state.radarError = null; return; }
+      state.radarLoading = true; render();
+      try{
+        state.radar = await apiRadarResumo(filtro.empresaId);
+        state.radarError = null;
+      }catch(e){ state.radar = null; state.radarError = e.message || 'Não foi possível carregar o Radar da IA agora.'; }
+      state.radarLoading = false; render();
+    }
+
+    // Painel "Insights principais" — mesmo dado agregado que Pedidos usa
+    // pro seu KPI row (resumirPeriodo, ver lib/relatorioVendas.js). Igual ao
+    // radar: auxiliar, uma falha aqui não impede conversar com a IA.
+    async function carregarInsights(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.resumoInsights = null; return; }
+      state.loadingResumoInsights = true; render();
+      try{ state.resumoInsights = await apiResumoVendas(filtro.empresaId, filtro.periodo, window.CerneFiltro.periodoExtra()); }
+      catch(e){ state.resumoInsights = null; }
+      state.loadingResumoInsights = false; render();
+    }
+
+    // Empresa mudou desde a última vez: uma conversa é sempre de UMA
+    // empresa (db/schema.sql#ia_conversas) — trocar de empresa fecha a
+    // conversa aberta (nunca mistura pergunta nova com histórico de outra
+    // empresa) e recarrega a lista de conversas daquela empresa.
+    function sincronizarContexto(){
+      const filtro = window.CerneFiltro.state;
+      const empresaMudou = state.contextEmpresaId !== null && state.contextEmpresaId !== filtro.empresaId;
+      if(empresaMudou){ state.conversaId = null; state.messages = []; }
+      const precisaRecarregarEmpresa = state.contextEmpresaId !== filtro.empresaId;
+      // "Insights principais" (painel novo, ver acima) depende de empresa E
+      // período — conversas/radar continuam só empresa-escopados, igual antes.
+      const precisaRecarregarInsights = precisaRecarregarEmpresa || state.contextPeriodo !== filtro.periodo;
+      if(precisaRecarregarEmpresa){
+        state.contextEmpresaId = filtro.empresaId;
+        carregarConversas();
+        carregarRadar();
+      }
+      if(precisaRecarregarInsights){
+        state.contextPeriodo = filtro.periodo;
+        carregarInsights();
+      }
+    }
+
+    async function load(){
+      if(state.checkingAuth || !state.usuario){
+        try{
+          const body = await apiMe();
+          state.usuario = body.usuario;
+        }catch(e){ state.usuario = null; }
+        state.checkingAuth = false;
+      }
+      if(state.usuario) sincronizarContexto();
+      render();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-iaGestora');
+      if(page && page.classList.contains('active') && state.usuario){ sincronizarContexto(); render(); }
+    });
+
+    function scrollParaFinal(){
+      const msgsEl = document.getElementById('iaMsgs');
+      if(msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+
+    // ---------------- Card visual (resumo/KPIs/tabela/gráfico/insights/atenção) ----------------
+    // Só desenha o que veio de `estrutura` — nenhum valor é calculado aqui;
+    // ver lib/ia/estrutura.js no backend.
+
+    function fmtCelula(v, tipo){
+      if(v === null || v === undefined) return 'pendente';
+      if(tipo === 'money') return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+      if(tipo === 'percent') return Number(v).toLocaleString('pt-BR', { maximumFractionDigits:1 }) + '%';
+      if(tipo === 'int') return Number(v).toLocaleString('pt-BR');
+      return escapeHtml(String(v));
+    }
+
+    function kpisHTML(kpis){
+      if(!kpis || !kpis.length) return '';
+      return '<div class="ia-kpis">' + kpis.map(k =>
+        '<div class="ia-kpi"><div class="ia-kpi-label">'+escapeHtml(k.label)+(k.grupo?' · '+escapeHtml(k.grupo):'')+'</div>'
+        + '<div class="ia-kpi-value">'+escapeHtml(k.valorFormatado || (k.valor===null?'pendente':String(k.valor)))+'</div>'
+        + (k.destaque ? '<div class="ia-kpi-sub">'+escapeHtml(k.destaque)+'</div>' : '')
+        + (k.variacaoPercentual!==undefined && k.variacaoPercentual!==null ? '<div class="ia-kpi-sub">'+(k.variacaoPercentual>=0?'+':'')+k.variacaoPercentual.toLocaleString('pt-BR',{maximumFractionDigits:1})+'% vs. período anterior</div>' : '')
+        + '</div>'
+      ).join('') + '</div>';
+    }
+
+    function tabelaHTML(tabela){
+      if(!tabela || !tabela.linhas || !tabela.linhas.length) return '';
+      const head = '<tr>' + tabela.colunas.map(c => '<th>'+escapeHtml(c.header)+'</th>').join('') + '</tr>';
+      const rows = tabela.linhas.map(linha => '<tr>' + tabela.colunas.map(c => '<td>'+fmtCelula(linha[c.key], c.tipo)+'</td>').join('') + '</tr>').join('');
+      return '<div class="ia-table-wrap"><table class="ia-table"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
+    }
+
+    function graficosHTML(graficos){
+      if(!graficos || !graficos.length) return '';
+      return graficos.map(g => {
+        const maiorValor = Math.max(1, ...g.series.flatMap(s => s.valores.map(v => Math.abs(v||0))));
+        const linhas = g.categorias.map((cat, i) => {
+          const barras = g.series.map((s, si) => {
+            const v = s.valores[i] || 0;
+            const pct = Math.max(2, Math.round((Math.abs(v) / maiorValor) * 100));
+            return '<div class="ia-chart-bar-track"><div class="ia-chart-bar-fill s'+(si%2)+'" style="width:'+pct+'%"></div></div>'
+              + '<div class="ia-chart-value">'+escapeHtml(g.series.length>1?s.nome+': ':'')+fmtCelula(v, s.tipo)+'</div>';
+          }).join('');
+          return '<div class="ia-chart-row"><div class="ia-chart-label">'+escapeHtml(cat)+'</div><div class="ia-chart-bars">'+barras+'</div></div>';
+        }).join('');
+        return '<div class="ia-chart"><div class="ia-chart-title">'+escapeHtml(g.titulo)+'</div>'+linhas+'</div>';
+      }).join('');
+    }
+
+    function cardHTML(msg){
+      const e = msg.estrutura;
+      if(!e) return '';
+      const resumoLinha = e.resumo ? '<div class="ia-card-resumo">'
+        + '<span>'+svg('clock')+' '+escapeHtml(e.resumo.periodo||'')+'</span>'
+        + (e.resumo.empresa ? '<span>'+svg('building')+' '+escapeHtml(e.resumo.empresa)+'</span>' : '')
+        + '</div>' : '';
+      const insightsHtml = (e.insights && e.insights.length)
+        ? '<div class="ia-insights"><h4>Principais conclusões</h4><ul>'+e.insights.map(i=>'<li>'+escapeHtml(i)+'</li>').join('')+'</ul></div>' : '';
+      const atencaoHtml = e.atencao ? '<div class="ia-atencao"><h4>Atenção</h4>'+escapeHtml(e.atencao)+'</div>' : '';
+      const temPlanilha = (e.tabela && e.tabela.linhas && e.tabela.linhas.length) || (e.graficos && e.graficos.length);
+      const downloadHtml = (temPlanilha && msg.id) ? '<div class="ia-card-actions"><a class="ia-download-btn" href="/api/ia-gestora/conversas/'+state.conversaId+'/mensagens/'+msg.id+'/xlsx" target="_blank" rel="noopener">'+svg('download')+'<span>Baixar planilha (XLSX)</span></a></div>' : '';
+      return '<div class="ia-card">'
+        + resumoLinha
+        + kpisHTML(e.kpis)
+        + tabelaHTML(e.tabela)
+        + graficosHTML(e.graficos)
+        + insightsHtml
+        + atencaoHtml
+        + downloadHtml
+        + '</div>';
+    }
+
+    function msgHTML(msg){
+      const isUser = msg.papel === 'usuario';
+      const bubbleClass = 'ia-bubble' + (msg.erro ? ' erro' : '');
+      let toolsHtml = '';
+      if(!isUser && msg.ferramentasUsadas && msg.ferramentasUsadas.length){
+        toolsHtml = '<div class="ia-msg-tools">'+svg('search')+'<span>Consultou: '+escapeHtml(msg.ferramentasUsadas.join(', '))+'</span></div>';
+      }
+      return '<div class="ia-msg '+(isUser?'user':'assistant')+'">'
+        + '<div class="ia-msg-ic">'+svg(isUser ? 'users' : 'messageCircle')+'</div>'
+        + '<div><div class="'+bubbleClass+'">'+escapeHtml(msg.texto)+'</div>'+(isUser?'':cardHTML(msg))+toolsHtml+'</div>'
+        + '</div>';
+    }
+
+    function typingHTML(){
+      return '<div class="ia-msg assistant"><div class="ia-msg-ic">'+svg('messageCircle')+'</div>'
+        + '<div class="ia-bubble ia-typing"><span class="spin"></span><span>IA Gestora está consultando os dados…</span></div></div>';
+    }
+
+    // Radar da IA — resumo "O que precisa da minha atenção hoje" (Passo 3
+    // do pedido do usuário, ver docs/02-decisoes.md). Mostrado na tela
+    // inicial da IA Gestora (antes de qualquer pergunta) — nunca substitui
+    // o chat, só resume o que o ciclo automático em segundo plano já
+    // detectou. Mesma paleta/emoji de severidade usada em Visão Geral >
+    // Alertas & IA (página overview, função radarPanelHTML).
+    const IA_RADAR_SEVERIDADE_COR = { critico:'danger', atencao:'warning', oportunidade:'success', informativo:'teal' };
+    const IA_RADAR_SEVERIDADE_EMOJI = { critico:'🔴', atencao:'🟠', oportunidade:'🟢', informativo:'🔵' };
+    const IA_RADAR_SEVERIDADE_LABEL = { critico:'Crítico', atencao:'Atenção', oportunidade:'Oportunidades', informativo:'Informativo' };
+
+    // Painel lateral direito — "O que precisa da minha atenção hoje"
+    // (26/08/2026 — redesign visual). Antes só aparecia dentro da tela
+    // vazia do chat (sumia ao conversar); agora fica fixo na coluna da
+    // direita, sempre visível — mesmo dado (state.radar), mesma leitura
+    // só-GET (carregarRadar), nenhuma lógica nova.
+    function radarPanelHTML(){
+      const head = '<div class="ia-panel-head"><h3>'+svg('activity')+' O que precisa da minha atenção hoje</h3></div>';
+      if(state.radarLoading && !state.radar) return head + '<div class="ia-panel-loading"><span class="spin"></span><span>Carregando o Radar da IA…</span></div>';
+      if(state.radarError) return ''; // auxiliar — some silenciosamente, o chat continua funcionando normalmente
+      if(!state.radar) return '';
+
+      const contagem = state.radar.contagem || {};
+      const totalRelevante = (contagem.critico||0) + (contagem.atencao||0) + (contagem.oportunidade||0);
+      if(!totalRelevante) return head + '<div class="ia-panel-empty">Nada pedindo atenção agora.</div>';
+
+      const chips = ['critico','atencao','oportunidade','informativo'].map(sev => {
+        const n = contagem[sev] || 0;
+        if(!n) return '';
+        const cor = IA_RADAR_SEVERIDADE_COR[sev];
+        return '<span class="status-chip" style="color:var(--'+cor+');background:var(--'+cor+'-soft);margin-right:6px;margin-bottom:6px;">'+IA_RADAR_SEVERIDADE_EMOJI[sev]+' '+n+' '+IA_RADAR_SEVERIDADE_LABEL[sev]+'</span>';
+      }).join('');
+
+      const itens = (state.radar.resumoHoje || []).slice(0, 5).map(r => {
+        const cor = IA_RADAR_SEVERIDADE_COR[r.severidade] || 'teal';
+        return '<div class="conn-row alert-row" data-page="'+escapeHtml(r.pagina||'')+'" style="cursor:'+(r.pagina?'pointer':'default')+';">'
+          + '<div class="conn-row-left"><span class="conn-ic" style="color:var(--'+cor+');">'+r.emoji+'</span><div>'
+            + '<div class="conn-name">'+escapeHtml(r.titulo)+'</div>'
+            + '<div class="conn-sub">'+escapeHtml(r.oQueAconteceu||'')+'</div>'
+          + '</div></div>'
+          + (r.pagina ? '<span class="conn-status">'+svg('link')+'</span>' : '')
+        + '</div>';
+      }).join('');
+
+      return head + '<div style="margin:6px 0 10px;flex-wrap:wrap;display:flex;">'+chips+'</div>' + itens;
+    }
+
+    // Painel lateral direito — "Insights principais" (26/08/2026 — redesign
+    // visual). Reaproveita /api/relatorios/resumo-vendas (mesmo endpoint já
+    // usado por Pedidos) — ticket médio é soma de exibição (faturamento ÷
+    // pedidos), igual ao já feito lá. Nunca mostra "vs período anterior"
+    // porque esse endpoint não traz comparação — não inventa a variação.
+    function insightsKpisHTML(){
+      const head = '<div class="ia-panel-head"><h3>Insights principais</h3></div>';
+      if(state.loadingResumoInsights && !state.resumoInsights) return head + '<div class="ia-panel-loading"><span class="spin"></span><span>Carregando…</span></div>';
+      if(!state.resumoInsights) return '';
+      const r = state.resumoInsights.resumo;
+      const ticketMedio = (r.faturamento.valor!==null && r.qtdPedidos) ? r.faturamento.valor / r.qtdPedidos : null;
+      const moneyKpi = (v) => v===null ? 'Pendente' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
+      const items = [
+        { label:'Faturamento total', icon:'lineChart', tint:'success', value: moneyKpi(r.faturamento.valor) },
+        { label:'Margem média', icon:'percent', tint:'purple', value: r.margemPercentual===null?'Pendente':r.margemPercentual.toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%' },
+        { label:'Ticket médio', icon:'wallet', tint:'petrol', value: moneyKpi(ticketMedio) },
+        { label:'Pedidos totais', icon:'cart', tint:'copper', value: String(r.qtdPedidos) },
+      ];
+      return head + '<div class="ia-panel-note">'+escapeHtml(state.resumoInsights.periodo.label)+'</div>'
+        + '<div class="ia-insights-kpis">' + items.map(k =>
+          '<div class="ia-insights-kpi" style="--tint:var(--'+k.tint+');--tint-soft:var(--'+k.tint+'-soft);">'
+            + '<div class="ia-insights-kpi-ic">'+svg(k.icon)+'</div>'
+            + '<div><div class="ia-insights-kpi-label">'+escapeHtml(k.label)+'</div><div class="ia-insights-kpi-value">'+k.value+'</div></div>'
+          + '</div>'
+        ).join('') + '</div>';
+    }
+
+    function insightsPanelHTML(){
+      return '<div class="ia-insights-panel">'
+        + insightsKpisHTML()
+        + '<div style="margin-top:18px;">' + radarPanelHTML() + '</div>'
+        + '</div>';
+    }
+
+    function emptyStateHTML(){
+      return '<div class="ia-empty">'
+        + '<div class="empty-icon">'+svg('messageCircle')+'</div>'
+        + '<h2>Pergunte à IA Gestora</h2>'
+        + '<p>Ela consulta os dados reais desta empresa e período — nunca inventa número. Ainda só consulta e analisa: não altera nada no sistema.</p>'
+        + '<div class="ia-suggestions">' + SUGESTOES.map(s => '<button type="button" class="ia-chip" data-pergunta="'+escapeHtml(s)+'">'+escapeHtml(s)+'</button>').join('') + '</div>'
+        + '</div>';
+    }
+
+    // ---------------- Login (login real, escopado a esta página) ----------------
+
+    function renderLogin(){
+      const root = document.getElementById('iaGestoraRoot');
+      if(!root) return;
+      root.innerHTML = '<div class="ia-page"><div class="ia-login-panel"><form class="ia-login-box" id="iaLoginForm">'
+        + '<div class="empty-icon" style="align-self:center;">'+svg('messageCircle')+'</div>'
+        + '<h2>Entrar na IA Gestora</h2>'
+        + '<p class="lead-sm">Login necessário só para conversar e ver seu histórico — suas conversas nunca aparecem para outro usuário.</p>'
+        + (state.loginErro ? '<div class="ia-login-error">'+escapeHtml(state.loginErro)+'</div>' : '')
+        + '<div class="ia-login-field"><label>E-mail</label><input type="email" id="iaLoginEmail" autocomplete="username" required value="'+escapeHtml(state.loginEmail)+'"></div>'
+        + '<div class="ia-login-field"><label>Senha</label><input type="password" id="iaLoginSenha" autocomplete="current-password" required></div>'
+        + '<button type="submit" class="ia-login-submit" id="iaLoginSubmit" '+(state.loginLoading?'disabled':'')+'>'+(state.loginLoading?'Entrando…':'Entrar')+'</button>'
+        + '</form></div></div>';
+
+      const form = document.getElementById('iaLoginForm');
+      if(form) form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        state.loginEmail = document.getElementById('iaLoginEmail').value.trim();
+        const senha = document.getElementById('iaLoginSenha').value;
+        state.loginErro = null; state.loginLoading = true; render();
+        try{
+          const body = await apiLogin(state.loginEmail, senha);
+          state.usuario = body.usuario;
+          state.loginLoading = false;
+          sincronizarContexto();
+          render();
+        }catch(err){
+          state.loginErro = err.message || 'Não foi possível entrar.';
+          state.loginLoading = false;
+          render();
+        }
+      });
+    }
+
+    // ---------------- Sidebar de conversas ----------------
+
+    function convosSidebarHTML(){
+      const lista = state.conversas.length
+        ? state.conversas.map(c => {
+            const dt = new Date(c.atualizadoEm);
+            const dataFmt = isNaN(dt) ? '' : dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+            return '<div class="ia-convo-item'+(c.id===state.conversaId?' active':'')+'" data-id="'+c.id+'">'
+              + '<div class="ia-convo-info"><div class="ia-convo-title">'+escapeHtml(c.titulo)+'</div><div class="ia-convo-meta">'+dataFmt+'</div></div>'
+              + '<button type="button" class="ia-convo-del" data-del-id="'+c.id+'" title="Excluir conversa" aria-label="Excluir conversa">'+svg('trash')+'</button>'
+              + '</div>';
+          }).join('')
+        : ('<div class="ia-convos-empty">'+(state.loadingConversas ? 'Carregando…' : 'Nenhuma conversa ainda. Pergunte algo para começar.')+'</div>');
+
+      return '<div class="ia-convos">'
+        + '<div class="ia-convos-head"><h3>Conversas</h3><button type="button" class="ia-new-btn" id="iaNovaConversaBtn">'+svg('plus')+'<span>Nova</span></button></div>'
+        + '<div class="ia-convos-list" id="iaConvosList">' + lista + '</div>'
+        + '<div class="ia-convos-foot"><span class="ia-convos-user">'+escapeHtml((state.usuario&&(state.usuario.nome||state.usuario.email))||'')+'</span><button type="button" class="ia-logout-btn" id="iaLogoutBtn">'+svg('logOut')+'<span>Sair</span></button></div>'
+        + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('iaGestoraRoot');
+      if(!root) return;
+
+      if(state.checkingAuth){ root.innerHTML = '<div class="ia-page"><div class="ia-login-panel"><span class="spin"></span></div></div>'; return; }
+      if(!state.usuario){ renderLogin(); return; }
+
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para conversar com a IA Gestora.</p></div>';
+        return;
+      }
+
+      const empresaNome = empresaAtualNome();
+      const periodoLabel = periodoAtualLabel();
+      const contextoHtml = '<div class="ia-inputbar-context">'
+        + svg('building') + '<span>'+escapeHtml(empresaNome || 'Selecione uma empresa no cabeçalho')+'</span>'
+        + '<span style="opacity:.5;">·</span>'
+        + svg('clock') + '<span>'+escapeHtml(periodoLabel)+'</span>'
+        + '</div>';
+
+      const msgsHtml = state.messages.length
+        ? state.messages.map(msgHTML).join('') + (state.loading ? typingHTML() : '')
+        : (state.loading ? typingHTML() : emptyStateHTML());
+
+      root.innerHTML = '<div class="ia-page">'
+        + convosSidebarHTML()
+        + '<div class="ia-shell">'
+          + '<div class="ia-msgs" id="iaMsgs">' + msgsHtml + '</div>'
+          + '<div class="ia-inputbar">'
+            + contextoHtml
+            + '<div class="ia-input-row">'
+              + '<textarea class="ia-textarea" id="iaInput" rows="1" placeholder="Pergunte sobre vendas, margem, custos, contas a pagar/receber, estoque…" '+(filtro.empresaId?'':'disabled')+'></textarea>'
+              + '<button class="ia-send-btn" id="iaSendBtn" type="button" '+(filtro.empresaId?'':'disabled')+'>'+svg('send')+'</button>'
+            + '</div>'
+            + '<div class="ia-disclaimer">A IA Gestora só consulta e analisa dados reais desta empresa e período — ainda não altera nada no sistema.</div>'
+          + '</div>'
+        + '</div>'
+        + insightsPanelHTML()
+      + '</div>';
+
+      scrollParaFinal();
+
+      const input = document.getElementById('iaInput');
+      const sendBtn = document.getElementById('iaSendBtn');
+
+      function autoresize(){ input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; }
+      if(input){
+        input.addEventListener('input', autoresize);
+        input.addEventListener('keydown', (e)=>{
+          if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); enviar(input.value); }
+        });
+      }
+      if(sendBtn) sendBtn.addEventListener('click', ()=> enviar(input ? input.value : ''));
+
+      root.querySelectorAll('.ia-chip').forEach(el=>{
+        el.addEventListener('click', ()=> enviar(el.dataset.pergunta));
+      });
+      root.querySelectorAll('.ia-insights-panel .alert-row').forEach(el=>{
+        el.addEventListener('click', () => { const page = el.dataset.page; if(page) navigate(page); });
+      });
+
+      const novaBtn = document.getElementById('iaNovaConversaBtn');
+      if(novaBtn) novaBtn.addEventListener('click', ()=>{
+        state.conversaId = null; state.messages = []; render();
+      });
+      const logoutBtn = document.getElementById('iaLogoutBtn');
+      if(logoutBtn) logoutBtn.addEventListener('click', async ()=>{
+        try{ await apiLogout(); }catch(e){ /* mesmo se falhar, limpa o estado local — o cookie expira sozinho */ }
+        state.usuario = null; state.conversaId = null; state.messages = []; state.conversas = []; state.contextEmpresaId = null;
+        render();
+      });
+      root.querySelectorAll('.ia-convo-item').forEach(el=>{
+        el.addEventListener('click', (e)=>{
+          if(e.target.closest('.ia-convo-del')) return;
+          abrirConversa(Number(el.dataset.id));
+        });
+      });
+      root.querySelectorAll('.ia-convo-del').forEach(el=>{
+        el.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          excluirConversa(Number(el.dataset.delId));
+        });
+      });
+    }
+
+    async function abrirConversa(id){
+      if(state.loading || id === state.conversaId) return;
+      try{
+        const conversa = await apiAbrirConversa(id);
+        state.conversaId = conversa.id;
+        state.messages = conversa.mensagens.map(m => ({ id: m.id, papel: m.papel, texto: m.texto, estrutura: m.estrutura, ferramentasUsadas: m.ferramentasUsadas, aviso: m.aviso }));
+        render();
+      }catch(err){ toast(err.message || 'Não foi possível abrir esta conversa.', 'error'); }
+    }
+
+    async function excluirConversa(id){
+      if(!window.confirm('Excluir esta conversa? Essa ação não pode ser desfeita.')) return;
+      try{
+        await apiExcluirConversa(id);
+        state.conversas = state.conversas.filter(c => c.id !== id);
+        if(state.conversaId === id){ state.conversaId = null; state.messages = []; }
+        toast('Conversa excluída.', 'success');
+        render();
+      }catch(err){ toast(err.message || 'Não foi possível excluir esta conversa.', 'error'); }
+    }
+
+    async function enviar(textoBruto){
+      const texto = String(textoBruto || '').trim();
+      const filtro = window.CerneFiltro.state;
+      if(!texto || state.loading || !filtro.empresaId) return;
+
+      state.messages.push({ papel: 'usuario', texto });
+      state.loading = true;
+      render();
+
+      try{
+        const resp = await apiPerguntar(filtro.empresaId, filtro.periodo, texto, state.conversaId, filtro.desdePersonalizado, filtro.atePersonalizado);
+        const ehErro = resp.aviso === 'nao_configurada' || resp.aviso === 'erro_provedor' || resp.aviso === 'limite_rodadas';
+        state.conversaId = resp.conversaId;
+        state.messages.push({ id: resp.mensagemId, papel: 'assistente', texto: resp.resposta, estrutura: resp.estrutura, ferramentasUsadas: resp.ferramentasUsadas, aviso: resp.aviso, erro: ehErro });
+        carregarConversas();
+      }catch(err){
+        if(err.status === 401){
+          state.usuario = null; state.messages.pop();
+          toast('Sua sessão expirou — faça login de novo.', 'error');
+        } else {
+          state.messages.push({ papel: 'assistente', texto: err.message || 'Não consegui falar com a IA Gestora agora. Tente novamente.', erro: true });
+        }
+      }
+      state.loading = false;
+      render();
+      const inputAfter = document.getElementById('iaInput');
+      if(inputAfter) inputAfter.focus();
+    }
+
+    window.IAGestora = { load };
+  })();
+

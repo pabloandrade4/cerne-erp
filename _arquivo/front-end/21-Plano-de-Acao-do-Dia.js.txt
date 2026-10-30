@@ -1,0 +1,195 @@
+  /* ================= PLANO DE AÇÃO DO DIA — Agente Coordenador (20/09/2026) =================
+     Pedido explícito do usuário: "claude agora com os meus agentes ligado
+     praciso que o analista analise a conta toda um exeplo anuncios o
+     porque um anuncio que vendia muito parou, pode ser ads pode ser o
+     concorrente entre outras coisas, como podemos fazer com que os
+     agentes analise a conta por completo e coloque pontual oque deve ser
+     feito, lembrando que nao pode ser no chute ou inventado tem que ser
+     com base em metricas e numeros da conta".
+
+     Etapa 5 do processo em etapas da "Daily dos Agentes" — a tela que
+     faltava pra ver o resultado do Agente Coordenador (Etapa 3, ver
+     lib/ia/coordenadorDiario.js) sem depender do WhatsApp (que hoje está
+     falhando por configuração do Twilio — ver 05-problemas-conhecidos.md).
+     Reaproveita 100%: GET /api/ia/daily/ultima (achados + correlações da
+     última reunião) e POST /api/ia/daily/gerar-agora ("Analisar agora",
+     mesmo botão que o agendador automático chama todo dia) — nenhuma
+     lógica nova no backend pra esta tela, só exibição.
+
+     "O que fazer primeiro" (as correlações do Coordenador) aparece SEMPRE
+     no topo, antes do detalhe por agente — é exatamente o "pontual o que
+     deve ser feito" que o usuário pediu. Cada conclusão já vem do backend
+     citando o número real por trás (nunca um texto solto aqui no
+     front-end) — esta tela só formata, nunca inventa nem completa nada. */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      try{ const d = new Date(v); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '—'; }
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      if(!wrap) return;
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+
+    const PRIORIDADE_INFO = {
+      critica: { label:'Crítica', cor:'--danger' },
+      alta: { label:'Alta', cor:'--warning' },
+      media: { label:'Média', cor:'--copper' },
+      baixa: { label:'Baixa', cor:'--text-faint' },
+    };
+    const NOME_AGENTE_FALLBACK = {
+      ads_performance:'Ads e Performance', promocoes:'Promoções', anuncios_radar:'Anúncios',
+      concorrente:'Análise de Concorrente', sac_mercado_livre:'SAC Mercado Livre', sac_shopee:'SAC Shopee',
+    };
+
+    const state = { loading:false, error:null, analisando:false, dados:null };
+
+    async function apiUltima(empresaId){
+      const res = await fetch('/api/ia/daily/ultima?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar o plano de ação.');
+      return body;
+    }
+    async function apiGerarAgora(empresaId){
+      const res = await fetch('/api/ia/daily/gerar-agora', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }),
+      });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível rodar a análise agora.');
+      return body;
+    }
+
+    async function carregar(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.dados = null; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.dados = await apiUltima(filtro.empresaId); }
+      catch(e){ state.error = e.message; state.dados = null; }
+      state.loading = false; render();
+    }
+
+    async function analisarAgora(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId || state.analisando) return;
+      state.analisando = true; render();
+      try{
+        await apiGerarAgora(filtro.empresaId);
+        await carregar();
+        toast('Análise concluída.', 'success');
+      } catch(e){
+        toast(e.message || 'Não foi possível rodar a análise agora.', 'error');
+      } finally {
+        state.analisando = false; render();
+      }
+    }
+
+    async function load(){ await carregar(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-planoAcaoDia');
+      if(page && page.classList.contains('active')) carregar();
+    });
+
+    function correlacaoCardHTML(c){
+      const pri = PRIORIDADE_INFO[c.prioridade] || { label:'Informativa', cor:'--text-faint' };
+      return '<div class="table-card" style="padding:16px 18px;margin-bottom:10px;border-left:4px solid var('+pri.cor+');">'
+        + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
+          + '<div style="flex:1;">'
+            + (c.sku ? '<div class="field-hint" style="margin-bottom:4px;">SKU <span class="mono">'+escapeHtml(c.sku)+'</span></div>' : '')
+            + '<div style="line-height:1.5;">'+escapeHtml(c.conclusao)+'</div>'
+          + '</div>'
+          + '<span class="badge-status" style="color:var('+pri.cor+');background:var('+pri.cor+'-soft);white-space:nowrap;">'+pri.label+'</span>'
+        + '</div>'
+      + '</div>';
+    }
+
+    function achadoLinhaHTML(a){
+      const pri = a.prioridade ? (PRIORIDADE_INFO[a.prioridade]||{cor:'--text-faint'}) : {cor:'--text-faint'};
+      return '<div style="padding:9px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;">'
+        + '<span style="width:8px;height:8px;border-radius:50%;background:var('+pri.cor+');margin-top:6px;flex:none;"></span>'
+        + '<div style="flex:1;">'
+          + '<div>'+escapeHtml(a.titulo)+'</div>'
+          + (a.descricao ? '<div class="field-hint" style="margin-top:2px;">'+escapeHtml(a.descricao)+'</div>' : '')
+        + '</div>'
+      + '</div>';
+    }
+
+    function agenteBlocoHTML(codigo, achados){
+      if(!achados || !achados.length) return '';
+      const nome = NOME_AGENTE_FALLBACK[codigo] || codigo;
+      return '<div class="table-card" style="padding:16px 18px;margin-bottom:10px;">'
+        + '<div class="panel-title" style="margin:0 0 6px;">'+escapeHtml(nome)+' <span class="field-hint" style="font-weight:500;">('+achados.length+')</span></div>'
+        + achados.map(achadoLinhaHTML).join('')
+      + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('planoAcaoDiaRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      const btnAnalisar = document.getElementById('btnAnalisarAgoraPlano');
+      if(btnAnalisar){
+        const habilitado = !state.analisando && !!filtro.empresaId;
+        btnAnalisar.disabled = !habilitado;
+        btnAnalisar.classList.toggle('enabled', habilitado);
+        btnAnalisar.innerHTML = svg('refreshCw')+'<span>'+(state.analisando ? 'Analisando…' : 'Analisar agora')+'</span>';
+      }
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para usar o Plano de Ação do Dia.</p></div>';
+        return;
+      }
+
+      if(state.loading){
+        root.innerHTML = '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando o plano de ação…</span></div></div>';
+        return;
+      }
+      if(state.error){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+        return;
+      }
+
+      const dados = state.dados;
+      if(!dados || !dados.reuniao){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('checkCircle')+'</div>'
+          + '<h2>Nenhuma análise ainda hoje</h2><p class="lead">Clique em "Analisar agora" pra rodar a Daily dos Agentes pela primeira vez — ela também roda automaticamente todo dia.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:14px;">Última análise: '+fmtDataHora(dados.reuniao.finalizadaEm || dados.reuniao.iniciadaEm)+' — status: '+escapeHtml(dados.reuniao.status)+(dados.reuniao.status === 'falhou' ? ' (nenhum especialista conseguiu produzir achados desta vez)' : '')+'</div>';
+
+      if(dados.correlacoes && dados.correlacoes.length){
+        html += '<div class="panel-title" style="margin:0 0 8px;">🧭 O que fazer primeiro</div>'
+          + dados.correlacoes.map(correlacaoCardHTML).join('');
+      } else {
+        html += '<div class="empty-panel" style="padding:18px;"><div class="field-hint">Nenhum cruzamento entre agentes identificado hoje — sem causa provável em comum entre os achados de Ads, Promoções, Anúncios e Concorrente pro mesmo SKU.</div></div>';
+      }
+
+      const porAgente = dados.achadosPorAgente || {};
+      const algumAchado = Object.keys(porAgente).some((codigo)=> (porAgente[codigo]||[]).length);
+      if(algumAchado){
+        html += '<div class="panel-title" style="margin:20px 0 8px;">Achados por agente</div>'
+          + Object.keys(porAgente).map((codigo)=> agenteBlocoHTML(codigo, porAgente[codigo])).join('');
+      } else if(!(dados.correlacoes && dados.correlacoes.length)){
+        html += '<div class="empty-panel" style="padding:18px;margin-top:10px;"><div class="field-hint">Nenhum achado de nenhum agente hoje.</div></div>';
+      }
+
+      root.innerHTML = html;
+    }
+
+    const btnAnalisarInicial = document.getElementById('btnAnalisarAgoraPlano');
+    if(btnAnalisarInicial) btnAnalisarInicial.addEventListener('click', analisarAgora);
+
+    window.PlanoAcaoDia = { load };
+  })();
+

@@ -1,0 +1,346 @@
+  /* ================= VISITAS E CONVERSÃO =================
+     Ativada em 26/08/2026, pedido explícito do usuário. Visitas vêm da API
+     de Visitas do Mercado Livre (lib/mlVisitas.js — novo cliente,
+     endpoints reais); vendas/pedidos vêm da mesma fonte única de sempre.
+     Conversão = pedidos ÷ visitas × 100 (definição explícita, mostrada em
+     toda a tela). REGRA DO USUÁRIO: nunca inventar número de visitas — "Dado
+     não disponível" é mostrado literalmente quando a API não retorna. */
+  (function(){
+    const state = { loading:false, error:null, data:null, contaId:'', sku:'', sort:'maisVisitados' };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function dadoNaoDisp(){ return '<span style="color:var(--text-faint);font-style:italic;">Dado não disponível</span>'; }
+    function intOrIndisp(v){ return v===null||v===undefined ? dadoNaoDisp() : Number(v).toLocaleString('pt-BR'); }
+    function pctOrIndisp(v){ return v===null||v===undefined ? dadoNaoDisp() : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
+    function pctSinal(v){ return v===null||v===undefined ? '—' : (v>=0?'+':'')+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+    function fmtDiaCurto(diaISO){ const [, m, d] = diaISO.split('-'); return d+'/'+m; }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function thumbHTML(url){
+      if(!url) return '<span class="anuncio-thumb-placeholder" title="Sem imagem disponível">'+svg('box')+'</span>';
+      return '<span style="position:relative;display:inline-block;width:36px;height:36px;flex-shrink:0;">'
+        + '<img class="anuncio-thumb" src="'+escapeHtml(url)+'" alt="" loading="lazy" style="position:absolute;inset:0;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+        + '<span class="anuncio-thumb-placeholder" style="display:none;position:absolute;inset:0;">'+svg('box')+'</span>'
+      + '</span>';
+    }
+
+    async function apiVisitas(empresaId, periodo, contaId, sku, desde, ate){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      if(sku) params.set('sku', sku);
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
+      const res = await fetch('/api/visitas-conversao?'+params.toString());
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar Visitas e Conversão.');
+      return body;
+    }
+
+    async function loadDados(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiVisitas(filtro.empresaId, filtro.periodo, state.contaId, state.sku, filtro.desdePersonalizado, filtro.atePersonalizado); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    function load(queryStr){
+      if(queryStr){
+        const params = new URLSearchParams(queryStr);
+        if(params.get('sku')) state.sku = params.get('sku');
+      }
+      loadDados();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-visitasConversao');
+      if(page && page.classList.contains('active')) loadDados();
+      else render();
+    });
+
+    const OPCOES_ORDENACAO = [
+      { valor:'maisVisitados', label:'Mais visitados' },
+      { valor:'menosVisitados', label:'Menos visitados' },
+      { valor:'melhorConversao', label:'Melhor conversão' },
+      { valor:'piorConversao', label:'Pior conversão' },
+      { valor:'maiorCrescimentoVisitas', label:'Maior crescimento de visitas' },
+      { valor:'maiorQuedaVisitas', label:'Maior queda de visitas' },
+      { valor:'muitasVisitasPoucasVendas', label:'Muitas visitas, poucas vendas' },
+      { valor:'poucasVisitasBoaConversao', label:'Poucas visitas, boa conversão' },
+    ];
+    function valOr(l, campo, seAusente){ const v = l[campo]; return v===null||v===undefined ? seAusente : v; }
+    function ordenarLinhas(linhas, sort){
+      if(sort==='muitasVisitasPoucasVendas'){
+        return linhas.filter(l=>l.insights.muitasVisitasPoucasVendas).slice().sort((a,b)=> valOr(b,'visitas',-Infinity) - valOr(a,'visitas',-Infinity));
+      }
+      if(sort==='poucasVisitasBoaConversao'){
+        return linhas.filter(l=>l.insights.poucasVisitasBoaConversao).slice().sort((a,b)=> valOr(b,'conversao',-Infinity) - valOr(a,'conversao',-Infinity));
+      }
+      const copia = linhas.slice();
+      if(sort==='menosVisitados') return copia.sort((a,b)=> valOr(a,'visitas',Infinity) - valOr(b,'visitas',Infinity));
+      if(sort==='melhorConversao') return copia.sort((a,b)=> valOr(b,'conversao',-Infinity) - valOr(a,'conversao',-Infinity));
+      if(sort==='piorConversao') return copia.sort((a,b)=> valOr(a,'conversao',Infinity) - valOr(b,'conversao',Infinity));
+      if(sort==='maiorCrescimentoVisitas') return copia.sort((a,b)=> valOr(b,'evolucaoVisitasPercentual',-Infinity) - valOr(a,'evolucaoVisitasPercentual',-Infinity));
+      if(sort==='maiorQuedaVisitas') return copia.sort((a,b)=> valOr(a,'evolucaoVisitasPercentual',Infinity) - valOr(b,'evolucaoVisitasPercentual',Infinity));
+      return copia.sort((a,b)=> valOr(b,'visitas',-Infinity) - valOr(a,'visitas',-Infinity)); // 'maisVisitados'
+    }
+
+    // ---- KPIs e rankings de topo — Σ/ordenação das MESMAS linhas já
+    // retornadas por /api/visitas-conversao (nenhum número novo). Visitas só
+    // somam nos anúncios com l.visitas!==null — nunca inventa visita pros
+    // que a API do Mercado Livre não retornou (mesma regra da tabela). */
+    function kpiHeroHTML(linhas){
+      if(!linhas.length) return '';
+      const comVisita = linhas.filter(l=>l.visitas!==null);
+      const visitasTotal = comVisita.reduce((s,l)=>s+l.visitas,0);
+      const pedidosComVisita = comVisita.reduce((s,l)=>s+l.pedidos,0);
+      const unidadesTotal = linhas.reduce((s,l)=>s+l.unidadesVendidas,0);
+      const pedidosTotal = linhas.reduce((s,l)=>s+l.pedidos,0);
+      const conversaoGeral = visitasTotal>0 ? (pedidosComVisita/visitasTotal*100) : null;
+      const anunciosFortes = linhas.filter(l=>l.insights.muitasVisitasBoaConversao).length;
+      const quedaVisitas = linhas.filter(l=>l.insights.quedaDeVisitas).length;
+      const items = [
+        { label:'Visitas (total)', icon:'eye', tint:'petrol', valueHtml: comVisita.length ? visitasTotal.toLocaleString('pt-BR') : dadoNaoDisp(), note: (linhas.length-comVisita.length)>0 ? (linhas.length-comVisita.length)+' anúncio(s) sem dado de visita' : 'Todos os anúncios com dado' },
+        { label:'Vendas (unidades)', icon:'box', tint:'copper', valueHtml: String(unidadesTotal), note: pedidosTotal+' pedido(s)' },
+        { label:'Conversão geral', icon:'activity', tint:'purple', valueHtml: conversaoGeral===null?dadoNaoDisp():conversaoGeral.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%', note:'Pedidos ÷ visitas, só anúncios com dado' },
+        { label:'Anúncios monitorados', icon:'tag', tint:'muted', valueHtml: String(linhas.length), note: state.data.lojas.length+' loja(s)' },
+        { label:'Anúncios fortes', icon:'checkCircle', tint: anunciosFortes>0?'success':'muted', valueHtml: String(anunciosFortes), note:'Muitas visitas + boa conversão' },
+        { label:'Queda de visitas', icon:'alertCircle', tint: quedaVisitas>0?'danger':'muted', valueHtml: String(quedaVisitas), note:'vs. período anterior' },
+      ];
+      return '<div class="kpi-hero-grid" style="margin-bottom:14px;">' + items.map(k=>
+        '<div class="kpi-hero" style="--tint:var(--'+k.tint+');--tint-soft:var(--'+k.tint+'-soft);">'
+          + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
+          + '<div class="kpi-hero-label">'+escapeHtml(k.label)+'</div>'
+          + '<div class="kpi-hero-value" style="font-size:18px;">'+k.valueHtml+'</div>'
+          + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
+        + '</div>'
+      ).join('') + '</div>';
+    }
+    function rankingListHTML(titulo, icone, linhas, valorFn){
+      if(!linhas.length) return '<div class="panel"><div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg(icone)+'</span>'+escapeHtml(titulo)+'</div></div><div class="field-hint">Sem dados suficientes.</div></div>';
+      return '<div class="panel">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg(icone)+'</span>'+escapeHtml(titulo)+'</div></div>'
+        + linhas.map((l,i)=> '<div class="item-row"><div style="display:flex;align-items:center;gap:10px;min-width:0;">'
+            + '<span style="flex-shrink:0;width:20px;color:var(--text-faint);font-weight:700;font-size:12px;">'+(i+1)+'</span>'
+            + thumbHTML(l.imagemUrl)
+            + '<div class="cell-stack" style="min-width:0;"><span class="ir-title" title="'+escapeHtml(l.anuncio||'—')+'">'+escapeHtml(l.anuncio||'(sem título)')+'</span><span class="ir-sku mono">'+escapeHtml(l.sku||'sem SKU')+'</span></div>'
+          + '</div>'
+          + '<div class="mono" style="text-align:right;flex-shrink:0;">'+valorFn(l)+'</div>'
+        + '</div>').join('')
+      + '</div>';
+    }
+
+    function insightsHTML(l){
+      const tags = [];
+      if(l.insights.muitasVisitasPoucasVendas) tags.push(['Muitas visitas, poucas vendas','var(--warning)']);
+      if(l.insights.poucasVisitasBoaConversao) tags.push(['Poucas visitas, boa conversão','var(--teal)']);
+      if(l.insights.muitasVisitasBoaConversao) tags.push(['Anúncio forte','var(--success)']);
+      if(l.insights.quedaDeVisitas) tags.push(['Queda de visitas','var(--danger)']);
+      if(!tags.length) return '';
+      return tags.map(([t,cor])=>'<span style="display:inline-block;font-size:11px;padding:2px 7px;border-radius:20px;background:var(--surface-2);color:'+cor+';font-weight:600;margin:0 4px 4px 0;">'+escapeHtml(t)+'</span>').join('');
+    }
+
+    function anuncioCellHTML(l){
+      return '<td class="produto-cell"><a href="javascript:void(0)" class="anuncio-link" data-ml-item="'+escapeHtml(l.mlItemId||'')+'" style="text-decoration:none;color:inherit;"><div class="anuncio-cell-flex">'
+        + thumbHTML(l.imagemUrl)
+        + '<div class="cell-stack">'
+          + '<span class="prod-title" title="'+escapeHtml(l.anuncio||'—')+'" style="text-decoration:underline dotted;">'+escapeHtml(l.anuncio||'(sem título)')+'</span>'
+          + '<span class="cell-stack-sub mono">'+escapeHtml(l.sku||'sem SKU')+'</span>'
+        + '</div></div></a></td>';
+    }
+
+    function tabelaHTML(linhas){
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Anúncio / SKU</th><th>Loja</th><th>Visitas</th><th>Unid. vendidas</th><th>Pedidos</th><th>Faturamento</th><th>Conversão (pedidos÷visitas)</th>'
+        + '<th>Visitas per. anterior</th><th>Evolução visitas</th><th>Evolução conversão</th><th>Sinalizações</th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + anuncioCellHTML(l)
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td class="mono">'+intOrIndisp(l.visitas)+'</td>'
+          + '<td class="mono tab-nums">'+l.unidadesVendidas+'</td>'
+          + '<td class="mono tab-nums">'+l.pedidos+'</td>'
+          + '<td class="mono">'+money(l.faturamento)+'</td>'
+          + '<td class="mono">'+pctOrIndisp(l.conversao)+'</td>'
+          + '<td class="mono">'+intOrIndisp(l.visitasAnterior)+'</td>'
+          + '<td class="mono" style="'+(l.evolucaoVisitasPercentual!==null?(l.evolucaoVisitasPercentual>=0?'color:var(--success);':'color:var(--danger);'):'')+'">'+(l.visitasNovo?'<span style="color:var(--teal);">Novo</span>':pctSinal(l.evolucaoVisitasPercentual))+'</td>'
+          + '<td class="mono">'+(l.evolucaoConversaoPontos===null?'—':((l.evolucaoConversaoPontos>=0?'+':'')+l.evolucaoConversaoPontos.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' p.p.'))+'</td>'
+          + '<td>'+insightsHTML(l)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    // ---- Gráficos: Visitas x Vendas (barras+linha) e Conversão ao longo do tempo (linha) ----
+    function chartVisitasVendasHTML(serie){
+      if(!serie || !serie.length){
+        return '<div class="chart-canvas h-lg">' + chartGridLines(4) + chartEmptyState('lineChart', 'Sem série diária disponível para este período.') + '</div>';
+      }
+      const n = serie.length;
+      const W = Math.max(n*10, 10), H = 100, topPad = 8, botPad = 10;
+      const usable = H - topPad - botPad;
+      const vals = serie.flatMap(d => [d.unidades||0, d.visitas||0]);
+      const maxV = Math.max(1, ...vals);
+      const yFor = v => topPad + usable * (1 - (v||0) / maxV);
+      const baseY = yFor(0);
+      const barW = 6;
+      let bars = '', points = [];
+      serie.forEach((d,i)=>{
+        const cx = i*10+5;
+        const y1 = yFor(d.unidades||0);
+        const barY = Math.min(y1, baseY), barH = Math.max(Math.abs(y1-baseY), 0.6);
+        const label = fmtDiaCurto(d.dia)+' — Vendas: '+(d.unidades||0)+' · Visitas: '+(d.visitas===null?'dado não disponível':d.visitas);
+        bars += '<rect x="'+(cx-barW/2)+'" y="'+barY+'" width="'+barW+'" height="'+barH+'" rx="1" fill="var(--copper)" fill-opacity="0.85"><title>'+escapeHtml(label)+'</title></rect>';
+        if(d.visitas!==null) points.push(cx+','+yFor(d.visitas));
+      });
+      const line = points.length ? '<polyline points="'+points.join(' ')+'" fill="none" stroke="var(--teal)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>' : '';
+      const baseline = '<line x1="0" y1="'+baseY+'" x2="'+W+'" y2="'+baseY+'" stroke="var(--border-strong)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+      const labelStep = Math.max(1, Math.ceil(n/9));
+      const labels = serie.map((d,i) => '<span>'+((i%labelStep===0 || i===n-1) ? escapeHtml(fmtDiaCurto(d.dia)) : '')+'</span>').join('');
+      return '<div class="chart-canvas" style="position:relative;height:200px;padding:0;">'
+        + '<svg class="simple-chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:100%;">' + baseline + bars + line + '</svg>'
+      + '</div>'
+      + '<div class="simple-chart-xlabels" style="grid-template-columns:repeat('+n+',1fr);">' + labels + '</div>';
+    }
+    function chartConversaoHTML(serie){
+      const comDado = (serie||[]).filter(d=>d.conversao!==null);
+      if(!comDado.length){
+        return '<div class="chart-canvas h-lg">' + chartGridLines(4) + chartEmptyState('activity', 'Sem conversão diária disponível (depende de visitas, que não estão disponíveis neste período).') + '</div>';
+      }
+      const n = serie.length;
+      const W = Math.max(n*10, 10), H = 100, topPad = 8, botPad = 10;
+      const usable = H - topPad - botPad;
+      const maxV = Math.max(1, ...comDado.map(d=>d.conversao));
+      const yFor = v => topPad + usable * (1 - v/maxV);
+      let points = [];
+      serie.forEach((d,i)=>{ if(d.conversao!==null) points.push((i*10+5)+','+yFor(d.conversao)); });
+      const line = '<polyline points="'+points.join(' ')+'" fill="none" stroke="var(--success)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>';
+      const dots = serie.map((d,i)=>{
+        if(d.conversao===null) return '';
+        const cx=i*10+5, cy=yFor(d.conversao);
+        return '<circle cx="'+cx+'" cy="'+cy+'" r="1.6" fill="var(--success)" vector-effect="non-scaling-stroke"><title>'+escapeHtml(fmtDiaCurto(d.dia)+' — Conversão: '+d.conversao.toFixed(2)+'%')+'</title></circle>';
+      }).join('');
+      const labelStep = Math.max(1, Math.ceil(n/9));
+      const labels = serie.map((d,i) => '<span>'+((i%labelStep===0 || i===n-1) ? escapeHtml(fmtDiaCurto(d.dia)) : '')+'</span>').join('');
+      return '<div class="chart-canvas" style="position:relative;height:200px;padding:0;">'
+        + '<svg class="simple-chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:100%;">' + line + dots + '</svg>'
+      + '</div>'
+      + '<div class="simple-chart-xlabels" style="grid-template-columns:repeat('+n+',1fr);">' + labels + '</div>';
+    }
+
+    function abrirDetalhe(l){
+      window.AnuncioDetalheModal.abrir({
+        titulo: l.anuncio, sku: l.sku, loja: l.loja, mlItemId: l.mlItemId, imagemUrl: l.imagemUrl, origem: 'visitasConversao',
+        campos: [
+          { label:'Visitas no período', html: intOrIndisp(l.visitas) },
+          { label:'Unidades vendidas', value: l.unidadesVendidas },
+          { label:'Pedidos', value: l.pedidos },
+          { label:'Faturamento', html: money(l.faturamento) },
+          { label:'Conversão (pedidos÷visitas)', html: pctOrIndisp(l.conversao) },
+          { label:'Visitas período anterior', html: intOrIndisp(l.visitasAnterior) },
+          { label:'Evolução de visitas', html: l.visitasNovo?'Novo no período':pctSinal(l.evolucaoVisitasPercentual) },
+          { label:'Evolução de conversão', value: l.evolucaoConversaoPontos===null?'—':(l.evolucaoConversaoPontos+' p.p.') },
+        ],
+      });
+    }
+
+    function render(){
+      const root = document.getElementById('visitasConversaoRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver Visitas e Conversão aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="field-hint" style="margin-bottom:12px;max-width:960px;">Conversão = <strong>pedidos ÷ visitas × 100</strong> (um pedido com várias unidades do mesmo anúncio conta como 1 conversão). Visitas vêm direto da API de Visitas do Mercado Livre — quando a API não retorna esse dado para um anúncio/período, a tela mostra "Dado não disponível" (nunca um número estimado). Os gráficos mostram a série diária agregada de todas as lojas/anúncios filtrados — a API do Mercado Livre não oferece visitas diárias por anúncio individual.</div>';
+
+      if(state.data && !state.data.semConta){
+        html += '<div class="toolbar"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="vcLojaSelect"><option value="">Todas as lojas</option>'
+            + state.data.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+          + '</select></div>'
+          + '<input type="text" id="vcSkuInput" placeholder="Buscar por SKU…" value="'+escapeHtml(state.sku)+'" style="height:38px;padding:0 12px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-1);min-width:160px;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="vcSortSelect">'
+            + OPCOES_ORDENACAO.map(o=>'<option value="'+o.valor+'" '+(o.valor===state.sort?'selected':'')+'>Ordenar por: '+escapeHtml(o.label)+'</option>').join('')
+          + '</select></div>'
+        + '</div></div>';
+
+        if(state.data.situacaoPorConta && state.data.situacaoPorConta.some(s=>!s.disponivel)){
+          html += '<div class="table-card" style="padding:12px 16px;margin-bottom:14px;border-left:3px solid var(--warning);">'
+            + state.data.situacaoPorConta.filter(s=>!s.disponivel).map(s=>
+              '<div style="font-size:12.5px;color:var(--text-muted);display:flex;gap:8px;align-items:flex-start;margin:4px 0;">'
+                + '<span style="color:var(--warning);flex-shrink:0;">'+svg('alertCircle')+'</span>'
+                + '<span><strong>'+escapeHtml(s.loja||('Conta '+s.contaId))+'</strong>: '+escapeHtml(s.mensagem||'')+'</span>'
+              + '</div>'
+            ).join('')
+          + '</div>';
+        }
+
+        if(state.data.linhas && state.data.linhas.length) html += kpiHeroHTML(state.data.linhas);
+
+        if(state.data.grafico){
+          html += '<div class="chart-card" style="margin-bottom:14px;">'
+            + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('lineChart')+'</span>Visitas x Vendas</div>'
+              + '<div class="chart-legend"><span class="legend-item"><span class="legend-dot" style="background:var(--copper)"></span>Vendas (unidades)</span><span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>Visitas</span></div>'
+            + '</div>'
+            + chartVisitasVendasHTML(state.data.grafico.serieDiaria)
+          + '</div>';
+          html += '<div class="chart-card" style="margin-bottom:14px;">'
+            + '<div class="chart-card-head"><div class="panel-title"><span class="panel-title-ic">'+svg('activity')+'</span>Conversão ao longo do tempo</div></div>'
+            + chartConversaoHTML(state.data.grafico.serieDiaria)
+          + '</div>';
+        }
+
+        if(state.data.linhas && state.data.linhas.length){
+          html += '<div class="grid-2" style="margin-bottom:14px;align-items:start;">'
+            + rankingListHTML('Ranking de mais visitados', 'eye', state.data.linhas.filter(l=>l.visitas!==null).slice().sort((a,b)=>b.visitas-a.visitas).slice(0,5), l=>intOrIndisp(l.visitas))
+            + rankingListHTML('Ranking de melhor conversão', 'activity', state.data.linhas.filter(l=>l.conversao!==null).slice().sort((a,b)=>b.conversao-a.conversao).slice(0,5), l=>pctOrIndisp(l.conversao))
+          + '</div>';
+        }
+      }
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando Visitas e Conversão…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data && state.data.semConta){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma conta do Mercado Livre conectada</h2><p class="lead">Conecte uma conta do Mercado Livre em <strong>Marketplaces</strong> para ver Visitas e Conversão aqui.</p></div>';
+      } else if(state.data && !state.data.linhas.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('eye')+'</div>'
+          + '<h2>Nenhum anúncio encontrado</h2><p class="lead">Nenhum anúncio com venda ou dado para os filtros escolhidos.</p></div>';
+      } else if(state.data){
+        const linhasOrdenadas = ordenarLinhas(state.data.linhas, state.sort);
+        if(!linhasOrdenadas.length){
+          html += '<div class="empty-panel"><div class="empty-icon">'+svg('eye')+'</div><h2>Nenhum anúncio nesta ordenação/filtro</h2><p class="lead">Experimente "Todas as lojas" ou outra ordenação.</p></div>';
+        } else {
+          html += tabelaHTML(linhasOrdenadas);
+        }
+      }
+
+      root.innerHTML = html;
+
+      const selLoja = document.getElementById('vcLojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadDados(); });
+      const skuInput = document.getElementById('vcSkuInput');
+      if(skuInput){
+        let debounce = null;
+        skuInput.addEventListener('input', ()=>{ clearTimeout(debounce); debounce = setTimeout(()=>{ state.sku = skuInput.value; loadDados(); }, 400); });
+      }
+      const selSort = document.getElementById('vcSortSelect');
+      if(selSort) selSort.addEventListener('change', ()=>{ state.sort = selSort.value; render(); });
+
+      root.querySelectorAll('.anuncio-link').forEach(el=>{
+        el.addEventListener('click', ()=>{
+          const mlItemId = el.dataset.mlItem;
+          const l = (state.data.linhas||[]).find(x=>x.mlItemId===mlItemId);
+          if(l) abrirDetalhe(l);
+        });
+      });
+    }
+
+    window.VisitasConversao = { load };
+  })();
+

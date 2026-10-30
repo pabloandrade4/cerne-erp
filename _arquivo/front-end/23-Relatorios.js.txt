@@ -1,0 +1,269 @@
+  /* ================= RELATÓRIOS — categorias com dados 100% reaproveitados =================
+     Ativado em 25/08/2026. Regra central do usuário: os números aqui usam as
+     MESMAS regras já usadas em Visão Geral/Pedidos/Financeiro (nenhum
+     cálculo novo) — ver lib/relatoriosAgregados.js no backend. Empresa e
+     período vêm do filtro do header; loja e SKU são filtros desta tela.
+     Exportação (XLSX/CSV) sempre respeita os filtros atuais. */
+  (function(){
+    const CATEGORIAS = [
+      ['vendas-margem','Vendas e Margem'],
+      ['produtos','Produtos'],
+      ['marketplaces','Marketplaces / Lojas'],
+    ];
+    const state = { loading:false, error:null, categoria:'vendas-margem', contaId:'', sku:'', lojas:[], data:null, visaoProdutos:'sku' };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? null : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function pctFmt(v){ return v===null||v===undefined ? null : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
+    function pend(){ return '<span style="color:var(--text-faint);font-style:italic;">pendente</span>'; }
+    function pendSync(){ return '<span style="color:var(--text-faint);font-style:italic;">Pendente de sincronização</span>'; }
+    function moneyOrPend(v){ return v===null||v===undefined ? pend() : money(v); }
+
+    async function apiLojas(empresaId){
+      try{
+        const res = await fetch('/api/integracoes/mercadolivre?empresaId='+empresaId);
+        const body = await res.json();
+        return (body && body.contas) || [];
+      }catch(e){ return []; }
+    }
+
+    async function apiCategoria(categoria, empresaId, periodo, contaId, sku, visaoProdutos, desde, ate){
+      const params = new URLSearchParams({ empresaId, periodo });
+      if(contaId) params.set('contaId', contaId);
+      if(categoria === 'produtos' && visaoProdutos !== 'caixa' && sku.trim()) params.set('sku', sku.trim());
+      if(periodo === 'personalizado'){ if(desde) params.set('desde', desde); if(ate) params.set('ate', ate); }
+      const path = categoria === 'vendas-margem' ? '/api/relatorios/vendas-margem'
+        : categoria === 'produtos' ? (visaoProdutos === 'caixa' ? '/api/relatorios/produtos-por-caixa' : '/api/relatorios/produtos')
+        : '/api/relatorios/marketplaces';
+      const res = await fetch(path+'?'+params.toString());
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o relatório.');
+      return body;
+    }
+
+    async function loadRelatorio(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.data = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{
+        const [dados, lojas] = await Promise.all([
+          apiCategoria(state.categoria, filtro.empresaId, filtro.periodo, state.contaId, state.sku, state.visaoProdutos, filtro.desdePersonalizado, filtro.atePersonalizado),
+          apiLojas(filtro.empresaId),
+        ]);
+        state.data = dados;
+        state.lojas = lojas;
+      }catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    function load(){ loadRelatorio(); }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-reports');
+      if(page && page.classList.contains('active')) loadRelatorio();
+      else render();
+    });
+
+    function baixarExportacao(formato){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId) return;
+      const params = new URLSearchParams({ categoria: state.categoria, empresaId: filtro.empresaId, periodo: filtro.periodo, formato });
+      if(state.contaId) params.set('contaId', state.contaId);
+      if(state.categoria === 'produtos' && state.sku.trim()) params.set('sku', state.sku.trim());
+      if(filtro.periodo === 'personalizado'){ if(filtro.desdePersonalizado) params.set('desde', filtro.desdePersonalizado); if(filtro.atePersonalizado) params.set('ate', filtro.atePersonalizado); }
+      window.location.href = '/api/relatorios/exportar?'+params.toString();
+    }
+
+    function renderVendasMargem(d){
+      const semPedidos = d.resumo.qtdPedidos === 0;
+      const linhas = [
+        ['Faturamento', semPedidos ? 0 : d.resumo.faturamento.valor, 'money'],
+        ['Pedidos', d.resumo.qtdPedidos, 'int'],
+        ['Unidades vendidas', d.totalUnidades, 'int'],
+        ['Taxas/comissões', semPedidos ? 0 : d.resumo.tarifas.valor, 'money'],
+        ['Frete vendedor', semPedidos ? 0 : d.resumo.freteVendedor.valor, 'money'],
+        ['Imposto', semPedidos ? 0 : d.resumo.imposto.valor, 'money'],
+        ['Custo dos produtos', d.resumo.custoProduto.valor, 'money'],
+        ['Ads', d.ads.disponivel ? d.ads.valor : null, 'money-sync'],
+        ['Margem de contribuição (R$)', d.resumo.margemContribuicao.valor, 'money'],
+        ['Margem de contribuição (%)', semPedidos ? 0 : d.resumo.margemPercentual, 'percent'],
+      ];
+      let html = '<div class="panel" style="max-width:640px;">'
+        + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('lineChart')+'</span>Vendas e Margem</div><span class="panel-note">'+escapeHtml((d.periodo&&d.periodo.label)||'')+'</span></div>'
+        + linhas.map(([label, valor, tipo])=>{
+            const valorHtml = tipo === 'money' ? moneyOrPend(valor)
+              : tipo === 'money-sync' ? (valor===null ? pendSync() : money(valor))
+              : tipo === 'percent' ? (valor===null ? pend() : pctFmt(valor))
+              : valor;
+            return '<div class="bd-row"><span class="bd-label">'+label+'</span><span class="bd-value">'+valorHtml+'</span></div>';
+          }).join('')
+        + (d.ads.disponivel && d.ads.parcial ? '<div class="bd-side-note">Ads: dado parcial — alguma loja está com a sincronização de Ads indisponível no momento.</div>' : '')
+        + '<div class="bd-side-note">Mesmos números e regras de Visão Geral, Pedidos e Financeiro para o mesmo período/loja — nenhum cálculo separado.</div>'
+      + '</div>';
+      return html;
+    }
+
+    function renderProdutos(d){
+      if(!d.linhas.length){
+        return '<div class="empty-panel"><div class="empty-icon">'+svg('box')+'</div>'
+          + '<h2>Nenhum produto vendido no período</h2>'
+          + '<p class="lead">Não há itens de pedido para os filtros selecionados.</p></div>';
+      }
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>SKU</th><th>Quantidade vendida</th><th>Faturamento</th><th>Custo</th><th>Imposto</th><th>Margem gerada</th>'
+        + '</tr></thead><tbody>'
+        + d.linhas.map(l => '<tr>'
+          + '<td class="mono">'+escapeHtml(l.sku)+(l.rateado?' <span title="Frete/desconto/tarifas deste SKU foram rateados proporcionalmente porque ele às vezes divide pedido com outros itens." style="color:var(--text-faint);font-size:11px;">(rateado)</span>':'')+'</td>'
+          + '<td class="tab-nums">'+l.quantidade+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.faturamento)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.custo)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.imposto)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.margemContribuicao)+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>'
+        + '<div class="field-hint" style="margin-top:6px;">"pendente" = falta cadastrar o custo do SKU em <strong>Produtos</strong> e/ou o Mercado Livre não retornou alguma tarifa — nunca um valor estimado.</div>';
+    }
+
+    // Visão "Por Caixa": agrupa pelo produto base físico (medida da caixa),
+    // juntando todos os SKUs/kit que representam a mesma caixa — ver
+    // GET /api/relatorios/produtos-por-caixa e lib/relatoriosAgregados.js.
+    function renderProdutosPorCaixa(d){
+      if(!d.linhas.length && !d.semProdutoBase.length){
+        return '<div class="empty-panel"><div class="empty-icon">'+svg('box')+'</div>'
+          + '<h2>Nenhum produto vendido no período</h2>'
+          + '<p class="lead">Não há itens de pedido para os filtros selecionados.</p></div>';
+      }
+      let html = '';
+      if(d.linhas.length){
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto base (medida)</th><th>Caixas físicas vendidas</th><th>Kits vendidos</th><th>Pedidos</th><th>Faturamento</th>'
+          + '</tr></thead><tbody>'
+          + d.linhas.map(l => '<tr>'
+            + '<td class="mono">'+escapeHtml(l.produtoBase)
+              + (l.origemHeuristica ? ' <span title="Produto base identificado automaticamente pelo padrão do SKU (dígitos no início = quantidade por kit) — sem vínculo cadastrado manualmente." style="color:var(--text-faint);font-size:11px;">(padrão do SKU)</span>' : '')
+              + '<div class="di-sub">'+l.skus.map(s=>escapeHtml(s.sku)+' ('+s.multiplicador+'x)').join(', ')+'</div>'
+            + '</td>'
+            + '<td class="tab-nums">'+l.quantidadeCaixas.toLocaleString('pt-BR')+'</td>'
+            + '<td class="tab-nums">'+l.kitsVendidos.toLocaleString('pt-BR')+'</td>'
+            + '<td class="tab-nums">'+l.quantidadePedidos+'</td>'
+            + '<td class="mono">'+moneyOrPend(l.faturamento)+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+      html += '<div class="field-hint" style="margin-top:6px;">Caixas físicas vendidas = kits vendidos × unidades por kit de cada SKU, somado por produto base. Faturamento é a soma total gerada pelos SKUs daquela medida — nunca dividido pela quantidade de caixas.</div>';
+      if(d.semProdutoBase.length){
+        html += '<div class="panel" style="margin-top:14px;">'
+          + '<div class="panel-head"><div class="panel-title"><span class="panel-title-ic">'+svg('alertCircle')+'</span>SKUs sem produto base identificado</div><span class="panel-note">'+d.semProdutoBase.length+'</span></div>'
+          + '<div class="table-wrap"><table class="data-table"><thead><tr><th>SKU</th><th>Kits vendidos</th><th>Pedidos</th><th>Faturamento</th></tr></thead><tbody>'
+          + d.semProdutoBase.map(l => '<tr>'
+            + '<td class="mono">'+escapeHtml(l.sku)+'</td>'
+            + '<td class="tab-nums">'+l.kitsVendidos.toLocaleString('pt-BR')+'</td>'
+            + '<td class="tab-nums">'+l.quantidadePedidos+'</td>'
+            + '<td class="mono">'+moneyOrPend(l.faturamento)+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div>'
+          + '<div class="bd-side-note">Esses SKUs não seguem o padrão "dígitos no início = quantidade por kit" e não têm vínculo cadastrado em Produto Base — nunca agrupados por chute. Não entram no total de caixas físicas acima.</div>'
+        + '</div>';
+      }
+      return html;
+    }
+
+    function renderMarketplaces(d){
+      const linhas = state.contaId ? d.linhas.filter(l=>String(l.contaMlId)===String(state.contaId)) : d.linhas;
+      if(!linhas.length){
+        return '<div class="empty-panel"><div class="empty-icon">'+svg('store')+'</div>'
+          + '<h2>Nenhuma loja com pedidos no período</h2>'
+          + '<p class="lead">Não há pedidos para os filtros selecionados.</p></div>';
+      }
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Loja</th><th>Faturamento</th><th>Pedidos</th><th>Taxas/comissões</th><th>Frete vendedor</th><th>Custo</th><th>Margem R$</th><th>Margem %</th>'
+        + '</tr></thead><tbody>'
+        + linhas.map(l => '<tr>'
+          + '<td>'+escapeHtml(l.loja||'—')+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.resumo.faturamento.valor)+'</td>'
+          + '<td class="tab-nums">'+l.resumo.qtdPedidos+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.resumo.tarifas.valor)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.resumo.freteVendedor.valor)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.resumo.custoProduto.valor)+'</td>'
+          + '<td class="mono">'+moneyOrPend(l.resumo.margemContribuicao.valor)+'</td>'
+          + '<td class="mono">'+(l.resumo.margemPercentual===null?pend():pctFmt(l.resumo.margemPercentual))+'</td>'
+        + '</tr>').join('')
+        + '</tbody></table></div></div>';
+    }
+
+    function render(){
+      const root = document.getElementById('relatoriosRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver Relatórios aqui.</p></div>';
+        return;
+      }
+
+      const podeExportar = state.categoria !== 'produtos' || state.visaoProdutos !== 'caixa';
+      let html = '<div class="toolbar">'
+        + '<div class="seg" id="relCategoriaSeg">'
+          + CATEGORIAS.map(([chave,label])=>'<button data-categoria="'+chave+'" class="'+(state.categoria===chave?'active':'')+'">'+label+'</button>').join('')
+        + '</div>'
+        + (state.categoria==='produtos' ? '<div class="seg" id="relVisaoProdutosSeg">'
+          + '<button data-visao="sku" class="'+(state.visaoProdutos==='sku'?'active':'')+'">Por SKU</button>'
+          + '<button data-visao="caixa" class="'+(state.visaoProdutos==='caixa'?'active':'')+'">Por Caixa</button>'
+        + '</div>' : '')
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          + '<div class="empresa-picker" style="margin-bottom:0;"><select id="relLojaSelect">'
+            + '<option value="">Todas as lojas</option>'
+            + state.lojas.map(l=>'<option value="'+l.id+'" '+(String(l.id)===String(state.contaId)?'selected':'')+'>'+escapeHtml(l.nickname||('Conta '+l.id))+'</option>').join('')
+          + '</select></div>'
+          + (state.categoria==='produtos' && state.visaoProdutos==='sku' ? '<div class="search-box" style="margin-bottom:0;">'+svg('search')+'<input type="text" id="relSkuInput" placeholder="Buscar SKU" value="'+escapeHtml(state.sku)+'"></div>' : '')
+        + '</div>'
+        + (podeExportar ? '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          + '<button class="ghost-btn" id="relXlsxBtn" type="button" style="cursor:pointer; opacity:1;" title="Exportar este relatório em Excel com os filtros atuais">'+svg('fileText')+'<span>Exportar (Excel)</span></button>'
+          + '<button class="ghost-btn" id="relCsvBtn" type="button" style="cursor:pointer; opacity:1;" title="Exportar este relatório em CSV com os filtros atuais">'+svg('fileText')+'<span>CSV</span></button>'
+        + '</div>' : '')
+      + '</div>';
+
+      if(state.loading || filtro.loadingEmpresas){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando relatório…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data){
+        if(state.categoria === 'vendas-margem') html += renderVendasMargem(state.data);
+        else if(state.categoria === 'produtos') html += (state.visaoProdutos === 'caixa' ? renderProdutosPorCaixa(state.data) : renderProdutos(state.data));
+        else html += renderMarketplaces(state.data);
+      }
+
+      root.innerHTML = html;
+
+      const seg = document.getElementById('relCategoriaSeg');
+      if(seg) seg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{
+        if(state.categoria === b.dataset.categoria) return;
+        state.categoria = b.dataset.categoria;
+        loadRelatorio();
+      }));
+      const visaoSeg = document.getElementById('relVisaoProdutosSeg');
+      if(visaoSeg) visaoSeg.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{
+        if(state.visaoProdutos === b.dataset.visao) return;
+        state.visaoProdutos = b.dataset.visao;
+        loadRelatorio();
+      }));
+      const selLoja = document.getElementById('relLojaSelect');
+      if(selLoja) selLoja.addEventListener('change', ()=>{ state.contaId = selLoja.value; loadRelatorio(); });
+      const skuInput = document.getElementById('relSkuInput');
+      if(skuInput) skuInput.addEventListener('input', ()=>{
+        state.sku = skuInput.value;
+        clearTimeout(skuInput._t);
+        skuInput._t = setTimeout(loadRelatorio, 300);
+      });
+      const xlsxBtn = document.getElementById('relXlsxBtn');
+      if(xlsxBtn) xlsxBtn.addEventListener('click', ()=> baixarExportacao('xlsx'));
+      const csvBtn = document.getElementById('relCsvBtn');
+      if(csvBtn) csvBtn.addEventListener('click', ()=> baixarExportacao('csv'));
+    }
+
+    window.Relatorios = { load };
+  })();
+

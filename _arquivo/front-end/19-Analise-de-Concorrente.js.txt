@@ -1,0 +1,329 @@
+  /* ================= ANÁLISE DE CONCORRENTE (19/09/2026) =================
+     Pedido explícito do usuário: "quero que pesquise os modelos de produtos
+     que eu vendo e me entregue um relatório de preços mas só quero daqueles
+     concorrentes que estão vendendo". Tela nova pra usar o backend já
+     pronto em lib/concorrente.js (GET /api/concorrente/buscar?empresaId&
+     produtoId) — sem uma tela, essa rota ficaria inacessível pra quem usa
+     o ERP. Fluxo: escolhe um produto já cadastrado (por nome ou SKU), pede
+     a busca, e a tela mostra o relatório — sempre com o nível de confiança
+     de cada concorrente (catálogo = mesmo produto garantido pelo próprio
+     Mercado Livre; candidato a confirmar = achado por título do anúncio,
+     você confirma se é de fato o mesmo produto antes de considerar
+     concorrente de verdade). Nunca inventa concorrente nem preço: quando a
+     busca não acha nada (ou o produto nunca vendeu pelo ML), mostra o
+     motivo real devolvido pela rota — igual ao resto do ERP.
+     LEMBRETE (mesmo aviso de lib/concorrente.js): esta é a primeira
+     integração deste projeto contra a busca pública do Mercado Livre,
+     ainda não testada contra a API de verdade (o ambiente de
+     desenvolvimento não tem acesso a api.mercadolibre.com) — se algum nome
+     de campo da API tiver mudado, o erro aparece aqui na tela (nunca falha
+     silenciosamente nem mostra um dado inventado). */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      try{ const d = new Date(v); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '—'; }
+    }
+    function fmtMoeda(v){
+      if(v === null || v === undefined || !Number.isFinite(Number(v))) return '—';
+      return Number(v).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+    }
+
+    const CONFIANCA_INFO = {
+      catalogo: { label:'Mesmo produto (catálogo Mercado Livre)', cor:'--success' },
+      candidato_a_confirmar: { label:'Candidato — confirme se é o mesmo produto', cor:'--warning' },
+    };
+
+    const state = {
+      produtos:[], buscaProduto:'', produtoSelecionadoId:null,
+      buscando:false, resultado:null, erro:null, debounceTimer:null,
+    };
+
+    async function apiProdutos(empresaId, search){
+      const params = new URLSearchParams({ empresaId, status:'ativos' });
+      if(search) params.set('search', search);
+      const res = await fetch('/api/produtos?'+params.toString());
+      const body = await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar os produtos.');
+      return body.produtos || [];
+    }
+
+    async function apiBuscarConcorrentes(empresaId, produtoId){
+      const params = new URLSearchParams({ empresaId, produtoId });
+      const res = await fetch('/api/concorrente/buscar?'+params.toString());
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível buscar concorrentes.');
+      return body;
+    }
+
+    async function carregarProdutos(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.produtos = []; render(); return; }
+      try{ state.produtos = await apiProdutos(filtro.empresaId, state.buscaProduto); }
+      catch(e){ state.produtos = []; }
+      render();
+    }
+
+    async function buscar(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId || !state.produtoSelecionadoId) return;
+      state.buscando = true; state.erro = null; state.resultado = null; render();
+      try{ state.resultado = await apiBuscarConcorrentes(filtro.empresaId, state.produtoSelecionadoId); }
+      catch(e){ state.erro = e.message || 'Não foi possível buscar concorrentes.'; }
+      finally{ state.buscando = false; render(); }
+    }
+
+    async function load(){
+      state.produtoSelecionadoId = null; state.resultado = null; state.erro = null; state.buscaProduto = '';
+      await Promise.all([carregarProdutos(), carregarCadastrados()]);
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-concorrente');
+      if(page && page.classList.contains('active')){
+        state.produtoSelecionadoId = null; state.resultado = null; state.erro = null; state.buscaProduto = '';
+        carregarProdutos();
+        carregarCadastrados();
+      }
+    });
+
+    function resultadoHTML(){
+      const r = state.resultado;
+      if(r.modo === 'sem_dado'){
+        return '<div class="empty-panel"><div class="empty-icon" style="color:var(--warning);background:var(--warning-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2>Sem dado suficiente pra buscar</h2><p class="lead">'+escapeHtml(r.mensagem || 'Não foi possível buscar concorrentes para este produto.')+'</p></div>';
+      }
+      // 20/09/2026 — o Mercado Livre passou a recusar (403) a busca por
+      // título pra aplicativos de terceiros; antes isso quebrava a tela
+      // inteira com "Erro interno do servidor" (ver 04-alteracoes.md (52)).
+      // Agora o backend nunca deixa isso virar um 500 — devolve
+      // modo:'busca_bloqueada' com o motivo real, e a tela mostra isso com
+      // honestidade em vez de fingir que não achou concorrente nenhum.
+      if(r.modo === 'busca_bloqueada'){
+        return '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2>Busca indisponível no momento</h2><p class="lead">'+escapeHtml(r.mensagem || 'O Mercado Livre recusou esta busca agora.')+'</p></div>';
+      }
+      const modoLabel = r.modo === 'catalogo'
+        ? 'Busca por catálogo — o Mercado Livre garante que é o mesmo produto'
+        : 'Busca por título do anúncio — candidatos, confirme antes de considerar concorrente';
+      let html = '<div class="table-card" style="padding:18px 20px;margin-bottom:14px;">'
+        + '<div class="panel-title" style="margin:0 0 4px;">'+escapeHtml(r.produto.nome)+' <span class="mono" style="color:var(--text-faint);font-weight:600;">('+escapeHtml(r.produto.sku)+')</span></div>'
+        + '<div class="field-hint">'+escapeHtml(modoLabel)+'</div>'
+        + (r.itemBase ? '<div class="field-hint" style="margin-top:4px;">Anúncio usado como referência: "'+escapeHtml(r.itemBase.titulo)+'"</div>' : '')
+        + '<div class="field-hint" style="margin-top:4px;color:var(--text-faint);">Buscado em '+fmtDataHora(r.buscadoEm)+'</div>'
+      + '</div>';
+
+      if(!r.concorrentes.length){
+        return html + '<div class="empty-panel"><div class="empty-icon">'+svg('checkCircle')+'</div><h2>Nenhum concorrente vendendo agora</h2><p class="lead">A busca não encontrou nenhum outro vendedor ativo e com estoque pra este produto no momento.</p></div>';
+      }
+
+      html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Vendedor</th><th>Anúncio</th><th>Preço</th><th>Estoque</th><th>Confiança</th><th></th>'
+        + '</tr></thead><tbody>'
+        + r.concorrentes.map((c)=>{
+            const conf = CONFIANCA_INFO[c.confianca] || { label:c.confianca||'—', cor:'--text-faint' };
+            return '<tr>'
+              + '<td>'+escapeHtml(c.vendedorNickname || '—')+'</td>'
+              + '<td style="max-width:340px;"><span class="prod-title" title="'+escapeHtml(c.titulo||'')+'">'+escapeHtml(c.titulo || '—')+'</span></td>'
+              + '<td class="mono">'+fmtMoeda(c.preco)+'</td>'
+              + '<td class="mono">'+(c.estoqueDisponivel === null || c.estoqueDisponivel === undefined ? '—' : c.estoqueDisponivel)+'</td>'
+              + '<td><span class="badge-status" style="color:var('+conf.cor+');background:var('+conf.cor+'-soft);">'+escapeHtml(conf.label)+'</span></td>'
+              + '<td>'+(c.permalink ? '<a href="'+escapeHtml(c.permalink)+'" target="_blank" rel="noopener" class="row-ic-btn" title="Abrir anúncio no Mercado Livre">'+svg('link')+'</a>' : '')+'</td>'
+            + '</tr>';
+          }).join('')
+        + '</tbody></table></div></div>';
+      return html;
+    }
+
+    function render(){
+      const root = document.getElementById('concorrenteRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para usar a Análise de Concorrente.</p></div>';
+        return;
+      }
+
+      const produtoSelecionado = state.produtos.find((p)=> p.id === state.produtoSelecionadoId);
+
+      let html = '<div class="table-card" style="padding:20px;margin-bottom:14px;">'
+        + '<div class="panel-title" style="margin:0 0 4px;">Buscar concorrentes de um produto</div>'
+        + '<div class="field-hint" style="max-width:760px;margin-bottom:14px;">Escolha um produto já cadastrado — a busca usa o anúncio real que já vendeu esse SKU no Mercado Livre pra encontrar quem mais está vendendo o mesmo produto agora, nunca inventa um termo de busca.</div>'
+        + '<div class="inline-form" style="margin:0;">'
+          + '<div class="field" style="min-width:320px;"><label>Produto</label>'
+            + '<input type="text" id="concorrenteBuscaProduto" placeholder="Digite o nome ou SKU do produto…" value="'+escapeHtml(state.buscaProduto)+'" list="concorrenteProdutosList" autocomplete="off">'
+            + '<datalist id="concorrenteProdutosList">'
+              + state.produtos.map((p)=> '<option data-id="'+p.id+'" value="'+escapeHtml(p.nome)+' ('+escapeHtml(p.sku)+')"></option>').join('')
+            + '</datalist>'
+          + '</div>'
+          + '<button class="primary-btn'+(state.produtoSelecionadoId && !state.buscando ? ' enabled' : '')+'" id="concorrenteBuscarBtn" type="button" '+(!state.produtoSelecionadoId || state.buscando ? 'disabled' : '')+'>'
+            + svg(state.buscando ? 'refreshCw' : 'search')+'<span>'+(state.buscando ? 'Buscando…' : 'Buscar concorrentes')+'</span>'
+          + '</button>'
+        + '</div>'
+        + (produtoSelecionado ? '<div class="field-hint" style="margin-top:8px;">Selecionado: <strong>'+escapeHtml(produtoSelecionado.nome)+'</strong> <span class="mono">('+escapeHtml(produtoSelecionado.sku)+')</span></div>' : '')
+      + '</div>';
+
+      if(state.buscando){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Buscando no Mercado Livre…</span></div></div>';
+      } else if(state.erro){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível buscar</h2><p class="lead">'+escapeHtml(state.erro)+'</p></div>';
+      } else if(state.resultado){
+        html += resultadoHTML();
+      }
+
+      html += cadastroSectionHTML();
+
+      root.innerHTML = html;
+
+      const inputBusca = document.getElementById('concorrenteBuscaProduto');
+      if(inputBusca){
+        inputBusca.addEventListener('input', ()=>{
+          state.buscaProduto = inputBusca.value;
+          let achou = null;
+          document.querySelectorAll('#concorrenteProdutosList option').forEach((o)=>{
+            if(o.value === inputBusca.value) achou = Number(o.dataset.id);
+          });
+          state.produtoSelecionadoId = achou;
+          const btn = document.getElementById('concorrenteBuscarBtn');
+          if(btn) btn.disabled = !achou;
+          if(btn) btn.classList.toggle('enabled', !!achou);
+          clearTimeout(state.debounceTimer);
+          state.debounceTimer = setTimeout(carregarProdutos, 300);
+        });
+      }
+      const btnBuscar = document.getElementById('concorrenteBuscarBtn');
+      if(btnBuscar) btnBuscar.addEventListener('click', buscar);
+
+      // ---- Cadastro manual de concorrente por SKU (20/09/2026) ----
+      const inputSku = document.getElementById('concorrenteCadastroSku');
+      const inputUrl = document.getElementById('concorrenteCadastroUrl');
+      const inputApelido = document.getElementById('concorrenteCadastroApelido');
+      const btnSalvarCadastro = document.getElementById('concorrenteCadastroSalvarBtn');
+      function atualizarBotaoSalvar(){
+        if(!btnSalvarCadastro) return;
+        const habilitado = !!stateCadastro.sku.trim() && !!stateCadastro.url.trim() && !stateCadastro.salvando;
+        btnSalvarCadastro.disabled = !habilitado;
+        btnSalvarCadastro.classList.toggle('enabled', habilitado);
+      }
+      if(inputSku) inputSku.addEventListener('input', ()=>{ stateCadastro.sku = inputSku.value; atualizarBotaoSalvar(); });
+      if(inputUrl) inputUrl.addEventListener('input', ()=>{ stateCadastro.url = inputUrl.value; atualizarBotaoSalvar(); });
+      if(inputApelido) inputApelido.addEventListener('input', ()=>{ stateCadastro.apelido = inputApelido.value; });
+      if(btnSalvarCadastro) btnSalvarCadastro.addEventListener('click', salvarCadastro);
+      document.querySelectorAll('.concorrenteCadastroRemoverBtn').forEach((btn)=>{
+        btn.addEventListener('click', ()=> removerCadastro(Number(btn.dataset.id)));
+      });
+    }
+
+    // ============== Cadastro manual de concorrente por SKU (20/09/2026) ==============
+    // Resposta direta do usuário ao bloqueio da busca automática (ver
+    // comentário grande no topo deste IIFE e em lib/concorrente.js): "sobre
+    // o concorrente eu vou mandar o link do anuncio do concorrente para
+    // ficar mais facil". Usa as rotas novas GET/POST/DELETE
+    // /api/concorrente/monitorados (ver routes/concorrente.js). Alimenta o
+    // Agente Coordenador (regra R4, lib/ia/coordenadorDiario.js) — nunca
+    // valida/busca o link automaticamente, só guarda o que o usuário colou.
+    const stateCadastro = { lista:[], loading:false, error:null, sku:'', url:'', apelido:'', salvando:false };
+
+    async function apiListarCadastrados(empresaId){
+      const res = await fetch('/api/concorrente/monitorados?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível carregar os concorrentes cadastrados.');
+      return (body && body.concorrentes) || [];
+    }
+    async function apiCadastrarConcorrente(empresaId, sku, url, apelido){
+      const res = await fetch('/api/concorrente/monitorados', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ empresaId, sku, url, apelido: apelido || null }),
+      });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível cadastrar este concorrente.');
+      return body;
+    }
+    async function apiRemoverConcorrente(empresaId, id){
+      const res = await fetch('/api/concorrente/monitorados/'+id+'?empresaId='+empresaId, { method:'DELETE' });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error) || 'Não foi possível remover este concorrente.');
+      return body;
+    }
+
+    async function carregarCadastrados(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ stateCadastro.lista = []; render(); return; }
+      stateCadastro.loading = true; stateCadastro.error = null; render();
+      try{ stateCadastro.lista = await apiListarCadastrados(filtro.empresaId); }
+      catch(e){ stateCadastro.error = e.message; stateCadastro.lista = []; }
+      stateCadastro.loading = false; render();
+    }
+
+    async function salvarCadastro(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId || !stateCadastro.sku.trim() || !stateCadastro.url.trim() || stateCadastro.salvando) return;
+      stateCadastro.salvando = true; stateCadastro.error = null; render();
+      try{
+        await apiCadastrarConcorrente(filtro.empresaId, stateCadastro.sku.trim(), stateCadastro.url.trim(), stateCadastro.apelido.trim());
+        stateCadastro.sku = ''; stateCadastro.url = ''; stateCadastro.apelido = '';
+        await carregarCadastrados();
+      } catch(e){
+        stateCadastro.error = e.message;
+      } finally {
+        stateCadastro.salvando = false; render();
+      }
+    }
+
+    async function removerCadastro(id){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId) return;
+      try{ await apiRemoverConcorrente(filtro.empresaId, id); await carregarCadastrados(); }
+      catch(e){ stateCadastro.error = e.message; render(); }
+    }
+
+    function cadastroSectionHTML(){
+      let html = '<div class="table-card" style="padding:20px;margin-bottom:14px;">'
+        + '<div class="panel-title" style="margin:0 0 4px;">Concorrentes cadastrados manualmente por SKU</div>'
+        + '<div class="field-hint" style="max-width:760px;margin-bottom:14px;">A busca automática acima é bloqueada pelo Mercado Livre pra alguns casos (ver aviso no topo da tela) — aqui você cola o link do anúncio/loja do concorrente uma vez, por SKU, e o sistema guarda pra sempre citar esse link nas análises (Plano de Ação do Dia). Nunca busca ou confirma preço automaticamente — é só o link, pra você conferir quando quiser.</div>'
+        + '<div class="inline-form" style="margin:0;flex-wrap:wrap;">'
+          + '<div class="field" style="min-width:160px;"><label>SKU</label>'
+            + '<input type="text" id="concorrenteCadastroSku" placeholder="Ex.: CX-19X12X12" value="'+escapeHtml(stateCadastro.sku)+'">'
+          + '</div>'
+          + '<div class="field" style="min-width:280px;flex:1;"><label>Link do anúncio/loja do concorrente</label>'
+            + '<input type="text" id="concorrenteCadastroUrl" placeholder="Cole o link aqui…" value="'+escapeHtml(stateCadastro.url)+'">'
+          + '</div>'
+          + '<div class="field" style="min-width:180px;"><label>Apelido (opcional)</label>'
+            + '<input type="text" id="concorrenteCadastroApelido" placeholder="Ex.: Loja Rival" value="'+escapeHtml(stateCadastro.apelido)+'">'
+          + '</div>'
+          + '<button class="primary-btn'+(stateCadastro.sku.trim() && stateCadastro.url.trim() && !stateCadastro.salvando ? ' enabled' : '')+'" id="concorrenteCadastroSalvarBtn" type="button" '+(!stateCadastro.sku.trim() || !stateCadastro.url.trim() || stateCadastro.salvando ? 'disabled' : '')+'>'
+            + svg('plus')+'<span>'+(stateCadastro.salvando ? 'Salvando…' : 'Cadastrar')+'</span>'
+          + '</button>'
+        + '</div>'
+        + (stateCadastro.error ? '<div class="field-hint" style="margin-top:10px;color:var(--danger);">'+escapeHtml(stateCadastro.error)+'</div>' : '')
+      + '</div>';
+
+      if(stateCadastro.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando concorrentes cadastrados…</span></div></div>';
+      } else if(!stateCadastro.lista.length){
+        html += '<div class="empty-panel" style="padding:18px;"><div class="field-hint">Nenhum concorrente cadastrado ainda.</div></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>SKU</th><th>Apelido</th><th>Link</th><th>Cadastrado em</th><th></th>'
+          + '</tr></thead><tbody>'
+          + stateCadastro.lista.map((c)=>{
+              return '<tr>'
+                + '<td class="mono">'+escapeHtml(c.sku)+'</td>'
+                + '<td>'+escapeHtml(c.apelido || '—')+'</td>'
+                + '<td style="max-width:340px;"><a href="'+escapeHtml(c.url)+'" target="_blank" rel="noopener" class="prod-title" title="'+escapeHtml(c.url)+'">'+escapeHtml(c.url)+'</a></td>'
+                + '<td>'+fmtDataHora(c.criadoEm)+'</td>'
+                + '<td><button class="row-ic-btn concorrenteCadastroRemoverBtn" data-id="'+c.id+'" type="button" title="Remover">'+svg('trash')+'</button></td>'
+              + '</tr>';
+            }).join('')
+          + '</tbody></table></div></div>';
+      }
+      return html;
+    }
+
+    window.AgenteConcorrente = { load };
+  })();
+

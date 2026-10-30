@@ -1,0 +1,477 @@
+  /* ================= AGENTE DE ENVIO FULL =================
+     23/09/2026, pedido explícito do usuário: "agente de envio full -
+     quando enviar ro full, quado ta acabando, quando segurar, quanto
+     gastei de envios full no mes". Mesmo padrão visual/estrutural de
+     window.Compras (acima), simplificado: aqui não existe fornecedor —
+     a decisão é só ENVIAR (do Galpão) ou SEGURAR, e a quantidade sugerida
+     já é limitada ao que existe no Galpão (ver lib/ia/envioFullMotor.js).
+     Nunca envia nada sozinho — toda recomendação passa por aprovação aqui
+     antes de virar um registro de envio (PUT /decisoes/:id). */
+  (function(){
+    const STATUS_PEDIDO_OPCOES = [
+      ['aprovado','Aprovado'],
+      ['enviado','Enviado'],
+      ['recebido_no_full','Recebido no Full'],
+      ['cancelado','Cancelado'],
+    ];
+    const STATUS_TINT = { saudavel:'success', atencao:'warning', programar_envio:'copper', enviar_agora:'danger', ruptura:'danger' };
+    const STATUS_ORDEM = { ruptura:0, enviar_agora:1, programar_envio:2, atencao:3, saudavel:4 };
+
+    const MESES_LABEL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+    const state = {
+      empresas:[], empresaId:null, loadingEmpresas:false,
+      aba: 'recomendacoes', busca:'',
+      linhas:[], resumo:null, loading:false, error:null, gerando:false,
+      pedidos:[], pedidosLoading:false, pedidosError:null,
+      custoAno: new Date().getFullYear(), custoMes: new Date().getMonth()+1,
+      custoAtual:null, custoHistorico:[], custoLoading:false, custoSalvando:false,
+    };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ if(v===null||v===undefined) return '—'; return 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function intFmt(v){ return (v===null||v===undefined) ? '—' : Math.round(Number(v)).toLocaleString('pt-BR'); }
+    function numFmt(v){ return (v===null||v===undefined) ? '—' : Number(v).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:2}); }
+    function fmtDate(iso){ if(!iso) return '—'; try{ const [y,m,d] = String(iso).slice(0,10).split('-'); return d+'/'+m+'/'+y; }catch(e){ return '—'; } }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+    function tintStyle(tint){ return tint==='muted' ? 'color:var(--text-muted);background:var(--surface-2);' : 'color:var(--'+tint+');background:var(--'+tint+'-soft);'; }
+
+    // ---- chamadas de API ----
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      const body = await res.json().catch(()=>null);
+      return (body && body.empresas) || [];
+    }
+    async function apiLinhas(empresaId){
+      const res = await fetch('/api/envio-full/linhas?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar as recomendações.');
+      return (body && body.linhas) || [];
+    }
+    async function apiResumo(empresaId){
+      const res = await fetch('/api/envio-full/resumo?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o resumo.');
+      return body;
+    }
+    async function apiGerarAgora(empresaId){
+      const res = await fetch('/api/envio-full/gerar-agora', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId }) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Falha ao gerar recomendações agora.');
+      return body;
+    }
+    async function apiDecisoes(empresaId, status){
+      const params = new URLSearchParams({ empresaId });
+      if(status) params.set('status', status);
+      const res = await fetch('/api/envio-full/decisoes?'+params.toString());
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar as recomendações pendentes.');
+      return (body && body.decisoes) || [];
+    }
+    async function apiDecidir(id, payload){
+      const res = await fetch('/api/envio-full/decisoes/'+id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok){ const err = new Error((body && body.error) || 'Não foi possível registrar a decisão.'); err.errors = body && body.errors; throw err; }
+      return body;
+    }
+    async function apiPedidos(empresaId){
+      const res = await fetch('/api/envio-full/pedidos?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o histórico.');
+      return (body && body.pedidos) || [];
+    }
+    async function apiPatchPedidoStatus(id, status){
+      const res = await fetch('/api/envio-full/pedidos/'+id+'/status', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status }) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível atualizar o status do envio.');
+      return body;
+    }
+    async function apiCustoAtual(empresaId, ano, mes){
+      const res = await fetch('/api/envio-full/custos?empresaId='+empresaId+'&ano='+ano+'&mes='+mes);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o custo do mês.');
+      return body;
+    }
+    async function apiCustoHistorico(empresaId){
+      const res = await fetch('/api/envio-full/custos/historico?empresaId='+empresaId+'&limite=12');
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o histórico de custos.');
+      return (body && body.historico) || [];
+    }
+    async function apiSalvarCusto(payload){
+      const res = await fetch('/api/envio-full/custos', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok){ const err = new Error((body && body.error) || 'Não foi possível salvar o custo.'); err.errors = body && body.errors; throw err; }
+      return body;
+    }
+
+    // ---- carregamento ----
+    async function carregarRecomendacoes(){
+      state.loading = true; state.error = null; render();
+      try{
+        const [linhas, resumo] = await Promise.all([apiLinhas(state.empresaId), apiResumo(state.empresaId)]);
+        state.linhas = linhas; state.resumo = resumo;
+      }catch(err){ state.error = err.message || 'Não foi possível carregar as recomendações.'; }
+      finally{ state.loading = false; render(); }
+    }
+    async function carregarHistorico(){
+      state.pedidosLoading = true; state.pedidosError = null; render();
+      try{ state.pedidos = await apiPedidos(state.empresaId); }
+      catch(err){ state.pedidosError = err.message || 'Não foi possível carregar o histórico.'; }
+      finally{ state.pedidosLoading = false; render(); }
+    }
+    async function carregarCustos(){
+      state.custoLoading = true; render();
+      try{
+        const [atual, historico] = await Promise.all([
+          apiCustoAtual(state.empresaId, state.custoAno, state.custoMes),
+          apiCustoHistorico(state.empresaId),
+        ]);
+        state.custoAtual = atual; state.custoHistorico = historico;
+      }catch(err){ toast(err.message || 'Não foi possível carregar os custos de Full.', 'error'); }
+      finally{ state.custoLoading = false; render(); }
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(!state.empresaId){ render(); return; }
+      await carregarRecomendacoes();
+      if(state.aba === 'historico') await carregarHistorico();
+      if(state.aba === 'custos') await carregarCustos();
+    }
+
+    async function gerarAgora(){
+      if(!state.empresaId){ toast('Selecione uma empresa.', 'error'); return; }
+      state.gerando = true;
+      const btn = document.getElementById('btnGerarEnvioFull');
+      if(btn){ btn.disabled = true; const sp = btn.querySelector('span'); if(sp) sp.textContent = 'Gerando…'; }
+      try{
+        const resultado = await apiGerarAgora(state.empresaId);
+        const n = (resultado && typeof resultado.recomendacoesGeradas === 'number') ? resultado.recomendacoesGeradas : null;
+        toast('Recomendações de Full atualizadas.' + (n !== null ? ' '+n+' recomendação(ões) pendente(s) agora.' : ''));
+        await carregarRecomendacoes();
+        if(state.aba === 'historico') await carregarHistorico();
+      }catch(err){ toast(err.message || 'Falha ao gerar recomendações agora.', 'error'); }
+      finally{
+        state.gerando = false;
+        const btn2 = document.getElementById('btnGerarEnvioFull');
+        if(btn2){ btn2.disabled = false; const sp = btn2.querySelector('span'); if(sp) sp.textContent = 'Gerar recomendações agora'; }
+      }
+    }
+
+    // ---- cards do topo ----
+    function cardHTML(k){
+      return '<div class="kpi-hero" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(k.icon)+'</div></div>'
+        + '<div class="kpi-hero-label">'+escapeHtml(k.label)+'</div>'
+        + '<div class="kpi-hero-value">'+k.valueHtml+'</div>'
+        + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+escapeHtml(k.note)+'</span></div>'
+      + '</div>';
+    }
+    function cardsHTML(){
+      const r = state.resumo || {};
+      const temUrgente = (r.enviarAgora||0) > 0;
+      const temProgramar = (r.programar||0) > 0;
+      const temSemGalpao = (r.semEstoqueGalpao||0) > 0;
+      const mesLabel = MESES_LABEL[(state.custoMes||1)-1];
+      const items = [
+        { label:'Enviar agora ao Full', icon:'truck', tint: temUrgente?'danger':'muted',
+          valueHtml: r.enviarAgora===undefined?'—':String(r.enviarAgora), note:'🔴 Enviar agora + 🚨 Full acabando' },
+        { label:'Programar envio', icon:'clock', tint: temProgramar?'copper':'muted',
+          valueHtml: r.programar===undefined?'—':String(r.programar), note:'🟠 Programar envio' },
+        { label:'Segurar (Full abastecido)', icon:'checkCircle', tint:'success',
+          valueHtml: r.segurar===undefined?'—':String(r.segurar), note:'🟢 Saudável / 🟡 Atenção — sem necessidade agora' },
+        { label:'Sem estoque no Galpão', icon:'alertCircle', tint: temSemGalpao?'danger':'muted',
+          valueHtml: r.semEstoqueGalpao===undefined?'—':String(r.semEstoqueGalpao), note:'Precisaria enviar, mas o Galpão não tem o suficiente' },
+        { label:'Gasto com envio Full — '+mesLabel, icon:'wallet', tint:'copper',
+          valueHtml: (state.custoAtual && state.custoAtual.valor!==null && state.custoAtual.valor!==undefined) ? money(state.custoAtual.valor) : '—',
+          note: (state.custoAtual && state.custoAtual.valor!==null) ? 'Lançado manualmente' : 'Ainda não lançado este mês' },
+      ];
+      return '<div class="kpi-hero-grid">' + items.map(cardHTML).join('') + '</div>';
+    }
+
+    // ---- tabela principal ----
+    function statusChipHTML(status, emoji, label){
+      const tint = STATUS_TINT[status] || 'muted';
+      return '<span class="status-chip" style="'+tintStyle(tint)+'">'+(emoji||'')+' '+escapeHtml(label||status||'—')+'</span>';
+    }
+    function linhasOrdenadas(){
+      return state.linhas.slice().sort((a,b)=>{
+        const oa = STATUS_ORDEM[a.status]===undefined?9:STATUS_ORDEM[a.status];
+        const ob = STATUS_ORDEM[b.status]===undefined?9:STATUS_ORDEM[b.status];
+        if(oa !== ob) return oa - ob;
+        const da = a.diasCoberturaFull===null||a.diasCoberturaFull===undefined ? Infinity : a.diasCoberturaFull;
+        const db = b.diasCoberturaFull===null||b.diasCoberturaFull===undefined ? Infinity : b.diasCoberturaFull;
+        return da - db;
+      });
+    }
+    function linhasFiltradas(){
+      const termo = (state.busca||'').trim().toLowerCase();
+      let linhas = linhasOrdenadas();
+      if(termo) linhas = linhas.filter((l)=> (l.codigo||'').toLowerCase().includes(termo) || (l.nome||'').toLowerCase().includes(termo));
+      return linhas;
+    }
+    function linhaRowHTML(l){
+      const mediaCell = l.semHistoricoDeVendas
+        ? '<span style="color:var(--text-faint);font-style:italic;">sem vendas</span>'
+        : (numFmt(l.mediaDiariaProjetada) + (l.acelerando ? ' <span title="Vendas acelerando" style="color:var(--danger);">▲</span>' : (l.desacelerando ? ' <span title="Vendas desacelerando" style="color:var(--text-faint);">▼</span>' : '')));
+      const coberturaCell = (l.diasCoberturaFull===null || l.diasCoberturaFull===undefined) ? '—' : numFmt(l.diasCoberturaFull)+'d';
+      const rupturaCell = (l.semHistoricoDeVendas || !l.dataRupturaFullPrevista) ? '—' : fmtDate(l.dataRupturaFullPrevista);
+      const envioCell = (l.quantidadeSugeridaEnvio>0)
+        ? ('<strong>'+intFmt(l.quantidadeSugeridaEnvio)+'</strong>' + (l.semEstoqueGalpaoSuficiente ? ' <span title="Galpão não tem o suficiente" style="color:var(--danger);">⚠</span>' : ''))
+        : '<span style="color:var(--text-faint);">—</span>';
+      const naoCadastrado = l.registrado === false;
+      const podeAgir = l.quantidadeSugeridaEnvio > 0 && !l.semEstoqueGalpaoSuficiente && !naoCadastrado;
+      const acoesHtml = (naoCadastrado && l.quantidadeSugeridaEnvio > 0)
+        ? '<span title="Cadastre este modelo em Produtos Base para poder aprovar o envio por aqui" style="color:var(--text-faint);font-size:11.5px;">cadastre o modelo</span>'
+        : podeAgir
+        ? '<div class="row-actions"><button class="row-ic-btn" data-aprovar-envio="'+l.produtoBaseId+'" title="Aprovar envio ao Full" type="button">'+svg('check')+'</button><button class="row-ic-btn" data-ignorar-envio="'+l.produtoBaseId+'" title="Ignorar por enquanto" type="button">'+svg('x')+'</button></div>'
+        : (l.semEstoqueGalpaoSuficiente ? '<span style="color:var(--text-faint);font-size:11.5px;">segurar — sem estoque</span>' : '');
+      return '<tr>'
+        + '<td class="produto-cell"><div class="cell-stack"><span class="prod-title">'+escapeHtml(l.codigo)+'</span>'+(l.nome?'<span class="cell-stack-sub">'+escapeHtml(l.nome)+'</span>':'')+'</div></td>'
+        + '<td class="tab-nums">'+intFmt(l.estoqueGalpao)+'</td>'
+        + '<td class="tab-nums">'+intFmt(l.estoqueFull)+'</td>'
+        + '<td class="tab-nums">'+intFmt(l.venda7d)+'</td>'
+        + '<td class="tab-nums">'+mediaCell+'</td>'
+        + '<td class="tab-nums">'+coberturaCell+'</td>'
+        + '<td class="tab-nums">'+rupturaCell+'</td>'
+        + '<td class="tab-nums">'+(l.prazoEnvioFullDias===null||l.prazoEnvioFullDias===undefined?'—':l.prazoEnvioFullDias+'d')+'</td>'
+        + '<td class="tab-nums">'+envioCell+'</td>'
+        + '<td>'+statusChipHTML(l.status, l.statusEmoji, l.statusLabel)+'</td>'
+        + '<td>'+acoesHtml+'</td>'
+      + '</tr>';
+    }
+    function abaRecomendacoesHTML(){
+      let html = cardsHTML();
+      if(state.loading && !state.linhas.length){
+        html += '<div class="table-card" style="margin-top:16px;"><div class="table-skel"><span class="spin"></span><span>Calculando recomendações…</span></div></div>';
+        return html;
+      }
+      if(state.error){
+        html += '<div class="empty-panel" style="margin-top:16px;"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="efRetryRecomendacoes" style="cursor:pointer;opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+        return html;
+      }
+      if(!state.linhas.length){
+        html += '<div class="empty-panel" style="margin-top:16px;"><div class="empty-icon">'+svg('truck')+'</div>'
+          + '<h2>Nenhum modelo físico cadastrado</h2>'
+          + '<p class="lead">Cadastre produtos com um modelo físico vinculado (SKU → modelo) em <strong>Cadastros → Produtos</strong> para o agente começar a analisar o envio ao Full.</p></div>';
+        return html;
+      }
+      const linhas = linhasFiltradas();
+      if(!linhas.length){
+        html += '<div class="empty-panel" style="margin-top:16px;"><div class="empty-icon">'+svg('search')+'</div><h2>Nenhum modelo encontrado</h2><p class="lead">Nenhum modelo corresponde à busca atual.</p></div>';
+        return html;
+      }
+      const precisam = state.linhas.filter((l)=> l.quantidadeSugeridaEnvio>0 && (l.status==='ruptura'||l.status==='enviar_agora'||l.status==='programar_envio'))
+        .sort((a,b)=> (STATUS_ORDEM[a.status]||0)-(STATUS_ORDEM[b.status]||0));
+      if(precisam.length){
+        html += '<div class="table-card" style="margin-top:16px;padding:14px 16px;border-left:4px solid var(--danger);"><strong>Precisa abastecer o Full ('+precisam.length+')</strong>'
+          + '<div style="margin-top:6px;font-size:13px;line-height:1.7;">'
+          + precisam.slice(0,12).map((l)=> escapeHtml(l.codigo)+': enviar <strong>'+intFmt(l.quantidadeSugeridaEnvio)+'</strong>'+(l.semEstoqueGalpaoSuficiente?' (Galpão insuficiente)':'')+' — '+escapeHtml(l.statusLabel||'')).join('<br>')
+          + (precisam.length>12?'<br>…e mais '+(precisam.length-12)+' na tabela abaixo.':'')
+          + '</div></div>';
+      }
+      html += '<div class="table-card" style="margin-top:16px;"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Modelo</th><th>Galpão</th><th>Full</th><th>Venda 7d</th><th>Média/dia</th><th>Cobertura Full</th><th>Full acaba em</th><th>Prazo envio</th><th>Enviar sugerido</th><th>Status</th><th>Ações</th>'
+        + '</tr></thead><tbody>' + linhas.map(linhaRowHTML).join('') + '</tbody></table></div></div>';
+      return html;
+    }
+
+    async function decidirEnvio(produtoBaseId, statusDecisao){
+      const linha = state.linhas.find((l)=> l.produtoBaseId === produtoBaseId);
+      const decisoesPendentes = await apiDecisoes(state.empresaId, 'pendente').catch(()=>[]);
+      const decisao = decisoesPendentes.find((d)=> d.produtoBaseId === produtoBaseId);
+      if(!decisao){ toast('Recomendação não encontrada — pode já ter sido decidida. Atualizando a lista…', 'error'); await carregarRecomendacoes(); return; }
+      try{
+        await apiDecidir(decisao.id, { statusDecisao, decididoPor:'Pablo' });
+        toast(statusDecisao === 'aprovada' ? 'Envio aprovado — registrado em Histórico.' : 'Recomendação ignorada por enquanto.');
+        await carregarRecomendacoes();
+        state.pedidos = [];
+        if(state.aba === 'historico') await carregarHistorico();
+      }catch(err){ toast(err.message || 'Não foi possível registrar a decisão.', 'error'); }
+    }
+
+    // ---- aba Histórico ----
+    function origemLabel(origem){ return origem === 'manual' ? 'Manual' : 'Recomendação do agente'; }
+    function pedidoRowHTML(p){
+      return '<tr>'
+        + '<td class="mono">'+escapeHtml(p.numeroEnvio)+'</td>'
+        + '<td class="produto-cell"><div class="cell-stack"><span class="prod-title">'+escapeHtml(p.produtoBaseCodigo)+'</span>'+(p.produtoBaseNome?'<span class="cell-stack-sub">'+escapeHtml(p.produtoBaseNome)+'</span>':'')+'</div></td>'
+        + '<td class="tab-nums">'+fmtDate(p.criadoEm)+'</td>'
+        + '<td class="tab-nums">'+intFmt(p.quantidade)+'</td>'
+        + '<td>'+escapeHtml(origemLabel(p.origem))+'</td>'
+        + '<td><select class="mono" data-pedido-status="'+p.id+'" style="font-size:11.5px; padding:4px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">'
+          + STATUS_PEDIDO_OPCOES.map((par)=> '<option value="'+par[0]+'" '+(p.status===par[0]?'selected':'')+'>'+par[1]+'</option>').join('')
+        + '</select></td>'
+        + '<td class="tab-nums">'+(p.previsaoChegada?fmtDate(p.previsaoChegada):'—')+'</td>'
+        + '<td class="tab-nums">'+(p.recebidoEm?fmtDate(p.recebidoEm):'—')+'</td>'
+      + '</tr>';
+    }
+    function abaHistoricoHTML(){
+      if(state.pedidosLoading && !state.pedidos.length){
+        return '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando histórico…</span></div></div>';
+      }
+      if(state.pedidosError){
+        return '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger);background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.pedidosError)+'</p>'
+          + '<button class="ghost-btn" id="efRetryHistorico" style="cursor:pointer;opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      }
+      if(!state.pedidos.length){
+        return '<div class="empty-panel"><div class="empty-icon">'+svg('inbox')+'</div><h2>Nenhum envio registrado ainda</h2>'
+          + '<p class="lead">Quando você aprovar uma recomendação na aba Recomendações, o envio aparece aqui.</p></div>';
+      }
+      return '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+        + '<th>Envio</th><th>Produto</th><th>Data</th><th>Quantidade</th><th>Origem</th><th>Status</th><th>Previsão</th><th>Recebido em</th>'
+        + '</tr></thead><tbody>' + state.pedidos.map(pedidoRowHTML).join('') + '</tbody></table></div></div>';
+    }
+
+    // ---- aba Custo Full ----
+    function custoHistoricoRowHTML(h){
+      return '<tr><td>'+MESES_LABEL[h.mes-1]+'/'+h.ano+'</td><td class="mono">'+money(h.valor)+'</td><td>'+escapeHtml(h.observacao||'—')+'</td></tr>';
+    }
+    function abaCustosHTML(){
+      const atual = state.custoAtual;
+      let html = '<div class="table-card" style="padding:18px;">'
+        + '<div class="section-label"><span>Lançar custo de envio ao Full do mês</span></div>'
+        + '<div class="field-hint" style="margin-bottom:12px;">Lançamento manual — o Mercado Livre não confirma, na documentação pública da API de Cobranças, um nome exato de cobrança separada para envio ao Full. Enquanto isso não é confirmado (testando direto na conta real, ou com um exemplo de fatura), o valor é digitado aqui todo mês.</div>'
+        + '<div class="inline-form" style="margin-top:0;">'
+          + '<div class="field narrow"><label>Mês</label><select id="efCustoMes">'
+            + MESES_LABEL.map((m,i)=> '<option value="'+(i+1)+'" '+((i+1)===state.custoMes?'selected':'')+'>'+m+'</option>').join('')
+          + '</select></div>'
+          + '<div class="field narrow"><label>Ano</label><input type="text" inputmode="numeric" id="efCustoAno" value="'+state.custoAno+'"></div>'
+          + '<div class="field narrow"><label>Valor gasto (R$)</label><input type="text" inputmode="decimal" id="efCustoValor" value="'+(atual && atual.valor!==null && atual.valor!==undefined ? String(atual.valor).replace('.',',') : '')+'"></div>'
+        + '</div>'
+        + '<div class="field"><label>Observação <span class="opt">(opcional)</span></label><input type="text" id="efCustoObs" value="'+escapeHtml((atual && atual.observacao) || '')+'"></div>'
+        + '<button type="button" class="ghost-btn" id="efCustoSalvar" style="cursor:pointer;opacity:1;" '+(state.custoSalvando?'disabled':'')+'>'+svg('check')+'<span>'+(state.custoSalvando?'Salvando…':'Salvar valor do mês')+'</span></button>'
+      + '</div>';
+
+      html += '<div class="table-card" style="margin-top:16px;"><div class="table-wrap"><table class="data-table"><thead><tr><th>Mês</th><th>Valor</th><th>Observação</th></tr></thead><tbody>'
+        + (state.custoHistorico.length ? state.custoHistorico.map(custoHistoricoRowHTML).join('') : '<tr><td colspan="3" style="color:var(--text-faint);">Nenhum mês lançado ainda.</td></tr>')
+        + '</tbody></table></div></div>';
+      return html;
+    }
+
+    async function salvarCustoMes(){
+      const mesSel = document.getElementById('efCustoMes');
+      const anoInput = document.getElementById('efCustoAno');
+      const valorInput = document.getElementById('efCustoValor');
+      const obsInput = document.getElementById('efCustoObs');
+      const valor = valorInput ? Number(valorInput.value.replace(',','.')) : NaN;
+      if(!Number.isFinite(valor) || valor < 0){ toast('Informe um valor válido, maior ou igual a zero.', 'error'); return; }
+      state.custoSalvando = true; render();
+      try{
+        await apiSalvarCusto({
+          empresaId: state.empresaId,
+          ano: Number(anoInput.value), mes: Number(mesSel.value),
+          valor, observacao: obsInput.value || null, lancadoPor: 'Pablo',
+        });
+        state.custoAno = Number(anoInput.value); state.custoMes = Number(mesSel.value);
+        toast('Custo de envio Full salvo.');
+        await carregarCustos();
+      }catch(err){
+        const msg = (err.errors && Object.values(err.errors).join(' ')) || err.message || 'Não foi possível salvar o custo.';
+        toast(msg, 'error');
+      }finally{ state.custoSalvando = false; render(); }
+    }
+
+    // ---- render geral ----
+    function render(){
+      const root = document.getElementById('envioFullRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de usar o Agente de Envio Full.</p></div>';
+        return;
+      }
+
+      const buscaAtiva = document.activeElement && document.activeElement.id === 'efSearch';
+      const buscaCursor = buscaAtiva ? document.activeElement.selectionStart : null;
+
+      let html = '<div class="toolbar">'
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="efEmpresaSelect">'
+          + state.empresas.map((e)=> '<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>'
+        + '<div class="seg" id="efAbas">'
+          + '<button type="button" data-aba="recomendacoes" class="'+(state.aba==='recomendacoes'?'active':'')+'">Recomendações'+((state.resumo && state.resumo.enviarAgora) ? (' · '+state.resumo.enviarAgora) : '')+'</button>'
+          + '<button type="button" data-aba="historico" class="'+(state.aba==='historico'?'active':'')+'">Histórico</button>'
+          + '<button type="button" data-aba="custos" class="'+(state.aba==='custos'?'active':'')+'">Custo Full</button>'
+        + '</div>'
+        + (state.aba==='recomendacoes' ? '<div class="search-box">'+svg('search')+'<input type="text" id="efSearch" placeholder="Buscar modelo" value="'+state.busca.replace(/"/g,'&quot;')+'"></div>' : '<span></span>')
+      + '</div>';
+
+      if(state.aba === 'recomendacoes') html += abaRecomendacoesHTML();
+      else if(state.aba === 'historico') html += abaHistoricoHTML();
+      else html += abaCustosHTML();
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('efEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{
+        state.empresaId = Number(sel.value);
+        state.pedidos = []; state.custoAtual = null; state.custoHistorico = [];
+        carregarRecomendacoes();
+        if(state.aba === 'historico') carregarHistorico();
+        if(state.aba === 'custos') carregarCustos();
+      });
+
+      const abas = document.getElementById('efAbas');
+      if(abas) abas.querySelectorAll('button').forEach((b)=> b.addEventListener('click', ()=>{
+        state.aba = b.dataset.aba;
+        if(state.aba === 'historico' && !state.pedidos.length && !state.pedidosLoading) carregarHistorico();
+        else if(state.aba === 'custos' && !state.custoAtual) carregarCustos();
+        else render();
+      }));
+
+      const search = document.getElementById('efSearch');
+      if(search){
+        search.addEventListener('input', ()=>{ state.busca = search.value; render(); });
+        if(buscaAtiva){ search.focus(); try{ search.setSelectionRange(buscaCursor, buscaCursor); }catch(e){} }
+      }
+
+      const retryRec = document.getElementById('efRetryRecomendacoes');
+      if(retryRec) retryRec.addEventListener('click', carregarRecomendacoes);
+      const retryHist = document.getElementById('efRetryHistorico');
+      if(retryHist) retryHist.addEventListener('click', carregarHistorico);
+
+      root.querySelectorAll('[data-aprovar-envio]').forEach((btn)=> btn.addEventListener('click', ()=> decidirEnvio(Number(btn.dataset.aprovarEnvio), 'aprovada')));
+      root.querySelectorAll('[data-ignorar-envio]').forEach((btn)=> btn.addEventListener('click', ()=> decidirEnvio(Number(btn.dataset.ignorarEnvio), 'ignorada')));
+
+      root.querySelectorAll('[data-pedido-status]').forEach((selEl)=> selEl.addEventListener('change', async ()=>{
+        const id = Number(selEl.dataset.pedidoStatus);
+        selEl.disabled = true;
+        try{
+          await apiPatchPedidoStatus(id, selEl.value);
+          toast('Status do envio atualizado.');
+          await carregarHistorico();
+        }catch(err){ toast(err.message || 'Não foi possível atualizar o status.', 'error'); selEl.disabled = false; }
+      }));
+
+      const btnSalvarCusto = document.getElementById('efCustoSalvar');
+      if(btnSalvarCusto) btnSalvarCusto.addEventListener('click', salvarCustoMes);
+    }
+
+    const btnGerar = document.getElementById('btnGerarEnvioFull');
+    if(btnGerar) btnGerar.addEventListener('click', gerarAgora);
+
+    window.EnvioFull = { load };
+  })();
+

@@ -1,0 +1,316 @@
+  /* ================= ESTOQUE / ESTOQUE FULL — espelho somente leitura do
+     Mercado Livre (26/08/2026) =================
+     O Mercado Livre é a fonte oficial das quantidades (pedido explícito do
+     usuário): ele faz todos os lançamentos e ajustes de estoque direto lá,
+     então a quantidade aqui é SEMPRE somente leitura — sem botão de ajuste,
+     sem modal, sem PUT. Cada tela lê o espelho gravado por
+     server/lib/mlEstoque.js (server/routes/estoque.js e
+     server/routes/estoqueFull.js), sincronizado automaticamente a cada 1
+     minuto pelo mesmo ciclo de server/lib/syncScheduler.js — "Sincronizar
+     agora" é só a opção de emergência, igual ao botão manual de pedidos.
+     Uma linha por anúncio/variação (nunca agrupado por produto base) — as
+     duas telas usam o MESMO código (criarTelaEstoqueSomenteLeitura), só
+     mudam o endpoint/rótulos, pra nunca deixar as duas divergirem sem
+     querer. Estoque e Estoque Full nunca somam nem misturam saldo: são
+     duas telas/abas completamente separadas, cada uma no seu próprio
+     endpoint (tipo='proprio' vs tipo='full' no banco). */
+  function criarTelaEstoqueSomenteLeitura(opts){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, loading:false, sincronizando:false, data:null, error:null };
+
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+message+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 3200);
+    }
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function pendenteSpan(){ return '<span style="color:var(--text-faint); font-style:italic; font-family:\'Public Sans\',sans-serif; font-weight:500;">Pendente</span>'; }
+    function num(v){ return v === null || v === undefined ? pendenteSpan() : Number(v).toLocaleString('pt-BR'); }
+    function fmtDateTime(iso){ if(!iso) return null; try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return null; } }
+    // ---- Só usados na visão física (Estoque Full, opts.visaoFisica — ver
+    // corpoFisicoHTML abaixo). A aba Estoque (fora do Full) nunca passa por
+    // aqui, então nada muda pra ela.
+    function money(v){ return v===null||v===undefined ? pendenteSpan() : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function fmtCaixas(v){ return v===null||v===undefined ? pendenteSpan() : Number(v).toLocaleString('pt-BR'); }
+    function tintVars(tint){ return tint==='muted' ? '--tint:var(--text-muted);--tint-soft:var(--surface-2);' : '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+    function secCardHTML(k){
+      return '<div class="kpi-sec" style="'+tintVars(k.tint)+'">'
+        + '<div class="kpi-sec-icon">'+svg(k.icon)+'</div>'
+        + '<div class="kpi-sec-body"><div class="kpi-sec-label">'+k.label+'</div><div class="kpi-sec-value">'+k.valueHtml+'</div></div></div>';
+    }
+    // Avisos "nunca inventar": um SKU sem produto base vinculado ou um
+    // produto base sem custo cadastrado nunca viram um número chutado — a
+    // quantidade/valor fica de fora da conta e o motivo aparece aqui,
+    // explicitamente (mesmo padrão de lib/estoqueFisico.js).
+    function pendenciasFisicoHTML(f){
+      const avisos = [];
+      if(f.unidadesSemProdutoBaseIdentificado > 0){
+        avisos.push('<strong>'+fmtCaixas(f.unidadesSemProdutoBaseIdentificado)+'</strong> unidade(s) de anúncio ainda sem produto base identificado — o SKU precisa ser vinculado a um produto base para entrar na quantidade em caixas e no valor abaixo.');
+      }
+      if(f.unidadesFisicasSemCustoCadastrado > 0){
+        avisos.push('<strong>'+fmtCaixas(f.unidadesFisicasSemCustoCadastrado)+'</strong> caixa(s) de produto base sem custo cadastrado — entram na quantidade em caixas, mas não no valor em R$ (nunca um custo estimado).');
+      }
+      if(f.itensPendentesDeSincronizacao > 0){
+        avisos.push(f.itensPendentesDeSincronizacao+' item(ns) ainda aguardando sincronização com o Mercado Livre.');
+      }
+      if(!avisos.length) return '';
+      return '<div class="empty-panel" style="padding:12px 16px; margin-bottom:14px; text-align:left; display:flex; align-items:flex-start; gap:12px;">'
+        + '<div class="empty-icon" style="color:var(--warning); background:var(--warning-soft); width:34px; height:34px; margin:0; flex:none;">'+svg('clock')+'</div>'
+        + '<div style="color:var(--text-faint); font-size:13px; line-height:1.5;">' + avisos.map(a=>'<div>'+a+'</div>').join('') + '</div>'
+      + '</div>';
+    }
+    // Corpo da tela Estoque Full (19/09/2026, pedido explícito do usuário):
+    // não mostra mais os anúncios como lista única/principal — mostra valor
+    // em R$, quantidade em caixas, e a quebra por modelo (produto base) e por
+    // SKU/anúncio, cada uma na sua própria seção. `state.data.fisico` vem de
+    // lib/estoqueFisico.js#calcularEstoqueFisico (rota GET /api/estoque-full).
+    function corpoFisicoHTML(){
+      const f = state.data.fisico;
+      if(!f) return '';
+
+      let html = '<div class="kpi-sec-grid" style="margin-bottom:14px;">'
+        + secCardHTML({ label:'Valor em estoque (a custo)', icon:'wallet', tint: f.valorTotalACusto!==null ? 'success' : 'muted', valueHtml: f.valorTotalACusto!==null ? money(f.valorTotalACusto) : pendenteSpan() })
+        + secCardHTML({ label:'Quantidade em caixas', icon:'box', tint:'copper', valueHtml: fmtCaixas(f.unidadesFisicas) })
+      + '</div>';
+
+      html += pendenciasFisicoHTML(f);
+
+      const porModelo = f.produtosBase || [];
+      html += '<div class="section-label" style="margin:18px 0 8px;"><span>Por modelo (produto base)</span></div>';
+      if(!porModelo.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('box')+'</div>'
+          + '<h2>Nenhum modelo identificado ainda</h2>'
+          + '<p class="lead">Assim que os SKUs dos anúncios Full forem vinculados a um produto base (com custo cadastrado), o resumo por modelo aparece aqui.</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto base (modelo)</th><th>Quantidade em caixas</th><th>Custo unitário</th><th>Valor em estoque</th>'
+          + '</tr></thead><tbody>'
+          + porModelo.map(p => '<tr>'
+            + '<td class="mono">'+escapeHtml(p.produtoBase)+'</td>'
+            + '<td class="tab-nums">'+fmtCaixas(p.quantidadeFisica)+'</td>'
+            + '<td class="tab-nums">'+(p.custoUnitario!==null ? money(p.custoUnitario) : pendenteSpan())+'</td>'
+            + '<td class="tab-nums">'+(p.valorEmEstoque!==null ? money(p.valorEmEstoque) : pendenteSpan())+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      const porItem = f.itens || [];
+      html += '<div class="section-label" style="margin:18px 0 8px;"><span>Por SKU / anúncio</span></div>';
+      if(!porItem.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
+          + '<h2>'+opts.tituloVazio+'</h2>'
+          + '<p class="lead">'+opts.mensagemVazia+'</p></div>';
+      } else {
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>Produto / Anúncio</th><th>SKU</th><th>Modelo (produto base)</th><th>Loja</th>'
+          + '<th>Qtd. no anúncio</th><th>Qtd. em caixas</th><th>Valor em estoque</th>'
+          + '</tr></thead><tbody>'
+          + porItem.map(it => '<tr>'
+            + '<td>'+escapeHtml(it.tituloAnuncio || '—')+'</td>'
+            + '<td class="mono">'+(it.sku ? escapeHtml(it.sku) : '<span style="color:var(--text-faint);">sem SKU</span>')+'</td>'
+            + '<td class="mono">'+(it.produtoBase ? escapeHtml(it.produtoBase) : '<span style="color:var(--text-faint);">não identificado</span>')+'</td>'
+            + '<td>'+escapeHtml(it.loja || '—')+'</td>'
+            + '<td class="tab-nums">'+fmtCaixas(it.quantidadeDisponivel)+'</td>'
+            + '<td class="tab-nums">'+(it.quantidadeFisica!==null ? fmtCaixas(it.quantidadeFisica) : pendenteSpan())+'</td>'
+            + '<td class="tab-nums">'+(it.valorEmEstoque!==null ? money(it.valorEmEstoque) : pendenteSpan())+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>';
+      }
+
+      return html;
+    }
+    function statusBadge(status){
+      if(status === 'active') return '<span class="badge-status on"><span class="dot"></span>Ativo</span>';
+      if(status === 'paused') return '<span class="badge-status warn"><span class="dot"></span>Pausado</span>';
+      if(status === 'closed') return '<span class="badge-status off"><span class="dot"></span>Encerrado</span>';
+      return status ? ('<span class="badge-status off"><span class="dot"></span>'+escapeHtml(status)+'</span>') : '—';
+    }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function apiGet(){
+      const res = await fetch(opts.apiPath+'?empresaId='+encodeURIComponent(state.empresaId));
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error)||'Falha ao carregar o estoque.');
+      return body;
+    }
+    async function apiSincronizar(){
+      const res = await fetch('/api/estoque/sincronizar', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ empresaId: state.empresaId }),
+      });
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body&&body.error)||'Falha ao sincronizar.');
+      return body;
+    }
+
+    async function loadDados(){
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiGet(); }
+      catch(err){ state.error = err.message || 'Não foi possível carregar o estoque.'; state.data = null; }
+      finally{ state.loading = false; render(); }
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadDados(); else render();
+    }
+
+    async function sincronizarAgora(){
+      if(!state.empresaId || state.sincronizando) return;
+      state.sincronizando = true; render();
+      try{
+        const resultado = await apiSincronizar();
+        if(resultado.ok) toast('Estoque sincronizado com o Mercado Livre.');
+        else toast(resultado.contasComErro.length+' conta(s) falharam ao sincronizar — veja os logs.', 'error');
+        await loadDados();
+      }catch(err){ toast(err.message || 'Não foi possível sincronizar agora.', 'error'); }
+      finally{ state.sincronizando = false; render(); }
+    }
+
+    function bannerHTML(){
+      const d = state.data;
+      if(!d || !d.pendente || !d.motivo) return '';
+      return '<div class="empty-panel" style="padding:14px 16px; margin-bottom:14px; text-align:left; display:flex; align-items:center; gap:12px;">'
+        + '<div class="empty-icon" style="color:var(--warning); background:var(--warning-soft); width:34px; height:34px; margin:0;">'+svg('clock')+'</div>'
+        + '<div><strong>'+(d.motivo==='sem_conta' ? 'Nenhuma conta conectada.' : d.motivo==='conta_com_erro' ? 'Conta desconectada.' : 'Aguardando sincronização.')+'</strong> '
+          + '<span style="color:var(--text-faint);">'+escapeHtml(d.mensagem||'')+'</span></div>'
+      + '</div>';
+    }
+
+    function ultimaSincronizacaoHTML(){
+      const d = state.data;
+      if(!d || !d.ultimaSincronizacaoGeral) return '';
+      return '<div class="field-hint" style="margin:0 0 14px;">Última sincronização (item mais recente): '+escapeHtml(fmtDateTime(d.ultimaSincronizacaoGeral))+'.</div>';
+    }
+
+    function render(){
+      const root = document.getElementById(opts.rootId);
+      if(!root) return;
+
+      const btnSync = document.getElementById(opts.syncButtonId);
+      if(btnSync){ btnSync.disabled = state.sincronizando || !state.empresaId; btnSync.querySelector('span').textContent = state.sincronizando ? 'Sincronizando…' : 'Sincronizar agora'; }
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> antes de ver o estoque.</p></div>';
+        return;
+      }
+
+      let html = '<div class="toolbar">'
+        + '<div class="empresa-picker" style="margin-bottom:0;"><select id="'+opts.selectId+'">'
+          + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+        + '</select></div>'
+      + '</div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando estoque…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p>'
+          + '<button class="ghost-btn" id="'+opts.retryId+'" style="cursor:pointer; opacity:1;">'+svg('activity')+'<span>Tentar novamente</span></button></div>';
+      } else if(state.data){
+        html += bannerHTML() + ultimaSincronizacaoHTML();
+
+        // Estoque Full (opts.visaoFisica): 19/09/2026, pedido explícito do
+        // usuário — não mostra mais os anúncios crus como visão principal;
+        // mostra valor em R$, quantidade em caixas e a quebra por modelo e
+        // por SKU/anúncio (ver corpoFisicoHTML). A aba Estoque (fora do
+        // Full) nunca passa por aqui — continua exatamente como antes.
+        if(opts.visaoFisica){
+          html += corpoFisicoHTML();
+        } else {
+          const itens = state.data.itens || [];
+          if(!itens.length){
+            html += '<div class="empty-panel"><div class="empty-icon">'+svg('layers')+'</div>'
+              + '<h2>'+opts.tituloVazio+'</h2>'
+              + '<p class="lead">'+opts.mensagemVazia+'</p></div>';
+          } else {
+            html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+              + '<th>Produto / Anúncio</th><th>SKU</th><th>Loja</th><th>ID do anúncio</th>'
+              + '<th>Estoque disponível</th><th>Status</th><th>Última sincronização</th>'
+              + '</tr></thead><tbody>'
+              + itens.map(it => {
+                return '<tr>'
+                  + '<td>'+escapeHtml(it.produto || '—')+'</td>'
+                  + '<td class="mono">'+(it.sku ? escapeHtml(it.sku) : '<span style="color:var(--text-faint);">sem SKU</span>')+'</td>'
+                  + '<td>'+escapeHtml(it.loja || '—')+'</td>'
+                  + '<td class="mono">'+escapeHtml(it.mlItemId || '—')+(it.mlVariationId ? ' <span style="color:var(--text-faint);">('+escapeHtml(String(it.mlVariationId))+')</span>' : '')+'</td>'
+                  + '<td class="tab-nums">'+(it.pendente ? pendenteSpan() : num(it.estoqueDisponivel))+'</td>'
+                  + '<td>'+statusBadge(it.status)+'</td>'
+                  + '<td>'+(fmtDateTime(it.ultimaSincronizacao) ? escapeHtml(fmtDateTime(it.ultimaSincronizacao)) : '—')+'</td>'
+                + '</tr>';
+              }).join('')
+              + '</tbody></table></div></div>';
+          }
+        }
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById(opts.selectId);
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadDados(); });
+      const retry = document.getElementById(opts.retryId);
+      if(retry) retry.addEventListener('click', loadDados);
+    }
+
+    const btnSync = document.getElementById(opts.syncButtonId);
+    if(btnSync) btnSync.addEventListener('click', sincronizarAgora);
+
+    // Atualização automática da TELA a cada 1 minuto (19/09/2026, pedido
+    // explícito do usuário: "quero que atualize de 1 em 1 minuto o estoque
+    // full"). O backend já sincroniza a quantidade a cada 1 minuto sozinho
+    // (lib/syncScheduler.js) desde antes — o que faltava era a tela reler
+    // esse dado sozinha, sem precisar trocar de aba/recarregar a página ou
+    // clicar em "Sincronizar agora". Isto só rechama loadDados() (o MESMO
+    // GET de sempre) — nunca dispara uma sincronização nova sozinho, e só
+    // quando esta aba está aberta, ativa e visível (evita chamada à toa com
+    // o usuário em outra tela do ERP ou com o navegador em segundo plano).
+    setInterval(()=>{
+      const page = document.getElementById('page-'+opts.pageId);
+      if(!page || !page.classList.contains('active')) return;
+      if(document.hidden) return;
+      if(state.loading || state.sincronizando || !state.empresaId) return;
+      loadDados();
+    }, 60000);
+
+    return { load };
+  }
+
+  window.Estoque = criarTelaEstoqueSomenteLeitura({
+    apiPath: '/api/estoque',
+    rootId: 'estoqueRoot',
+    selectId: 'stkEmpresaSelect',
+    retryId: 'stkRetry',
+    syncButtonId: 'btnSincronizarEstoque',
+    pageId: 'stock',
+    tituloVazio: 'Nenhum item sincronizado ainda',
+    mensagemVazia: 'Assim que a sincronização automática rodar (ou ao clicar em "Sincronizar agora"), os anúncios com estoque fora do Full aparecem aqui.',
+  });
+
+  window.EstoqueFull = criarTelaEstoqueSomenteLeitura({
+    apiPath: '/api/estoque-full',
+    rootId: 'estoqueFullRoot',
+    selectId: 'stkFullEmpresaSelect',
+    retryId: 'stkFullRetry',
+    syncButtonId: 'btnSincronizarEstoqueFull',
+    pageId: 'stockFull',
+    tituloVazio: 'Nenhum item Full sincronizado ainda',
+    mensagemVazia: 'Assim que a sincronização automática rodar (ou ao clicar em "Sincronizar agora"), os anúncios com logística Full aparecem aqui.',
+    // 19/09/2026, pedido explícito do usuário: em vez da lista de anúncios
+    // como visão principal, mostrar valor em R$, quantidade em caixas e a
+    // quebra por modelo/SKU/anúncio (ver corpoFisicoHTML acima).
+    visaoFisica: true,
+  });
+

@@ -1,0 +1,507 @@
+  /* ================= AGENTES DE IA — HUB (14/09/2026) =================
+     Redesign completo da área "Agentes de IA" pedido pelo usuário (prints
+     de referência + especificação numerada 1-13). ETAPA 2/3 do processo
+     em etapas que o próprio usuário pediu ("Comece somente pela ETAPA 1.
+     Não altere código ainda" -> ETAPA 1 = análise só, já entregue e
+     aprovada ("pode seguir") -> ETAPA 2 = estrutura/layout -> ETAPA 3 =
+     conectar cards/filtros/indicadores a dado real, feitas juntas aqui
+     porque quase todo dado já existe em rotas prontas (GET
+     /api/ia-agentes, e os novos GET /api/ia-agentes/stats e
+     GET /api/ia-agentes/historico, ver lib/ia/agentesResumo.js).
+     ETAPA 4 (interruptor real por empresa + scheduler, formulário "+ Novo
+     Agente") e ETAPA 5 (testes finais) ficam pra próxima entrega — esta
+     tela já avisa isso onde é o caso (nunca finge que algo já é real).
+
+     Reaproveita 100% do que já existe: window.CerneFiltro (empresa/
+     período do cabeçalho), GET /api/ia-agentes (mesmo endpoint que
+     criarModuloAgenteDecisoes já usa), as páginas/telas reais
+     agenteAds/agentePromocoes/iaGestora (o botão "Ver detalhes"/
+     "Conversar" só NAVEGA pra elas — nenhuma lógica duplicada) e as
+     classes CSS já existentes (.kpi-hero, .seg, .badge-status, .toggle,
+     .search-box, .table-card, .empty-panel, toast()).
+
+     Regra 3 do pedido ("NÃO USAR DADOS FALSOS"): todo número desta tela
+     vem de GET /api/ia-agentes/stats (nunca calculado aqui no front-end),
+     e quando não há dado o valor mostrado é "Sem dados ainda"/0 real —
+     nunca um número inventado. Os 5 cards "Em construção"
+     (SAC/Vendas-BuyBox/Estoque/Financeiro/Riscos Operacionais) são uma
+     exceção explícita, decidida com o usuário: eles NÃO existem como
+     agente real (mesma regra de db/schema.sql/especialistas.js: "nunca
+     como placeholder" pra automação de verdade) — por isso nunca têm
+     número, nunca vêm de GET /api/ia-agentes (ficam hardcoded aqui embaixo
+     só pra dar identidade ao card), e o botão de detalhes fica desabilitado
+     com o motivo explicado. */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtHora(v){
+      if(!v) return '--:--';
+      try{ return new Date(v).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '--:--'; }
+    }
+    function fmtDataHora(v){
+      if(!v) return '—';
+      try{ const d = new Date(v); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
+      catch(e){ return '—'; }
+    }
+    function toast(message, type){
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type||'success');
+      el.innerHTML = svg(type==='error' ? 'alertCircle':'checkCircle') + '<span>'+escapeHtml(message)+'</span>';
+      wrap.appendChild(el);
+      setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),250); }, 4200);
+    }
+    function tintVars(tint){ return '--tint:var(--'+tint+');--tint-soft:var(--'+tint+'-soft);'; }
+
+    // Ver comentário grande acima do IIFE — nunca cadastrados em
+    // ia_agentes, nunca com número/status real, sempre com o "Ver
+    // detalhes" desabilitado e explicado.
+    const EM_CONSTRUCAO = [
+      { codigo:'vendas_buybox', nome:'Vendas / Buy Box', icone:'store', area:'Vendas', tint:'copper',
+        desc:'Vai acompanhar concorrência de preço e Buy Box dos seus anúncios — ainda não existe como agente real.' },
+      { codigo:'estoque', nome:'Estoque', icone:'layers', area:'Estoque', tint:'petrol',
+        desc:'Vai sugerir reposição e alertar risco de ruptura de estoque — ainda não existe como agente real.' },
+      { codigo:'financeiro', nome:'Financeiro', icone:'wallet', area:'Financeiro', tint:'success',
+        desc:'Vai acompanhar caixa e contas a pagar/receber e sugerir ações — ainda não existe como agente real.' },
+      { codigo:'riscos', nome:'Riscos Operacionais', icone:'alertCircle', area:'Riscos', tint:'warning',
+        desc:'Vai consolidar riscos operacionais num agente dedicado — hoje esses alertas já existem em Alertas & IA, mas não como agente próprio.' },
+    ];
+
+    // Metadados de exibição dos agentes REAIS (a identidade/descrição
+    // continua vindo sempre de GET /api/ia-agentes — isto aqui é só a
+    // área/cor/página de destino de cada um, pra nunca duplicar texto).
+    const META_REAIS = {
+      ads_performance: { area:'Marketing / Ads', tint:'petrol', pagina:'agenteAds' },
+      promocoes: { area:'Vendas', tint:'copper', pagina:'agentePromocoes' },
+      sac_mercado_livre: { area:'Atendimento', tint:'teal', pagina:'sacMercadoLivre' },
+      sac_shopee: { area:'Atendimento', tint:'teal', pagina:'sacShopee' },
+      // 20/09/2026: faltavam aqui (caíam em "Outros", sem cor/área própria)
+      // — Anúncios (Radar) ainda não tem tela própria (fica null, nunca um
+      // link fingindo existir); Análise de Concorrente reaproveita a tela
+      // de busca manual já existente.
+      anuncios_radar: { area:'Marketing / Ads', tint:'petrol', pagina:null },
+      concorrente: { area:'Vendas', tint:'copper', pagina:'concorrente' },
+    };
+
+    const state = {
+      aba: 'agentes',
+      search: '',
+      filtroStatus: 'todos',
+      filtroArea: 'todas',
+      somentePendencias: false,
+      somenteAlertas: false,
+      loading: false,
+      error: null,
+      resumo: null,
+      historicoCarregado: false,
+      loadingHistorico: false,
+      errorHistorico: null,
+      historico: [],
+    };
+
+    async function apiResumo(empresaId){
+      const res = await fetch('/api/ia-agentes/stats?empresaId='+empresaId);
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os agentes.');
+      return body;
+    }
+    async function apiHistorico(empresaId){
+      const res = await fetch('/api/ia-agentes/historico?empresaId='+empresaId+'&limit=60');
+      const body = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar o histórico.');
+      return (body && body.eventos) || [];
+    }
+
+    async function carregarResumo(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.resumo = null; state.loading = false; render(); return; }
+      state.loading = true; state.error = null; render();
+      try{ state.resumo = await apiResumo(filtro.empresaId); }
+      catch(e){ state.error = e.message; state.resumo = null; }
+      state.loading = false; render();
+    }
+
+    async function carregarHistorico(){
+      const filtro = window.CerneFiltro.state;
+      if(!filtro.empresaId){ state.historico = []; state.loadingHistorico = false; render(); return; }
+      state.loadingHistorico = true; state.errorHistorico = null; render();
+      try{ state.historico = await apiHistorico(filtro.empresaId); state.historicoCarregado = true; }
+      catch(e){ state.errorHistorico = e.message; state.historico = []; }
+      state.loadingHistorico = false; render();
+    }
+
+    async function load(){
+      state.historicoCarregado = false;
+      await carregarResumo();
+      if(state.aba === 'historico') await carregarHistorico();
+    }
+
+    window.CerneFiltro.onChange(()=>{
+      const page = document.getElementById('page-agentesIaHub');
+      if(page && page.classList.contains('active')) load();
+      else render();
+    });
+
+    function construirCards(){
+      const resumo = state.resumo;
+      const cards = [];
+      if(resumo){
+        resumo.agentes.forEach((a)=>{
+          const meta = META_REAIS[a.codigo] || { area:'Outros', tint:'copper', pagina:null };
+          cards.push({
+            codigo:a.codigo, nome:a.nome, icone:a.icone || 'sparkle', area:meta.area, tint:meta.tint,
+            desc:a.descricao, real:true, emConstrucao:false, status:'online',
+            pendentes:a.pendentes, decididasHoje:a.decididasHoje, alertas:0,
+            ultimaAtualizacao:a.ultimaAtualizacao, pagina:meta.pagina, acaoLabel:'Ver detalhes',
+          });
+        });
+        // IA Gestora não é uma linha de `ia_agentes` (essa tabela é só pros
+        // agentes de decisão automática), mas é um agente real e
+        // funcionando — identidade reaproveitada de PAGES.iaGestora.
+        const pIaGestora = PAGES['iaGestora'];
+        cards.push({
+          codigo:'ia_gestora', nome:pIaGestora.title, icone:pIaGestora.icon, area:'Gestão', tint:'purple',
+          desc:pIaGestora.desc, real:true, emConstrucao:false, status:'online',
+          pendentes:null, decididasHoje:null, alertas:0,
+          conversasHoje:resumo.iaGestora.conversasHoje, mensagensHoje:resumo.iaGestora.mensagensHoje,
+          ultimaAtualizacao:resumo.iaGestora.ultimaAtividade, pagina:'iaGestora', acaoLabel:'Conversar',
+        });
+      }
+      EM_CONSTRUCAO.forEach((a)=>{
+        cards.push({
+          codigo:a.codigo, nome:a.nome, icone:a.icone, area:a.area, tint:a.tint,
+          desc:a.desc, real:false, emConstrucao:true, status:'em_construcao',
+          pendentes:null, decididasHoje:null, alertas:null, ultimaAtualizacao:null,
+          pagina:null, acaoLabel:'Ver detalhes',
+        });
+      });
+      return cards;
+    }
+
+    function filtrarCards(cards){
+      const busca = state.search.trim().toLowerCase();
+      return cards.filter((c)=>{
+        if(busca && c.nome.toLowerCase().indexOf(busca) === -1) return false;
+        if(state.filtroStatus !== 'todos' && c.status !== state.filtroStatus) return false;
+        if(state.filtroArea !== 'todas' && c.area !== state.filtroArea) return false;
+        if(state.somentePendencias && !(c.pendentes > 0)) return false;
+        if(state.somenteAlertas && !(c.alertas > 0)) return false;
+        return true;
+      });
+    }
+
+    function statChip(valor, label){
+      return '<div class="agent-card-stat"><b>'+(valor===null||valor===undefined?'—':valor)+'</b><span>'+escapeHtml(label)+'</span></div>';
+    }
+
+    function badgeStatusHTML(card){
+      if(card.emConstrucao) return '<span class="badge-status off"><span class="dot"></span>Em construção</span>';
+      if(card.status === 'online') return '<span class="badge-status on"><span class="dot"></span>Online</span>';
+      return '<span class="badge-status off"><span class="dot"></span>Pausado</span>';
+    }
+
+    // 20/09/2026, pedido explícito do usuário: "quando clicar em cima do
+    // agente de ia, quero ver oque ele esta fazendo, oque tenho pra
+    // aprovar..., oque ele fez e a melhora que ele teve" — todo agente REAL
+    // com uma linha em ia_agentes (nunca a IA Gestora, que é um chat sob
+    // demanda, nem os "Em construção", que nem existem de verdade) abre o
+    // modal de Detalhe do Agente (ver abrirDetalheAgente abaixo) tanto pelo
+    // clique no card inteiro quanto pelo botão "Ver detalhes".
+    function agentCardHTML(card){
+      const stats = card.codigo === 'ia_gestora'
+        ? statChip(card.conversasHoje, 'Conversas hoje') + statChip(card.mensagensHoje, 'Mensagens hoje')
+        : (card.emConstrucao
+            ? '<div class="field-hint" style="margin:0;">Sem dados — este agente ainda não existe de verdade.</div>'
+            : statChip(card.pendentes, 'Pendentes') + statChip(card.decididasHoje, 'Decididas hoje'));
+
+      // IA Gestora é um chat sob demanda, não uma automação em segundo
+      // plano — não faz sentido ter um interruptor ligar/desligar nela
+      // (por isso fica de fora, junto dos cards "Em construção").
+      const toggleHtml = (card.emConstrucao || card.codigo === 'ia_gestora') ? ''
+        : '<button type="button" class="toggle '+(card.status==='online'?'on':'')+'" disabled style="cursor:not-allowed;opacity:.7;" title="Interruptor por empresa: chega na próxima etapa (ETAPA 4) — ainda não desliga a automação de verdade."></button>';
+
+      const abreDetalhe = card.real && card.codigo !== 'ia_gestora';
+      const acaoBtn = card.emConstrucao
+        ? '<button class="ghost-btn" type="button" disabled title="Este agente ainda não existe de verdade — sem tela de detalhes ainda.">'+svg('eye')+'<span>Ver detalhes</span></button>'
+        : (abreDetalhe
+          // Sem data-detalhe próprio — o clique borbulha pro card (que já
+          // tem o atributo), evitando abrir o modal 2x num clique só.
+          ? '<button class="ghost-btn" type="button" style="cursor:pointer;opacity:1;">'+svg('eye')+'<span>Ver detalhes</span></button>'
+          : '<button class="ghost-btn" type="button" style="cursor:pointer;opacity:1;" data-page="'+card.pagina+'">'+svg('messageCircle')+'<span>'+card.acaoLabel+'</span></button>');
+
+      return '<div class="agent-card'+(card.emConstrucao?' em-construcao':'')+'" style="'+tintVars(card.tint)+(abreDetalhe?';cursor:pointer;':'')+'"'
+          + (abreDetalhe ? ' data-detalhe="'+card.codigo+'"' : '') + '>'
+        + '<div class="agent-card-top">'
+          + '<div class="agent-card-id"><div class="kpi-hero-icon">'+svg(card.icone)+'</div>'
+            + '<div><div class="agent-card-name">'+escapeHtml(card.nome)+'</div><div class="agent-card-area">'+escapeHtml(card.area)+'</div></div>'
+          + '</div>'
+          + badgeStatusHTML(card)
+        + '</div>'
+        + '<div class="agent-card-desc">'+escapeHtml(card.desc||'')+'</div>'
+        + '<div class="agent-card-stats">'+stats+'</div>'
+        + '<div class="agent-card-foot">'+toggleHtml+acaoBtn+'</div>'
+        + (card.emConstrucao ? '' : '<div class="agent-card-ultima">Última atualização: '+fmtDataHora(card.ultimaAtualizacao)+'</div>')
+      + '</div>';
+    }
+
+    function kpiRowHTML(){
+      const k = state.resumo ? state.resumo.kpis : null;
+      const semDado = state.loading || state.error || !k;
+      const items = [
+        { label:'Agentes ativos', icon:'sparkle', tint:'purple', value:k?k.agentesAtivos:null, note:'Cadastro ativo — interruptor por empresa chega na próxima etapa' },
+        { label:'Tarefas executadas hoje', icon:'activity', tint:'petrol', value:k?k.tarefasHoje:null, note:'Sugestões novas + alertas novos gerados hoje pelos agentes' },
+        { label:'Alertas importantes', icon:'alertCircle', tint:'warning', value:k?k.alertasImportantes:null, note:'Críticos + atenção, abertos agora (Radar)' },
+      ];
+      return '<div class="kpi-hero-grid" style="margin-bottom:14px;">' + items.map((it)=>{
+        const valueHtml = semDado ? '<span class="dash">'+(state.error?'—':'…')+'</span>' : String(it.value);
+        return '<div class="kpi-hero" style="'+tintVars(it.tint)+'">'
+          + '<div class="kpi-hero-top"><div class="kpi-hero-icon">'+svg(it.icon)+'</div></div>'
+          + '<div class="kpi-hero-label">'+it.label+'</div>'
+          + '<div class="kpi-hero-value">'+valueHtml+'</div>'
+          + '<div class="kpi-hero-foot"><span class="kpi-hero-note">'+it.note+'</span></div>'
+        + '</div>';
+      }).join('') + '</div>';
+    }
+
+    function heroIaGestoraHTML(){
+      const p = PAGES['iaGestora'];
+      const g = state.resumo ? state.resumo.iaGestora : null;
+      return '<div class="ia-hub-hero">'
+        + '<div class="ia-hub-hero-ic">'+svg(p.icon)+'</div>'
+        + '<div class="ia-hub-hero-body">'
+          + '<div class="ia-hub-hero-title">IA Gestora</div>'
+          + '<div class="ia-hub-hero-sub">'+escapeHtml(p.desc)+'</div>'
+          + '<div class="ia-hub-hero-stats">'
+            + '<div class="ia-hub-hero-stat"><b>'+(g?g.conversasHoje:'—')+'</b><span>Conversas hoje</span></div>'
+            + '<div class="ia-hub-hero-stat"><b>'+(g?g.mensagensHoje:'—')+'</b><span>Mensagens hoje</span></div>'
+          + '</div>'
+        + '</div>'
+        + '<button type="button" class="primary-btn" data-page="iaGestora" style="flex-shrink:0;cursor:pointer;opacity:1;">'+svg('messageCircle')+'<span>Conversar com a IA Gestora</span></button>'
+      + '</div>';
+    }
+
+    function toolbarHTML(areas){
+      const areaOptions = ['todas'].concat(areas).map((a)=> '<option value="'+escapeHtml(a)+'" '+(state.filtroArea===a?'selected':'')+'>'+(a==='todas'?'Todas as áreas':escapeHtml(a))+'</option>').join('');
+      return '<div class="agent-toolbar">'
+        + '<div class="search-box">'+svg('search')+'<input type="text" id="agHubSearch" placeholder="Buscar agente por nome…" value="'+escapeHtml(state.search)+'"></div>'
+        + '<select class="toolbar-select" id="agHubStatus">'
+          + '<option value="todos" '+(state.filtroStatus==='todos'?'selected':'')+'>Status: todos</option>'
+          + '<option value="online" '+(state.filtroStatus==='online'?'selected':'')+'>Online</option>'
+          + '<option value="pausado" '+(state.filtroStatus==='pausado'?'selected':'')+'>Pausado</option>'
+          + '<option value="em_construcao" '+(state.filtroStatus==='em_construcao'?'selected':'')+'>Em construção</option>'
+        + '</select>'
+        + '<select class="toolbar-select" id="agHubArea">'+areaOptions+'</select>'
+        + '<label class="check-chip'+(state.somentePendencias?' active':'')+'"><input type="checkbox" id="agHubPendencias" '+(state.somentePendencias?'checked':'')+'>Com pendências</label>'
+        + '<label class="check-chip'+(state.somenteAlertas?' active':'')+'"><input type="checkbox" id="agHubAlertas" '+(state.somenteAlertas?'checked':'')+'>Com alertas</label>'
+      + '</div>';
+    }
+
+    function abasHTML(){
+      return '<div class="seg" id="agHubTabs" style="margin-bottom:14px;">'
+        + '<button type="button" data-aba="agentes" class="'+(state.aba==='agentes'?'active':'')+'">Agentes</button>'
+        + '<button type="button" data-aba="historico" class="'+(state.aba==='historico'?'active':'')+'">Histórico</button>'
+      + '</div>';
+    }
+
+    const HIST_ICONE = { sugestao:'sparkle', aprovada:'checkCircle', alterada:'edit', editada:'edit', recusada:'x', expirada:'clock', alerta:'alertCircle', atendimento_novo:'inbox' };
+    const HIST_VERBO = { aprovada:'aprovou a resposta', alterada:'alterou a sugestão', editada:'editou e aprovou a resposta', recusada:'recusou a sugestão', expirada:'deixou a sugestão expirar' };
+    const HIST_NOME_AGENTE = { ads_performance:'Ads e Performance', promocoes:'Promoções', radar:'Radar (Central de Alertas)', sac_mercado_livre:'SAC Mercado Livre', sac_shopee:'SAC Shopee' };
+
+    function historicoEventoHTML(ev){
+      const agente = HIST_NOME_AGENTE[ev.agenteCodigo] || ev.agenteCodigo;
+      let corpo;
+      if(ev.tipo === 'sugestao'){
+        corpo = '<b>'+escapeHtml(agente)+'</b> sugeriu uma ação em <b>'+escapeHtml(ev.referencia)+'</b>';
+      } else if(ev.tipo === 'atendimento_novo'){
+        corpo = '<b>'+escapeHtml(agente)+'</b> recebeu um novo atendimento: <b>'+escapeHtml(ev.referencia)+'</b>';
+      } else if(ev.tipo === 'alerta'){
+        corpo = '<b>Radar</b> detectou: <b>'+escapeHtml(ev.referencia)+'</b>';
+      } else {
+        const verbo = HIST_VERBO[ev.tipo] || ev.tipo;
+        corpo = '<b>'+escapeHtml(ev.usuario || 'Alguém')+'</b> '+verbo+' de <b>'+escapeHtml(agente)+'</b> em '+escapeHtml(ev.referencia);
+      }
+      return '<div class="hist-row">'
+        + '<div class="hist-time">'+fmtHora(ev.ts)+'</div>'
+        + '<div class="hist-ic">'+svg(HIST_ICONE[ev.tipo]||'activity')+'</div>'
+        + '<div><div class="hist-body">'+corpo+'</div><div class="hist-sub">'+escapeHtml(ev.motivo||'')+'</div></div>'
+      + '</div>';
+    }
+
+    function render(){
+      const root = document.getElementById('agentesIaHubRoot');
+      if(!root) return;
+      const filtro = window.CerneFiltro.state;
+
+      if(!filtro.loadingEmpresas && !filtro.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2><p class="lead">Cadastre e ative uma empresa em <strong>Cadastros → Empresas</strong> para ver os agentes de IA.</p></div>';
+        return;
+      }
+
+      let html = kpiRowHTML() + heroIaGestoraHTML() + abasHTML();
+
+      if(state.aba === 'agentes'){
+        if(state.loading){
+          html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando agentes…</span></div></div>';
+        } else if(state.error){
+          html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+            + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+        } else {
+          const todos = construirCards();
+          const areas = Array.from(new Set(todos.map((c)=> c.area))).sort();
+          html += toolbarHTML(areas);
+          const filtrados = filtrarCards(todos);
+          if(!filtrados.length){
+            html += '<div class="empty-panel"><div class="empty-icon">'+svg('search')+'</div>'
+              + '<h2>Nenhum agente encontrado</h2><p class="lead">Ajuste a busca ou os filtros acima.</p></div>';
+          } else {
+            html += '<div class="agent-grid">' + filtrados.map(agentCardHTML).join('') + '</div>';
+          }
+        }
+      } else {
+        html += toolbarHTML(state.resumo ? Array.from(new Set(construirCards().map((c)=> c.area))).sort() : []);
+        if(state.loadingHistorico){
+          html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Carregando histórico…</span></div></div>';
+        } else if(state.errorHistorico){
+          html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+            + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.errorHistorico)+'</p></div>';
+        } else if(!state.historico.length){
+          html += '<div class="empty-panel"><div class="empty-icon">'+svg('clock')+'</div>'
+            + '<h2>Nenhum evento ainda</h2><p class="lead">Assim que um agente sugerir algo, você decidir, ou o Radar detectar um alerta, o evento aparece aqui.</p></div>';
+        } else {
+          html += '<div class="table-card"><div class="hist-list">' + state.historico.map(historicoEventoHTML).join('') + '</div></div>';
+        }
+      }
+
+      root.innerHTML = html;
+
+      const search = document.getElementById('agHubSearch');
+      if(search) search.addEventListener('input', ()=>{ state.search = search.value; render(); const el=document.getElementById('agHubSearch'); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
+      const selStatus = document.getElementById('agHubStatus');
+      if(selStatus) selStatus.addEventListener('change', ()=>{ state.filtroStatus = selStatus.value; render(); });
+      const selArea = document.getElementById('agHubArea');
+      if(selArea) selArea.addEventListener('change', ()=>{ state.filtroArea = selArea.value; render(); });
+      const chkPend = document.getElementById('agHubPendencias');
+      if(chkPend) chkPend.addEventListener('change', ()=>{ state.somentePendencias = chkPend.checked; render(); });
+      const chkAlert = document.getElementById('agHubAlertas');
+      if(chkAlert) chkAlert.addEventListener('change', ()=>{ state.somenteAlertas = chkAlert.checked; render(); });
+      const tabsEl = document.getElementById('agHubTabs');
+      if(tabsEl) tabsEl.querySelectorAll('button').forEach((b)=> b.addEventListener('click', ()=>{
+        state.aba = b.dataset.aba;
+        if(state.aba === 'historico' && !state.historicoCarregado){ carregarHistorico(); }
+        else render();
+      }));
+      root.querySelectorAll('[data-page]').forEach((el)=> el.addEventListener('click', ()=> navigate(el.dataset.page)));
+      root.querySelectorAll('[data-detalhe]').forEach((el)=> el.addEventListener('click', ()=> abrirDetalheAgente(el.dataset.detalhe)));
+    }
+
+    /* ---------------- "Detalhe do Agente" (modal) ----------------
+       20/09/2026, pedido explícito do usuário: "quando clicar em cima do
+       agente de ia, quero ver oque ele esta fazendo, oque tenho pra
+       aprovar pra ele fazer, oque ele fez e a melhora que ele teve naquilo
+       que é pra ser feito" — sempre nessas 4 seções, nessa ordem. Todo dado
+       vem de GET /api/ia-agentes/:codigo/detalhe (ver lib/ia/agenteDetalhe.js
+       no backend — nunca um número calculado aqui no front). */
+    const SUBSTANTIVO_MELHORA = { anuncios_radar: 'alerta', concorrente: 'alerta', sac_mercado_livre: 'atendimento', sac_shopee: 'atendimento' };
+
+    function fmtIntervalo(ms){
+      if(!ms) return 'intervalo não configurado';
+      const min = Math.round(ms/60000);
+      if(min < 60) return min+' minuto'+(min===1?'':'s');
+      const h = Math.round(min/60);
+      return h+' hora'+(h===1?'':'s');
+    }
+    function haQuanto(iso){
+      if(!iso) return 'ainda não rodou';
+      const diffMs = Date.now() - new Date(iso).getTime();
+      const min = Math.round(diffMs/60000);
+      if(min < 1) return 'agora mesmo';
+      if(min < 60) return 'há '+min+' minuto'+(min===1?'':'s');
+      const h = Math.round(min/60);
+      if(h < 24) return 'há '+h+' hora'+(h===1?'':'s');
+      return fmtDataHora(iso);
+    }
+
+    function statusAtualHTML(status){
+      if(!status) return '<p class="lead">Sem informação de status pra este agente.</p>';
+      const dot = '<span class="badge-status '+(status.ativo?'on':'off')+'" style="margin-bottom:8px;"><span class="dot"></span>'+(status.ativo?'Ativo':'Pausado')+'</span>';
+      const linhas = [
+        'Verifica sua empresa a cada '+fmtIntervalo(status.intervaloMs)+'.',
+        'Última verificação (de todas as empresas): '+haQuanto(status.ultimaExecucaoEm)+'.',
+      ];
+      if(status.ultimoCicloOk === false) linhas.push('<span style="color:var(--warning);">A última verificação teve algum erro — os dados podem estar um pouco desatualizados.</span>');
+      return dot + linhas.map((l)=> '<p class="lead" style="margin:4px 0;">'+l+'</p>').join('');
+    }
+
+    function pendentesHTML(pendentes, codigo){
+      if(!pendentes || !pendentes.temFluxoDeAprovacao){
+        return '<p class="lead">Este agente só observa e recomenda — não existe uma decisão sua pra aprovar aqui.</p>';
+      }
+      const pagina = (META_REAIS[codigo] || {}).pagina;
+      const btn = pagina ? '<button class="btn-secondary" type="button" data-page="'+pagina+'" data-fecha-modal="1" style="margin-top:8px;">Ver e decidir</button>' : '';
+      return '<p class="lead" style="margin:0 0 4px;"><b>'+pendentes.total+'</b> '+(pendentes.total===1?'sugestão espera':'sugestões esperam')+' sua aprovação agora.</p>' + btn;
+    }
+
+    function melhoraHTML(melhora, codigo){
+      if(!melhora) return '<p class="lead">Sem dado de melhora pra este agente ainda.</p>';
+      if(melhora.tipo === 'financeira'){
+        if(!melhora.avaliadas) return '<p class="lead">Ainda não há decisões avaliadas o suficiente pra medir a melhora — a IA reavalia automaticamente cada decisão aprovada alguns dias depois.</p>';
+        const cor = melhora.deltaMedioPct >= 0 ? 'var(--success)' : 'var(--danger)';
+        const sinal = melhora.deltaMedioPct >= 0 ? '+' : '';
+        return '<p class="lead" style="margin:0;">Margem média <b style="color:'+cor+';">'+sinal+melhora.deltaMedioPct.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' p.p.</b> depois da decisão, com base em '+melhora.avaliadas+' decisão'+(melhora.avaliadas===1?'':'ões')+' já reavaliada'+(melhora.avaliadas===1?'':'s')+'.</p>';
+      }
+      const subst = SUBSTANTIVO_MELHORA[codigo] || 'item';
+      return '<p class="lead" style="margin:0;">Nos últimos 30 dias, <b>'+melhora.resolvidosUltimos30d+'</b> '+subst+(melhora.resolvidosUltimos30d===1?'':'s')+' '+(melhora.resolvidosUltimos30d===1?'foi resolvido':'foram resolvidos')+'. <b>'+melhora.abertosAgora+'</b> ainda em aberto agora.</p>';
+    }
+
+    function detalheModalHTML(dados){
+      const historicoHtml = dados.historico.length
+        ? '<div class="hist-list">'+dados.historico.map(historicoEventoHTML).join('')+'</div>'
+        : '<p class="lead">Nenhum evento ainda pra este agente.</p>';
+      return '<div class="modal-overlay" id="modalOverlay">'
+        + '<div class="modal-card" style="max-width:560px;max-height:85vh;overflow:auto;">'
+          + '<div class="modal-head"><div class="modal-title">'+escapeHtml(dados.nome)+'</div>'
+            + '<button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<div class="modal-sub">'+escapeHtml(dados.descricao||'')+'</div>'
+          + '<h3 style="margin:16px 0 4px;font-size:14px;">O que está fazendo agora</h3>' + statusAtualHTML(dados.statusAtual)
+          + '<h3 style="margin:16px 0 4px;font-size:14px;">O que você tem pra aprovar</h3>' + pendentesHTML(dados.pendentes, dados.agenteCodigo)
+          + '<h3 style="margin:16px 0 4px;font-size:14px;">O que ele já fez</h3>' + historicoHtml
+          + '<h3 style="margin:16px 0 4px;font-size:14px;">A melhora que ele teve</h3>' + melhoraHTML(dados.melhora, dados.agenteCodigo)
+        + '</div>'
+      + '</div>';
+    }
+
+    async function abrirDetalheAgente(codigo){
+      const modalRoot = document.getElementById('modalRoot');
+      if(!modalRoot) return;
+      const empresaId = window.CerneFiltro.state.empresaId;
+      modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card" style="max-width:560px;"><div class="table-skel"><span class="spin"></span><span>Carregando agente…</span></div></div></div>';
+      const overlayLoading = document.getElementById('modalOverlay');
+      const closeLoading = ()=> modalRoot.innerHTML = '';
+      overlayLoading.addEventListener('click', (e)=>{ if(e.target === overlayLoading) closeLoading(); });
+
+      try{
+        const res = await fetch('/api/ia-agentes/'+encodeURIComponent(codigo)+'/detalhe?empresaId='+empresaId);
+        const body = await res.json().catch(()=>null);
+        if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar este agente.');
+
+        modalRoot.innerHTML = detalheModalHTML(body);
+        const overlay = document.getElementById('modalOverlay');
+        const close = ()=> modalRoot.innerHTML = '';
+        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+        document.getElementById('modalClose')?.addEventListener('click', close);
+        modalRoot.querySelectorAll('[data-page]').forEach((el)=> el.addEventListener('click', ()=>{ close(); navigate(el.dataset.page); }));
+      }catch(err){
+        modalRoot.innerHTML = '<div class="modal-overlay" id="modalOverlay"><div class="modal-card" style="max-width:560px;">'
+          + '<div class="modal-head"><div class="modal-title">Não foi possível carregar</div><button class="row-ic-btn" id="modalClose" type="button">'+svg('x')+'</button></div>'
+          + '<p class="lead">'+escapeHtml(err.message)+'</p></div></div>';
+        const overlay = document.getElementById('modalOverlay');
+        const close = ()=> modalRoot.innerHTML = '';
+        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+        document.getElementById('modalClose')?.addEventListener('click', close);
+      }
+    }
+
+    window.AgentesIaHub = { load };
+  })();
+

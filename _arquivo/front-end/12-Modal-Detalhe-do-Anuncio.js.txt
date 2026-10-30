@@ -1,0 +1,64 @@
+  /* ================= MODAL COMPARTILHADO — Detalhe do anúncio (Análise) =================
+     Usado pelas 3 abas abaixo (Performance de Anúncios, Visitas e
+     Conversão, Margem por Anúncio) — pedido explícito do usuário: "Quero
+     conseguir clicar em um anúncio em qualquer uma dessas telas e abrir os
+     detalhes daquele anúncio." Mostra os campos já carregados daquela linha
+     (nenhuma chamada nova à API — os dados já vieram do backend na tela de
+     origem) e oferece atalhos para ver o MESMO anúncio (mesmo SKU) nas
+     outras 2 abas. */
+  (function(){
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    // Mesmo padrão de miniatura das 3 telas (ver comentário em thumbHTML na
+    // aba Performance de Anúncios) — versão "lg" pro modal, onde a imagem
+    // tem mais destaque.
+    function thumbHTML(url){
+      if(!url) return '<span class="anuncio-thumb-lg-placeholder" title="Sem imagem disponível">'+svg('box')+'</span>';
+      return '<span style="position:relative;display:inline-block;width:64px;height:64px;flex-shrink:0;">'
+        + '<img class="anuncio-thumb-lg" src="'+escapeHtml(url)+'" alt="" loading="lazy" style="position:absolute;inset:0;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+        + '<span class="anuncio-thumb-lg-placeholder" style="display:none;position:absolute;inset:0;">'+svg('box')+'</span>'
+      + '</span>';
+    }
+
+    function abrir({ titulo, sku, loja, mlItemId, imagemUrl, campos, origem }){
+      const modalRoot = document.getElementById('modalRoot');
+      const outrasAbas = [
+        { id:'performanceAnuncios', label:'Performance de Anúncios' },
+        { id:'visitasConversao', label:'Visitas e Conversão' },
+        { id:'margemAnuncio', label:'Margem por Anúncio' },
+      ].filter(a => a.id !== origem);
+
+      modalRoot.innerHTML = '<div class="modal-overlay" id="anuncioDetModalOverlay"><div class="modal-card" style="max-width:580px;">'
+        + '<div class="modal-head" style="align-items:flex-start;">'
+          + '<div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0;">'
+            + thumbHTML(imagemUrl)
+            + '<div style="min-width:0;"><h3 class="modal-title">'+escapeHtml(titulo||'(sem título)')+'</h3>'
+            + '<div class="modal-sub" style="margin-top:2px;">'+(sku?('SKU <span class="mono">'+escapeHtml(sku)+'</span>'):'sem SKU')+(loja?(' · '+escapeHtml(loja)):'')+(mlItemId?(' · <span class="mono">'+escapeHtml(mlItemId)+'</span>'):'')+'</div></div>'
+          + '</div>'
+          + '<button class="row-ic-btn" id="anuncioDetModalClose" type="button">'+svg('x')+'</button></div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:16px 0;">'
+          + campos.map(c => '<div><div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.02em;">'+escapeHtml(c.label)+'</div><div style="font-size:14px;font-weight:600;margin-top:2px;">'+(c.html!==undefined?c.html:escapeHtml(c.value===null||c.value===undefined?'—':String(c.value)))+'</div></div>').join('')
+        + '</div>'
+        + (outrasAbas.length && sku ? '<div class="modal-sub" style="margin-top:4px;">Ver este mesmo anúncio (por SKU) em:</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
+            + outrasAbas.map(a=>'<button class="btn-secondary" data-ir-para="'+a.id+'" type="button">'+escapeHtml(a.label)+'</button>').join('')
+          + '</div>' : '')
+        + '<div class="modal-actions"><button type="button" class="btn-secondary" id="anuncioDetModalFechar">Fechar</button></div>'
+      + '</div></div>';
+
+      const overlay = document.getElementById('anuncioDetModalOverlay');
+      const close = ()=> modalRoot.innerHTML = '';
+      overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+      document.getElementById('anuncioDetModalClose')?.addEventListener('click', close);
+      document.getElementById('anuncioDetModalFechar')?.addEventListener('click', close);
+      modalRoot.querySelectorAll('[data-ir-para]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const destino = btn.dataset.irPara;
+          close();
+          navigate(destino + (sku ? ('?sku='+encodeURIComponent(sku)) : ''));
+        });
+      });
+    }
+
+    window.AnuncioDetalheModal = { abrir };
+  })();
+

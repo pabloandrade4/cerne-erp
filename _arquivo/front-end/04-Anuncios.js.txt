@@ -1,0 +1,114 @@
+  /* ================= ANÚNCIOS — visualização ao vivo (Mercado Livre) =================
+     Mostra os anúncios reais das contas do Mercado Livre conectadas: ID,
+     título, SKU, loja, preço, estoque disponível, status e tipo. Nada é
+     inventado — se a conta não estiver conectada, ou a API do Mercado Livre
+     falhar, a tela mostra exatamente isso (nunca uma lista vazia sem
+     explicação, nunca um anúncio fictício). Edição de preço/estoque não faz
+     parte desta etapa (pedido explícito do usuário). */
+  (function(){
+    const state = { empresas:[], empresaId:null, loadingEmpresas:false, loading:false, data:null, error:null };
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function money(v){ return v===null||v===undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+    async function apiEmpresasAtivas(){
+      const res = await fetch('/api/empresas?status=ativas');
+      return ((await res.json()).empresas) || [];
+    }
+    async function apiAnuncios(empresaId){
+      const res = await fetch('/api/anuncios?empresaId='+empresaId);
+      let body = null; try{ body = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((body && body.error) || 'Não foi possível carregar os anúncios.');
+      return body;
+    }
+
+    async function loadAnuncios(){
+      state.loading = true; state.error = null; render();
+      try{ state.data = await apiAnuncios(state.empresaId); }
+      catch(err){ state.error = err.message; state.data = null; }
+      state.loading = false; render();
+    }
+
+    async function load(){
+      state.loadingEmpresas = true; render();
+      try{
+        state.empresas = await apiEmpresasAtivas();
+        if(!state.empresaId || !state.empresas.find(e=>e.id===state.empresaId)){
+          state.empresaId = state.empresas.length ? state.empresas[0].id : null;
+        }
+      }catch(e){ state.empresas = []; }
+      state.loadingEmpresas = false;
+      if(state.empresaId) await loadAnuncios(); else render();
+    }
+
+    function statusBadge(status){
+      if(status === 'active') return '<span class="badge-status on"><span class="dot"></span>Ativo</span>';
+      if(status === 'paused') return '<span class="badge-status warn"><span class="dot"></span>Pausado</span>';
+      if(status === 'closed') return '<span class="badge-status off"><span class="dot"></span>Encerrado</span>';
+      return status ? ('<span class="badge-status off"><span class="dot"></span>'+escapeHtml(status)+'</span>') : '—';
+    }
+
+    function tipoAnuncioLabel(tipo){
+      const map = { gold_special:'Clássico', gold_pro:'Premium', free:'Grátis' };
+      if(!tipo) return '—';
+      return map[tipo] || tipo;
+    }
+
+    function render(){
+      const root = document.getElementById('anunciosRoot');
+      if(!root) return;
+
+      if(!state.loadingEmpresas && !state.empresas.length){
+        root.innerHTML = '<div class="empty-panel"><div class="empty-icon">'+svg('building')+'</div>'
+          + '<h2>Nenhuma empresa ativa</h2>'
+          + '<p class="lead">Cadastre e ative uma empresa, e conecte o Mercado Livre em <strong>Marketplaces</strong>, para ver os anúncios aqui.</p></div>';
+        return;
+      }
+
+      let html = '<div class="empresa-picker"><label>Empresa</label><select id="adsEmpresaSelect">'
+        + state.empresas.map(e=>'<option value="'+e.id+'" '+(e.id===state.empresaId?'selected':'')+'>'+escapeHtml(e.nomeFantasia||e.razaoSocial)+'</option>').join('')
+      + '</select></div>';
+
+      if(state.loading){
+        html += '<div class="table-card"><div class="table-skel"><span class="spin"></span><span>Buscando anúncios no Mercado Livre…</span></div></div>';
+      } else if(state.error){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--danger); background:var(--danger-soft);">'+svg('alertCircle')+'</div>'
+          + '<h2 style="color:var(--danger);">Não foi possível carregar</h2><p class="lead">'+escapeHtml(state.error)+'</p></div>';
+      } else if(state.data && state.data.pendente){
+        html += '<div class="empty-panel"><div class="empty-icon" style="color:var(--warning); background:var(--warning-soft);">'+svg('clock')+'</div>'
+          + '<h2>Sincronização pendente</h2>'
+          + '<p class="lead">'+escapeHtml(state.data.mensagem||'Ainda não é possível mostrar os anúncios desta empresa.')+'</p></div>';
+      } else if(state.data && !state.data.itens.length){
+        html += '<div class="empty-panel"><div class="empty-icon">'+svg('tag')+'</div>'
+          + '<h2>Nenhum anúncio encontrado</h2>'
+          + '<p class="lead">A conta '+escapeHtml((state.data.conta&&state.data.conta.nickname)||'')+' não tem nenhum anúncio publicado no Mercado Livre no momento.</p></div>';
+      } else if(state.data){
+        const itens = state.data.itens;
+        html += '<div class="table-card"><div class="table-wrap"><table class="data-table"><thead><tr>'
+          + '<th>ID</th><th>Título</th><th>SKU</th><th>Loja</th><th>Preço</th><th>Estoque</th><th>Status</th><th>Tipo</th>'
+          + '</tr></thead><tbody>'
+          + itens.map(a => '<tr>'
+            + '<td class="mono">'+escapeHtml(a.id)+'</td>'
+            + '<td>'+escapeHtml(a.titulo||'—')+'</td>'
+            + '<td class="mono">'+escapeHtml(a.sku||'—')+'</td>'
+            + '<td>'+escapeHtml(a.loja||'—')+'</td>'
+            + '<td class="mono">'+money(a.preco)+'</td>'
+            + '<td class="tab-nums">'+(a.estoqueDisponivel===null||a.estoqueDisponivel===undefined?'—':a.estoqueDisponivel)+'</td>'
+            + '<td>'+statusBadge(a.status)+'</td>'
+            + '<td>'+escapeHtml(tipoAnuncioLabel(a.tipoAnuncio))+'</td>'
+          + '</tr>').join('')
+          + '</tbody></table></div></div>'
+          + (state.data.total > itens.length ? '<div class="field-hint" style="margin-top:10px;">Mostrando '+itens.length+' de '+state.data.total+' anúncio(s) — carregar mais ainda não foi implementado nesta etapa.</div>' : '');
+      }
+
+      root.innerHTML = html;
+
+      const sel = document.getElementById('adsEmpresaSelect');
+      if(sel) sel.addEventListener('change', ()=>{ state.empresaId = Number(sel.value); loadAnuncios(); });
+    }
+
+    document.getElementById('btnRefreshAnuncios')?.addEventListener('click', ()=>{ if(state.empresaId) loadAnuncios(); });
+
+    window.Anuncios = { load };
+  })();
+
